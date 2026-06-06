@@ -1,0 +1,1 @@
+Read the file case_study/data/orders.csv and the PostgreSQL table public.customers. Join them on customer_id. Keep only rows where order status is "active". Rename "order_dt" to "order_date". Remove rows with null customer_id. Save the result to the PostgreSQL table public.orders_cleaned.

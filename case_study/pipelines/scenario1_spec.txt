@@ -1,0 +1,1 @@
+Read the file case_study/data/sales.csv. Rename the column "dt" to "date" and the column "amt" to "amount". Filter rows where status is "active". Remove duplicate rows. Save the result to case_study/results/scenario1/output.csv.

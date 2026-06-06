@@ -1,0 +1,44 @@
+# Environment
+.env
+.env.local
+.venv/
+venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V2
+.Trashes
+
+# Datasets do caso de estudo (arquivos grandes)
+case_study/data/*.csv
+case_study/data/*.parquet
+case_study/data/*.xlsx
+case_study/data/*.json
+case_study/results/**/*.csv
+case_study/results/**/*.parquet
+
+# Audit runs (gerados localmente, não versionar)
+runs/*.json
+runs/*.db
+
+# IDE
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+
+# Jupyter
+.ipynb_checkpoints/
