@@ -5,7 +5,7 @@ install:
 	uv pip install -e .
 
 test:
-	uv run pytest tests/unit/ tests/integration/ -v
+	uv run pytest tests/unit/ tests/integration/ -v --cov=src/ai_etl --cov-report=term-missing --cov-fail-under=80
 
 test-e2e:
 	uv run pytest tests/e2e/ -v --timeout=300

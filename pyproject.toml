@@ -63,7 +63,7 @@ exclude_dirs = ["tests", ".venv"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
-addopts = "-v --cov=src/ai_etl --cov-report=term-missing --cov-fail-under=80"
+addopts = "-v"
 
 [tool.coverage.run]
 source = ["src/ai_etl"]
