@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "langchain>=0.3.0",
+    "langchain-openai>=0.3.0",
     "langgraph>=0.2.0",
     "openai>=1.50.0",
     "pandas>=2.0.0",
@@ -25,6 +26,10 @@ dev = [
     "mypy>=1.10.0",
     "ruff>=0.5.0",
     "pandas-stubs>=2.0.0",
+    "bandit>=1.8.0",
+    "pip-audit>=2.7.0",
+    "pre-commit>=3.7.0",
+    "pytest-cov>=5.0.0",
 ]
 
 [build-system]
@@ -35,7 +40,7 @@ build-backend = "hatchling.build"
 packages = ["src/ai_etl"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 strict = true
 ignore_missing_imports = true
 
@@ -47,6 +52,25 @@ target-version = "py311"
 select = ["E", "F", "I", "N", "W"]
 ignore = ["E501"]
 
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.bandit]
+skips = ["B101", "B102"]
+exclude_dirs = ["tests", ".venv"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-v"
+pythonpath = ["src"]
+addopts = "-v --cov=src/ai_etl --cov-report=term-missing --cov-fail-under=80"
+
+[tool.coverage.run]
+source = ["src/ai_etl"]
+omit = ["*/__init__.py", "src/ai_etl/__main__.py"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]

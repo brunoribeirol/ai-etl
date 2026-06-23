@@ -1,7 +1,6 @@
 """Integration tests for the Quality Agent."""
 
 import pandas as pd
-import pytest
 
 from ai_etl.agents.quality import quality_node
 from ai_etl.core.state import initial_state
@@ -36,6 +35,11 @@ def test_duplicates_produce_warning() -> None:
 
 def test_error_state_is_passed_through() -> None:
     state = initial_state(spec="test", run_id="test-run")
-    state_with_error = {**state, "error": "upstream failed", "transformed_data": None, "pipeline_plan": {}}
+    state_with_error = {
+        **state,
+        "error": "upstream failed",
+        "transformed_data": None,
+        "pipeline_plan": {},
+    }
     result = quality_node(state_with_error)
     assert result["error"] == "upstream failed"

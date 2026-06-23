@@ -1,13 +1,15 @@
 """Quality Agent — deterministic data quality checks on the transformed DataFrame."""
 
+from typing import Any
+
 import pandas as pd
 
 from ai_etl.audit.logger import log_action
 from ai_etl.core.state import PipelineState
 
 SEVERITY_ORDER = {"ok": 0, "warning": 1, "error": 2}
-NULL_WARNING_THRESHOLD = 0.05   # 5% nulls → warning
-NULL_ERROR_THRESHOLD = 0.20     # 20% nulls → error
+NULL_WARNING_THRESHOLD = 0.05  # 5% nulls → warning
+NULL_ERROR_THRESHOLD = 0.20  # 20% nulls → error
 
 
 def quality_node(state: PipelineState) -> PipelineState:
@@ -20,8 +22,8 @@ def quality_node(state: PipelineState) -> PipelineState:
     if state.get("error"):
         return state
 
-    df: pd.DataFrame = state["transformed_data"]
-    checks: list[dict] = []
+    df: pd.DataFrame = state["transformed_data"]  # type: ignore[assignment]  # non-None guaranteed by error short-circuit above
+    checks: list[dict[str, Any]] = []
 
     checks.extend(_check_nulls(df))
     checks.append(_check_duplicates(df))
@@ -43,13 +45,15 @@ def quality_node(state: PipelineState) -> PipelineState:
     }
 
     new_log = log_action(
-        state, "quality", "checks_complete",
+        state,
+        "quality",
+        "checks_complete",
         {"severity": overall_severity, "checks": len(checks), "errors": error_count},
     )
     return {**state, "quality_report": quality_report, "audit_log": new_log}
 
 
-def _check_nulls(df: pd.DataFrame) -> list[dict]:
+def _check_nulls(df: pd.DataFrame) -> list[dict[str, Any]]:
     results = []
     for col in df.columns:
         null_ratio = float(df[col].isnull().mean())
@@ -60,11 +64,18 @@ def _check_nulls(df: pd.DataFrame) -> list[dict]:
             severity = "error"
         elif null_ratio >= NULL_WARNING_THRESHOLD:
             severity = "warning"
-        results.append({"check": "null", "column": col, "null_ratio": round(null_ratio, 4), "severity": severity})
+        results.append(
+            {
+                "check": "null",
+                "column": col,
+                "null_ratio": round(null_ratio, 4),
+                "severity": severity,
+            }
+        )
     return results
 
 
-def _check_duplicates(df: pd.DataFrame) -> dict:
+def _check_duplicates(df: pd.DataFrame) -> dict[str, Any]:
     dup_count = int(df.duplicated().sum())
     return {
         "check": "duplicate",
@@ -73,7 +84,7 @@ def _check_duplicates(df: pd.DataFrame) -> dict:
     }
 
 
-def _check_outliers_iqr(df: pd.DataFrame) -> list[dict]:
+def _check_outliers_iqr(df: pd.DataFrame) -> list[dict[str, Any]]:
     results = []
     for col in df.select_dtypes(include="number").columns:
         q1 = float(df[col].quantile(0.25))
@@ -84,10 +95,12 @@ def _check_outliers_iqr(df: pd.DataFrame) -> list[dict]:
         lower, upper = q1 - 1.5 * iqr, q3 + 1.5 * iqr
         outlier_count = int(((df[col] < lower) | (df[col] > upper)).sum())
         if outlier_count > 0:
-            results.append({
-                "check": "outlier_iqr",
-                "column": col,
-                "outlier_count": outlier_count,
-                "severity": "warning",
-            })
+            results.append(
+                {
+                    "check": "outlier_iqr",
+                    "column": col,
+                    "outlier_count": outlier_count,
+                    "severity": "warning",
+                }
+            )
     return results

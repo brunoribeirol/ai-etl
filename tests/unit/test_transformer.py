@@ -1,0 +1,110 @@
+"""Unit tests for the Transformer Agent."""
+
+from unittest.mock import MagicMock
+
+import pandas as pd
+import pytest
+
+from ai_etl.agents.transformer import _clean_code, transformer_node
+from ai_etl.core.state import initial_state
+
+VALID_CODE = """
+def transform(dfs):
+    df = dfs["orders"].copy()
+    df["total"] = df["price"] * df["qty"]
+    return df
+"""
+
+INVALID_CODE = """
+def transform(dfs):
+    raise ValueError("something went wrong")
+"""
+
+
+def _make_state() -> dict:
+    state = initial_state(spec="compute total", run_id="test-run")
+    df = pd.DataFrame({"price": [10.0, 20.0], "qty": [2, 3]})
+    return {
+        **state,
+        "pipeline_plan": {"transformations": ["compute total = price * qty"]},
+        "extracted_data": {"orders": df},
+        "source_schemas": {
+            "orders": {
+                "columns": ["price", "qty"],
+                "dtypes": {},
+                "shape": [2, 2],
+                "sample": [],
+                "null_counts": {},
+            }
+        },
+    }
+
+
+def _mock_llm(responses: list[str]) -> MagicMock:
+    llm = MagicMock()
+    llm.invoke.side_effect = [MagicMock(content=r) for r in responses]
+    return llm
+
+
+@pytest.fixture
+def mock_get_llm(mocker):
+    return mocker.patch("ai_etl.agents.transformer.get_llm")
+
+
+def test_valid_code_returns_transformed_dataframe(mock_get_llm) -> None:
+    mock_get_llm.return_value = _mock_llm([VALID_CODE])
+    result = transformer_node(_make_state())
+
+    assert result["error"] is None
+    assert result["transformed_data"] is not None
+    assert "total" in result["transformed_data"].columns
+    assert result["transformation_attempts"] == 1
+
+
+def test_audit_log_entry_added_on_success(mock_get_llm) -> None:
+    mock_get_llm.return_value = _mock_llm([VALID_CODE])
+    result = transformer_node(_make_state())
+
+    assert any(e["action"] == "code_executed" for e in result["audit_log"])
+
+
+def test_sandbox_error_triggers_retry(mock_get_llm) -> None:
+    mock_get_llm.return_value = _mock_llm([INVALID_CODE, INVALID_CODE, VALID_CODE])
+    result = transformer_node(_make_state())
+
+    assert result["error"] is None
+    assert result["transformation_attempts"] == 3
+
+
+def test_all_attempts_exhausted_sets_failed(mock_get_llm) -> None:
+    mock_get_llm.return_value = _mock_llm([INVALID_CODE, INVALID_CODE, INVALID_CODE])
+    result = transformer_node(_make_state())
+
+    assert result["error"] is not None
+    assert result["status"] == "failed"
+    assert result["transformation_attempts"] == 3
+
+
+def test_upstream_error_short_circuits() -> None:
+    state = _make_state()
+    state["error"] = "upstream failure"
+    result = transformer_node(state)
+    assert result["error"] == "upstream failure"
+
+
+# --- _clean_code() unit tests ---
+
+
+def test_clean_code_strips_python_fence() -> None:
+    raw = "```python\ndef transform(dfs):\n    return dfs\n```"
+    assert _clean_code(raw) == "def transform(dfs):\n    return dfs"
+
+
+def test_clean_code_strips_plain_fence() -> None:
+    raw = "```\ndef f(): pass\n```"
+    assert _clean_code(raw) == "def f(): pass"
+
+
+def test_clean_code_passthrough_if_no_fence() -> None:
+    raw = "def transform(dfs):\n    return dfs"
+    assert _clean_code(raw) == raw

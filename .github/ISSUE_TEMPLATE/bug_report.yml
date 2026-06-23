@@ -1,0 +1,60 @@
+name: Bug Report
+description: Something broke in the pipeline or an agent behaved unexpectedly.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before opening, check the [audit JSON](case_study/results/) for the run — it often shows exactly which agent failed and why.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the bug. Be specific about which agent or step failed.
+      placeholder: "The Transformer agent returned malformed code after 3 retries..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: spec
+    attributes:
+      label: Pipeline spec used
+      description: The natural language spec you passed to the pipeline.
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What actually happened? Paste the error message or audit log excerpt.
+      render: text
+    validations:
+      required: true
+
+  - type: dropdown
+    id: python_version
+    attributes:
+      label: Python version
+      options:
+        - "3.11"
+        - "3.12"
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: "macOS 15, Ubuntu 24.04..."

@@ -1,5 +1,10 @@
 # AI-ETL
 
+[![CI](https://github.com/brunoribeirol/ai-etl/actions/workflows/ci.yml/badge.svg)](https://github.com/brunoribeirol/ai-etl/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12-blue)](https://www.python.org)
+[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![Coverage](https://img.shields.io/badge/coverage-91%25-brightgreen)](https://github.com/brunoribeirol/ai-etl/actions)
+
 Multi-agent framework for automated ETL pipelines using LLMs.
 
 Describe your data pipeline in plain English. Five specialized agents — Orchestrator, Extractor, Transformer, Quality, and Loader — execute it end-to-end, generating auditable Python code at every step.

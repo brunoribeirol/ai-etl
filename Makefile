@@ -1,7 +1,8 @@
-.PHONY: install test test-e2e lint type-check check db-up db-down run-scenario1 run-scenario2 run-scenario3 clean
+.PHONY: install test test-e2e lint format format-check type-check security check db-up db-down run-scenario1 run-scenario2 run-scenario3 clean
 
 install:
 	uv sync --all-extras
+	uv pip install -e .
 
 test:
 	uv run pytest tests/unit/ tests/integration/ -v
@@ -12,10 +13,21 @@ test-e2e:
 lint:
 	uv run ruff check src/ tests/
 
+format:
+	uv run ruff format src/ tests/
+	uv run ruff check --fix src/ tests/
+
+format-check:
+	uv run ruff format --check src/ tests/
+
 type-check:
 	uv run mypy src/
 
-check: lint type-check test
+security:
+	uv run bandit -c pyproject.toml -r src/ai_etl/
+	uv run pip-audit
+
+check: lint format-check type-check test security
 
 db-up:
 	docker-compose up -d postgres

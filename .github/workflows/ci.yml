@@ -8,7 +8,13 @@ on:
 
 jobs:
   check:
+    name: "Python ${{ matrix.python-version }} — Lint, Format, Type, Test, Security"
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+
     steps:
       - uses: actions/checkout@v4
 
@@ -16,8 +22,8 @@ jobs:
         with:
           version: "latest"
 
-      - name: Set up Python
-        run: uv python install 3.11
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
 
       - name: Install dependencies
         run: uv sync --all-extras
@@ -25,13 +31,22 @@ jobs:
       - name: Lint
         run: uv run ruff check src/ tests/
 
+      - name: Format check
+        run: uv run ruff format --check src/ tests/
+
       - name: Type check
         run: uv run mypy src/
 
       - name: Unit tests
-        run: uv run pytest tests/unit/ -v
+        run: uv run pytest tests/unit/ -v --cov=src/ai_etl --cov-report=term-missing --cov-fail-under=80
 
       - name: Integration tests
         run: uv run pytest tests/integration/ -v
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+      - name: Security — bandit
+        run: uv run bandit -c pyproject.toml -r src/ai_etl/
+
+      - name: Security — pip-audit
+        run: uv run pip-audit

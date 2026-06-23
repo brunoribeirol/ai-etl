@@ -1,7 +1,6 @@
 """Unit tests for the sandbox module."""
 
 import pandas as pd
-import pytest
 
 from ai_etl.core.sandbox import execute_in_sandbox
 

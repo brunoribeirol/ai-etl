@@ -1,5 +1,7 @@
 """LangGraph pipeline graph definition."""
 
+from typing import Any
+
 from langgraph.graph import END, StateGraph
 
 from ai_etl.agents.extractor import extractor_node
@@ -26,7 +28,7 @@ def build_graph() -> Any:
         quality ──(ok)──→ loader → END
         quality ──(error)──→ END
     """
-    graph: StateGraph = StateGraph(PipelineState)
+    graph: StateGraph[PipelineState] = StateGraph(PipelineState)
 
     graph.add_node("orchestrator", orchestrator_node)
     graph.add_node("extractor", extractor_node)

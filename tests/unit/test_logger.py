@@ -1,6 +1,6 @@
 """Unit tests for the audit logger."""
 
-from ai_etl.audit.logger import log_action, _sanitize
+from ai_etl.audit.logger import _sanitize, log_action
 from ai_etl.core.state import initial_state
 
 
@@ -22,7 +22,9 @@ def test_log_action_does_not_mutate_state() -> None:
 
 def test_log_action_redacts_sensitive_keys() -> None:
     state = initial_state(spec="test", run_id="run-1")
-    new_log = log_action(state, "extractor", "connected", {"api_key": "sk-secret123", "url": "http://x.com"})
+    new_log = log_action(
+        state, "extractor", "connected", {"api_key": "sk-secret123", "url": "http://x.com"}
+    )
     details = new_log[0]["details"]
     assert details["api_key"] == "***REDACTED***"
     assert details["url"] == "http://x.com"

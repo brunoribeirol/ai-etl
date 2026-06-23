@@ -61,13 +61,15 @@ def transformer_node(state: PipelineState) -> PipelineState:
     for _ in range(MAX_ATTEMPTS):
         attempts += 1
         response = llm.invoke(prompt)
-        code = _clean_code(response.content)
+        code = _clean_code(str(response.content))
 
         result, error = execute_in_sandbox(code, state["extracted_data"])
 
         if error is None and result is not None:
             new_log = log_action(
-                state, "transformer", "code_executed",
+                state,
+                "transformer",
+                "code_executed",
                 {"attempts": attempts, "output_shape": list(result.shape)},
             )
             return {
@@ -82,7 +84,9 @@ def transformer_node(state: PipelineState) -> PipelineState:
         last_error = error
         prompt += f"\n\nPrevious attempt failed:\n{error}\n\nFix the transform() function."
 
-    new_log = log_action(state, "transformer", "code_failed", {"attempts": attempts, "error": last_error})
+    new_log = log_action(
+        state, "transformer", "code_failed", {"attempts": attempts, "error": last_error}
+    )
     return {
         **state,
         "transformation_attempts": attempts,
@@ -97,7 +101,7 @@ def _clean_code(raw: str) -> str:
     """Strip markdown code fences from LLM output."""
     raw = raw.strip()
     if raw.startswith("```python"):
-        raw = raw[len("```python"):].strip()
+        raw = raw[len("```python") :].strip()
     if raw.startswith("```"):
         raw = raw[3:].strip()
     if raw.endswith("```"):

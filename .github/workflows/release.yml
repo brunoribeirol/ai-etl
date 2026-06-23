@@ -1,0 +1,60 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build & publish GitHub Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history for changelog generation
+
+      - uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Quality gate — full check
+        run: |
+          uv run ruff check src/ tests/
+          uv run ruff format --check src/ tests/
+          uv run mypy src/
+          uv run pytest tests/unit/ -v --cov=src/ai_etl --cov-fail-under=80
+          uv run bandit -c pyproject.toml -r src/ai_etl/
+          uv run pip-audit
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            --title "Release ${{ github.ref_name }}" \
+            --notes "## What's Changed
+
+          See [CHANGELOG.md](CHANGELOG.md) for the full history.
+
+          ### Install
+          \`\`\`bash
+          git clone https://github.com/brunoribeirol/ai-etl && cd ai-etl
+          git checkout ${{ github.ref_name }}
+          uv sync --all-extras
+          \`\`\`" \
+            --verify-tag
