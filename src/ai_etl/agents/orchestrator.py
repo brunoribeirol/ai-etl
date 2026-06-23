@@ -48,12 +48,14 @@ def orchestrator_node(state: PipelineState) -> PipelineState:
 
     for attempt in range(1, 3):
         response = llm.invoke(prompt)
-        content = response.content.strip()
+        content = str(response.content).strip()
 
         try:
             pipeline_plan = json.loads(content)
             new_log = log_action(
-                state, "orchestrator", "plan_created",
+                state,
+                "orchestrator",
+                "plan_created",
                 {"attempt": attempt, "sources": len(pipeline_plan.get("sources", []))},
             )
             return {**state, "run_id": run_id, "pipeline_plan": pipeline_plan, "audit_log": new_log}
@@ -62,4 +64,10 @@ def orchestrator_node(state: PipelineState) -> PipelineState:
             prompt += f"\n\nPrevious response was not valid JSON: {e}\nResponse was:\n{content}\n\nReturn ONLY valid JSON."
 
     new_log = log_action(state, "orchestrator", "plan_failed", {"error": last_error})
-    return {**state, "run_id": run_id, "error": f"Orchestrator failed to produce valid JSON: {last_error}", "status": "failed", "audit_log": new_log}
+    return {
+        **state,
+        "run_id": run_id,
+        "error": f"Orchestrator failed to produce valid JSON: {last_error}",
+        "status": "failed",
+        "audit_log": new_log,
+    }

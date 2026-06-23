@@ -1,13 +1,27 @@
 """PostgreSQL destination connector."""
 
 import os
-from typing import Any
+import re
+from typing import Any, Literal
 
 import pandas as pd
 from sqlalchemy import create_engine, text
 
+_SAFE_TABLE_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_.]*$")
 
-def save_postgres(df: pd.DataFrame, table: str, if_exists: str = "replace") -> dict[str, Any]:
+
+def _validate_table_name(table: str) -> None:
+    if not _SAFE_TABLE_RE.match(table):
+        raise ValueError(
+            f"Invalid table name '{table}': only alphanumeric, underscores, and dots allowed."
+        )
+
+
+def save_postgres(
+    df: pd.DataFrame,
+    table: str,
+    if_exists: Literal["fail", "replace", "append", "delete_rows"] = "replace",
+) -> dict[str, Any]:
     """Save DataFrame to a PostgreSQL table. Validates row count after load.
 
     Never uses f-strings in SQL queries — table name is passed to pandas
@@ -17,11 +31,12 @@ def save_postgres(df: pd.DataFrame, table: str, if_exists: str = "replace") -> d
     if not url:
         raise EnvironmentError("POSTGRES_URL environment variable is not set.")
 
+    _validate_table_name(table)
     engine = create_engine(url)
     df.to_sql(table.split(".")[-1], engine, schema=_schema(table), if_exists=if_exists, index=False)
 
     with engine.connect() as conn:
-        count = conn.execute(text(f"SELECT COUNT(*) FROM {table}")).scalar()  # noqa: S608
+        count = conn.execute(text(f"SELECT COUNT(*) FROM {table}")).scalar()  # nosec B608 — table name validated above
 
     if count != len(df):
         raise RuntimeError(f"Load count mismatch: expected {len(df)}, got {count}")

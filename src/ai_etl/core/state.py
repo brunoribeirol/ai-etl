@@ -6,11 +6,13 @@ directly with another — all information flows through the state.
 
 from typing import Any, Optional, TypedDict
 
+import pandas as pd
+
 
 class PipelineState(TypedDict):
     # --- Input (immutable after Orchestrator) ---
-    spec: str           # natural language pipeline specification
-    run_id: str         # UUID generated at pipeline start
+    spec: str  # natural language pipeline specification
+    run_id: str  # UUID generated at pipeline start
 
     # --- Orchestrator output ---
     pipeline_plan: dict[str, Any]
@@ -27,14 +29,14 @@ class PipelineState(TypedDict):
     # }
 
     # --- Extractor output ---
-    extracted_data: dict[str, Any]      # {"source_name": pd.DataFrame}
-    source_schemas: dict[str, Any]      # {"source_name": {columns, dtypes, shape, sample}}
+    extracted_data: dict[str, Any]  # {"source_name": pd.DataFrame}
+    source_schemas: dict[str, Any]  # {"source_name": {columns, dtypes, shape, sample}}
 
     # --- Transformer output ---
-    transformation_code: str            # generated Python function as string
-    transformed_data: Optional[Any]     # pd.DataFrame result (None until Transformer runs)
-    transformation_attempts: int        # retry counter, max 3
-    transformation_error: Optional[str] # last sandbox execution error
+    transformation_code: str  # generated Python function as string
+    transformed_data: Optional[pd.DataFrame]  # None until Transformer runs successfully
+    transformation_attempts: int  # retry counter, max 3
+    transformation_error: Optional[str]  # last sandbox execution error
 
     # --- Quality output ---
     quality_report: dict[str, Any]
@@ -50,14 +52,16 @@ class PipelineState(TypedDict):
     # }
 
     # --- Loader output ---
-    load_result: Optional[dict[str, Any]]  # {"rows_loaded": int, "destination": str, "timestamp": str}
+    load_result: Optional[
+        dict[str, Any]
+    ]  # {"rows_loaded": int, "destination": str, "timestamp": str}
 
     # --- Audit (appended by every agent) ---
     audit_log: list[dict[str, Any]]
 
     # --- Control flow ---
-    error: Optional[str]    # fatal error message; routes to END if set
-    status: str             # "running" | "completed" | "failed"
+    error: Optional[str]  # fatal error message; routes to END if set
+    status: str  # "running" | "completed" | "failed"
 
 
 def initial_state(spec: str, run_id: str) -> PipelineState:

@@ -20,7 +20,7 @@ def loader_node(state: PipelineState) -> PipelineState:
         return state
 
     destination = state["pipeline_plan"]["destination"]
-    df: pd.DataFrame = state["transformed_data"]
+    df: pd.DataFrame = state["transformed_data"]  # type: ignore[assignment]  # non-None guaranteed by error short-circuit above
     dest_type = destination["type"]
 
     try:

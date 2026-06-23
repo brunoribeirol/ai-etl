@@ -1,7 +1,6 @@
 """LLM wrapper — OpenAI client with retry logic and model configuration."""
 
 import os
-from typing import Any
 
 from langchain_openai import ChatOpenAI
 

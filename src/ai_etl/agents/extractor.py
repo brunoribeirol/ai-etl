@@ -1,5 +1,9 @@
 """Extractor Agent — connects to sources and extracts DataFrames."""
 
+from typing import Any
+
+import pandas as pd
+
 from ai_etl.audit.logger import log_action
 from ai_etl.core.state import PipelineState
 from ai_etl.sources.csv_source import load_csv
@@ -17,8 +21,8 @@ def extractor_node(state: PipelineState) -> PipelineState:
         return state
 
     sources = state["pipeline_plan"].get("sources", [])
-    extracted_data: dict = {}
-    source_schemas: dict = {}
+    extracted_data: dict[str, Any] = {}
+    source_schemas: dict[str, Any] = {}
 
     for source in sources:
         name = source["name"]
@@ -38,18 +42,34 @@ def extractor_node(state: PipelineState) -> PipelineState:
             source_schemas[name] = _extract_schema(df)
 
         except Exception as e:
-            new_log = log_action(state, "extractor", "source_failed", {"source": name, "error": str(e)})
-            return {**state, "error": f"Extractor failed on source '{name}': {e}", "status": "failed", "audit_log": new_log}
+            new_log = log_action(
+                state, "extractor", "source_failed", {"source": name, "error": str(e)}
+            )
+            return {
+                **state,
+                "error": f"Extractor failed on source '{name}': {e}",
+                "status": "failed",
+                "audit_log": new_log,
+            }
 
     new_log = log_action(
-        state, "extractor", "extraction_complete",
-        {"sources": list(extracted_data.keys()), "total_rows": {k: len(v) for k, v in extracted_data.items()}},
+        state,
+        "extractor",
+        "extraction_complete",
+        {
+            "sources": list(extracted_data.keys()),
+            "total_rows": {k: len(v) for k, v in extracted_data.items()},
+        },
     )
-    return {**state, "extracted_data": extracted_data, "source_schemas": source_schemas, "audit_log": new_log}
+    return {
+        **state,
+        "extracted_data": extracted_data,
+        "source_schemas": source_schemas,
+        "audit_log": new_log,
+    }
 
 
-def _extract_schema(df) -> dict:  # type: ignore[no-untyped-def]
-    import pandas as pd
+def _extract_schema(df: pd.DataFrame) -> dict[str, Any]:
     return {
         "columns": df.columns.tolist(),
         "dtypes": {col: str(dtype) for col, dtype in df.dtypes.items()},
