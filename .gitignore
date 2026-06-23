@@ -33,6 +33,7 @@ case_study/results/**/*.parquet
 # Audit runs (gerados localmente, não versionar)
 runs/*.json
 runs/*.db
+runs/*_transform.py
 
 # IDE
 .vscode/settings.json
