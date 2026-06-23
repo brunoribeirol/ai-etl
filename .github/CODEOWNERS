@@ -1,0 +1,6 @@
+# Files that require review from the project owner before merging.
+
+src/ai_etl/core/sandbox.py     @brunoribeirol
+src/ai_etl/audit/              @brunoribeirol
+.github/workflows/             @brunoribeirol
+pyproject.toml                 @brunoribeirol

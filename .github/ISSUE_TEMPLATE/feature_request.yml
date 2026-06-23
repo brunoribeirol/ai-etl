@@ -1,0 +1,45 @@
+name: Feature Request
+description: Propose a new capability for the pipeline or an agent improvement.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the limitation or gap in the current pipeline behavior.
+      placeholder: "The Quality agent doesn't detect schema drift between runs..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: How should this be implemented? Include any design ideas or references.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: agents
+    attributes:
+      label: Which agent(s) does this affect?
+      options:
+        - label: Orchestrator
+        - label: Extractor
+        - label: Transformer
+        - label: Quality
+        - label: Loader
+        - label: Core / PipelineState
+        - label: Audit / Logger
+        - label: Sources / Destinations
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - Small — single function or check
+        - Medium — new agent capability or connector
+        - Large — new agent or major architecture change
+    validations:
+      required: true
