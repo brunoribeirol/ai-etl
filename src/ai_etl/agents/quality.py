@@ -50,7 +50,10 @@ def quality_node(state: PipelineState) -> PipelineState:
         "checks_complete",
         {"severity": overall_severity, "checks": len(checks), "errors": error_count},
     )
-    return {**state, "quality_report": quality_report, "audit_log": new_log}
+    # When severity is "error", the graph routes directly to END (bypassing Loader).
+    # Set status here so the final state is never left as "running".
+    final_status = "failed" if overall_severity == "error" else state["status"]
+    return {**state, "quality_report": quality_report, "status": final_status, "audit_log": new_log}
 
 
 def _check_nulls(df: pd.DataFrame) -> list[dict[str, Any]]:

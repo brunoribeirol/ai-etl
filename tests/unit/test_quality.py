@@ -54,6 +54,7 @@ def test_quality_node_error_severity_for_high_nulls() -> None:
     df = pd.DataFrame({"a": [1, None, None, None, None, None]})
     result = quality_node(_state_with_df(df))  # type: ignore[arg-type]
     assert result["quality_report"]["severity"] == "error"
+    assert result["status"] == "failed"  # quality-blocked runs must not stay "running"
 
 
 def test_quality_node_warning_severity_for_duplicates() -> None:
