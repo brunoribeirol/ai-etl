@@ -87,6 +87,27 @@ def test_load_rest_single_dict_response(mocker) -> None:
     assert "status" in df.columns
 
 
+def test_load_rest_time_series_nested_dict(mocker) -> None:
+    """Open-Meteo pattern: {"daily": {"time": [...], "temperature_2m_max": [...]}}"""
+    data = {
+        "latitude": -8.05,
+        "daily": {
+            "time": ["2026-06-23", "2026-06-24"],
+            "temperature_2m_max": [27.0, 27.2],
+        },
+    }
+    mock_response = MagicMock()
+    mock_response.json.return_value = data
+    mock_response.raise_for_status = MagicMock()
+    mocker.patch("ai_etl.sources.rest_source.httpx.get", return_value=mock_response)
+
+    df = load_rest("http://api.open-meteo.com/v1/forecast")
+    assert len(df) == 2
+    assert "time" in df.columns
+    assert "temperature_2m_max" in df.columns
+    assert df["temperature_2m_max"].iloc[0] == 27.0
+
+
 def test_load_rest_unexpected_type_raises(mocker) -> None:
     mock_response = MagicMock()
     mock_response.json.return_value = "unexpected string"
