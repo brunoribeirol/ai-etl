@@ -1,8 +1,11 @@
-.PHONY: install test test-e2e lint format format-check type-check security check db-up db-down run-scenario1 run-scenario2 run-scenario3 clean
+.PHONY: install test test-e2e lint format format-check type-check security check db-up db-down run-scenario1 run-scenario2 run-scenario3 app clean
 
 install:
 	uv sync --all-extras
 	uv pip install -e .
+
+app:
+	uv run streamlit run app.py
 
 test:
 	uv run pytest tests/unit/ tests/integration/ -v --cov=src/ai_etl --cov-report=term-missing --cov-fail-under=80
