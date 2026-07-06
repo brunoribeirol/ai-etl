@@ -19,6 +19,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+app = [
+    "plotly>=6.8.0",
+    "scikit-learn>=1.4.0",
+    "statsmodels>=0.14.0",
+    "streamlit>=1.35.0",
+]
+
 dev = [
     "pytest>=8.0.0",
     "pytest-mock>=3.14.0",
