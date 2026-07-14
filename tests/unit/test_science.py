@@ -5,7 +5,12 @@ from unittest.mock import MagicMock
 import pandas as pd
 import pytest
 
-from ai_etl.agents.science import _build_column_stats, _strip_fences, run_science
+from ai_etl.agents.science import (
+    _build_column_stats,
+    _strip_fences,
+    _validate_narrative_consistency,
+    run_science,
+)
 
 
 @pytest.fixture
@@ -110,6 +115,37 @@ def test_run_science_happy_path(mock_get_llm, sample_df: pd.DataFrame) -> None:
     assert result["attempts"] == 1
 
 
+NESTED_FUNCTION_CODE = """\
+def _fit():
+    X = df[['units']].fillna(0)
+    y = df['revenue'].fillna(0)
+    return LinearRegression().fit(X, y), X, y
+
+model, X, y = _fit()
+predictions_df = df[['units', 'revenue']].copy()
+predictions_df['predicted'] = model.predict(X)
+fig = px.scatter(predictions_df, x='units', y='revenue', title='Previsão de Receita')
+narrative = 'O modelo de regressão linear apresenta boa aderência aos dados históricos.'
+model_info = {'model_type': 'LinearRegression', 'task': 'regression',
+              'metrics': {'r2': float(r2_score(y, predictions_df["predicted"]))},
+              'features': ['units'], 'target': 'revenue'}
+"""
+
+
+def test_run_science_code_defining_nested_function_sees_df(
+    mock_get_llm, sample_df: pd.DataFrame
+) -> None:
+    """Regression test: exec(code, globals, locals) with separate dicts makes `df`
+    invisible inside any function the LLM defines, since nested scopes close over
+    globals, not the locals dict. `df` must be reachable from inside a `def`."""
+    mock_get_llm.return_value = _mock_llm([NESTED_FUNCTION_CODE])
+    result = run_science(sample_df, "Qual será a receita nos próximos meses?")
+
+    assert result["error"] is None
+    assert result["attempts"] == 1
+    assert not result["predictions_df"].empty
+
+
 def test_run_science_result_has_all_keys(mock_get_llm, sample_df: pd.DataFrame) -> None:
     mock_get_llm.return_value = _mock_llm([HAPPY_CODE])
     result = run_science(sample_df, "Qual será a receita?")
@@ -170,6 +206,57 @@ def test_run_science_retries_when_predictions_df_wrong_type(
     )
     mock_get_llm.return_value = _mock_llm([wrong_type_code, HAPPY_CODE])
     result = run_science(sample_df, "Previsão?")
+
+    assert result["error"] is None
+    assert result["attempts"] == 2
+
+
+# --- _validate_narrative_consistency ---
+
+
+def test_validate_narrative_consistency_ignores_non_forecast_tasks() -> None:
+    predictions_df = pd.DataFrame({"value": [10, 5]})
+    _validate_narrative_consistency(
+        "tendência de aumento", predictions_df, {"task": "regression"}
+    )  # must not raise
+
+
+def test_validate_narrative_consistency_ignores_when_no_directional_claim() -> None:
+    predictions_df = pd.DataFrame({"value": [10, 5]})
+    _validate_narrative_consistency(
+        "o modelo prevê estabilidade", predictions_df, {"task": "forecast"}
+    )  # must not raise
+
+
+def test_validate_narrative_consistency_raises_on_contradiction() -> None:
+    predictions_df = pd.DataFrame({"value": [2.79, 2.77, 2.75]})  # decreasing
+    with pytest.raises(ValueError, match="claims an increase"):
+        _validate_narrative_consistency(
+            "tendência de aumento nas avaliações nos próximos meses",
+            predictions_df,
+            {"task": "forecast"},
+        )
+
+
+def test_validate_narrative_consistency_accepts_matching_claim() -> None:
+    predictions_df = pd.DataFrame({"value": [2.70, 2.75, 2.80]})  # increasing
+    _validate_narrative_consistency(
+        "tendência de aumento nas avaliações", predictions_df, {"task": "forecast"}
+    )  # must not raise
+
+
+def test_run_science_retries_when_narrative_contradicts_numbers(
+    mock_get_llm, sample_df: pd.DataFrame
+) -> None:
+    contradictory_code = (
+        "predictions_df = pd.DataFrame({'value': [10.0, 8.0, 6.0]})\n"
+        "fig = px.line(predictions_df, y='value', title='X')\n"
+        "narrative = 'tendência de aumento nos próximos meses'\n"
+        "model_info = {'model_type': 'ExponentialSmoothing', 'task': 'forecast',"
+        " 'metrics': {}, 'features': [], 'target': 'value'}"
+    )
+    mock_get_llm.return_value = _mock_llm([contradictory_code, HAPPY_CODE])
+    result = run_science(sample_df, "Qual será a receita nos próximos meses?")
 
     assert result["error"] is None
     assert result["attempts"] == 2

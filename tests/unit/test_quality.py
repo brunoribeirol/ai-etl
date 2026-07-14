@@ -4,6 +4,7 @@ import pandas as pd
 
 from ai_etl.agents.quality import (
     _check_duplicates,
+    _check_logical_duplicates,
     _check_nulls,
     _check_outliers_iqr,
     _check_types,
@@ -56,6 +57,13 @@ def test_quality_node_error_severity_for_high_nulls() -> None:
     result = quality_node(_state_with_df(df))  # type: ignore[arg-type]
     assert result["quality_report"]["severity"] == "error"
     assert result["status"] == "failed"  # quality-blocked runs must not stay "running"
+    assert result["error"]  # must not be None — callers render it directly
+
+
+def test_quality_node_ok_severity_leaves_error_untouched() -> None:
+    df = pd.DataFrame({"a": [1, 2, 3]})
+    result = quality_node(_state_with_df(df))  # type: ignore[arg-type]
+    assert result["error"] is None
 
 
 def test_quality_node_warning_severity_for_duplicates() -> None:
@@ -183,3 +191,33 @@ def test_quality_node_includes_type_mismatch_in_severity() -> None:
     checks = result["quality_report"]["checks"]
     assert any(c["check"] == "type_mismatch" for c in checks)
     assert result["quality_report"]["severity"] == "warning"
+
+
+# --- _check_logical_duplicates ---
+
+
+def test_check_logical_duplicates_flags_repeated_names() -> None:
+    names = [f"App {i}" for i in range(20)] + ["App 0", "App 0"]  # 2 extra repeats of "App 0"
+    df = pd.DataFrame({"name": names})
+    checks = _check_logical_duplicates(df)
+    assert len(checks) == 1
+    assert checks[0]["check"] == "duplicate_by_column"
+    assert checks[0]["column"] == "name"
+    assert checks[0]["group_count"] == 1
+    assert checks[0]["row_count"] == 3
+    assert checks[0]["severity"] == "warning"
+
+
+def test_check_logical_duplicates_ignores_low_cardinality_category() -> None:
+    df = pd.DataFrame({"category": ["Games", "Tools"] * 10})
+    assert _check_logical_duplicates(df) == []
+
+
+def test_check_logical_duplicates_no_repeats_returns_empty() -> None:
+    df = pd.DataFrame({"name": [f"App {i}" for i in range(10)]})
+    assert _check_logical_duplicates(df) == []
+
+
+def test_check_logical_duplicates_ignores_numeric_columns() -> None:
+    df = pd.DataFrame({"amount": [1, 1, 1, 2, 3, 4, 5, 6, 7, 8]})
+    assert _check_logical_duplicates(df) == []

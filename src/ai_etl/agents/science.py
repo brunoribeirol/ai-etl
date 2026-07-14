@@ -35,23 +35,32 @@ You are a senior data scientist. You have access to a cleaned pandas DataFrame c
 
 ## Your task
 
-Analyze the data and question to determine the BEST predictive analysis. Choose ONE:
+Analyze the data and question to determine the BEST analysis. Choose ONE:
 
-- TIME SERIES FORECAST: if question asks about future values, trends over time
-  (look for date/datetime columns; forecast the main numeric metric)
+- DIAGNOSTIC ANALYSIS: if the question asks WHY something happened, changed, dropped,
+  increased, or differs across groups/time (e.g. "why did X fall in 2020", "what explains
+  the difference between A and B"). Decompose the change by comparing segments, categories,
+  or periods (before/after). Do NOT forecast future values for this case — a "why" question
+  is explanatory, not predictive.
+- TIME SERIES FORECAST: if question explicitly asks about FUTURE values or trends going
+  forward (look for date/datetime columns; forecast the main numeric metric)
 - REGRESSION: if question asks to predict a numeric value from features
 - CLASSIFICATION: if question asks to predict a category/label
 - CLUSTERING: if question asks about groups, segments, or profiles of customers/products
 
 Then write Python code that defines EXACTLY four variables:
 
-1. `predictions_df` — a pandas DataFrame with the model's results.
+1. `predictions_df` — a pandas DataFrame with the analysis results.
+   - For DIAGNOSTIC: a breakdown table comparing the metric across the relevant segments/
+     periods (e.g. columns = [segment, 'metric_before', 'metric_after', 'delta']), so the
+     decomposition is visible in the data, not just asserted in the narrative.
    - For FORECAST: columns = [date_col, 'actual', 'forecast'] or similar
    - For REGRESSION: columns = [feature, 'actual', 'predicted', 'residual']
    - For CLASSIFICATION: columns = [id_col, 'predicted_class', 'probability'] or a confusion summary
    - For CLUSTERING: original df with a new 'cluster' column + cluster summary
 
 2. `fig` — a Plotly figure visualizing the model output clearly.
+   - DIAGNOSTIC: grouped/side-by-side bar chart comparing the metric across segments/periods
    - FORECAST: line chart with actual vs. forecast (use different colors/dashes)
    - REGRESSION: scatter actual vs. predicted + a reference line
    - CLASSIFICATION: bar chart of class distribution or feature importance
@@ -59,12 +68,13 @@ Then write Python code that defines EXACTLY four variables:
    - Set a descriptive title in Portuguese. Use professional color palettes.
 
 3. `narrative` — a 2–4 sentence string in Portuguese for a non-technical business user.
-   Include: what type of model was used, the main finding, and a business implication.
-   Be specific with numbers.
+   Include: what type of analysis was used, the main finding, and a business implication.
+   Be specific with numbers, and the DIRECTION you state (increase/decrease) MUST match
+   the actual numbers in `predictions_df` — never claim a trend the data doesn't show.
 
 4. `model_info` — a Python dict with:
    {{"model_type": str, "task": str, "metrics": dict, "features": list, "target": str}}
-   - task: "forecast" | "regression" | "classification" | "clustering"
+   - task: "diagnostic" | "forecast" | "regression" | "classification" | "clustering"
    - metrics: relevant metrics (e.g. {{"rmse": 12.3, "r2": 0.87}} or {{"accuracy": 0.91}})
    - features: list of column names used as input
    - target: column name being predicted (or "segments" for clustering)
@@ -194,6 +204,73 @@ def _strip_fences(code: str) -> str:
     return code.strip()
 
 
+_INCREASE_WORDS = (
+    "aumento",
+    "aumenta",
+    "crescimento",
+    "cresce",
+    "crescer",
+    "subir",
+    "sobe",
+    "alta",
+    "melhora",
+    "melhoria",
+)
+_DECREASE_WORDS = (
+    "queda",
+    "cai ",
+    "caiu",
+    "cair",
+    "diminui",
+    "diminuição",
+    "redução",
+    "reduz",
+    "baixa",
+    "piora",
+    "declínio",
+)
+
+
+def _validate_narrative_consistency(
+    narrative: str, predictions_df: pd.DataFrame, model_info: dict[str, Any]
+) -> None:
+    """Reject a narrative whose trend claim contradicts the numeric trend it describes.
+
+    Only applies to diagnostic/forecast tasks, where the narrative makes a directional
+    claim (increase/decrease) that should be derivable from `predictions_df` itself.
+    Raising here feeds into the existing retry loop, so a contradictory narrative is
+    treated the same as any other execution failure and triggers a fresh attempt.
+    """
+    if model_info.get("task") not in ("diagnostic", "forecast"):
+        return
+
+    text = narrative.lower()
+    claims_increase = any(w in text for w in _INCREASE_WORDS)
+    claims_decrease = any(w in text for w in _DECREASE_WORDS)
+    if claims_increase == claims_decrease:
+        return  # no clear single-direction claim to check
+
+    numeric_cols = predictions_df.select_dtypes(include="number").columns
+    if len(numeric_cols) == 0:
+        return
+    series = predictions_df[numeric_cols[-1]].dropna()
+    if len(series) < 2:
+        return
+
+    delta = series.iloc[-1] - series.iloc[0]
+    col = numeric_cols[-1]
+    if claims_increase and delta < 0:
+        raise ValueError(
+            f"Narrative claims an increase but '{col}' decreased "
+            f"({series.iloc[0]:.4g} → {series.iloc[-1]:.4g})."
+        )
+    if claims_decrease and delta > 0:
+        raise ValueError(
+            f"Narrative claims a decrease but '{col}' increased "
+            f"({series.iloc[0]:.4g} → {series.iloc[-1]:.4g})."
+        )
+
+
 def run_science(df: pd.DataFrame, business_question: str) -> dict[str, Any]:
     """Run predictive analytics on the Silver DataFrame.
 
@@ -279,15 +356,19 @@ def run_science(df: pd.DataFrame, business_question: str) -> dict[str, Any]:
         code = _strip_fences(str(response.content).strip())
         last_code = code
 
-        local_env: dict[str, Any] = {"df": df.copy()}
+        # A single dict serves as both globals and locals so that functions the
+        # LLM defines in `code` (which close over globals, not a separate locals
+        # dict) can still see `df` — exec(code, g, l) with g is l would otherwise
+        # raise NameError inside any nested `def` referencing `df`.
+        exec_env: dict[str, Any] = {**safe_globals, "df": df.copy()}
 
         try:
-            exec(code, safe_globals, local_env)  # noqa: S102
+            exec(code, exec_env)  # noqa: S102
 
-            predictions_df = local_env.get("predictions_df")
-            fig = local_env.get("fig")
-            narrative = local_env.get("narrative", "")
-            model_info = local_env.get("model_info", {})
+            predictions_df = exec_env.get("predictions_df")
+            fig = exec_env.get("fig")
+            narrative = exec_env.get("narrative", "")
+            model_info = exec_env.get("model_info", {})
 
             if not isinstance(predictions_df, pd.DataFrame):
                 raise TypeError(
@@ -297,6 +378,7 @@ def run_science(df: pd.DataFrame, business_question: str) -> dict[str, Any]:
                 raise ValueError("fig must be defined (a Plotly Figure object)")
             if not isinstance(model_info, dict):
                 raise TypeError(f"model_info must be a dict, got {type(model_info).__name__}")
+            _validate_narrative_consistency(str(narrative), predictions_df, model_info)
 
             return {
                 "predictions_df": predictions_df,

@@ -24,10 +24,34 @@ def transform(dfs: dict) -> pd.DataFrame:
 ```
 
 Rules:
-- Use ONLY pandas (pd) and numpy (np). No other imports are available.
+- Use ONLY pandas (pd) and numpy (np), already available as pre-loaded variables.
+- Do NOT write any `import` statement — the sandbox has no `__import__` builtin, so any
+  `import` line, including `import re` or `from datetime import ...`, will crash with
+  "ImportError: __import__ not found". Everything you need is reachable via pd/np.
 - The function must return a single pd.DataFrame.
 - Handle edge cases (empty DataFrames, missing columns).
 - Do not read from files or databases — data is already in `dfs`.
+- When parsing a date/datetime column with `pd.to_datetime(..., errors="coerce")`, the
+  default parse assumes month-first (MM/DD/YYYY) and will silently turn a large fraction
+  of a day-first dataset (DD/MM/YYYY, common outside the US) into NaT instead of raising.
+  Try the default parse, and if more than 5% of non-null values become NaT, retry the
+  same column with `dayfirst=True` and keep whichever attempt produced fewer NaT.
+
+WRONG (silently drops most day-first dates as NaT, no fallback attempted):
+```python
+df["date"] = pd.to_datetime(df["date"], errors="coerce")
+```
+
+RIGHT (falls back to dayfirst parsing when the default parse looks wrong):
+```python
+parsed = pd.to_datetime(df["date"], errors="coerce")
+non_null = df["date"].notna().sum()
+if non_null > 0 and parsed.isna().sum() / non_null > 0.05:
+    parsed_dayfirst = pd.to_datetime(df["date"], errors="coerce", dayfirst=True)
+    if parsed_dayfirst.isna().sum() < parsed.isna().sum():
+        parsed = parsed_dayfirst
+df["date"] = parsed
+```
 
 Respond ONLY with the Python function. No explanation, no markdown fences.
 """
@@ -82,7 +106,12 @@ def transformer_node(state: PipelineState) -> PipelineState:
             }
 
         last_error = error
-        prompt += f"\n\nPrevious attempt failed:\n{error}\n\nFix the transform() function."
+        hint = ""
+        if error and "__import__" in error:
+            hint = (
+                " You used an `import` statement — remove it entirely, pd/np are already available."
+            )
+        prompt += f"\n\nPrevious attempt failed:\n{error}\n\nFix the transform() function.{hint}"
 
     new_log = log_action(
         state, "transformer", "code_failed", {"attempts": attempts, "error": last_error}

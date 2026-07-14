@@ -208,15 +208,25 @@ def run_analyst(df: pd.DataFrame, business_question: str) -> dict[str, Any]:
         code = _strip_fences(str(response.content).strip())
         last_code = code
 
-        safe_globals = {**_SAFE_GLOBALS, "pd": pd, "np": np, "px": px, "go": go}
-        local_env: dict[str, Any] = {"df": df.copy()}
+        # A single dict serves as both globals and locals so that functions the
+        # LLM defines in `code` (which close over globals, not a separate locals
+        # dict) can still see `df` — exec(code, g, l) with g is l would otherwise
+        # raise NameError inside any nested `def` referencing `df`.
+        exec_env: dict[str, Any] = {
+            **_SAFE_GLOBALS,
+            "pd": pd,
+            "np": np,
+            "px": px,
+            "go": go,
+            "df": df.copy(),
+        }
 
         try:
-            exec(code, safe_globals, local_env)  # noqa: S102
+            exec(code, exec_env)  # noqa: S102
 
-            gold_df = local_env.get("gold_df")
-            fig = local_env.get("fig")
-            narrative = local_env.get("narrative", "")
+            gold_df = exec_env.get("gold_df")
+            fig = exec_env.get("fig")
+            narrative = exec_env.get("narrative", "")
 
             if not isinstance(gold_df, pd.DataFrame):
                 raise TypeError(f"gold_df must be a pd.DataFrame, got {type(gold_df).__name__}")

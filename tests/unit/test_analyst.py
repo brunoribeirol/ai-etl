@@ -109,6 +109,31 @@ def test_run_analyst_happy_path(mock_get_llm, sample_df: pd.DataFrame) -> None:
     assert result["attempts"] == 1
 
 
+NESTED_FUNCTION_CODE = """\
+def _compute():
+    return df.groupby('product')['revenue'].sum().reset_index()
+
+gold_df = _compute()
+gold_df.columns = ['product', 'total_revenue']
+fig = px.bar(gold_df, x='product', y='total_revenue', title='Receita por produto')
+narrative = 'O produto C gerou mais receita no período analisado.'
+"""
+
+
+def test_run_analyst_code_defining_nested_function_sees_df(
+    mock_get_llm, sample_df: pd.DataFrame
+) -> None:
+    """Regression test: exec(code, globals, locals) with separate dicts makes `df`
+    invisible inside any function the LLM defines, since nested scopes close over
+    globals, not the locals dict. `df` must be reachable from inside a `def`."""
+    mock_get_llm.return_value = _make_llm_mock([NESTED_FUNCTION_CODE])
+    result = run_analyst(sample_df, "Qual produto gerou mais receita?")
+
+    assert result["error"] is None
+    assert result["attempts"] == 1
+    assert not result["gold_df"].empty
+
+
 def test_run_analyst_strips_markdown_fences(mock_get_llm, sample_df: pd.DataFrame) -> None:
     fenced = f"```python\n{HAPPY_CODE}\n```"
     mock_get_llm.return_value = _make_llm_mock([fenced])

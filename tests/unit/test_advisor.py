@@ -92,6 +92,17 @@ def test_run_advisor_happy_path(mock_get_llm, sample_df, gold_result, science_re
     assert len(result["summary"]) > 0
 
 
+def test_run_advisor_prompt_forbids_restating_the_request(
+    mock_get_llm, sample_df, gold_result, science_result
+) -> None:
+    mock_llm = _mock_llm([VALID_RESPONSE])
+    mock_get_llm.return_value = mock_llm
+    run_advisor(sample_df, "Como aumentar o faturamento?", gold_result, science_result)
+
+    sent_prompt = mock_llm.invoke.call_args[0][0]
+    assert "Do NOT restate the business question" in sent_prompt
+
+
 def test_run_advisor_result_has_all_keys(
     mock_get_llm, sample_df, gold_result, science_result
 ) -> None:

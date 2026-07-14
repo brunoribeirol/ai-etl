@@ -55,6 +55,14 @@ Rules:
 - "priority" must be exactly one of: "high", "medium", "low".
 - Be specific: mention actual column names, product names, or numbers from the data.
 - Do NOT invent data that was not provided.
+- Do NOT restate the business question or propose running the analysis that was already
+  requested (e.g. "investigar X", "construir Y", "implementar um ranking") as if it were a
+  recommendation — the analysis has already been done above; you must recommend a CONCRETE
+  BUSINESS ACTION based on its results, not a research task.
+- If the descriptive or predictive analysis above is unavailable (says "não disponível"),
+  do NOT recommend "running the analysis" either — instead, only make recommendations that
+  are safely grounded in the data overview alone, and say plainly in the summary that some
+  recommendations are limited by missing upstream analysis.
 """
 
 _PRIORITY_ORDER = {"high": 0, "medium": 1, "low": 2}

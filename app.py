@@ -87,7 +87,11 @@ def _read_uploaded_file(uploaded_file) -> Optional[pd.DataFrame]:
 
 def _save_upload_to_temp(uploaded_file) -> Path:
     suffix = Path(uploaded_file.name).suffix
-    dest = UPLOADS_DIR / f"{uuid.uuid4()}{suffix}"
+    # Short hex id, not a full 36-char UUID: this path is embedded as free text in the
+    # Orchestrator's natural-language spec, and the LLM has to transcribe it verbatim
+    # into the plan JSON — a long random string invites transcription typos (an extra
+    # or dropped character), which then makes the Extractor fail with a bogus path.
+    dest = UPLOADS_DIR / f"{uuid.uuid4().hex[:12]}{suffix}"
     dest.write_bytes(uploaded_file.getvalue())
     return dest
 
@@ -105,8 +109,14 @@ def _auto_generate_spec(
         f"Read the file at {file_path}. "
         f"The file has {n_rows} rows and {n_cols} columns: {cols}.{question_hint} "
         f"Clean the data: remove completely duplicate rows, standardize column names to snake_case, "
-        f"parse date columns where obvious, fill obvious missing values, "
-        f"preserve all columns and their values. "
+        f"parse date columns where obvious. "
+        f"For missing values in non-critical numeric columns, fill with a reasonable default "
+        f"(e.g. 0 or the column mean) only when that is a safe assumption. "
+        f"Do NOT fabricate values for missing identifying or categorical fields "
+        f"(e.g. name, id, category) — never invent a name, category, or price. "
+        f"Instead, add a boolean column 'is_incomplete' set to true for rows with missing "
+        f"critical fields, and leave the original value missing (NaN) in those rows. "
+        f"Preserve all rows and all original columns. "
         f"Save the cleaned result to {output_csv}."
     )
 
@@ -144,7 +154,7 @@ def _run_silver_pipeline(spec: str) -> dict:
         if overall == "completed":
             status_box.update(label=f"✅ Silver concluído em {total_time}s", state="complete")
         else:
-            err = final_state.get("error", "Erro desconhecido")
+            err = final_state.get("error") or "Erro desconhecido"
             status_box.update(label=f"❌ Silver falhou: {err[:80]}", state="error")
 
     final_state["_agent_timings"] = agent_timings
@@ -251,12 +261,23 @@ def _render_results(result: dict) -> None:
     if status == "completed":
         load_result = state.get("load_result") or {}
         rows = load_result.get("rows_loaded", "—")
-        st.success(f"✅ Pipeline concluído em {total_time}s — {rows} linhas Silver")
+        failed_stages = [
+            label
+            for label, stage_result in (("Gold", gold), ("Science", science), ("Advisor", advisor))
+            if stage_result.get("error")
+        ]
+        if failed_stages:
+            st.warning(
+                f"⚠️ Pipeline concluído parcialmente em {total_time}s — {rows} linhas Silver. "
+                f"Falharam: {', '.join(failed_stages)} (ver aba correspondente para o erro)."
+            )
+        else:
+            st.success(f"✅ Pipeline concluído em {total_time}s — {rows} linhas Silver")
     elif status == "failed":
-        err = state.get("error", "Erro desconhecido")
+        err = state.get("error") or "Erro desconhecido"
         st.error(f"❌ Pipeline falhou: {err}")
     else:
-        st.error(f"❌ Status: {state.get('error', '—')}")
+        st.error(f"❌ Status: {state.get('error') or '—'}")
 
     st.caption(f"Run ID: `{run_id}`")
     st.divider()
