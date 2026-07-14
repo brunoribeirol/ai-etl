@@ -37,6 +37,11 @@ case_study/results/**/*.parquet
 runs/*.json
 runs/*.db
 runs/*_transform.py
+runs/*_silver.csv
+runs/uploads/
+
+# Streamlit app output (gerado localmente, não versionar)
+output/
 
 # IDE
 .vscode/settings.json
