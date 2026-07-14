@@ -6,14 +6,15 @@ from ai_etl.agents.quality import (
     _check_duplicates,
     _check_nulls,
     _check_outliers_iqr,
+    _check_types,
     quality_node,
 )
 from ai_etl.core.state import initial_state
 
 
-def _state_with_df(df: pd.DataFrame) -> dict:
+def _state_with_df(df: pd.DataFrame, source_schemas: dict | None = None) -> dict:
     state = initial_state(spec="test", run_id="q-test-1")
-    return {**state, "transformed_data": df}
+    return {**state, "transformed_data": df, "source_schemas": source_schemas or {}}
 
 
 # --- quality_node ---
@@ -132,3 +133,53 @@ def test_check_outliers_ignores_string_columns() -> None:
     checks = _check_outliers_iqr(df)
     for c in checks:
         assert c["column"] != "a"
+
+
+# --- _check_types ---
+
+
+def test_check_types_no_source_schemas_returns_empty() -> None:
+    df = pd.DataFrame({"a": [1, 2, 3]})
+    assert _check_types(df, {}) == []
+
+
+def test_check_types_matching_dtype_returns_empty() -> None:
+    df = pd.DataFrame({"a": [1, 2, 3]})
+    source_schemas = {"orders": {"dtypes": {"a": "int64"}}}
+    assert _check_types(df, source_schemas) == []
+
+
+def test_check_types_mismatch_returns_warning() -> None:
+    df = pd.DataFrame({"a": ["1", "2", "3"]})
+    source_schemas = {"orders": {"dtypes": {"a": "int64"}}}
+    checks = _check_types(df, source_schemas)
+    assert len(checks) == 1
+    assert checks[0]["check"] == "type_mismatch"
+    assert checks[0]["column"] == "a"
+    assert checks[0]["severity"] == "warning"
+    assert checks[0]["actual_dtype"] != "int64"
+    assert checks[0]["expected_dtype"] == ["int64"]
+
+
+def test_check_types_ignores_columns_not_in_any_source() -> None:
+    df = pd.DataFrame({"new_col": [1, 2, 3]})
+    source_schemas = {"orders": {"dtypes": {"a": "int64"}}}
+    assert _check_types(df, source_schemas) == []
+
+
+def test_check_types_matches_if_any_source_dtype_agrees() -> None:
+    df = pd.DataFrame({"customer_id": [1, 2, 3]})
+    source_schemas = {
+        "orders": {"dtypes": {"customer_id": "object"}},
+        "customers": {"dtypes": {"customer_id": "int64"}},
+    }
+    assert _check_types(df, source_schemas) == []
+
+
+def test_quality_node_includes_type_mismatch_in_severity() -> None:
+    df = pd.DataFrame({"a": ["1", "2", "3"]})
+    source_schemas = {"orders": {"dtypes": {"a": "int64"}}}
+    result = quality_node(_state_with_df(df, source_schemas))  # type: ignore[arg-type]
+    checks = result["quality_report"]["checks"]
+    assert any(c["check"] == "type_mismatch" for c in checks)
+    assert result["quality_report"]["severity"] == "warning"
