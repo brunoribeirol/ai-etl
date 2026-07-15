@@ -1,4 +1,4 @@
-.PHONY: install test test-e2e lint format format-check type-check security check db-up db-down run-scenario1 run-scenario2 run-scenario3 app clean unhide-pth
+.PHONY: install test test-e2e lint format format-check type-check security check db-up db-down db-test-up app-db-up app-db-down app-db-test-up db-migrate run-scenario1 run-scenario2 run-scenario3 app clean unhide-pth
 
 install:
 	uv sync --all-extras
@@ -51,6 +51,18 @@ db-down:
 
 db-test-up:
 	docker-compose up -d postgres-test
+
+app-db-up:
+	docker-compose up -d app-postgres
+
+app-db-down:
+	docker-compose stop app-postgres
+
+app-db-test-up:
+	docker-compose up -d app-postgres-test
+
+db-migrate:
+	uv run alembic upgrade head
 
 run-scenario1:
 	uv run python -m ai_etl run \

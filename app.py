@@ -7,10 +7,8 @@ Run with:
     streamlit run app.py   (or: make app)
 """
 
-import contextlib
 import json
 import os
-import sqlite3
 import uuid
 from pathlib import Path
 from typing import Any, Optional
@@ -19,6 +17,7 @@ import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
 
+from ai_etl.audit.db import load_history
 from ai_etl.services.pipeline_service import AGENT_STEPS, ProgressCallback, run_full_analysis
 
 load_dotenv()
@@ -151,21 +150,6 @@ def _make_progress_adapter() -> ProgressCallback:
             box.write(message)
 
     return _callback
-
-
-def _load_history() -> pd.DataFrame:
-    db_path = RUNS_DIR / "runs.db"
-    if not db_path.exists():
-        return pd.DataFrame()
-    with contextlib.closing(sqlite3.connect(db_path)) as conn:
-        try:
-            return pd.read_sql(
-                "SELECT run_id, status, rows_loaded, timestamp, substr(spec,1,80) as spec "
-                "FROM runs ORDER BY timestamp DESC LIMIT 20",
-                conn,
-            )
-        except Exception:
-            return pd.DataFrame()
 
 
 # ---------------------------------------------------------------------------
@@ -711,7 +695,7 @@ def _tab_executar() -> None:
 def _tab_historico() -> None:
     st.markdown("### Histórico de execuções")
 
-    history = _load_history()
+    history = load_history(limit=20)
     if history.empty:
         st.info("Nenhuma execução registrada. Execute um pipeline para começar.")
         return

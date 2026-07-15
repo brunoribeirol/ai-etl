@@ -1,25 +1,27 @@
-"""Audit persistence — saves pipeline run state to JSON and SQLite."""
+"""Audit persistence — saves pipeline run state to JSON and the application Postgres."""
 
-import contextlib
 import json
-import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
 import pandas as pd
+from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from ai_etl.audit.connection import get_engine
+from ai_etl.audit.models import analysis_runs, runs
 from ai_etl.core.analysis_types import AdvisorResult, GoldResult, ScienceResult, TokenUsage
 from ai_etl.core.state import PipelineState
 
 
 def save_run(state: PipelineState, log_dir: str = "./runs") -> Path:
-    """Persist the final pipeline state to JSON and record in SQLite.
+    """Persist the final pipeline state to JSON and record it in the app database.
 
     Creates:
         {log_dir}/{run_id}.json          — full state snapshot
         {log_dir}/{run_id}_transform.py  — generated transformation code (if any)
-        {log_dir}/runs.db                — SQLite with run history
+        a row in the `runs` table of the application Postgres (APP_DATABASE_URL)
 
     Returns:
         Path to the JSON file.
@@ -35,7 +37,7 @@ def save_run(state: PipelineState, log_dir: str = "./runs") -> Path:
 
     json_path = log_path / f"{run_id}.json"
     _write_json(state, json_path, transform_code_path=transform_code_path)
-    _write_sqlite(state, log_path / "runs.db")
+    _write_run_row(state)
 
     return json_path
 
@@ -51,32 +53,55 @@ def _write_json(
     path.write_text(json.dumps(serializable, indent=2, default=str))
 
 
-def _write_sqlite(state: PipelineState, db_path: Path) -> None:
-    with contextlib.closing(sqlite3.connect(db_path)) as conn:
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS runs (
-                run_id TEXT PRIMARY KEY,
-                spec TEXT,
-                status TEXT,
-                error TEXT,
-                rows_loaded INTEGER,
-                timestamp TEXT
-            )
-        """)
-        load_result = state.get("load_result")
-        rows_loaded = load_result.get("rows_loaded") if load_result else None
-        conn.execute(
-            "INSERT OR REPLACE INTO runs VALUES (?, ?, ?, ?, ?, ?)",
-            (
-                state["run_id"],
-                state["spec"],
-                state["status"],
-                state.get("error"),
-                rows_loaded,
-                datetime.now(tz=timezone.utc).isoformat(),
-            ),
+def _write_run_row(state: PipelineState) -> None:
+    load_result = state.get("load_result")
+    rows_loaded = load_result.get("rows_loaded") if load_result else None
+    stmt = pg_insert(runs).values(
+        run_id=state["run_id"],
+        spec=state["spec"],
+        status=state["status"],
+        error=state.get("error"),
+        rows_loaded=rows_loaded,
+        timestamp=datetime.now(tz=timezone.utc),
+    )
+    stmt = stmt.on_conflict_do_update(
+        index_elements=[runs.c.run_id],
+        set_={
+            "spec": stmt.excluded.spec,
+            "status": stmt.excluded.status,
+            "error": stmt.excluded.error,
+            "rows_loaded": stmt.excluded.rows_loaded,
+            "timestamp": stmt.excluded.timestamp,
+        },
+    )
+    with get_engine().begin() as conn:
+        conn.execute(stmt)
+
+
+def load_history(limit: int = 20) -> pd.DataFrame:
+    """Return the most recent runs for the history table in `app.py`.
+
+    Mirrors the Phase 1 `_load_history` SQLite query. Returns an empty DataFrame
+    (rather than raising) if the application database is unreachable, so history
+    stays a soft-fail feature — matching the original behavior when `runs.db` was
+    missing or unreadable.
+    """
+    stmt = (
+        select(
+            runs.c.run_id,
+            runs.c.status,
+            runs.c.rows_loaded,
+            runs.c.timestamp,
+            func.substr(runs.c.spec, 1, 80).label("spec"),
         )
-        conn.commit()
+        .order_by(runs.c.timestamp.desc())
+        .limit(limit)
+    )
+    try:
+        with get_engine().connect() as conn:
+            return pd.read_sql(stmt, conn)
+    except Exception:
+        return pd.DataFrame()
 
 
 def save_analysis(
@@ -94,8 +119,8 @@ def save_analysis(
     Figures aren't serialized (not JSON-safe, and cheap to regenerate from `code`);
     full DataFrames aren't embedded either — only a preview and shape, since the CSV
     download per sub-task already covers the full data during the session. Token
-    usage is aggregated into an `analysis_runs` SQLite table so cost can be tracked
-    across runs without re-parsing every JSON file.
+    usage is aggregated into an `analysis_runs` table in the application Postgres so
+    cost can be tracked across runs without re-parsing every JSON file.
 
     Without this, closing the browser tab lost every Gold/Science/Advisor result —
     only the Silver ETL state was ever persisted, which undercut the "auditable
@@ -121,9 +146,7 @@ def save_analysis(
     json_path.write_text(json.dumps(payload, indent=2, default=str, ensure_ascii=False))
 
     total_tokens = _sum_all_tokens(gold_results, science_results, advisor_result, planner_tokens)
-    _write_analysis_sqlite(
-        run_id, len(gold_results), len(science_results), total_tokens, log_path / "runs.db"
-    )
+    _write_analysis_row(run_id, len(gold_results), len(science_results), total_tokens)
 
     return json_path
 
@@ -165,34 +188,29 @@ def _sum_all_tokens(
     return total
 
 
-def _write_analysis_sqlite(
-    run_id: str, n_gold: int, n_science: int, tokens: TokenUsage, db_path: Path
-) -> None:
-    with contextlib.closing(sqlite3.connect(db_path)) as conn:
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS analysis_runs (
-                run_id TEXT PRIMARY KEY,
-                gold_subtasks INTEGER,
-                science_subtasks INTEGER,
-                input_tokens INTEGER,
-                output_tokens INTEGER,
-                total_tokens INTEGER,
-                timestamp TEXT
-            )
-        """)
-        conn.execute(
-            "INSERT OR REPLACE INTO analysis_runs VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (
-                run_id,
-                n_gold,
-                n_science,
-                tokens.get("input_tokens", 0),
-                tokens.get("output_tokens", 0),
-                tokens.get("total_tokens", 0),
-                datetime.now(tz=timezone.utc).isoformat(),
-            ),
-        )
-        conn.commit()
+def _write_analysis_row(run_id: str, n_gold: int, n_science: int, tokens: TokenUsage) -> None:
+    stmt = pg_insert(analysis_runs).values(
+        run_id=run_id,
+        gold_subtasks=n_gold,
+        science_subtasks=n_science,
+        input_tokens=tokens.get("input_tokens", 0),
+        output_tokens=tokens.get("output_tokens", 0),
+        total_tokens=tokens.get("total_tokens", 0),
+        timestamp=datetime.now(tz=timezone.utc),
+    )
+    stmt = stmt.on_conflict_do_update(
+        index_elements=[analysis_runs.c.run_id],
+        set_={
+            "gold_subtasks": stmt.excluded.gold_subtasks,
+            "science_subtasks": stmt.excluded.science_subtasks,
+            "input_tokens": stmt.excluded.input_tokens,
+            "output_tokens": stmt.excluded.output_tokens,
+            "total_tokens": stmt.excluded.total_tokens,
+            "timestamp": stmt.excluded.timestamp,
+        },
+    )
+    with get_engine().begin() as conn:
+        conn.execute(stmt)
 
 
 def _make_serializable(obj: Any) -> Any:

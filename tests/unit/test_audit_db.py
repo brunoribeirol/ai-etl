@@ -1,15 +1,30 @@
-"""Unit tests for audit persistence (db.py)."""
+"""Unit tests for audit persistence (db.py) — JSON-file behavior only.
+
+Row-level Postgres behavior (upsert semantics, token aggregation, history
+ordering) is covered by tests/integration/test_audit_persistence.py against a
+live application database, since it isn't meaningful to fake with a mock
+without duplicating the SQL. Here, `_write_run_row`/`_write_analysis_row` are
+monkeypatched to no-ops so these tests exercise only the JSON-writing path
+and don't require a database.
+"""
 
 import json
-import sqlite3
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
+from ai_etl.audit import db
 from ai_etl.audit.db import save_analysis, save_run
 from ai_etl.core.state import initial_state
 
 _ZERO_TOKENS = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+
+
+@pytest.fixture(autouse=True)
+def _no_db(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(db, "_write_run_row", lambda state: None)
+    monkeypatch.setattr(db, "_write_analysis_row", lambda *args: None)
 
 
 def _make_completed_state() -> dict:
@@ -41,37 +56,33 @@ def test_save_run_creates_json_file(tmp_path: Path) -> None:
     assert data["status"] == "completed"
 
 
-def test_save_run_creates_sqlite_db(tmp_path: Path) -> None:
+def test_save_run_writes_row_with_correct_fields(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured: dict = {}
+    monkeypatch.setattr(db, "_write_run_row", lambda state: captured.update(state))
+
     state = _make_completed_state()
     save_run(state, log_dir=str(tmp_path))
 
-    db_path = tmp_path / "runs.db"
-    assert db_path.exists()
-
-    conn = sqlite3.connect(db_path)
-    row = conn.execute("SELECT * FROM runs WHERE run_id = 'run-abc-123'").fetchone()
-    conn.close()
-
-    assert row is not None
-    assert row[2] == "completed"  # status
-    assert row[4] == 42  # rows_loaded
+    assert captured["run_id"] == "run-abc-123"
+    assert captured["status"] == "completed"
+    assert captured["load_result"]["rows_loaded"] == 42
 
 
-def test_save_run_failed_state_has_null_rows_loaded(tmp_path: Path) -> None:
+def test_save_run_failed_state_has_no_load_result(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured: dict = {}
+    monkeypatch.setattr(db, "_write_run_row", lambda state: captured.update(state))
+
     state = _make_failed_state()
     save_run(state, log_dir=str(tmp_path))
 
-    db_path = tmp_path / "runs.db"
-    conn = sqlite3.connect(db_path)
-    row = conn.execute("SELECT rows_loaded FROM runs WHERE run_id = 'run-failed-1'").fetchone()
-    conn.close()
-
-    assert row[0] is None
+    assert captured.get("load_result") is None
 
 
 def test_save_run_json_serializes_dataframe(tmp_path: Path) -> None:
-    import pandas as pd
-
     state = _make_completed_state()
     state["transformed_data"] = pd.DataFrame({"a": [1, 2]})
     json_path = save_run(state, log_dir=str(tmp_path))
@@ -199,7 +210,16 @@ def test_save_analysis_includes_data_preview(tmp_path: Path) -> None:
     assert len(data["gold"][0]["data_preview"]) == 2
 
 
-def test_save_analysis_aggregates_tokens_in_sqlite(tmp_path: Path) -> None:
+def test_save_analysis_aggregates_tokens_before_writing_row(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured: dict = {}
+
+    def fake_write(run_id: str, n_gold: int, n_science: int, tokens: dict) -> None:
+        captured.update(run_id=run_id, n_gold=n_gold, n_science=n_science, tokens=tokens)
+
+    monkeypatch.setattr(db, "_write_analysis_row", fake_write)
+
     planner_tokens = {"input_tokens": 30, "output_tokens": 10, "total_tokens": 40}
     save_analysis(
         "run-analysis-3",
@@ -210,20 +230,12 @@ def test_save_analysis_aggregates_tokens_in_sqlite(tmp_path: Path) -> None:
         log_dir=str(tmp_path),
     )
 
-    conn = sqlite3.connect(tmp_path / "runs.db")
-    row = conn.execute(
-        "SELECT gold_subtasks, science_subtasks, input_tokens, output_tokens, total_tokens "
-        "FROM analysis_runs WHERE run_id = 'run-analysis-3'"
-    ).fetchone()
-    conn.close()
-
-    assert row is not None
-    assert row[0] == 1  # gold_subtasks
-    assert row[1] == 1  # science_subtasks
+    assert captured["n_gold"] == 1
+    assert captured["n_science"] == 1
     # 100 (gold) + 200 (science) + 50 (advisor) + 30 (planner) = 380
-    assert row[2] == 380
-    assert row[3] == 50 + 80 + 20 + 10  # output tokens
-    assert row[4] == 150 + 280 + 70 + 40  # total tokens
+    assert captured["tokens"]["input_tokens"] == 380
+    assert captured["tokens"]["output_tokens"] == 50 + 80 + 20 + 10
+    assert captured["tokens"]["total_tokens"] == 150 + 280 + 70 + 40
 
 
 def test_save_analysis_handles_empty_results(tmp_path: Path) -> None:
