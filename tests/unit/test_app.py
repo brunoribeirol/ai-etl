@@ -91,27 +91,91 @@ def test_save_upload_to_temp_preserves_extension(tmp_path, monkeypatch) -> None:
 
 
 # ---------------------------------------------------------------------------
-# _sum_run_tokens
+# _make_progress_adapter — bridges pipeline_service.ProgressCallback to st.status
 # ---------------------------------------------------------------------------
 
 
-def test_sum_run_tokens_aggregates_across_all_calls() -> None:
-    gold_results = [{"tokens": {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}}]
-    science_results = [{"tokens": {"input_tokens": 20, "output_tokens": 8, "total_tokens": 28}}]
-    advisor_result = {"tokens": {"input_tokens": 5, "output_tokens": 2, "total_tokens": 7}}
-    planner_tokens = {"input_tokens": 3, "output_tokens": 1, "total_tokens": 4}
+def test_progress_adapter_opens_one_status_box_per_stage(monkeypatch) -> None:
+    created: list[str] = []
 
-    total = app_module._sum_run_tokens(
-        gold_results, science_results, advisor_result, planner_tokens
-    )
+    class _FakeBox:
+        def __init__(self) -> None:
+            self.written: list[str] = []
+            self.updated: list[tuple[str, str]] = []
 
-    assert total == {"input_tokens": 38, "output_tokens": 16, "total_tokens": 54}
+        def write(self, message: str) -> None:
+            self.written.append(message)
+
+        def update(self, label: str, state: str) -> None:
+            self.updated.append((label, state))
+
+    def _fake_status(message: str, expanded: bool = True) -> _FakeBox:
+        created.append(message)
+        return _FakeBox()
+
+    monkeypatch.setattr(app_module.st, "status", _fake_status)
+
+    callback = app_module._make_progress_adapter()
+    callback("silver", "⚡ Executando pipeline Silver...")
+    callback("gold:0", "🏅 Gold — pergunta 1")
+    callback("silver", "⚙️ **Transformer** — ... *(1.0s)*")
+
+    assert created == ["⚡ Executando pipeline Silver...", "🏅 Gold — pergunta 1"]
 
 
-def test_sum_run_tokens_handles_missing_tokens_key() -> None:
-    total = app_module._sum_run_tokens([{}], [{}], {}, {})
+def test_progress_adapter_finalizes_box_on_done_glyph(monkeypatch) -> None:
+    class _FakeBox:
+        def __init__(self) -> None:
+            self.updated: list[tuple[str, str]] = []
+            self.written: list[str] = []
 
-    assert total == {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+        def write(self, message: str) -> None:
+            self.written.append(message)
+
+        def update(self, label: str, state: str) -> None:
+            self.updated.append((label, state))
+
+    boxes: dict[str, _FakeBox] = {}
+
+    def _fake_status(message: str, expanded: bool = True) -> _FakeBox:
+        box = _FakeBox()
+        boxes["silver"] = box
+        return box
+
+    monkeypatch.setattr(app_module.st, "status", _fake_status)
+
+    callback = app_module._make_progress_adapter()
+    callback("silver", "⚡ Executando pipeline Silver...")
+    callback("silver", "✅ Silver concluído em 3.0s")
+
+    assert boxes["silver"].updated == [("✅ Silver concluído em 3.0s", "complete")]
+
+
+def test_progress_adapter_treats_warning_glyph_as_error_state(monkeypatch) -> None:
+    class _FakeBox:
+        def __init__(self) -> None:
+            self.updated: list[tuple[str, str]] = []
+
+        def write(self, message: str) -> None:
+            pass
+
+        def update(self, label: str, state: str) -> None:
+            self.updated.append((label, state))
+
+    boxes: dict[str, _FakeBox] = {}
+
+    def _fake_status(message: str, expanded: bool = True) -> _FakeBox:
+        box = _FakeBox()
+        boxes["gold"] = box
+        return box
+
+    monkeypatch.setattr(app_module.st, "status", _fake_status)
+
+    callback = app_module._make_progress_adapter()
+    callback("gold", "🏅 Gold — pergunta 1")
+    callback("gold", "⚠️ Gold concluído com aviso (2.0s)")
+
+    assert boxes["gold"].updated == [("⚠️ Gold concluído com aviso (2.0s)", "error")]
 
 
 # ---------------------------------------------------------------------------

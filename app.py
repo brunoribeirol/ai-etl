@@ -11,14 +11,15 @@ import contextlib
 import json
 import os
 import sqlite3
-import time
 import uuid
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
+
+from ai_etl.services.pipeline_service import AGENT_STEPS, ProgressCallback, run_full_analysis
 
 load_dotenv()
 
@@ -49,14 +50,6 @@ EXAMPLE_QUESTIONS = [
     "Quais regiões devo priorizar para crescer?",
     "Como segmentar os clientes por perfil de compra?",
 ]
-
-AGENT_STEPS = {
-    "orchestrator": ("🧠", "Orchestrator", "Planejando o pipeline..."),
-    "extractor": ("📥", "Extractor", "Extraindo e inspecionando os dados..."),
-    "transformer": ("⚙️", "Transformer", "Transformando e limpando os dados (Silver)..."),
-    "quality": ("🔍", "Quality", "Verificando qualidade dos dados..."),
-    "loader": ("💾", "Loader", "Persistindo os dados limpos..."),
-}
 
 PRIORITY_ICON = {"high": "🔴", "medium": "🟡", "low": "🟢"}
 PRIORITY_LABEL = {"high": "Alta", "medium": "Média", "low": "Baixa"}
@@ -122,213 +115,42 @@ def _auto_generate_spec(
 
 
 # ---------------------------------------------------------------------------
-# Pipeline runners
+# Progress adapter — bridges pipeline_service.ProgressCallback to st.status
 # ---------------------------------------------------------------------------
-def _run_silver_pipeline(spec: str) -> dict:
-    from ai_etl.audit.db import save_run
-    from ai_etl.core.graph import build_graph
-    from ai_etl.core.state import initial_state
-
-    run_id = str(uuid.uuid4())
-    state = initial_state(spec=spec, run_id=run_id)
-    graph = build_graph()
-
-    final_state = dict(state)
-    agent_timings: dict[str, float] = {}
-
-    with st.status("⚡ Executando pipeline Silver...", expanded=True) as status_box:
-        t_total = time.time()
-        for chunk in graph.stream(state):
-            node_name = list(chunk.keys())[0]
-            partial = chunk[node_name]
-            t_node = time.time()
-            final_state.update(partial)
-
-            emoji, label, desc = AGENT_STEPS.get(node_name, ("⚡", node_name, "Processando..."))
-            agent_timings[node_name] = round(time.time() - t_node, 2)
-            elapsed = round(time.time() - t_total, 1)
-            status_box.write(f"{emoji} **{label}** — {desc} *({elapsed}s)*")
-
-        overall = final_state.get("status", "unknown")
-        total_time = round(time.time() - t_total, 1)
-        if overall == "completed":
-            status_box.update(label=f"✅ Silver concluído em {total_time}s", state="complete")
-        else:
-            err = final_state.get("error") or "Erro desconhecido"
-            status_box.update(label=f"❌ Silver falhou: {err[:80]}", state="error")
-
-    final_state["_agent_timings"] = agent_timings
-    final_state["_total_time"] = total_time
-
-    save_run(final_state, log_dir=str(RUNS_DIR))  # type: ignore[arg-type]
-    return final_state
+_DONE_PREFIXES = ("✅", "❌", "⚠️")
 
 
-def _run_gold_analysis(silver_df: pd.DataFrame, task_question: str) -> dict:
-    from ai_etl.agents.analyst import run_analyst
+def _make_progress_adapter() -> ProgressCallback:
+    """Build a ProgressCallback that renders each distinct `stage` as its own
+    `st.status` box, opened lazily on the first message for that stage.
 
-    with st.status(f"🏅 Gold — {task_question}", expanded=True) as status_box:
-        status_box.write("🤖 **Analyst Agent** — Calculando KPIs e insights...")
-        t0 = time.time()
-        result = run_analyst(silver_df, task_question)
-        elapsed = round(time.time() - t0, 1)
-        attempts = result.get("attempts", 1)
-
-        if result["error"]:
-            status_box.update(label=f"⚠️ Gold concluído com aviso ({elapsed}s)", state="error")
-        else:
-            status_box.update(
-                label=f"✅ Gold pronto em {elapsed}s ({attempts} tentativa(s))", state="complete"
-            )
-    return {**result, "task_question": task_question}
-
-
-def _run_science_analysis(silver_df: pd.DataFrame, task_question: str) -> dict:
-    from ai_etl.agents.science import run_science
-
-    with st.status(f"🔬 Science — {task_question}", expanded=True) as status_box:
-        status_box.write("🤖 **Science Agent** — Treinando modelo e gerando previsões...")
-        t0 = time.time()
-        result = run_science(silver_df, task_question)
-        elapsed = round(time.time() - t0, 1)
-        attempts = result.get("attempts", 1)
-
-        if result["error"]:
-            status_box.update(label=f"⚠️ Science concluído com aviso ({elapsed}s)", state="error")
-        else:
-            model_type = result.get("model_info", {}).get("model_type", "Modelo")
-            status_box.update(
-                label=f"✅ {model_type} treinado em {elapsed}s ({attempts} tentativa(s))",
-                state="complete",
-            )
-    return {**result, "task_question": task_question}
-
-
-def _run_gold_with_repair(silver_df: pd.DataFrame, task_question: str) -> dict:
-    """Run a Gold sub-task; if it fails outright, try once more with a simplified
-    fallback question before giving up.
-
-    `run_analyst` already retries the SAME question up to 3 times internally — this is
-    a different failure mode: the question itself may be too specific/complex for the
-    LLM to translate into working code at all, so the fallback rephrases it instead of
-    repeating it verbatim.
+    A message is treated as the box's final state (checkmark/error, collapsible)
+    when it starts with a "done" glyph (✅/❌/⚠️) — the same convention the moved
+    orchestration code already used for its last status update per phase. Anything
+    else is appended to the box with `.write()` while it stays in the "running" state.
     """
-    result = _run_gold_analysis(silver_df, task_question)
-    if not result.get("error"):
-        return result
+    boxes: dict[str, Any] = {}
 
-    fallback_question = (
-        f"Resuma de forma simples os principais números relacionados a: {task_question}"
-    )
-    with st.status(f"🔧 Gold — reparo automático: {task_question}", expanded=True) as box:
-        box.write("A sub-análise falhou; tentando uma versão simplificada da pergunta...")
-        repaired = _run_gold_analysis(silver_df, fallback_question)
-        box.update(
-            label="✅ Reparo automático funcionou"
-            if not repaired.get("error")
-            else "⚠️ Reparo também falhou",
-            state="complete" if not repaired.get("error") else "error",
-        )
+    def _state_for(message: str) -> str:
+        return "complete" if message.startswith("✅") else "error"
 
-    if repaired.get("error"):
-        return result  # both failed — surface the original, more specific error
-    repaired["task_question"] = task_question
-    repaired["repaired"] = True
-    return repaired
+    def _callback(stage: str, message: str) -> None:
+        box = boxes.get(stage)
+        is_done = message.startswith(_DONE_PREFIXES)
 
+        if box is None:
+            box = st.status(message, expanded=True)
+            boxes[stage] = box
+            if is_done:
+                box.update(label=message, state=_state_for(message))
+            return
 
-def _run_science_with_repair(silver_df: pd.DataFrame, task_question: str) -> dict:
-    """Same auto-repair strategy as `_run_gold_with_repair`, for Science sub-tasks."""
-    result = _run_science_analysis(silver_df, task_question)
-    if not result.get("error"):
-        return result
-
-    fallback_question = (
-        f"Resuma de forma simples os principais números relacionados a: {task_question}"
-    )
-    with st.status(f"🔧 Science — reparo automático: {task_question}", expanded=True) as box:
-        box.write("A sub-análise falhou; tentando uma versão simplificada da pergunta...")
-        repaired = _run_science_analysis(silver_df, fallback_question)
-        box.update(
-            label="✅ Reparo automático funcionou"
-            if not repaired.get("error")
-            else "⚠️ Reparo também falhou",
-            state="complete" if not repaired.get("error") else "error",
-        )
-
-    if repaired.get("error"):
-        return result
-    repaired["task_question"] = task_question
-    repaired["repaired"] = True
-    return repaired
-
-
-def _run_analysis_tasks(silver_df: pd.DataFrame, business_question: str) -> tuple[list, list, dict]:
-    """Decompose the business question and run each sub-task through Gold or Science.
-
-    A single Gold/Science call answering a multi-part question in one shot tends to
-    cover only part of it — the LLM has to prioritize within one code generation. This
-    runs the Planner first, then one Gold/Science call per sub-task (with a one-shot
-    auto-repair fallback if a sub-task fails outright), so coverage of a "mega prompt"
-    is a property of the loop instead of how well one call juggled it.
-
-    Returns (gold_results, science_results, planner_tokens).
-    """
-    from ai_etl.agents.planner import plan_analysis_tasks
-
-    with st.status("🧭 Planner — decompondo a pergunta em sub-análises...", expanded=True) as box:
-        tasks, planner_tokens = plan_analysis_tasks(business_question, silver_df)
-        box.update(label=f"✅ {len(tasks)} sub-análise(s) planejada(s)", state="complete")
-        for t in tasks:
-            box.write(f"- ({t['type']}) {t['question']}")
-
-    gold_results: list = []
-    science_results: list = []
-    for task in tasks:
-        if task["type"] == "descriptive":
-            gold_results.append(_run_gold_with_repair(silver_df, task["question"]))
+        if is_done:
+            box.update(label=message, state=_state_for(message))
         else:
-            science_results.append(_run_science_with_repair(silver_df, task["question"]))
-    return gold_results, science_results, planner_tokens
+            box.write(message)
 
-
-def _sum_run_tokens(
-    gold_results: list, science_results: list, advisor_result: dict, planner_tokens: dict
-) -> dict:
-    """Aggregate token usage across the Planner call, every Gold/Science sub-task, and
-    the Advisor call, so the UI can show a single cost figure per run."""
-    per_call = [g.get("tokens", {}) for g in gold_results]
-    per_call += [s.get("tokens", {}) for s in science_results]
-    per_call.append(advisor_result.get("tokens", {}))
-    per_call.append(planner_tokens)
-
-    total = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
-    for tokens in per_call:
-        for key in total:
-            total[key] += (tokens or {}).get(key, 0)
-    return total
-
-
-def _run_advisor_analysis(
-    silver_df: pd.DataFrame,
-    business_question: str,
-    gold_results: list,
-    science_results: list,
-) -> dict:
-    from ai_etl.agents.advisor import run_advisor
-
-    with st.status("🎯 Advisor — recomendações prescritivas...", expanded=True) as status_box:
-        status_box.write("🤖 **Advisor Agent** — Sintetizando análises e gerando recomendações...")
-        t0 = time.time()
-        result = run_advisor(silver_df, business_question, gold_results, science_results)
-        elapsed = round(time.time() - t0, 1)
-        n = len(result.get("recommendations", []))
-
-        if result["error"]:
-            status_box.update(label=f"⚠️ Advisor com aviso ({elapsed}s)", state="error")
-        else:
-            status_box.update(label=f"✅ {n} recomendações geradas em {elapsed}s", state="complete")
-    return result
+    return _callback
 
 
 def _load_history() -> pd.DataFrame:
@@ -855,44 +677,26 @@ def _tab_executar() -> None:
                 spec = manual_spec.strip()
                 df_bronze = None
 
-            # Silver pipeline
-            silver_state = _run_silver_pipeline(spec)
-            silver_df = silver_state.get("transformed_data")
-
-            gold_results: list = []
-            science_results: list = []
-            advisor_result: dict = {}
-            planner_tokens: dict = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
-
-            if isinstance(silver_df, pd.DataFrame) and not silver_df.empty:
-                from ai_etl.audit.db import save_analysis
-
-                q = business_question.strip()
-                gold_results, science_results, planner_tokens = _run_analysis_tasks(silver_df, q)
-                advisor_result = _run_advisor_analysis(silver_df, q, gold_results, science_results)
-                save_analysis(
-                    silver_state["run_id"],
-                    gold_results,
-                    science_results,
-                    advisor_result,
-                    planner_tokens,
-                    log_dir=str(RUNS_DIR),
-                )
-            elif silver_state.get("status") != "completed":
-                st.warning("Pipeline Silver não completou — análise não executada.")
-
-            total_tokens = _sum_run_tokens(
-                gold_results, science_results, advisor_result, planner_tokens
+            result = run_full_analysis(
+                spec,
+                business_question,
+                run_dir=str(RUNS_DIR),
+                progress_callback=_make_progress_adapter(),
             )
 
+            silver_df = result["state"].get("transformed_data")
+            silver_ran_ok = isinstance(silver_df, pd.DataFrame) and not silver_df.empty
+            if not silver_ran_ok and result["state"].get("status") != "completed":
+                st.warning("Pipeline Silver não completou — análise não executada.")
+
             st.session_state["pipeline_result"] = {
-                "state": silver_state,
+                "state": result["state"],
                 "bronze": df_bronze,
-                "gold": gold_results,
-                "science": science_results,
-                "advisor": advisor_result,
-                "question": business_question.strip(),
-                "tokens": total_tokens,
+                "gold": result["gold"],
+                "science": result["science"],
+                "advisor": result["advisor"],
+                "question": result["question"],
+                "tokens": result["tokens"],
             }
             st.rerun()
 
