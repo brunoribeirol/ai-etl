@@ -151,6 +151,7 @@ def test_run_science_result_has_all_keys(mock_get_llm, sample_df: pd.DataFrame) 
     result = run_science(sample_df, "Qual será a receita?")
 
     assert set(result.keys()) == {
+        "task_question",
         "predictions_df",
         "fig",
         "narrative",
@@ -158,6 +159,7 @@ def test_run_science_result_has_all_keys(mock_get_llm, sample_df: pd.DataFrame) 
         "code",
         "attempts",
         "error",
+        "tokens",
     }
 
 

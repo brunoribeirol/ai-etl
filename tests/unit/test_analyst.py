@@ -211,4 +211,13 @@ def test_run_analyst_result_has_all_keys(mock_get_llm, sample_df: pd.DataFrame) 
     mock_get_llm.return_value = _make_llm_mock([HAPPY_CODE])
     result = run_analyst(sample_df, "Qual produto?")
 
-    assert set(result.keys()) == {"gold_df", "fig", "narrative", "code", "attempts", "error"}
+    assert set(result.keys()) == {
+        "task_question",
+        "gold_df",
+        "fig",
+        "narrative",
+        "code",
+        "attempts",
+        "error",
+        "tokens",
+    }

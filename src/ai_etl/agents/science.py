@@ -13,7 +13,8 @@ from typing import Any
 
 import pandas as pd
 
-from ai_etl.core.llm import get_llm
+from ai_etl.core.analysis_types import ScienceResult, TokenUsage
+from ai_etl.core.llm import extract_token_usage, get_llm, sum_token_usage
 
 _PROMPT_TEMPLATE = """\
 You are a senior data scientist. You have access to a cleaned pandas DataFrame called `df`.
@@ -271,17 +272,11 @@ def _validate_narrative_consistency(
         )
 
 
-def run_science(df: pd.DataFrame, business_question: str) -> dict[str, Any]:
+def run_science(df: pd.DataFrame, business_question: str) -> ScienceResult:
     """Run predictive analytics on the Silver DataFrame.
 
-    Returns a dict with keys:
-        predictions_df : pd.DataFrame
-        fig            : plotly Figure or None
-        narrative      : str
-        model_info     : dict
-        code           : str
-        attempts       : int
-        error          : str or None
+    Returns a ScienceResult dict (see ai_etl.core.analysis_types) with `task_question`
+    left blank — callers running this per Planner sub-task fill it in themselves.
     """
     import math
 
@@ -345,6 +340,7 @@ def run_science(df: pd.DataFrame, business_question: str) -> dict[str, Any]:
     llm = get_llm()
     last_error = ""
     last_code = ""
+    attempt_usages: list[TokenUsage] = []
 
     for attempt in range(1, 4):
         if attempt == 1:
@@ -353,6 +349,7 @@ def run_science(df: pd.DataFrame, business_question: str) -> dict[str, Any]:
             prompt = _RETRY_PREFIX.format(error=last_error, columns_list=columns_list) + base_prompt
 
         response = llm.invoke(prompt)
+        attempt_usages.append(extract_token_usage(response))
         code = _strip_fences(str(response.content).strip())
         last_code = code
 
@@ -381,6 +378,7 @@ def run_science(df: pd.DataFrame, business_question: str) -> dict[str, Any]:
             _validate_narrative_consistency(str(narrative), predictions_df, model_info)
 
             return {
+                "task_question": "",
                 "predictions_df": predictions_df,
                 "fig": fig,
                 "narrative": str(narrative),
@@ -388,12 +386,14 @@ def run_science(df: pd.DataFrame, business_question: str) -> dict[str, Any]:
                 "code": code,
                 "attempts": attempt,
                 "error": None,
+                "tokens": sum_token_usage(*attempt_usages),
             }
 
         except Exception as exc:  # noqa: BLE001
             last_error = textwrap.shorten(str(exc), width=400, placeholder="...")
 
     return {
+        "task_question": "",
         "predictions_df": pd.DataFrame(),
         "fig": None,
         "narrative": "Não foi possível executar a análise preditiva. Tente reformular a pergunta ou verifique se os dados têm estrutura adequada para modelagem.",
@@ -401,4 +401,5 @@ def run_science(df: pd.DataFrame, business_question: str) -> dict[str, Any]:
         "code": last_code,
         "attempts": 3,
         "error": last_error,
+        "tokens": sum_token_usage(*attempt_usages),
     }

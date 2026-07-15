@@ -10,7 +10,8 @@ from typing import Any
 
 import pandas as pd
 
-from ai_etl.core.llm import get_llm
+from ai_etl.core.analysis_types import AdvisorResult, GoldResult, ScienceResult, TokenUsage
+from ai_etl.core.llm import extract_token_usage, get_llm, sum_token_usage
 
 _PROMPT_TEMPLATE = """\
 You are a senior business advisor with deep expertise in data-driven strategy.
@@ -79,62 +80,78 @@ def _build_data_overview(df: pd.DataFrame) -> str:
     return f"{n_rows} linhas × {n_cols} colunas\nColunas:\n" + "\n".join(col_summary) + more
 
 
-def _build_gold_context(gold: dict[str, Any]) -> str:
-    if not gold or gold.get("error"):
-        return "Análise descritiva não disponível."
+def _build_gold_context(gold_results: list[GoldResult]) -> str:
+    """Render every completed Gold sub-task, one block per task question.
 
-    parts: list[str] = []
-    if gold.get("narrative"):
-        parts.append(f"Narrativa: {gold['narrative']}")
+    Gold now runs once per sub-task produced by the Planner instead of once for the
+    whole business question, so the Advisor must see all of them to cite results the
+    single-shot version never had access to.
+    """
+    blocks: list[str] = []
+    for gold in gold_results:
+        if not gold or gold.get("error"):
+            continue
+        task_question = gold.get("task_question", "")
+        parts: list[str] = [f"Sub-pergunta: {task_question}"] if task_question else []
+        if gold.get("narrative"):
+            parts.append(f"Narrativa: {gold['narrative']}")
+        gold_df = gold.get("gold_df")
+        if isinstance(gold_df, pd.DataFrame) and not gold_df.empty:
+            parts.append(f"Dados agregados:\n{gold_df.head(10).to_string(index=False)}")
+        if parts:
+            blocks.append("\n".join(parts))
 
-    gold_df = gold.get("gold_df")
-    if isinstance(gold_df, pd.DataFrame) and not gold_df.empty:
-        parts.append(f"Dados agregados:\n{gold_df.head(10).to_string(index=False)}")
-
-    return "\n".join(parts) if parts else "Análise descritiva não disponível."
+    return "\n\n".join(blocks) if blocks else "Análise descritiva não disponível."
 
 
-def _build_science_context(science: dict[str, Any]) -> str:
-    if not science or science.get("error"):
-        return "Análise preditiva não disponível."
+def _build_science_context(science_results: list[ScienceResult]) -> str:
+    """Render every completed Science sub-task, one block per task question."""
+    blocks: list[str] = []
+    for science in science_results:
+        if not science or science.get("error"):
+            continue
+        task_question = science.get("task_question", "")
+        parts: list[str] = [f"Sub-pergunta: {task_question}"] if task_question else []
+        if science.get("narrative"):
+            parts.append(f"Narrativa: {science['narrative']}")
 
-    parts: list[str] = []
-    if science.get("narrative"):
-        parts.append(f"Narrativa: {science['narrative']}")
+        model_info = science.get("model_info", {})
+        if model_info:
+            model_type = model_info.get("model_type", "—")
+            task = model_info.get("task", "—")
+            metrics = model_info.get("metrics", {})
+            metrics_str = ", ".join(f"{k}={v}" for k, v in metrics.items())
+            parts.append(f"Modelo: {model_type} ({task})")
+            if metrics_str:
+                parts.append(f"Métricas: {metrics_str}")
 
-    model_info = science.get("model_info", {})
-    if model_info:
-        model_type = model_info.get("model_type", "—")
-        task = model_info.get("task", "—")
-        metrics = model_info.get("metrics", {})
-        metrics_str = ", ".join(f"{k}={v}" for k, v in metrics.items())
-        parts.append(f"Modelo: {model_type} ({task})")
-        if metrics_str:
-            parts.append(f"Métricas: {metrics_str}")
+        pred_df = science.get("predictions_df")
+        if isinstance(pred_df, pd.DataFrame) and not pred_df.empty:
+            parts.append(f"Amostra de previsões:\n{pred_df.head(5).to_string(index=False)}")
 
-    pred_df = science.get("predictions_df")
-    if isinstance(pred_df, pd.DataFrame) and not pred_df.empty:
-        parts.append(f"Amostra de previsões:\n{pred_df.head(5).to_string(index=False)}")
+        if parts:
+            blocks.append("\n".join(parts))
 
-    return "\n".join(parts) if parts else "Análise preditiva não disponível."
+    return "\n\n".join(blocks) if blocks else "Análise preditiva não disponível."
 
 
 def run_advisor(
     df: pd.DataFrame,
     business_question: str,
-    gold_result: dict[str, Any],
-    science_result: dict[str, Any],
-) -> dict[str, Any]:
+    gold_results: list[GoldResult],
+    science_results: list[ScienceResult],
+) -> AdvisorResult:
     """Generate prescriptive recommendations from all available analysis.
 
-    Returns a dict with keys:
-        recommendations : list[dict] — each has action, rationale, priority, expected_impact
-        summary         : str — executive summary in Portuguese
-        error           : str or None
+    `gold_results` and `science_results` hold one entry per sub-task produced by the
+    Planner (`ai_etl.agents.planner.plan_analysis_tasks`) — a multi-part business
+    question is answered by several independent Gold/Science runs, not a single one.
+
+    Returns an AdvisorResult dict (see ai_etl.core.analysis_types).
     """
     data_overview = _build_data_overview(df)
-    gold_context = _build_gold_context(gold_result)
-    science_context = _build_science_context(science_result)
+    gold_context = _build_gold_context(gold_results)
+    science_context = _build_science_context(science_results)
 
     prompt = _PROMPT_TEMPLATE.format(
         question=business_question,
@@ -144,9 +161,11 @@ def run_advisor(
     )
 
     llm = get_llm()
+    attempt_usages: list[TokenUsage] = []
 
     for attempt in range(1, 3):
         response = llm.invoke(prompt)
+        attempt_usages.append(extract_token_usage(response))
         raw = str(response.content).strip()
 
         # Strip markdown fences if present
@@ -173,9 +192,10 @@ def run_advisor(
             recommendations.sort(key=lambda r: _PRIORITY_ORDER.get(r.get("priority", "low"), 2))
 
             return {
-                "recommendations": recommendations,
+                "recommendations": recommendations,  # type: ignore[typeddict-item]  # validated above
                 "summary": summary,
                 "error": None,
+                "tokens": sum_token_usage(*attempt_usages),
             }
 
         except (json.JSONDecodeError, KeyError, TypeError) as exc:
@@ -186,4 +206,5 @@ def run_advisor(
         "recommendations": [],
         "summary": "Não foi possível gerar recomendações automaticamente.",
         "error": "JSON parsing failed after 2 attempts",
+        "tokens": sum_token_usage(*attempt_usages),
     }
