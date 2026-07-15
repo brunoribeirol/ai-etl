@@ -12,15 +12,16 @@ from functools import lru_cache
 
 from sqlalchemy import Engine, create_engine
 
-_DEFAULT_APP_DATABASE_URL = "postgresql://ai_etl_app:ai_etl_app@localhost:5434/ai_etl_app_db"
-
 
 @lru_cache(maxsize=1)
 def get_engine() -> Engine:
     """Return a process-wide engine for the application database.
 
-    Cached per-process: `APP_DATABASE_URL` is read once. Tests that need a different
-    URL should call `get_engine.cache_clear()` after setting the environment variable.
+    Uses APP_DATABASE_URL from environment. Cached per-process: the variable is read
+    once. Tests that need a different URL should call `get_engine.cache_clear()` after
+    setting the environment variable.
     """
-    url = os.getenv("APP_DATABASE_URL", _DEFAULT_APP_DATABASE_URL)
+    url = os.getenv("APP_DATABASE_URL")
+    if not url:
+        raise EnvironmentError("APP_DATABASE_URL environment variable is not set.")
     return create_engine(url, pool_pre_ping=True)
