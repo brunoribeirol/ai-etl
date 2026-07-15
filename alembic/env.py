@@ -10,7 +10,6 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-from ai_etl.audit.connection import _DEFAULT_APP_DATABASE_URL
 from ai_etl.audit.models import metadata
 
 config = context.config
@@ -18,9 +17,10 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-config.set_main_option(
-    "sqlalchemy.url", os.getenv("APP_DATABASE_URL", _DEFAULT_APP_DATABASE_URL)
-)
+_app_database_url = os.getenv("APP_DATABASE_URL")
+if not _app_database_url:
+    raise EnvironmentError("APP_DATABASE_URL environment variable is not set.")
+config.set_main_option("sqlalchemy.url", _app_database_url)
 
 target_metadata = metadata
 
