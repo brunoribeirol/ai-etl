@@ -23,5 +23,31 @@ services:
     tmpfs:
       - /var/lib/postgresql/data
 
+  # Application database — stores AI-ETL's own runs/analysis_runs audit tables.
+  # Logically distinct from `postgres` above, which is a pipeline source/destination
+  # the user points at their own data (see APP_DATABASE_URL vs. POSTGRES_URL).
+  app-postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: ai_etl_app
+      POSTGRES_PASSWORD: ai_etl_app
+      POSTGRES_DB: ai_etl_app_db
+    ports:
+      - "5434:5432"
+    volumes:
+      - app_postgres_data:/var/lib/postgresql/data
+
+  app-postgres-test:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: ai_etl_app_test
+      POSTGRES_PASSWORD: ai_etl_app_test
+      POSTGRES_DB: ai_etl_app_test_db
+    ports:
+      - "5435:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+
 volumes:
   postgres_data:
+  app_postgres_data:

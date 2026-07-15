@@ -36,6 +36,8 @@ cd ai-etl
 cp .env.example .env        # fill in OPENAI_API_KEY
 uv sync --all-extras
 make db-up                  # starts PostgreSQL (optional, for scenarios 2 and 3)
+make app-db-up               # starts the application database (runs/analysis_runs history)
+make db-migrate              # applies Alembic migrations to it
 
 # Run a pipeline
 python -m ai_etl run --spec "Read sales.csv, rename dt to date, filter active rows, save as output.csv"
