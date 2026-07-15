@@ -4,16 +4,18 @@ import pandas as pd
 
 from ai_etl.agents.quality import (
     _check_duplicates,
+    _check_logical_duplicates,
     _check_nulls,
     _check_outliers_iqr,
+    _check_types,
     quality_node,
 )
 from ai_etl.core.state import initial_state
 
 
-def _state_with_df(df: pd.DataFrame) -> dict:
+def _state_with_df(df: pd.DataFrame, source_schemas: dict | None = None) -> dict:
     state = initial_state(spec="test", run_id="q-test-1")
-    return {**state, "transformed_data": df}
+    return {**state, "transformed_data": df, "source_schemas": source_schemas or {}}
 
 
 # --- quality_node ---
@@ -55,6 +57,13 @@ def test_quality_node_error_severity_for_high_nulls() -> None:
     result = quality_node(_state_with_df(df))  # type: ignore[arg-type]
     assert result["quality_report"]["severity"] == "error"
     assert result["status"] == "failed"  # quality-blocked runs must not stay "running"
+    assert result["error"]  # must not be None — callers render it directly
+
+
+def test_quality_node_ok_severity_leaves_error_untouched() -> None:
+    df = pd.DataFrame({"a": [1, 2, 3]})
+    result = quality_node(_state_with_df(df))  # type: ignore[arg-type]
+    assert result["error"] is None
 
 
 def test_quality_node_warning_severity_for_duplicates() -> None:
@@ -132,3 +141,83 @@ def test_check_outliers_ignores_string_columns() -> None:
     checks = _check_outliers_iqr(df)
     for c in checks:
         assert c["column"] != "a"
+
+
+# --- _check_types ---
+
+
+def test_check_types_no_source_schemas_returns_empty() -> None:
+    df = pd.DataFrame({"a": [1, 2, 3]})
+    assert _check_types(df, {}) == []
+
+
+def test_check_types_matching_dtype_returns_empty() -> None:
+    df = pd.DataFrame({"a": [1, 2, 3]})
+    source_schemas = {"orders": {"dtypes": {"a": "int64"}}}
+    assert _check_types(df, source_schemas) == []
+
+
+def test_check_types_mismatch_returns_warning() -> None:
+    df = pd.DataFrame({"a": ["1", "2", "3"]})
+    source_schemas = {"orders": {"dtypes": {"a": "int64"}}}
+    checks = _check_types(df, source_schemas)
+    assert len(checks) == 1
+    assert checks[0]["check"] == "type_mismatch"
+    assert checks[0]["column"] == "a"
+    assert checks[0]["severity"] == "warning"
+    assert checks[0]["actual_dtype"] != "int64"
+    assert checks[0]["expected_dtype"] == ["int64"]
+
+
+def test_check_types_ignores_columns_not_in_any_source() -> None:
+    df = pd.DataFrame({"new_col": [1, 2, 3]})
+    source_schemas = {"orders": {"dtypes": {"a": "int64"}}}
+    assert _check_types(df, source_schemas) == []
+
+
+def test_check_types_matches_if_any_source_dtype_agrees() -> None:
+    df = pd.DataFrame({"customer_id": [1, 2, 3]})
+    source_schemas = {
+        "orders": {"dtypes": {"customer_id": "object"}},
+        "customers": {"dtypes": {"customer_id": "int64"}},
+    }
+    assert _check_types(df, source_schemas) == []
+
+
+def test_quality_node_includes_type_mismatch_in_severity() -> None:
+    df = pd.DataFrame({"a": ["1", "2", "3"]})
+    source_schemas = {"orders": {"dtypes": {"a": "int64"}}}
+    result = quality_node(_state_with_df(df, source_schemas))  # type: ignore[arg-type]
+    checks = result["quality_report"]["checks"]
+    assert any(c["check"] == "type_mismatch" for c in checks)
+    assert result["quality_report"]["severity"] == "warning"
+
+
+# --- _check_logical_duplicates ---
+
+
+def test_check_logical_duplicates_flags_repeated_names() -> None:
+    names = [f"App {i}" for i in range(20)] + ["App 0", "App 0"]  # 2 extra repeats of "App 0"
+    df = pd.DataFrame({"name": names})
+    checks = _check_logical_duplicates(df)
+    assert len(checks) == 1
+    assert checks[0]["check"] == "duplicate_by_column"
+    assert checks[0]["column"] == "name"
+    assert checks[0]["group_count"] == 1
+    assert checks[0]["row_count"] == 3
+    assert checks[0]["severity"] == "warning"
+
+
+def test_check_logical_duplicates_ignores_low_cardinality_category() -> None:
+    df = pd.DataFrame({"category": ["Games", "Tools"] * 10})
+    assert _check_logical_duplicates(df) == []
+
+
+def test_check_logical_duplicates_no_repeats_returns_empty() -> None:
+    df = pd.DataFrame({"name": [f"App {i}" for i in range(10)]})
+    assert _check_logical_duplicates(df) == []
+
+
+def test_check_logical_duplicates_ignores_numeric_columns() -> None:
+    df = pd.DataFrame({"amount": [1, 1, 1, 2, 3, 4, 5, 6, 7, 8]})
+    assert _check_logical_duplicates(df) == []

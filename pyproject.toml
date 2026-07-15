@@ -9,7 +9,7 @@ dependencies = [
     "langchain-openai>=0.3.0",
     "langgraph>=0.2.0",
     "openai>=1.50.0",
-    "pandas>=2.0.0",
+    "pandas>=2.0.0,<3.0.0",
     "openpyxl>=3.1.0",
     "sqlalchemy>=2.0.0",
     "psycopg2-binary>=2.9.0",
@@ -32,7 +32,7 @@ dev = [
     "pytest-timeout>=2.3.0",
     "mypy>=1.10.0",
     "ruff>=0.5.0",
-    "pandas-stubs>=2.0.0",
+    "pandas-stubs>=2.0.0,<3.0.0",
     "bandit>=1.8.0",
     "pip-audit>=2.7.0",
     "pre-commit>=3.7.0",
@@ -69,7 +69,7 @@ exclude_dirs = ["tests", ".venv"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src"]
+pythonpath = ["src", "."]
 addopts = "-v"
 
 [tool.coverage.run]

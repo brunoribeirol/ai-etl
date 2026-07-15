@@ -20,6 +20,14 @@ def transform(dfs):
     raise ValueError("something went wrong")
 """
 
+IMPORT_CODE = """
+import re
+def transform(dfs):
+    df = dfs["orders"].copy()
+    df["total"] = df["price"] * df["qty"]
+    return df
+"""
+
 
 def _make_state() -> dict:
     state = initial_state(spec="compute total", run_id="test-run")
@@ -74,6 +82,19 @@ def test_sandbox_error_triggers_retry(mock_get_llm) -> None:
 
     assert result["error"] is None
     assert result["transformation_attempts"] == 3
+
+
+def test_import_statement_triggers_retry_with_hint(mock_get_llm) -> None:
+    """The sandbox has no `__import__`; the retry prompt should call this out
+    explicitly so the LLM removes the import instead of repeating it."""
+    llm = _mock_llm([IMPORT_CODE, VALID_CODE])
+    mock_get_llm.return_value = llm
+    result = transformer_node(_make_state())
+
+    assert result["error"] is None
+    assert result["transformation_attempts"] == 2
+    second_prompt = llm.invoke.call_args_list[1].args[0]
+    assert "remove it entirely" in second_prompt
 
 
 def test_all_attempts_exhausted_sets_failed(mock_get_llm) -> None:

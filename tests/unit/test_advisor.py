@@ -21,28 +21,34 @@ def sample_df() -> pd.DataFrame:
 
 
 @pytest.fixture
-def gold_result() -> dict:
-    return {
-        "narrative": "O produto C gerou 43% da receita total.",
-        "gold_df": pd.DataFrame({"product": ["C", "B", "A"], "total_revenue": [300, 200, 250]}),
-        "error": None,
-    }
+def gold_result() -> list[dict]:
+    return [
+        {
+            "task_question": "Qual produto gerou mais receita?",
+            "narrative": "O produto C gerou 43% da receita total.",
+            "gold_df": pd.DataFrame({"product": ["C", "B", "A"], "total_revenue": [300, 200, 250]}),
+            "error": None,
+        }
+    ]
 
 
 @pytest.fixture
-def science_result() -> dict:
-    return {
-        "narrative": "O modelo prevê crescimento de 15% nos próximos 3 meses.",
-        "model_info": {
-            "model_type": "LinearRegression",
-            "task": "regression",
-            "metrics": {"r2": 0.91},
-            "features": ["units"],
-            "target": "revenue",
-        },
-        "predictions_df": pd.DataFrame({"month": ["Jan", "Fev"], "predicted": [320.0, 340.0]}),
-        "error": None,
-    }
+def science_result() -> list[dict]:
+    return [
+        {
+            "task_question": "Qual a previsão de receita?",
+            "narrative": "O modelo prevê crescimento de 15% nos próximos 3 meses.",
+            "model_info": {
+                "model_type": "LinearRegression",
+                "task": "regression",
+                "metrics": {"r2": 0.91},
+                "features": ["units"],
+                "target": "revenue",
+            },
+            "predictions_df": pd.DataFrame({"month": ["Jan", "Fev"], "predicted": [320.0, 340.0]}),
+            "error": None,
+        }
+    ]
 
 
 @pytest.fixture
@@ -92,13 +98,24 @@ def test_run_advisor_happy_path(mock_get_llm, sample_df, gold_result, science_re
     assert len(result["summary"]) > 0
 
 
+def test_run_advisor_prompt_forbids_restating_the_request(
+    mock_get_llm, sample_df, gold_result, science_result
+) -> None:
+    mock_llm = _mock_llm([VALID_RESPONSE])
+    mock_get_llm.return_value = mock_llm
+    run_advisor(sample_df, "Como aumentar o faturamento?", gold_result, science_result)
+
+    sent_prompt = mock_llm.invoke.call_args[0][0]
+    assert "Do NOT restate the business question" in sent_prompt
+
+
 def test_run_advisor_result_has_all_keys(
     mock_get_llm, sample_df, gold_result, science_result
 ) -> None:
     mock_get_llm.return_value = _mock_llm([VALID_RESPONSE])
     result = run_advisor(sample_df, "Como crescer?", gold_result, science_result)
 
-    assert set(result.keys()) == {"recommendations", "summary", "error"}
+    assert set(result.keys()) == {"recommendations", "summary", "error", "tokens"}
 
 
 def test_run_advisor_recommendations_are_sorted_by_priority(
@@ -145,16 +162,63 @@ def test_run_advisor_normalizes_invalid_priority(
 
 def test_run_advisor_handles_empty_gold(mock_get_llm, sample_df, science_result) -> None:
     mock_get_llm.return_value = _mock_llm([VALID_RESPONSE])
-    result = run_advisor(sample_df, "Como crescer?", {}, science_result)
+    result = run_advisor(sample_df, "Como crescer?", [], science_result)
 
     assert result["error"] is None
 
 
 def test_run_advisor_handles_empty_science(mock_get_llm, sample_df, gold_result) -> None:
     mock_get_llm.return_value = _mock_llm([VALID_RESPONSE])
-    result = run_advisor(sample_df, "Como crescer?", gold_result, {})
+    result = run_advisor(sample_df, "Como crescer?", gold_result, [])
 
     assert result["error"] is None
+
+
+def test_run_advisor_aggregates_multiple_gold_subtasks(
+    mock_get_llm, sample_df, science_result
+) -> None:
+    mock_llm = _mock_llm([VALID_RESPONSE])
+    mock_get_llm.return_value = mock_llm
+    two_gold_tasks = [
+        {
+            "task_question": "KPIs gerais?",
+            "narrative": "Receita total de R$750.",
+            "gold_df": pd.DataFrame({"total": [750]}),
+            "error": None,
+        },
+        {
+            "task_question": "KPIs por região?",
+            "narrative": "Norte lidera com R$500.",
+            "gold_df": pd.DataFrame({"region": ["Norte"], "total": [500]}),
+            "error": None,
+        },
+    ]
+    run_advisor(sample_df, "Pergunta com múltiplas partes", two_gold_tasks, science_result)
+
+    sent_prompt = mock_llm.invoke.call_args[0][0]
+    assert "KPIs gerais?" in sent_prompt
+    assert "KPIs por região?" in sent_prompt
+
+
+def test_run_advisor_skips_failed_subtasks_in_context(
+    mock_get_llm, sample_df, science_result
+) -> None:
+    mock_llm = _mock_llm([VALID_RESPONSE])
+    mock_get_llm.return_value = mock_llm
+    mixed = [
+        {"task_question": "Falhou", "error": "boom"},
+        {
+            "task_question": "Funcionou",
+            "narrative": "Tudo certo.",
+            "gold_df": pd.DataFrame({"a": [1]}),
+            "error": None,
+        },
+    ]
+    run_advisor(sample_df, "Pergunta", mixed, science_result)
+
+    sent_prompt = mock_llm.invoke.call_args[0][0]
+    assert "Falhou" not in sent_prompt
+    assert "Funcionou" in sent_prompt
 
 
 # ---------------------------------------------------------------------------

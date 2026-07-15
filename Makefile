@@ -1,11 +1,22 @@
-.PHONY: install test test-e2e lint format format-check type-check security check db-up db-down run-scenario1 run-scenario2 run-scenario3 app clean
+.PHONY: install test test-e2e lint format format-check type-check security check db-up db-down run-scenario1 run-scenario2 run-scenario3 app clean unhide-pth
 
 install:
 	uv sync --all-extras
-	uv pip install -e .
+	@$(MAKE) unhide-pth
 
 app:
+	uv sync --all-extras --quiet
+	@$(MAKE) unhide-pth
 	uv run streamlit run app.py
+
+# macOS + uv workaround: uv marks the .pth files it writes for editable
+# installs as "hidden" (UF_HIDDEN). Python >= 3.12.7 skips hidden .pth
+# files when building sys.path, which breaks `import ai_etl` silently.
+# Clearing the flag after every sync keeps the editable install usable.
+unhide-pth:
+	@if [ "$$(uname)" = "Darwin" ]; then \
+		chflags nohidden .venv/lib/python3.*/site-packages/*.pth 2>/dev/null || true; \
+	fi
 
 test:
 	uv run pytest tests/unit/ tests/integration/ -v --cov=src/ai_etl --cov-report=term-missing --cov-fail-under=80

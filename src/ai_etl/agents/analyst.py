@@ -12,7 +12,8 @@ from typing import Any
 
 import pandas as pd
 
-from ai_etl.core.llm import get_llm
+from ai_etl.core.analysis_types import GoldResult, TokenUsage
+from ai_etl.core.llm import extract_token_usage, get_llm, sum_token_usage
 
 _PROMPT_TEMPLATE = """\
 You are an expert data analyst. You have access to a cleaned pandas DataFrame called `df`.
@@ -166,16 +167,11 @@ def _strip_fences(code: str) -> str:
     return code.strip()
 
 
-def run_analyst(df: pd.DataFrame, business_question: str) -> dict[str, Any]:
+def run_analyst(df: pd.DataFrame, business_question: str) -> GoldResult:
     """Answer a business question from a Silver DataFrame.
 
-    Returns a dict with keys:
-        gold_df   : pd.DataFrame
-        fig       : plotly Figure or None
-        narrative : str
-        code      : str (generated Python)
-        attempts  : int
-        error     : str or None
+    Returns a GoldResult dict (see ai_etl.core.analysis_types) with `task_question`
+    left blank — callers running this per Planner sub-task fill it in themselves.
     """
     import numpy as np
     import plotly.express as px
@@ -197,6 +193,7 @@ def run_analyst(df: pd.DataFrame, business_question: str) -> dict[str, Any]:
     llm = get_llm()
     last_error = ""
     last_code = ""
+    attempt_usages: list[TokenUsage] = []
 
     for attempt in range(1, 4):
         if attempt == 1:
@@ -205,18 +202,29 @@ def run_analyst(df: pd.DataFrame, business_question: str) -> dict[str, Any]:
             prompt = _RETRY_PREFIX.format(error=last_error, columns_list=columns_list) + base_prompt
 
         response = llm.invoke(prompt)
+        attempt_usages.append(extract_token_usage(response))
         code = _strip_fences(str(response.content).strip())
         last_code = code
 
-        safe_globals = {**_SAFE_GLOBALS, "pd": pd, "np": np, "px": px, "go": go}
-        local_env: dict[str, Any] = {"df": df.copy()}
+        # A single dict serves as both globals and locals so that functions the
+        # LLM defines in `code` (which close over globals, not a separate locals
+        # dict) can still see `df` — exec(code, g, l) with g is l would otherwise
+        # raise NameError inside any nested `def` referencing `df`.
+        exec_env: dict[str, Any] = {
+            **_SAFE_GLOBALS,
+            "pd": pd,
+            "np": np,
+            "px": px,
+            "go": go,
+            "df": df.copy(),
+        }
 
         try:
-            exec(code, safe_globals, local_env)  # noqa: S102
+            exec(code, exec_env)  # noqa: S102
 
-            gold_df = local_env.get("gold_df")
-            fig = local_env.get("fig")
-            narrative = local_env.get("narrative", "")
+            gold_df = exec_env.get("gold_df")
+            fig = exec_env.get("fig")
+            narrative = exec_env.get("narrative", "")
 
             if not isinstance(gold_df, pd.DataFrame):
                 raise TypeError(f"gold_df must be a pd.DataFrame, got {type(gold_df).__name__}")
@@ -224,22 +232,26 @@ def run_analyst(df: pd.DataFrame, business_question: str) -> dict[str, Any]:
                 raise ValueError("fig must be defined (a Plotly Figure object)")
 
             return {
+                "task_question": "",
                 "gold_df": gold_df,
                 "fig": fig,
                 "narrative": str(narrative),
                 "code": code,
                 "attempts": attempt,
                 "error": None,
+                "tokens": sum_token_usage(*attempt_usages),
             }
 
         except Exception as exc:  # noqa: BLE001
             last_error = textwrap.shorten(str(exc), width=400, placeholder="...")
 
     return {
+        "task_question": "",
         "gold_df": pd.DataFrame(),
         "fig": None,
         "narrative": "Não foi possível gerar a análise automaticamente. Tente reformular a pergunta com mais detalhes.",
         "code": last_code,
         "attempts": 3,
         "error": last_error,
+        "tokens": sum_token_usage(*attempt_usages),
     }
