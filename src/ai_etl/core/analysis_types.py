@@ -17,6 +17,8 @@ from typing import Any, Literal, NotRequired, TypedDict
 
 import pandas as pd
 
+from ai_etl.core.state import PipelineState
+
 
 class TokenUsage(TypedDict):
     input_tokens: int
@@ -77,4 +79,22 @@ class AdvisorResult(TypedDict):
     recommendations: list[Recommendation]
     summary: str
     error: str | None
+    tokens: TokenUsage
+
+
+class AnalysisRunResult(TypedDict):
+    """Return contract of `pipeline_service.run_full_analysis` — the full
+    Silver -> Planner -> Gold/Science -> Advisor run for one business question.
+
+    `advisor` keeps the legacy "empty dict means not run" sentinel from the code
+    this replaces (Silver failing/returning no rows skips Planner/Gold/Science/
+    Advisor entirely): an `AdvisorResult` when the pipeline reached the Advisor,
+    or `{}` when it didn't. Callers must check truthiness, not just read fields.
+    """
+
+    state: PipelineState
+    gold: list[GoldResult]
+    science: list[ScienceResult]
+    advisor: "AdvisorResult | dict[str, Any]"
+    question: str
     tokens: TokenUsage
