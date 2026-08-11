@@ -7,7 +7,9 @@ Security note: exec() with restricted globals can be bypassed via
 introspection (e.g., ().__class__.__mro__[1].__subclasses__()).
 This is an accepted limitation for the TCC scope with controlled datasets.
 Production use would require a proper sandboxing solution (e.g., Docker).
-See docs/security.md for the full risk analysis.
+See SECURITY.md and docs/adr/ADR-003-exec-sandbox.md for the full risk analysis,
+including the two other exec() sites in agents/analyst.py and agents/science.py
+that this module's sandbox does not cover.
 """
 
 import traceback

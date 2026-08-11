@@ -78,7 +78,7 @@ make check       # lint + type-check + test
 - API keys are never logged — the audit logger redacts sensitive fields automatically
 - SQL queries always use SQLAlchemy parameterized execution
 
-See `docs/security.md` for the full risk analysis.
+See `SECURITY.md` and [ADR-003](docs/adr/ADR-003-exec-sandbox.md) for the full risk analysis.
 
 ---
 

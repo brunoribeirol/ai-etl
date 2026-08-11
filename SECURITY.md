@@ -22,16 +22,35 @@ You will receive an acknowledgement within 72 hours.
 ## Security design principles
 
 ### Code execution
-- `exec()` is only permitted inside `src/ai_etl/core/sandbox.py`, which restricts
-  the global namespace to a safe subset of builtins, `pandas`, and `numpy`.
-- LLM-generated code is never executed with unrestricted globals.
-- Known limitation: restricted `exec()` globals can be bypassed via Python
-  introspection (`__class__.__mro__`). This is accepted for the current scope
-  with controlled datasets. See inline comment in `sandbox.py`.
+- `exec()` is used at three call sites, each with its own restricted global
+  namespace — LLM-generated code is never executed with unrestricted globals
+  at any of them:
+  - `src/ai_etl/core/sandbox.py` — Transformer agent; `pandas`, `numpy`.
+  - `src/ai_etl/agents/analyst.py` — Analyst/Gold agent; `pandas`, `numpy`,
+    `plotly`; also permits `setattr`/`vars`, which the sandbox above does not.
+  - `src/ai_etl/agents/science.py` — Science agent; same as `analyst.py`,
+    plus pre-injected `sklearn` and `statsmodels` classes.
+- These three whitelists are maintained independently and are **not**
+  identical — see [ADR-003](docs/adr/ADR-003-exec-sandbox.md) for the full
+  comparison and the open follow-up to unify them.
+- Known limitation, applies to all three sites: restricted `exec()` globals
+  can be bypassed via Python introspection (`__class__.__mro__`). This is
+  accepted for the current scope with controlled datasets. See inline
+  comments in `sandbox.py`, `analyst.py`, and `science.py`.
+- Known gap: none of the three sites enforce an actual execution timeout —
+  `timeout_seconds` parameters accepted by some callers are not applied.
 
 ### SQL
-- SQL queries always use SQLAlchemy bound parameters (`text("... WHERE id = :id")`).
-- f-strings in SQL are forbidden — enforced via code review and bandit.
+- SQL queries use SQLAlchemy bound parameters (`text("... WHERE id = :id")`)
+  wherever the query shape is fixed at call time.
+- Table names interpolated into SQL (`sources/postgres_source.py`,
+  `destinations/postgres_dest.py`) go through a regex allowlist
+  (`^[A-Za-z0-9_.]+$`) before use — bound parameters cannot parameterize
+  identifiers in SQLAlchemy, so this is a deliberate, reviewed exception, not
+  an oversight. Both sites carry `# nosec B608` with a comment pointing to
+  the validation. Unvalidated f-strings in SQL are forbidden; validated,
+  identifier-only f-strings behind the allowlist are the one accepted
+  pattern — enforced via code review and bandit.
 
 ### Secrets and credentials
 - API keys, tokens, and passwords are configured via environment variables only.
