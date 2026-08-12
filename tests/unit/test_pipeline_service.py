@@ -391,7 +391,7 @@ def test_run_full_analysis_calls_stages_in_order_and_persists_analysis(monkeypat
     assert result["state"] is silver_state
     assert len(result["gold"]) == 1
     assert result["advisor"]["error"] is None
-    assert saved_analysis == {"run_id": "run-123", "log_dir": "runs"}
+    assert saved_analysis == {"run_id": "run-123", "log_dir": "runs", "tenant_id": None}
 
 
 def test_run_full_analysis_short_circuits_when_silver_produces_no_data(monkeypatch) -> None:
