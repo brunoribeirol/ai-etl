@@ -96,9 +96,10 @@ def test_run_silver_pipeline_emits_progress_and_persists(monkeypatch) -> None:
 
     saved: dict[str, Any] = {}
 
-    def fake_save_run(state: Any, log_dir: str) -> pathlib.Path:
+    def fake_save_run(state: Any, log_dir: str, tenant_id: str | None = None) -> pathlib.Path:
         saved["state"] = state
         saved["log_dir"] = log_dir
+        saved["tenant_id"] = tenant_id
         return pathlib.Path(log_dir) / "run.json"
 
     monkeypatch.setattr(pipeline_service, "save_run", fake_save_run)
@@ -125,7 +126,9 @@ def test_run_silver_pipeline_emits_progress_and_persists(monkeypatch) -> None:
 def test_run_silver_pipeline_reports_failure(monkeypatch) -> None:
     chunks = [{"orchestrator": {"status": "failed", "error": "Orchestrator failed: bad JSON"}}]
     monkeypatch.setattr(pipeline_service, "build_graph", lambda: _FakeGraph(chunks))
-    monkeypatch.setattr(pipeline_service, "save_run", lambda state, log_dir: pathlib.Path("x"))
+    monkeypatch.setattr(
+        pipeline_service, "save_run", lambda state, log_dir, tenant_id=None: pathlib.Path("x")
+    )
 
     events, _cb = _recorder()
     result = pipeline_service.run_silver_pipeline("bad spec", run_dir="runs", progress_callback=_cb)
@@ -338,7 +341,10 @@ def test_run_full_analysis_calls_stages_in_order_and_persists_analysis(monkeypat
     monkeypatch.setattr(
         pipeline_service,
         "run_silver_pipeline",
-        lambda spec, run_dir, progress_callback: (call_order.append("silver"), silver_state)[1],
+        lambda spec, run_dir, progress_callback, tenant_id=None: (
+            call_order.append("silver"),
+            silver_state,
+        )[1],
     )
     monkeypatch.setattr(
         pipeline_service,
@@ -360,11 +366,18 @@ def test_run_full_analysis_calls_stages_in_order_and_persists_analysis(monkeypat
     saved_analysis: dict[str, Any] = {}
 
     def fake_save_analysis(
-        run_id: str, gold: Any, science: Any, advisor: Any, planner_tokens: Any, log_dir: str
+        run_id: str,
+        gold: Any,
+        science: Any,
+        advisor: Any,
+        planner_tokens: Any,
+        log_dir: str,
+        tenant_id: str | None = None,
     ) -> pathlib.Path:
         call_order.append("save_analysis")
         saved_analysis["run_id"] = run_id
         saved_analysis["log_dir"] = log_dir
+        saved_analysis["tenant_id"] = tenant_id
         return pathlib.Path(log_dir) / f"{run_id}_analysis.json"
 
     monkeypatch.setattr(pipeline_service, "run_analyst", fake_run_analyst)
@@ -378,7 +391,7 @@ def test_run_full_analysis_calls_stages_in_order_and_persists_analysis(monkeypat
     assert result["state"] is silver_state
     assert len(result["gold"]) == 1
     assert result["advisor"]["error"] is None
-    assert saved_analysis == {"run_id": "run-123", "log_dir": "runs"}
+    assert saved_analysis == {"run_id": "run-123", "log_dir": "runs", "tenant_id": None}
 
 
 def test_run_full_analysis_short_circuits_when_silver_produces_no_data(monkeypatch) -> None:
@@ -390,7 +403,7 @@ def test_run_full_analysis_short_circuits_when_silver_produces_no_data(monkeypat
     monkeypatch.setattr(
         pipeline_service,
         "run_silver_pipeline",
-        lambda spec, run_dir, progress_callback: failed_state,
+        lambda spec, run_dir, progress_callback, tenant_id=None: failed_state,
     )
 
     downstream_called = {"planner": False, "advisor": False, "save_analysis": False}
@@ -424,7 +437,10 @@ def test_run_full_analysis_forwards_progress_callback_to_every_stage(monkeypatch
     silver_state = _completed_silver_state("run-1", pd.DataFrame({"a": [1]}))
 
     def fake_run_silver_pipeline(
-        spec: str, run_dir: str, progress_callback: pipeline_service.ProgressCallback
+        spec: str,
+        run_dir: str,
+        progress_callback: pipeline_service.ProgressCallback,
+        tenant_id: str | None = None,
     ) -> dict[str, Any]:
         progress_callback("silver", "⚡ Executando pipeline Silver...")
         progress_callback("silver", "✅ Silver concluído em 1.0s")

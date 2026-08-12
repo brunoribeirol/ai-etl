@@ -40,6 +40,24 @@ RUNS_DIR.mkdir(exist_ok=True)
 UPLOADS_DIR = RUNS_DIR / "uploads"
 UPLOADS_DIR.mkdir(exist_ok=True)
 
+
+# ---------------------------------------------------------------------------
+# Session scoping (Sprint A stopgap — not real auth/tenancy)
+# ---------------------------------------------------------------------------
+def _get_session_id() -> str:
+    """Return a stable per-browser-session UUID, generating one on first use.
+
+    Sprint A stopgap for the cross-session history leak: `load_history()` had no
+    filter, so any browser session could see and download any other session's
+    runs. This is not authentication — it's a random UUID tied to Streamlit's
+    `session_state`, good only for isolating concurrent sessions within one
+    deployed process. Real tenant accounts are future work.
+    """
+    if "session_id" not in st.session_state:
+        st.session_state["session_id"] = str(uuid.uuid4())
+    return str(st.session_state["session_id"])
+
+
 SEVERITY_BADGE = {"ok": "🟢 ok", "warning": "🟡 warning", "error": "🔴 error"}
 
 EXAMPLE_QUESTIONS = [
@@ -666,6 +684,7 @@ def _tab_executar() -> None:
                 business_question,
                 run_dir=str(RUNS_DIR),
                 progress_callback=_make_progress_adapter(),
+                tenant_id=_get_session_id(),
             )
 
             silver_df = result["state"].get("transformed_data")
@@ -695,7 +714,7 @@ def _tab_executar() -> None:
 def _tab_historico() -> None:
     st.markdown("### Histórico de execuções")
 
-    history = load_history(limit=20)
+    history = load_history(limit=20, tenant_id=_get_session_id())
     if history.empty:
         st.info("Nenhuma execução registrada. Execute um pipeline para começar.")
         return

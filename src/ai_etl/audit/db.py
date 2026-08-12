@@ -15,13 +15,21 @@ from ai_etl.core.analysis_types import AdvisorResult, GoldResult, ScienceResult,
 from ai_etl.core.state import PipelineState
 
 
-def save_run(state: PipelineState, log_dir: str = "./runs") -> Path:
+def save_run(state: PipelineState, log_dir: str = "./runs", tenant_id: str | None = None) -> Path:
     """Persist the final pipeline state to JSON and record it in the app database.
 
     Creates:
         {log_dir}/{run_id}.json          — full state snapshot
         {log_dir}/{run_id}_transform.py  — generated transformation code (if any)
         a row in the `runs` table of the application Postgres (APP_DATABASE_URL)
+
+    Args:
+        state: Final pipeline state to persist.
+        log_dir: Directory to write the JSON/transform files into.
+        tenant_id: Sprint A session-scoping stopgap — the browser session's UUID
+            (see `app.py::_get_session_id`), not a real tenant/account. Defaults to
+            `None` for backward compatibility with callers that don't pass one, but
+            `app.py` should always pass a real value going forward.
 
     Returns:
         Path to the JSON file.
@@ -37,7 +45,7 @@ def save_run(state: PipelineState, log_dir: str = "./runs") -> Path:
 
     json_path = log_path / f"{run_id}.json"
     _write_json(state, json_path, transform_code_path=transform_code_path)
-    _write_run_row(state)
+    _write_run_row(state, tenant_id=tenant_id)
 
     return json_path
 
@@ -53,7 +61,7 @@ def _write_json(
     path.write_text(json.dumps(serializable, indent=2, default=str))
 
 
-def _write_run_row(state: PipelineState) -> None:
+def _write_run_row(state: PipelineState, tenant_id: str | None = None) -> None:
     load_result = state.get("load_result")
     rows_loaded = load_result.get("rows_loaded") if load_result else None
     stmt = pg_insert(runs).values(
@@ -63,6 +71,7 @@ def _write_run_row(state: PipelineState) -> None:
         error=state.get("error"),
         rows_loaded=rows_loaded,
         timestamp=datetime.now(tz=timezone.utc),
+        tenant_id=tenant_id,
     )
     stmt = stmt.on_conflict_do_update(
         index_elements=[runs.c.run_id],
@@ -72,19 +81,29 @@ def _write_run_row(state: PipelineState) -> None:
             "error": stmt.excluded.error,
             "rows_loaded": stmt.excluded.rows_loaded,
             "timestamp": stmt.excluded.timestamp,
+            "tenant_id": stmt.excluded.tenant_id,
         },
     )
     with get_engine().begin() as conn:
         conn.execute(stmt)
 
 
-def load_history(limit: int = 20) -> pd.DataFrame:
+def load_history(limit: int = 20, tenant_id: str | None = None) -> pd.DataFrame:
     """Return the most recent runs for the history table in `app.py`.
 
     Mirrors the Phase 1 `_load_history` SQLite query. Returns an empty DataFrame
     (rather than raising) if the application database is unreachable, so history
     stays a soft-fail feature — matching the original behavior when `runs.db` was
     missing or unreadable.
+
+    Args:
+        limit: Maximum number of rows to return, most recent first.
+        tenant_id: Sprint A session-scoping stopgap. When not `None`, restricts
+            results to that browser session's own runs via a bound-parameter
+            `WHERE` clause — this is the actual fix for the cross-session history
+            leak. When `None` (the default, kept for backward compatibility with
+            other callers), no filter is applied. `app.py` should always pass a
+            real value going forward.
     """
     stmt = (
         select(
@@ -97,6 +116,8 @@ def load_history(limit: int = 20) -> pd.DataFrame:
         .order_by(runs.c.timestamp.desc())
         .limit(limit)
     )
+    if tenant_id is not None:
+        stmt = stmt.where(runs.c.tenant_id == tenant_id)
     try:
         with get_engine().connect() as conn:
             return pd.read_sql(stmt, conn)
@@ -111,6 +132,7 @@ def save_analysis(
     advisor_result: AdvisorResult,
     planner_tokens: TokenUsage,
     log_dir: str = "./runs",
+    tenant_id: str | None = None,
 ) -> Path:
     """Persist Gold/Science/Advisor sub-task results alongside the Silver run.
 
@@ -125,6 +147,11 @@ def save_analysis(
     Without this, closing the browser tab lost every Gold/Science/Advisor result —
     only the Silver ETL state was ever persisted, which undercut the "auditable
     pipeline" pitch at exactly the layer a user is most likely to want to revisit.
+
+    Args:
+        tenant_id: Sprint A session-scoping stopgap — the browser session's UUID.
+            Defaults to `None` for backward compatibility; `app.py` should always
+            pass a real value going forward.
     """
     log_path = Path(log_dir)
     log_path.mkdir(parents=True, exist_ok=True)
@@ -146,7 +173,7 @@ def save_analysis(
     json_path.write_text(json.dumps(payload, indent=2, default=str, ensure_ascii=False))
 
     total_tokens = _sum_all_tokens(gold_results, science_results, advisor_result, planner_tokens)
-    _write_analysis_row(run_id, len(gold_results), len(science_results), total_tokens)
+    _write_analysis_row(run_id, len(gold_results), len(science_results), total_tokens, tenant_id)
 
     return json_path
 
@@ -188,7 +215,13 @@ def _sum_all_tokens(
     return total
 
 
-def _write_analysis_row(run_id: str, n_gold: int, n_science: int, tokens: TokenUsage) -> None:
+def _write_analysis_row(
+    run_id: str,
+    n_gold: int,
+    n_science: int,
+    tokens: TokenUsage,
+    tenant_id: str | None = None,
+) -> None:
     stmt = pg_insert(analysis_runs).values(
         run_id=run_id,
         gold_subtasks=n_gold,
@@ -197,6 +230,7 @@ def _write_analysis_row(run_id: str, n_gold: int, n_science: int, tokens: TokenU
         output_tokens=tokens.get("output_tokens", 0),
         total_tokens=tokens.get("total_tokens", 0),
         timestamp=datetime.now(tz=timezone.utc),
+        tenant_id=tenant_id,
     )
     stmt = stmt.on_conflict_do_update(
         index_elements=[analysis_runs.c.run_id],
@@ -207,6 +241,7 @@ def _write_analysis_row(run_id: str, n_gold: int, n_science: int, tokens: TokenU
             "output_tokens": stmt.excluded.output_tokens,
             "total_tokens": stmt.excluded.total_tokens,
             "timestamp": stmt.excluded.timestamp,
+            "tenant_id": stmt.excluded.tenant_id,
         },
     )
     with get_engine().begin() as conn:
