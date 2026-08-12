@@ -6,16 +6,29 @@ live application database, since it isn't meaningful to fake with a mock
 without duplicating the SQL. Here, `_write_run_row`/`_write_analysis_row` are
 monkeypatched to no-ops so these tests exercise only the JSON-writing path
 and don't require a database.
+
+The `load_history(tenant_id=...)` tests below are the one exception: the
+`tenant_id` filter is a `WHERE` clause on the *read* path, not an
+upsert/aggregation detail, and its correctness (does it actually scope rows
+per-session) is the whole point of the Sprint A fix — worth covering here
+without waiting on a live Postgres. They run `db.load_history` against a
+real (if lightweight) in-memory SQLite engine rather than mocking `get_engine`,
+so the actual SQLAlchemy Core `select(...).where(...)` executes for real.
 """
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
 import pytest
+import sqlalchemy
+from sqlalchemy import Engine
 
 from ai_etl.audit import db
 from ai_etl.audit.db import save_analysis, save_run
+from ai_etl.audit.models import metadata as audit_metadata
+from ai_etl.audit.models import runs as runs_table
 from ai_etl.core.state import initial_state
 
 _ZERO_TOKENS = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
@@ -23,7 +36,7 @@ _ZERO_TOKENS = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
 
 @pytest.fixture(autouse=True)
 def _no_db(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(db, "_write_run_row", lambda state: None)
+    monkeypatch.setattr(db, "_write_run_row", lambda state, tenant_id=None: None)
     monkeypatch.setattr(db, "_write_analysis_row", lambda *args: None)
 
 
@@ -60,7 +73,7 @@ def test_save_run_writes_row_with_correct_fields(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     captured: dict = {}
-    monkeypatch.setattr(db, "_write_run_row", lambda state: captured.update(state))
+    monkeypatch.setattr(db, "_write_run_row", lambda state, tenant_id=None: captured.update(state))
 
     state = _make_completed_state()
     save_run(state, log_dir=str(tmp_path))
@@ -74,7 +87,7 @@ def test_save_run_failed_state_has_no_load_result(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     captured: dict = {}
-    monkeypatch.setattr(db, "_write_run_row", lambda state: captured.update(state))
+    monkeypatch.setattr(db, "_write_run_row", lambda state, tenant_id=None: captured.update(state))
 
     state = _make_failed_state()
     save_run(state, log_dir=str(tmp_path))
@@ -215,8 +228,12 @@ def test_save_analysis_aggregates_tokens_before_writing_row(
 ) -> None:
     captured: dict = {}
 
-    def fake_write(run_id: str, n_gold: int, n_science: int, tokens: dict) -> None:
-        captured.update(run_id=run_id, n_gold=n_gold, n_science=n_science, tokens=tokens)
+    def fake_write(
+        run_id: str, n_gold: int, n_science: int, tokens: dict, tenant_id: str | None = None
+    ) -> None:
+        captured.update(
+            run_id=run_id, n_gold=n_gold, n_science=n_science, tokens=tokens, tenant_id=tenant_id
+        )
 
     monkeypatch.setattr(db, "_write_analysis_row", fake_write)
 
@@ -261,3 +278,82 @@ def test_save_analysis_marks_repaired_subtasks(tmp_path: Path) -> None:
 
     data = json.loads(json_path.read_text())
     assert data["gold"][0]["repaired"] is True
+
+
+# ---------------------------------------------------------------------------
+# load_history(tenant_id=...)
+# ---------------------------------------------------------------------------
+
+
+def _make_sqlite_engine() -> Engine:
+    """A fresh in-memory SQLite engine with the `runs`/`analysis_runs` schema.
+
+    `load_history` only ever runs a plain `select(...).where(...)` against
+    `runs` (no `pg_insert`/`ON CONFLICT`), so it's portable to SQLite — this
+    lets the tenant-filter `WHERE` clause execute for real instead of being
+    mocked, without requiring a live Postgres.
+    """
+    engine = sqlalchemy.create_engine("sqlite:///:memory:")
+    audit_metadata.create_all(engine)
+    return engine
+
+
+def _insert_run_row(
+    engine: Engine,
+    run_id: str,
+    tenant_id: str | None,
+    timestamp: datetime | None = None,
+) -> None:
+    with engine.begin() as conn:
+        conn.execute(
+            runs_table.insert().values(
+                run_id=run_id,
+                spec="load sales.csv",
+                status="completed",
+                error=None,
+                rows_loaded=1,
+                timestamp=timestamp or datetime.now(tz=timezone.utc),
+                tenant_id=tenant_id,
+            )
+        )
+
+
+def test_load_history_filters_by_tenant_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    engine = _make_sqlite_engine()
+    monkeypatch.setattr(db, "get_engine", lambda: engine)
+
+    _insert_run_row(engine, "run-tenant-a", tenant_id="tenant-a")
+    _insert_run_row(engine, "run-tenant-b", tenant_id="tenant-b")
+
+    history = db.load_history(tenant_id="tenant-a")
+
+    assert list(history["run_id"]) == ["run-tenant-a"]
+
+
+def test_load_history_without_tenant_id_returns_all_runs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = _make_sqlite_engine()
+    monkeypatch.setattr(db, "get_engine", lambda: engine)
+
+    _insert_run_row(engine, "run-tenant-a", tenant_id="tenant-a")
+    _insert_run_row(engine, "run-tenant-b", tenant_id="tenant-b")
+
+    history = db.load_history()
+
+    assert set(history["run_id"]) == {"run-tenant-a", "run-tenant-b"}
+
+
+def test_load_history_handles_legacy_rows_with_null_tenant_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = _make_sqlite_engine()
+    monkeypatch.setattr(db, "get_engine", lambda: engine)
+
+    _insert_run_row(engine, "run-legacy", tenant_id=None)
+
+    unfiltered = db.load_history()
+    assert list(unfiltered["run_id"]) == ["run-legacy"]
+
+    filtered = db.load_history(tenant_id="tenant-a")
+    assert filtered.empty

@@ -3,8 +3,10 @@
 Mirrors the `runs`/`analysis_runs` tables Phase 1 kept in SQLite
 (`{log_dir}/runs.db`), now backed by the application Postgres so run
 history survives across processes and Streamlit redeploys instead of
-living in one file per deployment. No auth/tenant columns yet — that's
-Phase 3.
+living in one file per deployment. `tenant_id` is a Sprint A stopgap
+holding a per-browser-session UUID for isolating history between
+concurrent Streamlit sessions — it is not a real tenant/account column;
+that's still future work.
 
 Core (not the ORM) matches the style already used in
 `sources/postgres_source.py` and `destinations/postgres_dest.py`.
@@ -23,6 +25,7 @@ runs = Table(
     Column("error", Text, nullable=True),
     Column("rows_loaded", Integer, nullable=True),
     Column("timestamp", DateTime(timezone=True), nullable=False),
+    Column("tenant_id", String, nullable=True),
 )
 
 analysis_runs = Table(
@@ -35,4 +38,5 @@ analysis_runs = Table(
     Column("output_tokens", Integer, nullable=False),
     Column("total_tokens", Integer, nullable=False),
     Column("timestamp", DateTime(timezone=True), nullable=False),
+    Column("tenant_id", String, nullable=True),
 )

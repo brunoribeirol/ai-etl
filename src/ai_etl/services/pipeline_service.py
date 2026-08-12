@@ -57,6 +57,7 @@ def run_silver_pipeline(
     spec: str,
     run_dir: str,
     progress_callback: ProgressCallback = _noop_progress,
+    tenant_id: str | None = None,
 ) -> PipelineState:
     """Run the Silver LangGraph (Orchestrator -> Extractor -> Transformer -> Quality
     -> Loader) to completion and persist the resulting state via `save_run`.
@@ -65,6 +66,11 @@ def run_silver_pipeline(
     per-node `agent_timings` computation (each entry is ~0 by construction — timed
     from immediately before to immediately after the state update, not across the
     node's actual execution — a pre-existing quirk kept as-is rather than fixed here).
+
+    Args:
+        tenant_id: Sprint A session-scoping stopgap forwarded to `save_run` — the
+            browser session's UUID (see `app.py::_get_session_id`), not a real
+            tenant/account. Defaults to `None` for backward compatibility.
     """
     run_id = str(uuid.uuid4())
     state = initial_state(spec=spec, run_id=run_id)
@@ -97,7 +103,7 @@ def run_silver_pipeline(
     final_state["_agent_timings"] = agent_timings
     final_state["_total_time"] = total_time
 
-    save_run(cast(PipelineState, final_state), log_dir=run_dir)
+    save_run(cast(PipelineState, final_state), log_dir=run_dir, tenant_id=tenant_id)
     return cast(PipelineState, final_state)
 
 
@@ -305,6 +311,7 @@ def run_full_analysis(
     business_question: str,
     run_dir: str,
     progress_callback: ProgressCallback = _noop_progress,
+    tenant_id: str | None = None,
 ) -> AnalysisRunResult:
     """Run the full Silver -> Planner -> Gold/Science -> Advisor pipeline for one
     business question, persisting Silver + analysis results as a side effect.
@@ -314,8 +321,13 @@ def run_full_analysis(
     Gold/Science/Advisor are skipped entirely and `advisor` comes back as `{}` (the
     legacy sentinel meaning "not run" — see `AnalysisRunResult`), matching the
     original short-circuit exactly.
+
+    Args:
+        tenant_id: Sprint A session-scoping stopgap forwarded to `save_run`/
+            `save_analysis` — the browser session's UUID. Defaults to `None` for
+            backward compatibility; `app.py` should always pass a real value.
     """
-    silver_state = run_silver_pipeline(spec, run_dir, progress_callback)
+    silver_state = run_silver_pipeline(spec, run_dir, progress_callback, tenant_id=tenant_id)
     silver_df = silver_state.get("transformed_data")
 
     gold_results: list[GoldResult] = []
@@ -339,6 +351,7 @@ def run_full_analysis(
             advisor_result,
             planner_tokens,
             log_dir=run_dir,
+            tenant_id=tenant_id,
         )
 
     total_tokens = sum_run_tokens(gold_results, science_results, advisor_result, planner_tokens)
