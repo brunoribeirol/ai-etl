@@ -11,10 +11,13 @@ any verification error.
 
 Env vars (read via `os.environ`/`os.getenv`, same pattern as `OPENAI_API_KEY`
 in `app.py` — never hardcoded): `CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`,
-`CLERK_JWKS_URL`. Only `CLERK_JWKS_URL` is actually needed by this module;
-the other two are read by other parts of the Clerk integration (client-side
-sign-in) and are not required here, but are documented in ADR-006 as the full
-env var set for the feature.
+`CLERK_JWKS_URL`, `CLERK_ISSUER`. `CLERK_JWKS_URL` and `CLERK_ISSUER` are
+both required by this module (the latter for `iss` claim validation, so a
+token signed by a key that happens to resolve via the configured JWKS URL
+can't be accepted unless it was also issued by this exact Clerk instance);
+the other two vars are read by other parts of the Clerk integration
+(client-side sign-in) and are not required here, but are documented in
+ADR-006 as the full env var set for the feature.
 """
 
 from __future__ import annotations
@@ -86,13 +89,24 @@ def verify_session_token(token: str) -> AuthResult:
             ok=False, user_id=None, error="CLERK_JWKS_URL não configurada."
         )
 
+    # Fail closed the same way as a missing CLERK_JWKS_URL: without an expected
+    # issuer to compare against, `iss` can't be validated at all, and a JWT
+    # signed by any key the JWKS endpoint happens to serve would otherwise be
+    # accepted regardless of which Clerk instance/application issued it.
+    issuer = os.getenv("CLERK_ISSUER")
+    if not issuer:
+        return AuthResult(
+            ok=False, user_id=None, error="CLERK_ISSUER não configurada."
+        )
+
     try:
         signing_key = jwks_client.get_signing_key_from_jwt(token)
         payload = jwt.decode(
             token,
             signing_key.key,
             algorithms=_ALGORITHMS,
-            options={"require": ["exp", "sub"]},
+            issuer=issuer,
+            options={"require": ["exp", "sub", "iss"]},
         )
     except jwt.PyJWTError as exc:
         return AuthResult(ok=False, user_id=None, error=f"Token inválido: {exc}")
