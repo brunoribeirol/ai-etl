@@ -228,8 +228,12 @@ def test_app_renders_welcome_screen_with_no_upload(monkeypatch) -> None:
     )
     monkeypatch.setattr(app_module, "ensure_user", lambda user_id: None)
     at = AppTest.from_file(str(Path(__file__).resolve().parents[2] / "app.py"))
-    at.run(timeout=30)
-    at.text_input(key="clerk_session_token").set_value("fake-token")
+    # Pre-seed session_state before the (only) run, rather than
+    # `.text_input(...).set_value(...)` + a second `.run()`: `st.text_input`
+    # reads an existing `session_state[key]` as its initial value, so this
+    # reaches the same authenticated state in one script execution without
+    # depending on the two-step widget-simulation/rerun chain.
+    at.session_state["clerk_session_token"] = "fake-token"
     at.run(timeout=30)
 
     assert not at.exception
