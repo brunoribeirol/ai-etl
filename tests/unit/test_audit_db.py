@@ -379,8 +379,18 @@ def _make_sqlite_engine_with_fk_enforcement() -> Engine:
     """Same in-memory schema as `_make_sqlite_engine`, but with SQLite's
     `foreign_keys` pragma turned on. SQLite ignores FK constraints by default
     (unlike NOT NULL, which it always enforces), so the FK-violation assertion
-    below would silently pass without this."""
-    engine = _make_sqlite_engine()
+    below would silently pass without this.
+
+    The `connect` listener must be registered *before* `create_all()` runs,
+    not after: `sqlite:///:memory:` engines use `SingletonThreadPool`, which
+    keeps the connection opened by `create_all()` alive and reuses it for
+    every later `.begin()`/`.connect()` call on this thread. Registering the
+    listener on an already-built `_make_sqlite_engine()` engine attaches it
+    too late — that first connection was already made without the pragma,
+    and no new connection is ever opened to trigger it, so FK enforcement
+    was silently never applied (the bug this comment now prevents).
+    """
+    engine = sqlalchemy.create_engine("sqlite:///:memory:")
 
     @sqlalchemy.event.listens_for(engine, "connect")
     def _enable_fk(dbapi_connection, connection_record) -> None:  # noqa: ANN001
@@ -388,6 +398,7 @@ def _make_sqlite_engine_with_fk_enforcement() -> Engine:
         cursor.execute("PRAGMA foreign_keys=ON")
         cursor.close()
 
+    audit_metadata.create_all(engine)
     return engine
 
 

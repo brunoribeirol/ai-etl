@@ -215,12 +215,18 @@ def test_app_renders_welcome_screen_with_no_upload(monkeypatch) -> None:
     the sign-in gate and renders the welcome screen, matching this test's
     pre-ADR-006 behavior — only the auth boundary changed. `verify_session_token`
     is mocked at the boundary `app.py` calls it, the same pattern already used
-    for `st.status` above rather than minting a real Clerk token."""
+    for `st.status` above rather than minting a real Clerk token. `ensure_user`
+    is mocked too: it's a real `get_engine()`/DB call (ADR-006's `users` upsert,
+    see `7507300`), and this test's CI environment has no `APP_DATABASE_URL` —
+    without this, the gate raises `EnvironmentError`, the script aborts before
+    ever reaching `_render_welcome()`, and this test fails on an empty body
+    rather than on the auth logic it's actually meant to exercise."""
     monkeypatch.setattr(
         app_module,
         "verify_session_token",
         lambda token: {"ok": True, "user_id": "user_test_123", "error": None},
     )
+    monkeypatch.setattr(app_module, "ensure_user", lambda user_id: None)
     at = AppTest.from_file(str(Path(__file__).resolve().parents[2] / "app.py"))
     at.run(timeout=30)
     at.text_input(key="clerk_session_token").set_value("fake-token")
