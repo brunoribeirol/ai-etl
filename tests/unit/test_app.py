@@ -17,6 +17,8 @@ import pytest
 from streamlit.testing.v1 import AppTest
 
 import app as app_module
+from ai_etl.audit import db as db_module
+from ai_etl.services import auth_service as auth_service_module
 
 # ---------------------------------------------------------------------------
 # _auto_generate_spec
@@ -197,8 +199,51 @@ def test_app_boots_without_exception() -> None:
     assert not at.exception
 
 
-def test_app_renders_welcome_screen_with_no_upload() -> None:
+def test_app_shows_sign_in_gate_when_unauthenticated() -> None:
+    """Per ADR-006, `main()` gates on `_render_sign_in_gate()` and returns before
+    rendering the welcome screen or pipeline UI when no session token is present."""
     at = AppTest.from_file(str(Path(__file__).resolve().parents[2] / "app.py"))
+    at.run(timeout=30)
+
+    assert not at.exception
+    info_body = " ".join(m.value for m in at.info)
+    assert "login" in info_body.lower()
+    body = " ".join(m.value for m in at.markdown)
+    assert "Faça upload" not in body
+
+
+def test_app_renders_welcome_screen_with_no_upload(monkeypatch) -> None:
+    """Once the sign-in gate resolves to a `tenant_id`, `main()` proceeds past
+    it and renders the welcome screen, matching this test's pre-ADR-006
+    behavior — only the auth boundary changed.
+
+    Root cause of three failed prior attempts at this test, found via CI
+    round-trips (unreproducible locally — this sandbox hangs on any script
+    that constructs a real `AppTest`): `AppTest.from_file()` re-executes
+    `app.py`'s *source text* fresh in its own isolated namespace on every
+    `.run()` — it does not share state with `app_module` (this file's
+    `import app as app_module`, a snapshot from whenever pytest first
+    collected this module). So `monkeypatch.setattr(app_module, ...)` — used
+    correctly elsewhere in this file for tests that call `app_module`'s
+    functions *directly* — silently patches a copy AppTest never sees, and
+    every `main()` inside `at.run()` kept hitting the real, unmocked
+    `verify_session_token`/`_render_sign_in_gate` and failing closed.
+
+    The fix: patch the *origin* modules (`ai_etl.services.auth_service`,
+    `ai_etl.audit.db`) instead of `app_module`. Those are genuine `sys.modules`
+    singletons — app.py's `from ai_etl.services.auth_service import
+    verify_session_token` re-resolves against their live attributes on every
+    fresh exec, patched or not, unlike a name already bound onto a stale
+    `app_module` snapshot."""
+    monkeypatch.setattr(
+        auth_service_module,
+        "verify_session_token",
+        lambda token: {"ok": True, "user_id": "user_test_123", "error": None},
+    )
+    monkeypatch.setattr(db_module, "ensure_user", lambda user_id: None)
+
+    at = AppTest.from_file(str(Path(__file__).resolve().parents[2] / "app.py"))
+    at.session_state["clerk_session_token"] = "fake-token"
     at.run(timeout=30)
 
     assert not at.exception

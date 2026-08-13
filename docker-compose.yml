@@ -48,6 +48,22 @@ services:
     tmpfs:
       - /var/lib/postgresql/data
 
+  # Streamlit app, for local dev parity with the Railway deploy — builds from
+  # the same Dockerfile used in production. Reads its env from `.env` (see
+  # .env.example for the full variable list, including CLERK_*/APP_DATABASE_URL).
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8501:8501"
+    environment:
+      PORT: "8501"
+    env_file:
+      - .env
+    depends_on:
+      - app-postgres
+
 volumes:
   postgres_data:
   app_postgres_data:

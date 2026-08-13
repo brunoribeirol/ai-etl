@@ -3,18 +3,24 @@
 Mirrors the `runs`/`analysis_runs` tables Phase 1 kept in SQLite
 (`{log_dir}/runs.db`), now backed by the application Postgres so run
 history survives across processes and Streamlit redeploys instead of
-living in one file per deployment. `tenant_id` is a Sprint A stopgap
-holding a per-browser-session UUID for isolating history between
-concurrent Streamlit sessions — it is not a real tenant/account column;
-that's still future work.
+living in one file per deployment. `tenant_id` maps to a real Clerk user
+account (see `users` below and ADR-006) — it is a required foreign key,
+not the per-browser-session UUID stopgap ADR-005 originally introduced.
 
 Core (not the ORM) matches the style already used in
 `sources/postgres_source.py` and `destinations/postgres_dest.py`.
 """
 
-from sqlalchemy import Column, DateTime, Integer, MetaData, String, Table, Text
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, MetaData, String, Table, Text
 
 metadata = MetaData()
+
+users = Table(
+    "users",
+    metadata,
+    Column("id", String, primary_key=True),  # Clerk user_id — not a UUID
+    Column("created_at", DateTime(timezone=True), nullable=False),
+)
 
 runs = Table(
     "runs",
@@ -25,7 +31,7 @@ runs = Table(
     Column("error", Text, nullable=True),
     Column("rows_loaded", Integer, nullable=True),
     Column("timestamp", DateTime(timezone=True), nullable=False),
-    Column("tenant_id", String, nullable=True),
+    Column("tenant_id", String, ForeignKey("users.id"), nullable=False),
 )
 
 analysis_runs = Table(
@@ -38,5 +44,5 @@ analysis_runs = Table(
     Column("output_tokens", Integer, nullable=False),
     Column("total_tokens", Integer, nullable=False),
     Column("timestamp", DateTime(timezone=True), nullable=False),
-    Column("tenant_id", String, nullable=True),
+    Column("tenant_id", String, ForeignKey("users.id"), nullable=False),
 )

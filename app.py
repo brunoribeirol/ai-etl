@@ -17,7 +17,8 @@ import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
 
-from ai_etl.audit.db import load_history
+from ai_etl.audit.db import ensure_user, load_history
+from ai_etl.services.auth_service import verify_session_token
 from ai_etl.services.pipeline_service import AGENT_STEPS, ProgressCallback, run_full_analysis
 
 load_dotenv()
@@ -41,23 +42,6 @@ UPLOADS_DIR = RUNS_DIR / "uploads"
 UPLOADS_DIR.mkdir(exist_ok=True)
 
 
-# ---------------------------------------------------------------------------
-# Session scoping (Sprint A stopgap — not real auth/tenancy)
-# ---------------------------------------------------------------------------
-def _get_session_id() -> str:
-    """Return a stable per-browser-session UUID, generating one on first use.
-
-    Sprint A stopgap for the cross-session history leak: `load_history()` had no
-    filter, so any browser session could see and download any other session's
-    runs. This is not authentication — it's a random UUID tied to Streamlit's
-    `session_state`, good only for isolating concurrent sessions within one
-    deployed process. Real tenant accounts are future work.
-    """
-    if "session_id" not in st.session_state:
-        st.session_state["session_id"] = str(uuid.uuid4())
-    return str(st.session_state["session_id"])
-
-
 SEVERITY_BADGE = {"ok": "🟢 ok", "warning": "🟡 warning", "error": "🔴 error"}
 
 EXAMPLE_QUESTIONS = [
@@ -79,6 +63,54 @@ LLM_MODEL = os.getenv("AI_ETL_LLM_MODEL", "gpt-4o-mini")
 # ---------------------------------------------------------------------------
 def _check_api_key() -> bool:
     return bool(os.getenv("OPENAI_API_KEY"))
+
+
+def _render_sign_in_gate() -> Optional[str]:
+    """Render the Clerk sign-in gate and return the verified Clerk `user_id`
+    (used as `tenant_id` downstream), or `None` if the visitor isn't signed in.
+
+    Interim UI, deliberate for Sprint 1 (ADR-006): Clerk does not ship a native
+    Streamlit component, so there is no hosted sign-in widget to embed here yet.
+    Until that follow-up UX work lands, users authenticate by signing in on
+    Clerk's own hosted UI (e.g. the Clerk Account Portal for this app) and
+    pasting the resulting session token into the field below. This is a manual
+    hand-off, not a shortcut around verification: the pasted token is always
+    passed through `auth_service.verify_session_token()` unchanged, exactly as
+    a token lifted from a `__session` cookie by a future JS bridge would be —
+    nothing here fakes or bypasses the real Clerk/JWKS check.
+    """
+    st.info(
+        "🔒 **Login necessário.** Faça login em sua conta Clerk e cole abaixo o token de "
+        "sessão gerado. *(Fluxo interino do Sprint 1 — uma tela de login nativa do Clerk "
+        "é uma melhoria de UX planejada para um sprint futuro, não um bloqueador aqui.)*"
+    )
+    token = st.text_input(
+        "Token de sessão Clerk",
+        type="password",
+        key="clerk_session_token",
+        help="Token JWT emitido pelo Clerk após o login (claim 'sub' = seu user_id).",
+    )
+    if not token:
+        return None
+
+    result = verify_session_token(token)
+    if not result["ok"]:
+        st.error(f"❌ Falha na autenticação: {result['error']}")
+        return None
+
+    user_id = result["user_id"]
+    # `runs`/`analysis_runs.tenant_id` are NOT NULL FKs to `users.id` (migration
+    # 0003, ADR-006) — a brand-new Clerk account has no `users` row yet, and
+    # nothing else in this flow creates one. Without this, the first pipeline
+    # run for any new user would fail with a Postgres IntegrityError. Gated on
+    # session_state (not on the auth decision itself, which is re-verified via
+    # `verify_session_token` above on every rerun) purely to avoid a DB
+    # round-trip on every Streamlit rerun for an already-known user.
+    if st.session_state.get("_ensured_user_id") != user_id:
+        ensure_user(user_id)
+        st.session_state["_ensured_user_id"] = user_id
+
+    return user_id
 
 
 def _read_uploaded_file(uploaded_file) -> Optional[pd.DataFrame]:
@@ -590,7 +622,7 @@ def _render_welcome() -> None:
 # ---------------------------------------------------------------------------
 # Main tab: Analisar
 # ---------------------------------------------------------------------------
-def _tab_executar() -> None:
+def _tab_executar(tenant_id: str) -> None:
     col_input, _ = st.columns([3, 1])
 
     with col_input:
@@ -684,7 +716,7 @@ def _tab_executar() -> None:
                 business_question,
                 run_dir=str(RUNS_DIR),
                 progress_callback=_make_progress_adapter(),
-                tenant_id=_get_session_id(),
+                tenant_id=tenant_id,
             )
 
             silver_df = result["state"].get("transformed_data")
@@ -711,10 +743,10 @@ def _tab_executar() -> None:
 # ---------------------------------------------------------------------------
 # History tab
 # ---------------------------------------------------------------------------
-def _tab_historico() -> None:
+def _tab_historico(tenant_id: str) -> None:
     st.markdown("### Histórico de execuções")
 
-    history = load_history(limit=20, tenant_id=_get_session_id())
+    history = load_history(limit=20, tenant_id=tenant_id)
     if history.empty:
         st.info("Nenhuma execução registrada. Execute um pipeline para começar.")
         return
@@ -772,12 +804,16 @@ def _tab_historico() -> None:
 # Main
 # ---------------------------------------------------------------------------
 def main() -> None:
-    _render_sidebar()
-
     st.title("⚡ AI-ETL · Agentic Business Intelligence")
     st.caption(
         "Dado bruto → ETL auditável → insights descritivos → modelos preditivos → recomendações."
     )
+
+    tenant_id = _render_sign_in_gate()
+    if not tenant_id:
+        return
+
+    _render_sidebar()
 
     tab_run, tab_history = st.tabs(["▶️ Analisar", "📋 Histórico"])
 
@@ -785,10 +821,10 @@ def main() -> None:
         if not st.session_state.get("pipeline_result"):
             _render_welcome()
             st.divider()
-        _tab_executar()
+        _tab_executar(tenant_id)
 
     with tab_history:
-        _tab_historico()
+        _tab_historico(tenant_id)
 
 
 if __name__ == "__main__":

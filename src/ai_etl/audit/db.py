@@ -10,9 +10,33 @@ from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from ai_etl.audit.connection import get_engine
-from ai_etl.audit.models import analysis_runs, runs
+from ai_etl.audit.models import analysis_runs, runs, users
 from ai_etl.core.analysis_types import AdvisorResult, GoldResult, ScienceResult, TokenUsage
 from ai_etl.core.state import PipelineState
+
+
+def ensure_user(user_id: str) -> None:
+    """Idempotently upsert a `users` row for a verified Clerk `user_id`.
+
+    Migration 0003 (ADR-006) made `runs.tenant_id`/`analysis_runs.tenant_id`
+    NOT NULL foreign keys to `users.id`. Nothing in the Clerk sign-in flow
+    otherwise creates that row, so without this call the very first
+    `save_run()`/`save_analysis()` for a brand-new Clerk account fails with a
+    Postgres FK violation (`IntegrityError`) — every real user's first run
+    would crash. Callers must invoke this with the verified `tenant_id`
+    (`auth_service.verify_session_token()`'s `user_id`) before it is used
+    anywhere else that writes to `runs`/`analysis_runs`.
+
+    `ON CONFLICT DO NOTHING` makes repeat calls for an already-known user
+    (e.g. every Streamlit rerun) cheap no-ops that don't touch `created_at`.
+    """
+    stmt = (
+        pg_insert(users)
+        .values(id=user_id, created_at=datetime.now(tz=timezone.utc))
+        .on_conflict_do_nothing(index_elements=[users.c.id])
+    )
+    with get_engine().begin() as conn:
+        conn.execute(stmt)
 
 
 def save_run(state: PipelineState, log_dir: str = "./runs", tenant_id: str | None = None) -> Path:
