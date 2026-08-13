@@ -9,7 +9,7 @@
 - 5-agent LangGraph "Silver" pipeline (Orchestrator → Extractor → Transformer → Quality → Loader) + 4-agent "Agentic BI" layer (Planner → Analyst/Gold, Science → Advisor) — both fully implemented and exercised by the case study (15 runs, 100% success) and by the Streamlit app (`app.py`).
 - Persistence: Postgres (SQLAlchemy Core + Alembic), `runs`/`analysis_runs` tables. As of PR #16: both tables carry a nullable `tenant_id` column, session-scoped (not account-scoped) via `app.py::_get_session_id()`.
 - Security docs (`SECURITY.md`, `docs/adr/ADR-003-exec-sandbox.md`) accurately describe **three separate, unmerged `exec()` sandboxes** (`core/sandbox.py`, `agents/analyst.py`, `agents/science.py`) — corrected 2026-08-11 (PR #15), still unmerged/unenforced-timeout as of this writing (tracked for Sprint 2 of the SaaS plan, see below).
-- No authentication anywhere. No real multi-tenancy (only the PR #16 session-scoping stopgap). Dockerfile does not run the Streamlit app (CLI only).
+- No authentication anywhere. No real multi-tenancy (only the PR #16 session-scoping stopgap). Dockerfile now runs the Streamlit app (fixed this session, see Deploy below) — auth/tenancy code itself is `backend-agent-sprint1`'s in-flight work on this same branch.
 - Dependencies: `gitpython` bumped to 3.1.59 (cleared 15 CVEs), `pandas`/`pandas-stubs` bumped to `<4.0.0` (Dependabot #13/#14) — all merged.
 
 ## Changed files (this session, 2026-08-11)
@@ -27,13 +27,21 @@
 
 - **`exec()` sandbox not yet unified** — 3 independent whitelists, no enforced timeout. Deployment-blocking once real multi-tenant traffic exists (tracked as Sprint 2 of the SaaS plan).
 - **No real authentication/accounts** — session-scoping (PR #16) is an explicit stopgap, not a fix. Tracked as Sprint 1 of the SaaS plan (Clerk + Supabase Postgres, decided 2026-08-11).
-- **Dockerfile doesn't run the app** — CLI-only image. Tracked as part of Sprint 1.
+- ~~**Dockerfile doesn't run the app**~~ — fixed this session (`infra-agent-sprint1`), see Deploy section below. Actual Railway deploy (dashboard env vars, first live run) still pending.
 - **Two unreconciled ICP framings** across the project's own docs (`artefact/saas-potential.md`: data engineers; `writing/drafts/draft-visao-produto.md` + owner's stated framing: SMB entrepreneurs) — not yet resolved, flagged for the owner to decide, not a code task.
 - **`.claude/specs/sr-standard.md` §8 SaaS Roadmap table** — the project's own pre-existing plan for exactly this transition; the current multi-sprint plan (see below) follows its sequencing logic but reorders items where the SaaS-readiness audit found reason to (see plan file).
 
 ## Next steps
 
 Multi-sprint plan approved 2026-08-11, plan file: `~/.claude/plans/magical-floating-teapot.md` (local to the session that created it — if unavailable, the sprint structure is: A [done, PR #16] → 1 [auth/tenancy/deploy] → 2 [sandbox unification] → 3 [async + metering] → 4 [storage/config] → 5 [e2e + thesis polish]). ADR-006 (Clerk + Supabase Postgres tenancy decision) is the next artifact to write, at the start of Sprint 1.
+
+## Deploy
+
+- **Target: Railway**, via Docker (`Dockerfile`, `railway.json`). Not yet deployed — this is infra prep, no live URL exists.
+- `Dockerfile` fixed (Sprint 1, `infra-agent-sprint1`): installs the `app` extra (`uv sync --no-dev --no-editable --extra app` — plotly, scikit-learn, statsmodels, streamlit) and its `ENTRYPOINT` runs `streamlit run app.py --server.port=$PORT --server.address=0.0.0.0` instead of the CLI. `$PORT` is injected by Railway at runtime, not hardcoded.
+- `railway.json` points Railway's builder at the Dockerfile and mirrors its start command.
+- `docker-compose.yml` gained an `app` service (builds from the same `Dockerfile`, port `8501`, reads `.env`) for local dev parity with the Railway deploy.
+- Required env vars for the deployed app — `CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `CLERK_JWKS_URL`, `APP_DATABASE_URL` (see `.env.example` and [ADR-006](adr/ADR-006-clerk-auth-supabase-postgres-tenancy.md)) — must be set in Railway's dashboard, not committed to the repo.
 
 ## Related
 
