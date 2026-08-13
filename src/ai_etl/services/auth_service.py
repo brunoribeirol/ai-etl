@@ -85,9 +85,7 @@ def verify_session_token(token: str) -> AuthResult:
 
     jwks_client = _get_jwks_client()
     if jwks_client is None:
-        return AuthResult(
-            ok=False, user_id=None, error="CLERK_JWKS_URL não configurada."
-        )
+        return AuthResult(ok=False, user_id=None, error="CLERK_JWKS_URL não configurada.")
 
     # Fail closed the same way as a missing CLERK_JWKS_URL: without an expected
     # issuer to compare against, `iss` can't be validated at all, and a JWT
@@ -95,9 +93,7 @@ def verify_session_token(token: str) -> AuthResult:
     # accepted regardless of which Clerk instance/application issued it.
     issuer = os.getenv("CLERK_ISSUER")
     if not issuer:
-        return AuthResult(
-            ok=False, user_id=None, error="CLERK_ISSUER não configurada."
-        )
+        return AuthResult(ok=False, user_id=None, error="CLERK_ISSUER não configurada.")
 
     try:
         signing_key = jwks_client.get_signing_key_from_jwt(token)
