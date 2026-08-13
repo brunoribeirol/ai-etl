@@ -211,29 +211,25 @@ def test_app_shows_sign_in_gate_when_unauthenticated() -> None:
 
 
 def test_app_renders_welcome_screen_with_no_upload(monkeypatch) -> None:
-    """Once `auth_service.verify_session_token` succeeds, `main()` proceeds past
-    the sign-in gate and renders the welcome screen, matching this test's
-    pre-ADR-006 behavior — only the auth boundary changed. `verify_session_token`
-    is mocked at the boundary `app.py` calls it, the same pattern already used
-    for `st.status` above rather than minting a real Clerk token. `ensure_user`
-    is mocked too: it's a real `get_engine()`/DB call (ADR-006's `users` upsert,
-    see `7507300`), and this test's CI environment has no `APP_DATABASE_URL` —
-    without this, the gate raises `EnvironmentError`, the script aborts before
-    ever reaching `_render_welcome()`, and this test fails on an empty body
-    rather than on the auth logic it's actually meant to exercise."""
-    monkeypatch.setattr(
-        app_module,
-        "verify_session_token",
-        lambda token: {"ok": True, "user_id": "user_test_123", "error": None},
-    )
-    monkeypatch.setattr(app_module, "ensure_user", lambda user_id: None)
+    """Once the sign-in gate resolves to a `tenant_id`, `main()` proceeds past
+    it and renders the welcome screen, matching this test's pre-ADR-006
+    behavior — only the auth boundary changed.
+
+    `_render_sign_in_gate` is mocked as a whole (rather than driving the real
+    `st.text_input` widget through `verify_session_token`/`ensure_user`) to
+    keep this test scoped to "what renders once authenticated," not to the
+    gate's own widget/token mechanics — those are covered separately by
+    `test_app_shows_sign_in_gate_when_unauthenticated` and by
+    `test_auth_service.py`. Two prior attempts at driving the real widget
+    (`.text_input(...).set_value(...)` + a second `.run()`, and pre-seeding
+    `session_state["clerk_session_token"]` before a single `.run()`) both left
+    `main()` returning early with no exception recorded, for a reason not
+    reproducible locally — this sandbox hangs on any script that constructs a
+    real `AppTest`, streamlit-testing or not, so it could only be debugged via
+    CI round-trips. Mocking at this boundary removes that uncertainty
+    entirely rather than continuing to guess at it."""
+    monkeypatch.setattr(app_module, "_render_sign_in_gate", lambda: "user_test_123")
     at = AppTest.from_file(str(Path(__file__).resolve().parents[2] / "app.py"))
-    # Pre-seed session_state before the (only) run, rather than
-    # `.text_input(...).set_value(...)` + a second `.run()`: `st.text_input`
-    # reads an existing `session_state[key]` as its initial value, so this
-    # reaches the same authenticated state in one script execution without
-    # depending on the two-step widget-simulation/rerun chain.
-    at.session_state["clerk_session_token"] = "fake-token"
     at.run(timeout=30)
 
     assert not at.exception
