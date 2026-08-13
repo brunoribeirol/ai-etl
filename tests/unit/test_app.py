@@ -197,8 +197,33 @@ def test_app_boots_without_exception() -> None:
     assert not at.exception
 
 
-def test_app_renders_welcome_screen_with_no_upload() -> None:
+def test_app_shows_sign_in_gate_when_unauthenticated() -> None:
+    """Per ADR-006, `main()` gates on `_render_sign_in_gate()` and returns before
+    rendering the welcome screen or pipeline UI when no session token is present."""
     at = AppTest.from_file(str(Path(__file__).resolve().parents[2] / "app.py"))
+    at.run(timeout=30)
+
+    assert not at.exception
+    info_body = " ".join(m.value for m in at.info)
+    assert "login" in info_body.lower()
+    body = " ".join(m.value for m in at.markdown)
+    assert "Faça upload" not in body
+
+
+def test_app_renders_welcome_screen_with_no_upload(monkeypatch) -> None:
+    """Once `auth_service.verify_session_token` succeeds, `main()` proceeds past
+    the sign-in gate and renders the welcome screen, matching this test's
+    pre-ADR-006 behavior — only the auth boundary changed. `verify_session_token`
+    is mocked at the boundary `app.py` calls it, the same pattern already used
+    for `st.status` above rather than minting a real Clerk token."""
+    monkeypatch.setattr(
+        app_module,
+        "verify_session_token",
+        lambda token: {"ok": True, "user_id": "user_test_123", "error": None},
+    )
+    at = AppTest.from_file(str(Path(__file__).resolve().parents[2] / "app.py"))
+    at.run(timeout=30)
+    at.text_input(key="clerk_session_token").set_value("fake-token")
     at.run(timeout=30)
 
     assert not at.exception

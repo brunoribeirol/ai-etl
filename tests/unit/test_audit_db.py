@@ -26,9 +26,11 @@ import sqlalchemy
 from sqlalchemy import Engine
 
 from ai_etl.audit import db
+from ai_etl.audit.db import _write_run_row as _real_write_run_row
 from ai_etl.audit.db import save_analysis, save_run
 from ai_etl.audit.models import metadata as audit_metadata
 from ai_etl.audit.models import runs as runs_table
+from ai_etl.audit.models import users as users_table
 from ai_etl.core.state import initial_state
 
 _ZERO_TOKENS = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
@@ -344,16 +346,91 @@ def test_load_history_without_tenant_id_returns_all_runs(
     assert set(history["run_id"]) == {"run-tenant-a", "run-tenant-b"}
 
 
-def test_load_history_handles_legacy_rows_with_null_tenant_id(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_runs_table_rejects_null_tenant_id() -> None:
+    """Regression guard for ADR-006 migration 0003: `runs.tenant_id` is NOT NULL
+    now (it maps to a real Clerk account via a FK to `users`, not the ADR-005
+    session-UUID stopgap, which allowed NULL). This replaces the old
+    `test_load_history_handles_legacy_rows_with_null_tenant_id` test, whose
+    premise (a legacy NULL-tenant row) the migration makes impossible — this
+    proves the constraint is actually enforced by the schema, not just
+    documented in the migration."""
     engine = _make_sqlite_engine()
+
+    with pytest.raises(sqlalchemy.exc.IntegrityError):
+        _insert_run_row(engine, "run-no-tenant", tenant_id=None)
+
+
+# ---------------------------------------------------------------------------
+# Tenant isolation (ADR-006) — real users rows, real FK, real in-memory engine
+# ---------------------------------------------------------------------------
+
+
+def _insert_user_row(engine: Engine, user_id: str) -> None:
+    with engine.begin() as conn:
+        conn.execute(
+            users_table.insert().values(
+                id=user_id,
+                created_at=datetime.now(tz=timezone.utc),
+            )
+        )
+
+
+def _make_sqlite_engine_with_fk_enforcement() -> Engine:
+    """Same in-memory schema as `_make_sqlite_engine`, but with SQLite's
+    `foreign_keys` pragma turned on. SQLite ignores FK constraints by default
+    (unlike NOT NULL, which it always enforces), so the FK-violation assertion
+    below would silently pass without this."""
+    engine = _make_sqlite_engine()
+
+    @sqlalchemy.event.listens_for(engine, "connect")
+    def _enable_fk(dbapi_connection, connection_record) -> None:  # noqa: ANN001
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
+    return engine
+
+
+def test_save_run_is_scoped_and_isolated_by_tenant_id(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """End-to-end ADR-006 regression guard: two real `users` rows (tenant A,
+    tenant B), a run saved under tenant A via the real `save_run()` path
+    (not a direct table insert), and `load_history` proving tenant B sees
+    nothing while tenant A sees its own run."""
+    # Override the module's `_no_db` autouse fixture: this test needs the real
+    # `_write_run_row` DB-write path, not the JSON-only no-op the rest of this
+    # file uses.
+    monkeypatch.setattr(db, "_write_run_row", _real_write_run_row)
+
+    engine = _make_sqlite_engine_with_fk_enforcement()
     monkeypatch.setattr(db, "get_engine", lambda: engine)
 
-    _insert_run_row(engine, "run-legacy", tenant_id=None)
+    _insert_user_row(engine, "tenant-a")
+    _insert_user_row(engine, "tenant-b")
 
-    unfiltered = db.load_history()
-    assert list(unfiltered["run_id"]) == ["run-legacy"]
+    state = _make_completed_state()
+    save_run(state, log_dir=str(tmp_path), tenant_id="tenant-a")
 
-    filtered = db.load_history(tenant_id="tenant-a")
-    assert filtered.empty
+    history_b = db.load_history(tenant_id="tenant-b")
+    assert history_b.empty
+
+    history_a = db.load_history(tenant_id="tenant-a")
+    assert list(history_a["run_id"]) == ["run-abc-123"]
+
+
+def test_save_run_rejects_tenant_id_with_no_matching_user_row(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The key regression guard for ADR-006's migration: `tenant_id` is a real
+    FK to `users.id`, not a decorative string column — saving a run under a
+    tenant_id with no corresponding `users` row must fail, not silently
+    persist an orphaned row."""
+    monkeypatch.setattr(db, "_write_run_row", _real_write_run_row)
+
+    engine = _make_sqlite_engine_with_fk_enforcement()
+    monkeypatch.setattr(db, "get_engine", lambda: engine)
+
+    state = _make_completed_state()
+    with pytest.raises(sqlalchemy.exc.IntegrityError):
+        save_run(state, log_dir=str(tmp_path), tenant_id="ghost-tenant")
