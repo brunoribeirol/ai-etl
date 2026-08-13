@@ -17,7 +17,7 @@ import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
 
-from ai_etl.audit.db import load_history
+from ai_etl.audit.db import ensure_user, load_history
 from ai_etl.services.auth_service import verify_session_token
 from ai_etl.services.pipeline_service import AGENT_STEPS, ProgressCallback, run_full_analysis
 
@@ -98,7 +98,19 @@ def _render_sign_in_gate() -> Optional[str]:
         st.error(f"❌ Falha na autenticação: {result['error']}")
         return None
 
-    return result["user_id"]
+    user_id = result["user_id"]
+    # `runs`/`analysis_runs.tenant_id` are NOT NULL FKs to `users.id` (migration
+    # 0003, ADR-006) — a brand-new Clerk account has no `users` row yet, and
+    # nothing else in this flow creates one. Without this, the first pipeline
+    # run for any new user would fail with a Postgres IntegrityError. Gated on
+    # session_state (not on the auth decision itself, which is re-verified via
+    # `verify_session_token` above on every rerun) purely to avoid a DB
+    # round-trip on every Streamlit rerun for an already-known user.
+    if st.session_state.get("_ensured_user_id") != user_id:
+        ensure_user(user_id)
+        st.session_state["_ensured_user_id"] = user_id
+
+    return user_id
 
 
 def _read_uploaded_file(uploaded_file) -> Optional[pd.DataFrame]:
