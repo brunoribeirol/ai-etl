@@ -5,8 +5,12 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 WORKDIR /app
 
-# Copy dependency files first for layer caching
-COPY pyproject.toml uv.lock* ./
+# Copy dependency files first for layer caching. README.md is required here,
+# not just at runtime: hatchling (the build backend) validates pyproject.toml's
+# `readme = "README.md"` field exists on disk while building the local
+# package wheel during `uv sync` below — without it, the build fails with
+# "OSError: Readme file does not exist: README.md".
+COPY pyproject.toml uv.lock* README.md ./
 COPY src/ ./src/
 
 # Install production dependencies + the `app` extra (plotly, scikit-learn,
