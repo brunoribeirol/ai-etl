@@ -434,3 +434,58 @@ def test_save_run_rejects_tenant_id_with_no_matching_user_row(
     state = _make_completed_state()
     with pytest.raises(sqlalchemy.exc.IntegrityError):
         save_run(state, log_dir=str(tmp_path), tenant_id="ghost-tenant")
+
+
+# ---------------------------------------------------------------------------
+# ensure_user (fixed in 7507300) — a brand-new Clerk user has no `users` row
+# yet, so their first save_run()/save_analysis() used to fail its FK.
+# ---------------------------------------------------------------------------
+
+
+def test_ensure_user_allows_first_save_run_for_new_user(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Direct regression guard for the bug fixed in 7507300: nothing in the
+    Clerk sign-in flow used to create a `users` row for a brand-new account,
+    so that account's very first `save_run()` failed its FK to `users.id`.
+    `ensure_user()` must create that row so `save_run()` succeeds."""
+    monkeypatch.setattr(db, "_write_run_row", _real_write_run_row)
+
+    engine = _make_sqlite_engine_with_fk_enforcement()
+    monkeypatch.setattr(db, "get_engine", lambda: engine)
+
+    db.ensure_user("new_user")  # no pre-existing `users` row for "new_user"
+
+    state = _make_completed_state()
+    save_run(state, log_dir=str(tmp_path), tenant_id="new_user")  # must not raise
+
+    history = db.load_history(tenant_id="new_user")
+    assert list(history["run_id"]) == ["run-abc-123"]
+
+
+def test_ensure_user_is_idempotent(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`ensure_user()` upserts with `ON CONFLICT DO NOTHING` so repeat calls for
+    an already-known user (e.g. every Streamlit rerun) are cheap no-ops. This
+    proves that: calling it twice for the same id must not raise, must not
+    create a second row, and must not clobber the original `created_at`."""
+    engine = _make_sqlite_engine_with_fk_enforcement()
+    monkeypatch.setattr(db, "get_engine", lambda: engine)
+
+    db.ensure_user("repeat_user")
+    with engine.connect() as conn:
+        first_created_at = conn.execute(
+            sqlalchemy.select(users_table.c.created_at).where(users_table.c.id == "repeat_user")
+        ).scalar()
+
+    db.ensure_user("repeat_user")  # second call — must not raise
+
+    with engine.connect() as conn:
+        second_created_at = conn.execute(
+            sqlalchemy.select(users_table.c.created_at).where(users_table.c.id == "repeat_user")
+        ).scalar()
+        row_count = conn.execute(
+            sqlalchemy.select(sqlalchemy.func.count()).select_from(users_table)
+        ).scalar()
+
+    assert second_created_at == first_created_at
+    assert row_count == 1
