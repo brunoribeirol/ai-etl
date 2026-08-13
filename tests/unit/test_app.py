@@ -17,6 +17,8 @@ import pytest
 from streamlit.testing.v1 import AppTest
 
 import app as app_module
+from ai_etl.audit import db as db_module
+from ai_etl.services import auth_service as auth_service_module
 
 # ---------------------------------------------------------------------------
 # _auto_generate_spec
@@ -215,21 +217,33 @@ def test_app_renders_welcome_screen_with_no_upload(monkeypatch) -> None:
     it and renders the welcome screen, matching this test's pre-ADR-006
     behavior — only the auth boundary changed.
 
-    `_render_sign_in_gate` is mocked as a whole (rather than driving the real
-    `st.text_input` widget through `verify_session_token`/`ensure_user`) to
-    keep this test scoped to "what renders once authenticated," not to the
-    gate's own widget/token mechanics — those are covered separately by
-    `test_app_shows_sign_in_gate_when_unauthenticated` and by
-    `test_auth_service.py`. Two prior attempts at driving the real widget
-    (`.text_input(...).set_value(...)` + a second `.run()`, and pre-seeding
-    `session_state["clerk_session_token"]` before a single `.run()`) both left
-    `main()` returning early with no exception recorded, for a reason not
-    reproducible locally — this sandbox hangs on any script that constructs a
-    real `AppTest`, streamlit-testing or not, so it could only be debugged via
-    CI round-trips. Mocking at this boundary removes that uncertainty
-    entirely rather than continuing to guess at it."""
-    monkeypatch.setattr(app_module, "_render_sign_in_gate", lambda: "user_test_123")
+    Root cause of three failed prior attempts at this test, found via CI
+    round-trips (unreproducible locally — this sandbox hangs on any script
+    that constructs a real `AppTest`): `AppTest.from_file()` re-executes
+    `app.py`'s *source text* fresh in its own isolated namespace on every
+    `.run()` — it does not share state with `app_module` (this file's
+    `import app as app_module`, a snapshot from whenever pytest first
+    collected this module). So `monkeypatch.setattr(app_module, ...)` — used
+    correctly elsewhere in this file for tests that call `app_module`'s
+    functions *directly* — silently patches a copy AppTest never sees, and
+    every `main()` inside `at.run()` kept hitting the real, unmocked
+    `verify_session_token`/`_render_sign_in_gate` and failing closed.
+
+    The fix: patch the *origin* modules (`ai_etl.services.auth_service`,
+    `ai_etl.audit.db`) instead of `app_module`. Those are genuine `sys.modules`
+    singletons — app.py's `from ai_etl.services.auth_service import
+    verify_session_token` re-resolves against their live attributes on every
+    fresh exec, patched or not, unlike a name already bound onto a stale
+    `app_module` snapshot."""
+    monkeypatch.setattr(
+        auth_service_module,
+        "verify_session_token",
+        lambda token: {"ok": True, "user_id": "user_test_123", "error": None},
+    )
+    monkeypatch.setattr(db_module, "ensure_user", lambda user_id: None)
+
     at = AppTest.from_file(str(Path(__file__).resolve().parents[2] / "app.py"))
+    at.session_state["clerk_session_token"] = "fake-token"
     at.run(timeout=30)
 
     assert not at.exception
