@@ -9,14 +9,17 @@ WORKDIR /app
 COPY pyproject.toml uv.lock* ./
 COPY src/ ./src/
 
-# Install production dependencies only (no dev extras)
-RUN uv sync --no-dev --no-editable
+# Install production dependencies + the `app` extra (plotly, scikit-learn,
+# statsmodels, streamlit) — required to run the Streamlit app (app.py).
+# No dev extras (pytest, mypy, ruff, ...) in the runtime image.
+RUN uv sync --no-dev --no-editable --extra app
 
 # Copy remaining files
 COPY case_study/ ./case_study/
 COPY .env.example .env.example
+COPY app.py ./app.py
 
 ENV PATH="/app/.venv/bin:$PATH"
 
-ENTRYPOINT ["python", "-m", "ai_etl"]
-CMD ["--help"]
+# Railway injects $PORT at runtime; do not hardcode 8501.
+ENTRYPOINT ["sh", "-c", "streamlit run app.py --server.port=$PORT --server.address=0.0.0.0"]
