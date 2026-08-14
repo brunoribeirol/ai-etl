@@ -38,10 +38,15 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
+    # connect_timeout bounds only the initial TCP handshake, per libpq — a
+    # stalled TLS/SSL negotiation past that point (e.g. an MTU black hole on
+    # a VPN or flaky network) is not covered and can otherwise hang forever
+    # with no error. Fail fast and loud instead.
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        connect_args={"connect_timeout": 15},
     )
     with connectable.connect() as connection:
         context.configure(connection=connection, target_metadata=target_metadata)
