@@ -15,6 +15,17 @@ import pandas as pd
 
 from ai_etl.core.analysis_types import ScienceResult, TokenUsage
 from ai_etl.core.llm import extract_token_usage, get_llm, sum_token_usage
+from ai_etl.core.sandbox import execute_in_sandbox
+
+# Higher than Analyst's (15s) but still lower than Transformer's default (30s,
+# core/sandbox.py) — Science's sandboxed code can legitimately do model fitting
+# (RandomForest, KMeans, ExponentialSmoothing/ARIMA) on top of the aggregation
+# work Analyst does, so it needs more headroom per attempt. Still bounded well
+# below Transformer's 30s given the same 3x retry compounding ADR-007 flagged
+# (`for attempt in range(1, 4)` below): worst case is 3 x 20s = 60s of sandbox
+# time for one Science sub-task, before LLM latency. Revisit if real usage on
+# this project's dataset sizes shows 20s is too tight for legitimate fits.
+SCIENCE_TIMEOUT_SECONDS = 20
 
 _PROMPT_TEMPLATE = """\
 You are a senior data scientist. You have access to a cleaned pandas DataFrame called `df`.
@@ -114,52 +125,6 @@ Ensure all four variables are defined: `predictions_df` (DataFrame), `fig` (Plot
 Use ONLY the exact column names: {columns_list}
 
 """
-
-_SAFE_GLOBALS: dict[str, Any] = {
-    "__builtins__": {
-        "len": len,
-        "range": range,
-        "print": print,
-        "int": int,
-        "float": float,
-        "str": str,
-        "list": list,
-        "dict": dict,
-        "bool": bool,
-        "tuple": tuple,
-        "set": set,
-        "None": None,
-        "True": True,
-        "False": False,
-        "enumerate": enumerate,
-        "zip": zip,
-        "map": map,
-        "filter": filter,
-        "sorted": sorted,
-        "reversed": reversed,
-        "min": min,
-        "max": max,
-        "sum": sum,
-        "round": round,
-        "abs": abs,
-        "pow": pow,
-        "divmod": divmod,
-        "isinstance": isinstance,
-        "issubclass": issubclass,
-        "hasattr": hasattr,
-        "getattr": getattr,
-        "setattr": setattr,
-        "all": all,
-        "any": any,
-        "type": type,
-        "repr": repr,
-        "format": format,
-        "iter": iter,
-        "next": next,
-        "vars": vars,
-        "slice": slice,
-    },
-}
 
 
 def _build_column_stats(df: pd.DataFrame) -> str:
@@ -280,7 +245,6 @@ def run_science(df: pd.DataFrame, business_question: str) -> ScienceResult:
     """
     import math
 
-    import numpy as np
     import plotly.express as px
     import plotly.graph_objects as go
     from sklearn.cluster import KMeans
@@ -310,10 +274,7 @@ def run_science(df: pd.DataFrame, business_question: str) -> ScienceResult:
         question=business_question,
     )
 
-    safe_globals: dict[str, Any] = {
-        **_SAFE_GLOBALS,
-        "pd": pd,
-        "np": np,
+    extra_globals: dict[str, Any] = {
         "px": px,
         "go": go,
         "math": math,
@@ -353,20 +314,32 @@ def run_science(df: pd.DataFrame, business_question: str) -> ScienceResult:
         code = _strip_fences(str(response.content).strip())
         last_code = code
 
-        # A single dict serves as both globals and locals so that functions the
-        # LLM defines in `code` (which close over globals, not a separate locals
-        # dict) can still see `df` — exec(code, g, l) with g is l would otherwise
-        # raise NameError inside any nested `def` referencing `df`.
-        exec_env: dict[str, Any] = {**safe_globals, "df": df.copy()}
+        sandbox_result = execute_in_sandbox(
+            code,
+            {"df": df.copy()},
+            mode="script",
+            result_vars=["predictions_df", "fig", "narrative", "model_info"],
+            extra_globals=extra_globals,
+            timeout_seconds=SCIENCE_TIMEOUT_SECONDS,
+        )
+
+        if sandbox_result["timed_out"]:
+            # Distinct failure mode from an exception (ADR-007) — feeds the same
+            # last_error/retry-prompt channel, but with a message that hints the
+            # LLM toward cheaper code on the next attempt instead of an opaque trace.
+            last_error = f"Execution exceeded {SCIENCE_TIMEOUT_SECONDS}s — simplify the computation"
+            continue
+
+        if sandbox_result["error"] is not None:
+            last_error = textwrap.shorten(sandbox_result["error"], width=400, placeholder="...")
+            continue
+
+        predictions_df = sandbox_result["values"].get("predictions_df")
+        fig = sandbox_result["values"].get("fig")
+        narrative = sandbox_result["values"].get("narrative", "")
+        model_info = sandbox_result["values"].get("model_info", {})
 
         try:
-            exec(code, exec_env)  # noqa: S102
-
-            predictions_df = exec_env.get("predictions_df")
-            fig = exec_env.get("fig")
-            narrative = exec_env.get("narrative", "")
-            model_info = exec_env.get("model_info", {})
-
             if not isinstance(predictions_df, pd.DataFrame):
                 raise TypeError(
                     f"predictions_df must be a pd.DataFrame, got {type(predictions_df).__name__}"

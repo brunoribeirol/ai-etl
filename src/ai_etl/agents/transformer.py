@@ -87,7 +87,9 @@ def transformer_node(state: PipelineState) -> PipelineState:
         response = llm.invoke(prompt)
         code = _clean_code(str(response.content))
 
-        result, error = execute_in_sandbox(code, state["extracted_data"])
+        sandbox_result = execute_in_sandbox(code, state["extracted_data"], mode="function")
+        result = sandbox_result["values"].get("result")
+        error = sandbox_result["error"]
 
         if error is None and result is not None:
             new_log = log_action(

@@ -8,12 +8,24 @@ Receives the Silver DataFrame + a business question and produces:
 
 import json
 import textwrap
-from typing import Any
 
 import pandas as pd
 
 from ai_etl.core.analysis_types import GoldResult, TokenUsage
 from ai_etl.core.llm import extract_token_usage, get_llm, sum_token_usage
+from ai_etl.core.sandbox import execute_in_sandbox
+
+# Lower than Transformer's default (30s, core/sandbox.py) — deliberately, per
+# ADR-007's flagged-but-unfixed compounding concern. Analyst retries up to 3x
+# (`for attempt in range(1, 4)` below), so worst-case sandbox time alone is
+# 3 x timeout_seconds, on top of 3 LLM round-trips, for a *single* Gold
+# sub-task — and one business question can fan out into several sub-tasks
+# (pipeline_service.run_analysis_tasks). Gold code here is aggregation/filter/
+# plot work over an already-loaded Silver DataFrame, not model training, so it
+# has no legitimate reason to run long; 15s is generous headroom over any
+# expected case while keeping the worst-case ceiling (3 x 15s = 45s) tolerable
+# for an interactive Streamlit session. Revisit if real usage shows otherwise.
+ANALYST_TIMEOUT_SECONDS = 15
 
 _PROMPT_TEMPLATE = """\
 You are an expert data analyst. You have access to a cleaned pandas DataFrame called `df`.
@@ -74,51 +86,6 @@ Use ONLY the exact column names: {columns_list}
 
 """
 
-_SAFE_GLOBALS: dict[str, Any] = {
-    "__builtins__": {
-        "len": len,
-        "range": range,
-        "print": print,
-        "int": int,
-        "float": float,
-        "str": str,
-        "list": list,
-        "dict": dict,
-        "bool": bool,
-        "tuple": tuple,
-        "set": set,
-        "None": None,
-        "True": True,
-        "False": False,
-        "enumerate": enumerate,
-        "zip": zip,
-        "map": map,
-        "filter": filter,
-        "sorted": sorted,
-        "reversed": reversed,
-        "min": min,
-        "max": max,
-        "sum": sum,
-        "round": round,
-        "abs": abs,
-        "pow": pow,
-        "divmod": divmod,
-        "isinstance": isinstance,
-        "issubclass": issubclass,
-        "hasattr": hasattr,
-        "getattr": getattr,
-        "setattr": setattr,
-        "all": all,
-        "any": any,
-        "type": type,
-        "repr": repr,
-        "format": format,
-        "iter": iter,
-        "next": next,
-        "vars": vars,
-    },
-}
-
 
 def _build_column_stats(df: pd.DataFrame) -> str:
     """Build a concise stats summary to help the LLM make better chart decisions."""
@@ -173,7 +140,6 @@ def run_analyst(df: pd.DataFrame, business_question: str) -> GoldResult:
     Returns a GoldResult dict (see ai_etl.core.analysis_types) with `task_question`
     left blank — callers running this per Planner sub-task fill it in themselves.
     """
-    import numpy as np
     import plotly.express as px
     import plotly.graph_objects as go
 
@@ -206,26 +172,31 @@ def run_analyst(df: pd.DataFrame, business_question: str) -> GoldResult:
         code = _strip_fences(str(response.content).strip())
         last_code = code
 
-        # A single dict serves as both globals and locals so that functions the
-        # LLM defines in `code` (which close over globals, not a separate locals
-        # dict) can still see `df` — exec(code, g, l) with g is l would otherwise
-        # raise NameError inside any nested `def` referencing `df`.
-        exec_env: dict[str, Any] = {
-            **_SAFE_GLOBALS,
-            "pd": pd,
-            "np": np,
-            "px": px,
-            "go": go,
-            "df": df.copy(),
-        }
+        sandbox_result = execute_in_sandbox(
+            code,
+            {"df": df.copy()},
+            mode="script",
+            result_vars=["gold_df", "fig", "narrative"],
+            extra_globals={"px": px, "go": go},
+            timeout_seconds=ANALYST_TIMEOUT_SECONDS,
+        )
+
+        if sandbox_result["timed_out"]:
+            # Distinct failure mode from an exception (ADR-007) — feeds the same
+            # last_error/retry-prompt channel, but with a message that hints the
+            # LLM toward cheaper code on the next attempt instead of an opaque trace.
+            last_error = f"Execution exceeded {ANALYST_TIMEOUT_SECONDS}s — simplify the computation"
+            continue
+
+        if sandbox_result["error"] is not None:
+            last_error = textwrap.shorten(sandbox_result["error"], width=400, placeholder="...")
+            continue
+
+        gold_df = sandbox_result["values"].get("gold_df")
+        fig = sandbox_result["values"].get("fig")
+        narrative = sandbox_result["values"].get("narrative", "")
 
         try:
-            exec(code, exec_env)  # noqa: S102
-
-            gold_df = exec_env.get("gold_df")
-            fig = exec_env.get("fig")
-            narrative = exec_env.get("narrative", "")
-
             if not isinstance(gold_df, pd.DataFrame):
                 raise TypeError(f"gold_df must be a pd.DataFrame, got {type(gold_df).__name__}")
             if fig is None:
