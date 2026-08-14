@@ -22,6 +22,7 @@ risk analysis.
 """
 
 import multiprocessing
+import queue
 import time
 import traceback
 from typing import Any, Literal, Optional, TypedDict
@@ -240,9 +241,34 @@ def execute_in_sandbox(
 
     start = time.monotonic()
     process.start()
-    process.join(timeout_seconds)
 
-    if process.is_alive():
+    # Drain the queue *while* waiting for the child, not strictly after
+    # `process.join()` returns. `multiprocessing.Queue` is backed by an OS
+    # pipe with a bounded buffer (~64KB on Linux) fed by a background thread
+    # inside the child. If nobody reads from the queue until the child has
+    # fully exited, a result larger than that buffer makes the child block
+    # forever on `queue.put()` — its feeder thread can't drain into a pipe
+    # nobody is reading — so the child never exits, `process.join(timeout_seconds)`
+    # runs out the clock, and a call that actually finished computing gets
+    # reported as `timed_out=True`. Polling `queue.get(timeout=...)` in a loop
+    # concurrently with waiting for the child avoids the deadlock: as soon as
+    # the child manages to put data on the queue it is read immediately,
+    # unblocking its feeder thread regardless of how long the child then takes
+    # to finish exiting.
+    deadline = start + timeout_seconds
+    payload: Optional[dict[str, Any]] = None
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        try:
+            payload = result_queue.get(timeout=min(remaining, 0.1))
+            break
+        except queue.Empty:
+            if not process.is_alive():
+                break
+
+    if payload is None and process.is_alive():
         process.terminate()
         process.join(_TERMINATE_GRACE_SECONDS)
         if process.is_alive():
@@ -257,11 +283,18 @@ def execute_in_sandbox(
             duration_seconds=duration,
         )
 
-    duration = time.monotonic() - start
+    # The result (if any) has already been read above, which unblocks a
+    # child that was waiting on `queue.put()` — reaping it here is now fast
+    # and bounded rather than at risk of the same deadlock.
+    process.join(_TERMINATE_GRACE_SECONDS)
+    if process.is_alive():
+        process.kill()
+        process.join()
 
-    try:
-        payload = result_queue.get_nowait()
-    except Exception:
+    duration = time.monotonic() - start
+    result_queue.close()
+
+    if payload is None:
         # Child exited without putting anything on the queue — a crash, an
         # OOM kill, a segfault in a C extension. Surface a generic error
         # instead of hanging on an empty queue.
@@ -271,8 +304,6 @@ def execute_in_sandbox(
             timed_out=False,
             duration_seconds=duration,
         )
-    finally:
-        result_queue.close()
 
     return SandboxResult(
         values=payload.get("values", {}),
