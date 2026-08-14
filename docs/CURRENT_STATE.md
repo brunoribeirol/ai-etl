@@ -2,49 +2,57 @@
 
 > Living doc. Updated at the end of meaningful work sessions, not per-commit. Source of truth for repo/code state; the Obsidian vault (`~/Documents/Obsidian Vault/tcc/`) is the source of truth for the academic TCC narrative and product/strategy context.
 
-**Last updated:** 2026-08-11
+**Last updated:** 2026-08-14
 
-## Confirmed state (branch `main` @ `60469a8`, PR #16 merged 2026-08-11)
+## Confirmed state (branch `main` @ `a00a4dc`, PR #21 merged 2026-08-14)
 
 - 5-agent LangGraph "Silver" pipeline (Orchestrator → Extractor → Transformer → Quality → Loader) + 4-agent "Agentic BI" layer (Planner → Analyst/Gold, Science → Advisor) — both fully implemented and exercised by the case study (15 runs, 100% success) and by the Streamlit app (`app.py`).
-- Persistence: Postgres (SQLAlchemy Core + Alembic), `runs`/`analysis_runs` tables. As of PR #16: both tables carry a nullable `tenant_id` column, session-scoped (not account-scoped) via `app.py::_get_session_id()`.
-- Security docs (`SECURITY.md`, `docs/adr/ADR-003-exec-sandbox.md`) accurately describe **three separate, unmerged `exec()` sandboxes** (`core/sandbox.py`, `agents/analyst.py`, `agents/science.py`) — corrected 2026-08-11 (PR #15), still unmerged/unenforced-timeout as of this writing (tracked for Sprint 2 of the SaaS plan, see below).
-- No authentication anywhere. No real multi-tenancy (only the PR #16 session-scoping stopgap). Dockerfile now runs the Streamlit app (fixed this session, see Deploy below) — auth/tenancy code itself is `backend-agent-sprint1`'s in-flight work on this same branch.
-- Dependencies: `gitpython` bumped to 3.1.59 (cleared 15 CVEs), `pandas`/`pandas-stubs` bumped to `<4.0.0` (Dependabot #13/#14) — all merged.
+- **Real authentication (Clerk) and account-based tenancy (Supabase Postgres) are live**, both in code and on a real Railway deployment (Sprint 1, PR #18, merged 2026-08-13; deploy debugged and confirmed working 2026-08-14). `runs`/`analysis_runs.tenant_id` are `NOT NULL` foreign keys to a new `users` table, keyed by Clerk `user_id` — the PR #16 session-UUID stopgap is fully retired.
+- Security docs (`SECURITY.md`, `docs/adr/ADR-003-exec-sandbox.md`) accurately describe **three separate, unmerged `exec()` sandboxes** (`core/sandbox.py`, `agents/analyst.py`, `agents/science.py`) — corrected 2026-08-11 (PR #15), still unmerged/unenforced-timeout. **This is now the top open risk**: real auth + a public deploy exist, so this gap is exposed to the internet, not just the project owner (documented and consciously accepted in ADR-006 pending Sprint 2).
+- Dependencies: `gitpython` bumped to 3.1.59 (cleared 15 CVEs), `pandas`/`pandas-stubs` bumped to `<4.0.0` (Dependabot #13/#14), `pyjwt[crypto]>=2.13.0` added (Sprint 1) — all merged.
 
-## Changed files (this session, 2026-08-11)
+## Changed files (2026-08-13 — Sprint 1 code)
 
-- `docs/adr/ADR-003-exec-sandbox.md`, `SECURITY.md`, `README.md`, `src/ai_etl/core/sandbox.py` — corrected to document all 3 `exec()` sites (PR #15, merged).
-- `uv.lock` — gitpython bump (part of PR #15).
-- `alembic/versions/0002_add_session_scoping.py` (new), `src/ai_etl/audit/models.py`, `src/ai_etl/audit/db.py`, `src/ai_etl/services/pipeline_service.py`, `app.py`, `docs/adr/ADR-005-session-scoped-run-isolation.md` (new), `tests/unit/test_audit_db.py`, `tests/unit/test_pipeline_service.py` — session-scoped isolation stopgap for the Histórico-tab data leak (PR #16, merged — CI green, 186/186 unit tests, 93.72% coverage).
+- `docs/adr/ADR-006-clerk-auth-supabase-postgres-tenancy.md` (new) — supersedes ADR-005.
+- `src/ai_etl/services/auth_service.py` (new) — `verify_session_token()`: local JWT verification via JWKS, RS256-only, `exp`/`sub`/`iss` all required, fails closed on every error path.
+- `alembic/versions/0003_users_table_and_required_tenant_id.py` (new), `src/ai_etl/audit/models.py`, `src/ai_etl/audit/db.py` (`ensure_user()` added — a real bug found by security review: nothing created the `users` row for a brand-new Clerk account, so every new user's first `save_run()` would fail its FK) — all merged in PR #18.
+- `app.py` — real sign-in gate (`_render_sign_in_gate()`) replacing the Sprint A session-UUID gate. Interim UI: paste a Clerk session token (Clerk has no native Streamlit sign-in component yet).
+- `Dockerfile`, `docker-compose.yml`, `railway.json` — Railway deploy prep (PR #18).
+
+## Changed files (2026-08-14 — Railway deploy debugging)
+
+- `Dockerfile` (PR #19) — was missing `COPY README.md`; `uv sync --no-editable` needs it on disk (hatchling validates `pyproject.toml`'s `readme` field at build time). Build failed 100% of the time until fixed.
+- `railway.json` (PR #20) — removed a redundant `deploy.startCommand` that duplicated the Dockerfile's `ENTRYPOINT`; Railway runs `startCommand` without a shell, so `$PORT` was never expanded and reached Streamlit as the literal string `"$PORT"`.
+- `alembic/env.py` (PR #21) — added `connect_args={"connect_timeout": 15}`; the engine had no timeout at all, so a stalled connection (root-caused to a VPN-induced MTU/TLS-handshake stall on the machine running it) hung forever with zero output instead of failing fast. Does not fully solve the class of hang (`connect_timeout` only bounds the initial TCP phase per libpq, not a stalled TLS negotiation) — flagged as a known partial mitigation.
 
 ## Validation
 
-- PR #15: CI green (Python 3.11/3.12 matrix), merged.
-- PR #16: `ruff check` / `ruff format --check` passed locally (scoped to touched files). **`mypy`/`pytest` could not be run locally this session** — every invocation hung indefinitely regardless of scope/cache/plugin-autoload settings; root cause and workaround captured in the vault bug note (see Related below). Manual review substituted for automated checks and found/fixed one real regression (5 stale test monkeypatches) before pushing. CI (clean GitHub Actions runner) then caught one more thing manual review missed — a stale dict-equality assertion — fixed in a follow-up commit; final CI run green on both Python 3.11/3.12, 186/186 unit tests, 93.72% coverage. Merged.
+- PR #18: CI green after 5 debugging rounds (Python 3.11/3.12), 94.29% coverage. Two reusable test bugs found and fixed along the way — see vault bug notes.
+- PR #19, #20, #21: CI green, each verified against the real failure it fixes (`docker build`/`docker run` locally for #19; the actual Railway deploy log for #20; direct SQL application against the real Supabase database after `alembic upgrade head` itself proved unable to complete for #21 — see Known risks below).
+- **Live deploy confirmed working end-to-end** on Railway: build passes, container boots, public domain reachable, Clerk sign-in gate renders, a real Clerk JWT validates correctly (including correctly *rejecting* an invalid-`kid` token — fail-closed behavior confirmed in production, not just in tests), `ensure_user()` writes to the real Supabase database.
 
 ## Known risks / open items
 
-- **`exec()` sandbox not yet unified** — 3 independent whitelists, no enforced timeout. Deployment-blocking once real multi-tenant traffic exists (tracked as Sprint 2 of the SaaS plan).
-- **No real authentication/accounts** — session-scoping (PR #16) is an explicit stopgap, not a fix. Tracked as Sprint 1 of the SaaS plan (Clerk + Supabase Postgres, decided 2026-08-11).
-- ~~**Dockerfile doesn't run the app**~~ — fixed this session (`infra-agent-sprint1`), see Deploy section below. Actual Railway deploy (dashboard env vars, first live run) still pending.
+- **`exec()` sandbox not yet unified** — 3 independent whitelists, no enforced timeout. Now the top priority: real auth + a public deploy exist, so this is exposed to real (if currently few) external users, not just the project owner. Tracked as Sprint 2 of the SaaS plan.
+- **`alembic upgrade head`'s exact root-cause hang is not fully diagnosed.** With network connectivity independently confirmed healthy (a raw `SELECT 1` succeeded in ~1s from the same environment), the actual `alembic upgrade head` invocation still hung indefinitely — worked around by applying the equivalent schema via direct SQL and manually syncing `alembic_version`, not by fixing Alembic's own connection flow. If migration `0004` is ever needed, this may recur and needs proper diagnosis first (suspected: a heavier schema-introspection query than a trivial `SELECT`, but unconfirmed).
 - **Two unreconciled ICP framings** across the project's own docs (`artefact/saas-potential.md`: data engineers; `writing/drafts/draft-visao-produto.md` + owner's stated framing: SMB entrepreneurs) — not yet resolved, flagged for the owner to decide, not a code task.
-- **`.claude/specs/sr-standard.md` §8 SaaS Roadmap table** — the project's own pre-existing plan for exactly this transition; the current multi-sprint plan (see below) follows its sequencing logic but reorders items where the SaaS-readiness audit found reason to (see plan file).
+- **`.claude/specs/sr-standard.md` §8 SaaS Roadmap table** — the project's own pre-existing plan for exactly this transition; the current multi-sprint plan follows its sequencing logic but reorders items where the SaaS-readiness audit found reason to.
 
 ## Next steps
 
-Multi-sprint plan approved 2026-08-11, plan file: `~/.claude/plans/magical-floating-teapot.md` (local to the session that created it — if unavailable, the sprint structure is: A [done, PR #16] → 1 [auth/tenancy/deploy] → 2 [sandbox unification] → 3 [async + metering] → 4 [storage/config] → 5 [e2e + thesis polish]). ADR-006 (Clerk + Supabase Postgres tenancy decision) is the next artifact to write, at the start of Sprint 1.
+Multi-sprint plan: A [done] → 1 [done — auth/tenancy/deploy] → 2 [next — sandbox unification] → 3 [async + metering] → 4 [storage/config] → 5 [e2e + thesis polish]. ADR-007 (unified sandbox policy) is the next artifact to write, at the start of Sprint 2.
 
 ## Deploy
 
-- **Target: Railway**, via Docker (`Dockerfile`, `railway.json`). Not yet deployed — this is infra prep, no live URL exists.
-- `Dockerfile` fixed (Sprint 1, `infra-agent-sprint1`): installs the `app` extra (`uv sync --no-dev --no-editable --extra app` — plotly, scikit-learn, statsmodels, streamlit) and its `ENTRYPOINT` runs `streamlit run app.py --server.port=$PORT --server.address=0.0.0.0` instead of the CLI. `$PORT` is injected by Railway at runtime, not hardcoded.
-- `railway.json` points Railway's builder at the Dockerfile and mirrors its start command.
-- `docker-compose.yml` gained an `app` service (builds from the same `Dockerfile`, port `8501`, reads `.env`) for local dev parity with the Railway deploy.
-- Required env vars for the deployed app — `CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `CLERK_JWKS_URL`, `APP_DATABASE_URL` (see `.env.example` and [ADR-006](adr/ADR-006-clerk-auth-supabase-postgres-tenancy.md)) — must be set in Railway's dashboard, not committed to the repo.
+- **Target: Railway, live.** Deployed via Docker (`Dockerfile`, `railway.json`), public domain generated through Railway's Networking settings.
+- `Dockerfile` installs the `app` extra (`uv sync --no-dev --no-editable --extra app` — plotly, scikit-learn, statsmodels, streamlit); `ENTRYPOINT` runs `streamlit run app.py --server.port=$PORT --server.address=0.0.0.0`. `$PORT` is injected by Railway at runtime.
+- `railway.json` points Railway's builder at the Dockerfile only — no `startCommand` override (see Changed files above for why).
+- `docker-compose.yml` has an `app` service for local dev parity.
+- Env vars set in Railway's dashboard (not committed): `CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `CLERK_JWKS_URL`, `CLERK_ISSUER`, `APP_DATABASE_URL` (Supabase **Session pooler**, not Direct connection — Direct connection is IPv6-only and unreachable from Railway's IPv4-only egress), `OPENAI_API_KEY`.
 
 ## Related
 
-- Vault: `~/Documents/Obsidian Vault/tcc/sessions/2026-08-11-tech-lead-saas-review-e-sprint-a.md` — full session narrative.
+- Vault: `~/Documents/Obsidian Vault/tcc/sessions/2026-08-13-sprint1-clerk-auth-tenancy.md` — Sprint 1 code session.
+- Vault: `~/Documents/Obsidian Vault/tcc/sessions/2026-08-14-railway-deploy-clerk-supabase.md` — deploy debugging session (4 infra bugs, all documented as reusable Vault bug notes).
 - Vault: `~/Documents/Obsidian Vault/tcc/artefact/saas-potential.md` — product/business framing (explicitly out of TCC scope).
-- `docs/adr/` — ADR-001 through ADR-005; ADR-006+ to be written per sprint.
+- `docs/adr/` — ADR-001 through ADR-006; ADR-007+ to be written per sprint.
