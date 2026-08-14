@@ -11,7 +11,19 @@ Core (not the ORM) matches the style already used in
 `sources/postgres_source.py` and `destinations/postgres_dest.py`.
 """
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, MetaData, String, Table, Text
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    MetaData,
+    String,
+    Table,
+    Text,
+)
 
 metadata = MetaData()
 
@@ -32,6 +44,25 @@ runs = Table(
     Column("rows_loaded", Integer, nullable=True),
     Column("timestamp", DateTime(timezone=True), nullable=False),
     Column("tenant_id", String, ForeignKey("users.id"), nullable=False),
+)
+
+stage_latencies = Table(
+    "stage_latencies",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    # runs.run_id or analysis_runs.run_id, disambiguated by run_type — see ADR-007
+    # for why this is one narrow long-format table instead of two nullable FKs.
+    Column("run_id", String, nullable=False),
+    Column("run_type", String(10), nullable=False),  # "silver" | "analysis"
+    Column("tenant_id", String, ForeignKey("users.id"), nullable=False),
+    Column("stage", String(30), nullable=False),
+    # 2nd+ Analyst/Science call for the same run (repair/multi-subtask); always
+    # 1 for Silver's LangGraph nodes, which run exactly once each.
+    Column("seq", Integer, nullable=False, server_default="1"),
+    Column("duration_seconds", Float, nullable=False),
+    Column("timed_out", Boolean, nullable=False, server_default="false"),
+    Column("recorded_at", DateTime(timezone=True), nullable=False),
+    Index("ix_stage_latencies_tenant_stage", "tenant_id", "stage"),
 )
 
 analysis_runs = Table(
