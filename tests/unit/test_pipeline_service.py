@@ -104,6 +104,13 @@ def test_run_silver_pipeline_emits_progress_and_persists(monkeypatch) -> None:
 
     monkeypatch.setattr(pipeline_service, "save_run", fake_save_run)
 
+    stage_latencies_calls: list[Any] = []
+    monkeypatch.setattr(
+        pipeline_service,
+        "save_stage_latencies",
+        lambda *args, **kwargs: stage_latencies_calls.append((args, kwargs)),
+    )
+
     events, _cb = _recorder()
     result = pipeline_service.run_silver_pipeline(
         "read file.csv", run_dir="runs", progress_callback=_cb
@@ -129,6 +136,7 @@ def test_run_silver_pipeline_reports_failure(monkeypatch) -> None:
     monkeypatch.setattr(
         pipeline_service, "save_run", lambda state, log_dir, tenant_id=None: pathlib.Path("x")
     )
+    monkeypatch.setattr(pipeline_service, "save_stage_latencies", lambda *a, **k: None)
 
     events, _cb = _recorder()
     result = pipeline_service.run_silver_pipeline("bad spec", run_dir="runs", progress_callback=_cb)
@@ -383,6 +391,7 @@ def test_run_full_analysis_calls_stages_in_order_and_persists_analysis(monkeypat
     monkeypatch.setattr(pipeline_service, "run_analyst", fake_run_analyst)
     monkeypatch.setattr(pipeline_service, "run_advisor", fake_run_advisor)
     monkeypatch.setattr(pipeline_service, "save_analysis", fake_save_analysis)
+    monkeypatch.setattr(pipeline_service, "save_stage_latencies", lambda *a, **k: None)
 
     result = pipeline_service.run_full_analysis("spec", "  pergunta de negócio  ", run_dir="runs")
 
@@ -455,6 +464,7 @@ def test_run_full_analysis_forwards_progress_callback_to_every_stage(monkeypatch
     monkeypatch.setattr(pipeline_service, "run_analyst", lambda df, q: _gold_result(error=None))
     monkeypatch.setattr(pipeline_service, "run_advisor", lambda *a, **k: _advisor_result())
     monkeypatch.setattr(pipeline_service, "save_analysis", lambda *a, **k: pathlib.Path("x"))
+    monkeypatch.setattr(pipeline_service, "save_stage_latencies", lambda *a, **k: None)
 
     events, _cb = _recorder()
     pipeline_service.run_full_analysis("spec", "pergunta", run_dir="runs", progress_callback=_cb)
