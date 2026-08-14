@@ -10,6 +10,7 @@ project's interactive dev sandbox — `multiprocessing`/pandas execution hangs t
 — so CI is the first real run of everything in this file.
 """
 
+import os
 import time
 
 import pandas as pd
@@ -296,3 +297,64 @@ result = obj.x
     assert result["error"] is not None
     assert "setattr" in result["error"]
     assert "not defined" in result["error"]
+
+
+# ---------------------------------------------------------------------------
+# Env-var exposure — the child inherits the parent's full `os.environ` under
+# `spawn` (spawn does not clear it), and this project keeps real secrets
+# there (APP_DATABASE_URL, POSTGRES_URL, CLERK_JWKS_URL/CLERK_ISSUER,
+# OPENAI_API_KEY-style vars). `_sandbox_worker()` now clears `os.environ` as
+# its first line, before user code runs, specifically so that even the
+# documented introspection escape (`().__class__.__mro__[1].__subclasses__()`
+# reaching an already-imported `os` module's globals) finds nothing there.
+#
+# These tests don't exercise that exact mro/subclasses escape path — which
+# module happens to be reachable that way is a fragile implementation detail
+# of whatever's been imported by pandas/plotly/sklearn at the time, not a
+# stable thing to assert on. Instead they inject a direct reference to the
+# real `os` module via `extra_globals` (the same mechanism analyst.py uses
+# for `px`/`go`) as a stable proxy: however sandboxed code ends up holding a
+# reference to `os` — via the accepted escape or (as here) a legitimate
+# extra_globals entry — `os.environ` must already be empty by the time it can
+# use it, which is exactly the property `_sandbox_worker()`'s env-clear is
+# supposed to guarantee.
+# ---------------------------------------------------------------------------
+
+
+def test_child_process_environment_is_cleared_before_user_code_runs() -> None:
+    """Baseline: the child's `os.environ` is empty (or at least does not
+    contain any of the parent's own vars), proving the clear happens
+    before user code — and inside the child, not the parent, since this
+    process's own `os.environ` (checked below) is untouched."""
+    code = "env_len = len(os.environ)"
+    result = execute_in_sandbox(
+        code, {}, mode="script", result_vars=["env_len"], extra_globals={"os": os}
+    )
+
+    assert result["error"] is None, result["error"]
+    assert result["values"]["env_len"] == 0
+
+    # The clear happened in the child's copy of os.environ, not the parent's
+    # (this test process) — this process's own environment must be untouched.
+    assert len(os.environ) > 0
+
+
+def test_injected_parent_env_var_not_visible_in_sandboxed_child(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A secret-shaped var set in the parent (this test process) right before
+    the call — analogous to APP_DATABASE_URL/OPENAI_API_KEY being real,
+    populated env vars in the running app — must not be visible inside the
+    sandboxed child, even though `spawn` would otherwise inherit it."""
+    monkeypatch.setenv("AI_ETL_TEST_SECRET_MARKER", "should-not-leak-into-sandbox")
+
+    code = "leaked = os.environ.get('AI_ETL_TEST_SECRET_MARKER')"
+    result = execute_in_sandbox(
+        code, {}, mode="script", result_vars=["leaked"], extra_globals={"os": os}
+    )
+
+    assert result["error"] is None, result["error"]
+    assert result["values"]["leaked"] is None
+    # Confirm the marker really was set in the parent at call time — otherwise
+    # this test would trivially pass for the wrong reason.
+    assert os.environ.get("AI_ETL_TEST_SECRET_MARKER") == "should-not-leak-into-sandbox"

@@ -22,6 +22,7 @@ risk analysis.
 """
 
 import multiprocessing
+import os
 import queue
 import time
 import traceback
@@ -168,6 +169,38 @@ def _sandbox_worker(
     bounding *this* function's wall-clock time, not about handling exceptions
     that escape it, so nothing here is allowed to propagate uncaught.
     """
+    # Clear the child's environment before anything else runs — the very
+    # first line, before even building SAFE_GLOBALS. `spawn` does not clear
+    # os.environ; the child inherits it verbatim from the parent (this
+    # process), which holds real secrets (APP_DATABASE_URL, POSTGRES_URL,
+    # CLERK_JWKS_URL/CLERK_ISSUER, OPENAI_API_KEY-style vars — see
+    # audit/connection.py, sources/postgres_source.py, services/auth_service.py,
+    # core/llm.py). None of those are ever placed in SAFE_GLOBALS/extra_globals,
+    # but the sandbox's exec()-with-restricted-globals boundary is documented
+    # (module docstring above) as bypassable via introspection
+    # (`().__class__.__mro__[1].__subclasses__()`) reaching already-imported
+    # modules' `__globals__` — which is enough to reach `os.environ` without
+    # ever doing `import os` through the blocked builtins. Clearing here
+    # removes that concrete target; it does not close the introspection
+    # escape itself (still an accepted, documented, separate limitation).
+    #
+    # Safe to do this late (as the first line of the worker, not earlier):
+    # pandas/numpy (imported at module load, above) and any extra_globals
+    # modules/classes (plotly, sklearn, statsmodels — unpickled by
+    # multiprocessing's bootstrap before this function is even called) have
+    # already finished importing by this point, using the still-intact
+    # environment. Checked for any *runtime* (not just import-time) env-var
+    # dependency in this call path and found none that matters here:
+    # pandas/numpy have none at the operations Analyst/Science/Transformer
+    # code performs; sklearn's estimators here (RandomForest*, KMeans,
+    # LinearRegression/Ridge/LogisticRegression) default to `n_jobs=None`
+    # (no parallel worker subprocesses, so no joblib/loky temp-dir env
+    # lookup); and even if LLM-generated code passed `n_jobs=-1`,
+    # `tempfile.gettempdir()` (what joblib/loky falls back to without
+    # `TMPDIR`/`TEMP`/`TMP`) has a hardcoded `/tmp` fallback on the Linux
+    # containers this project deploys to. Nothing here needs an allowlist.
+    os.environ.clear()
+
     try:
         builtins_ = {**SAFE_BUILTINS, **(extra_builtins or {})}
         sandbox_globals: dict[str, Any] = {
