@@ -63,6 +63,33 @@ services:
       - .env
     depends_on:
       - app-postgres
+      - redis
+
+  # Broker + result backend for Celery (Sprint 3, ADR-008) — async pipeline
+  # execution and the per-tenant rate-limit counters in
+  # services/execution_queue.py both live here. No persistence volume: the
+  # rate-limit counters are meant to be ephemeral (fixed-window, self-expiring)
+  # and task results already have result_expires=3600 (core/celery_app.py) —
+  # losing this on a dev-machine restart isn't a real loss.
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  # Celery worker, for local dev parity — production's worker process
+  # management (Railway) is a separate decision, out of scope for this
+  # compose file (see ADR-008's consequences). Same image as `app`, different
+  # entrypoint command.
+  celery-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: uv run celery -A ai_etl.core.celery_app worker --loglevel=info
+    env_file:
+      - .env
+    depends_on:
+      - app-postgres
+      - redis
 
 volumes:
   postgres_data:

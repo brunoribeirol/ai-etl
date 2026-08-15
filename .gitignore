@@ -51,3 +51,4 @@ output/
 
 # Jupyter
 .ipynb_checkpoints/
+.claude/worktrees/

@@ -12,6 +12,8 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from ai_etl.audit.connection import get_engine
 from ai_etl.audit.models import analysis_runs, runs, stage_latencies, users
 from ai_etl.core.analysis_types import AdvisorResult, GoldResult, ScienceResult, TokenUsage
+from ai_etl.core.llm import get_model_name
+from ai_etl.core.pricing import compute_cost_usd
 from ai_etl.core.state import PipelineState
 
 
@@ -66,6 +68,16 @@ def save_run(state: PipelineState, log_dir: str = "./runs", tenant_id: str | Non
     if state.get("transformation_code"):
         transform_code_path = log_path / f"{run_id}_transform.py"
         transform_code_path.write_text(state["transformation_code"])
+
+    # Sprint 3 (ADR-008): also persist the Silver DataFrame as CSV, alongside
+    # the (lossy) JSON snapshot below — `_make_serializable` only keeps a
+    # shape placeholder for DataFrames in `{run_id}.json`. `load_full_result`
+    # reads this CSV back to reconstruct `state["transformed_data"]` for
+    # `app.py::_render_results`, which async execution's polling loop can no
+    # longer pass the live in-memory DataFrame to directly.
+    silver_df = state.get("transformed_data")
+    if isinstance(silver_df, pd.DataFrame) and not silver_df.empty:
+        (log_path / f"{run_id}_silver.csv").write_text(silver_df.to_csv(index=False))
 
     json_path = log_path / f"{run_id}.json"
     _write_json(state, json_path, transform_code_path=transform_code_path)
@@ -128,6 +140,12 @@ def load_history(limit: int = 20, tenant_id: str | None = None) -> pd.DataFrame:
             leak. When `None` (the default, kept for backward compatibility with
             other callers), no filter is applied. `app.py` should always pass a
             real value going forward.
+
+    `cost_usd`/`model_name` (Sprint 3, ADR-008) come from a `LEFT OUTER JOIN`
+    against `analysis_runs` on `run_id` — a Silver-only run (no business
+    question asked, so `save_analysis` never ran) has no matching row and
+    reads back as `NaN`/`None`, which is the correct "no analysis, no cost"
+    signal, not a bug to backfill.
     """
     stmt = (
         select(
@@ -136,7 +154,10 @@ def load_history(limit: int = 20, tenant_id: str | None = None) -> pd.DataFrame:
             runs.c.rows_loaded,
             runs.c.timestamp,
             func.substr(runs.c.spec, 1, 80).label("spec"),
+            analysis_runs.c.cost_usd,
+            analysis_runs.c.model_name,
         )
+        .select_from(runs.outerjoin(analysis_runs, runs.c.run_id == analysis_runs.c.run_id))
         .order_by(runs.c.timestamp.desc())
         .limit(limit)
     )
@@ -157,6 +178,7 @@ def save_analysis(
     planner_tokens: TokenUsage,
     log_dir: str = "./runs",
     tenant_id: str | None = None,
+    business_question: str = "",
 ) -> Path:
     """Persist Gold/Science/Advisor sub-task results alongside the Silver run.
 
@@ -176,14 +198,24 @@ def save_analysis(
         tenant_id: Sprint A session-scoping stopgap — the browser session's UUID.
             Defaults to `None` for backward compatibility; `app.py` should always
             pass a real value going forward.
+        business_question: Sprint 3 addition — persisted so `load_full_result` can
+            reconstruct the header `_render_results` shows ("O que fazer sobre:
+            ..."). Defaults to `""` for backward compatibility with existing callers.
     """
     log_path = Path(log_dir)
     log_path.mkdir(parents=True, exist_ok=True)
 
     payload = {
         "run_id": run_id,
-        "gold": [_serialize_analysis_result(g, "gold_df") for g in gold_results],
-        "science": [_serialize_analysis_result(s, "predictions_df") for s in science_results],
+        "question": business_question,
+        "gold": [
+            _serialize_analysis_result(g, "gold_df", log_path, f"{run_id}_gold_{i}")
+            for i, g in enumerate(gold_results)
+        ],
+        "science": [
+            _serialize_analysis_result(s, "predictions_df", log_path, f"{run_id}_science_{i}")
+            for i, s in enumerate(science_results)
+        ],
         "advisor": {
             "recommendations": advisor_result.get("recommendations", []),
             "summary": advisor_result.get("summary"),
@@ -202,8 +234,22 @@ def save_analysis(
     return json_path
 
 
-def _serialize_analysis_result(result: "GoldResult | ScienceResult", df_key: str) -> dict[str, Any]:
+def _serialize_analysis_result(
+    result: "GoldResult | ScienceResult", df_key: str, log_path: Path, file_prefix: str
+) -> dict[str, Any]:
+    """Build one gold/science manifest entry.
+
+    `data_preview`/`data_shape` are the original lossy-but-JSON-embedded preview
+    (unchanged, still useful for `st.json(...)` debugging in the History tab's
+    raw view). Sprint 3 adds `data_path`/`fig_path`: the full DataFrame (CSV) and
+    Plotly `Figure` (`fig.to_json()`) persisted as sibling files, not embedded —
+    `load_full_result` reads them back to reconstruct the exact objects
+    `app.py::_render_results` renders. A missing df/fig simply omits that key
+    from the manifest; the reload step treats that as "not available" the same
+    way a live run with no chart/data does today, not as an error.
+    """
     df = result.get(df_key)
+    fig = result.get("fig")
     serialized: dict[str, Any] = {
         "task_question": result.get("task_question"),
         "narrative": result.get("narrative"),
@@ -217,6 +263,13 @@ def _serialize_analysis_result(result: "GoldResult | ScienceResult", df_key: str
     if isinstance(df, pd.DataFrame) and not df.empty:
         serialized["data_preview"] = df.head(20).to_dict(orient="records")
         serialized["data_shape"] = list(df.shape)
+        data_path = log_path / f"{file_prefix}.csv"
+        data_path.write_text(df.to_csv(index=False))
+        serialized["data_path"] = data_path.name
+    if fig is not None:
+        fig_path = log_path / f"{file_prefix}_fig.json"
+        fig_path.write_text(fig.to_json())
+        serialized["fig_path"] = fig_path.name
     return serialized
 
 
@@ -246,6 +299,14 @@ def _write_analysis_row(
     tokens: TokenUsage,
     tenant_id: str | None = None,
 ) -> None:
+    # Sprint 3 (ADR-008): model_name/cost_usd computed here, not threaded
+    # through as a caller-supplied argument — get_model_name() reads the same
+    # AI_ETL_LLM_MODEL env var every agent call in this run already used (see
+    # core/llm.py::get_llm()), so it's the correct model for this row without
+    # widening save_analysis()'s signature for every existing caller.
+    model_name = get_model_name()
+    cost_usd = compute_cost_usd(model_name, tokens)
+
     stmt = pg_insert(analysis_runs).values(
         run_id=run_id,
         gold_subtasks=n_gold,
@@ -255,6 +316,8 @@ def _write_analysis_row(
         total_tokens=tokens.get("total_tokens", 0),
         timestamp=datetime.now(tz=timezone.utc),
         tenant_id=tenant_id,
+        model_name=model_name,
+        cost_usd=cost_usd,
     )
     stmt = stmt.on_conflict_do_update(
         index_elements=[analysis_runs.c.run_id],
@@ -266,6 +329,8 @@ def _write_analysis_row(
             "total_tokens": stmt.excluded.total_tokens,
             "timestamp": stmt.excluded.timestamp,
             "tenant_id": stmt.excluded.tenant_id,
+            "model_name": stmt.excluded.model_name,
+            "cost_usd": stmt.excluded.cost_usd,
         },
     )
     with get_engine().begin() as conn:
@@ -340,6 +405,159 @@ def save_stage_latencies(
     )
     with get_engine().begin() as conn:
         conn.execute(stmt)
+
+
+def _run_belongs_to_tenant(run_id: str, tenant_id: str) -> bool:
+    """Server-side ownership check for `load_full_result` — queries `runs`
+    directly rather than trusting a `run_id` the caller already claims is
+    tenant-scoped. Soft-fails to `False` (i.e. "not authorized") on any DB
+    error, matching this module's existing soft-fail style — a reload should
+    never leak data just because the ownership check itself couldn't run."""
+    try:
+        stmt = select(runs.c.run_id).where(runs.c.run_id == run_id, runs.c.tenant_id == tenant_id)
+        with get_engine().connect() as conn:
+            return conn.execute(stmt).first() is not None
+    except Exception:
+        return False
+
+
+def load_full_result(
+    run_id: str, log_dir: str = "./runs", tenant_id: str | None = None
+) -> Optional[dict[str, Any]]:
+    """Reconstruct the `AnalysisRunResult`-shaped dict `app.py::_render_results`
+    expects, from the artifacts `save_run`/`save_analysis` persist to disk.
+
+    Sprint 3 (ADR-008) context: `run_full_analysis_task`'s Celery return value is
+    a small JSON-safe summary only (DataFrames/Figures don't cross the task's
+    process boundary — see `services/execution_queue.py`'s docstring). The full
+    result was always durably persisted as a side effect of `save_run`/
+    `save_analysis` for the History tab's raw-JSON view; this function is what
+    actually reconstructs it into a shape `_render_results` can render, for both
+    the History tab and a completed async run.
+
+    Security note (added on review): this reads artifacts straight off disk by
+    `run_id`, with no inherent ownership check. `app.py`'s only caller today
+    passes a `run_id` sourced from `load_history(..., tenant_id=...)`, so a
+    tenant can normally only ever select their own runs — but that's a UI-layer
+    restriction, not a data-layer one, and this project has already shipped
+    (and fixed) exactly one cross-tenant data leak before (Sprint A). When
+    `tenant_id` is given, ownership is verified against `runs.tenant_id` before
+    any file is read, returning `None` (same soft-fail shape as "unknown run
+    id") on mismatch — a second, defense-in-depth check that doesn't rely on
+    the caller never changing how `run_id` is sourced. `tenant_id` defaults to
+    `None` for callers that intentionally operate without tenant scoping (none
+    exist in `app.py` today; kept optional rather than required so this stays
+    a additive, non-breaking signature change).
+
+    Returns `None` if `{run_id}.json` doesn't exist (unknown run id), or if
+    `tenant_id` is given and doesn't match the run's owner — mirrors
+    `load_history`'s soft-fail style rather than raising.
+
+    `bronze` is always `None` on reload: the originally-uploaded file only ever
+    existed in the browser session's memory and was never persisted (unchanged
+    from before Sprint 3 — `_render_results` already renders a missing bronze_df
+    as "not available" rather than erroring).
+
+    Reload is best-effort per sub-task artifact: a missing/corrupt CSV or figure
+    JSON for one gold/science entry degrades just that entry (data/figure
+    omitted, narrative/model_info still shown) rather than failing the whole
+    reload — matches `load_history`'s "soft-fail, don't block the UI" philosophy.
+    """
+    if tenant_id is not None and not _run_belongs_to_tenant(run_id, tenant_id):
+        return None
+
+    log_path = Path(log_dir)
+    json_path = log_path / f"{run_id}.json"
+    if not json_path.exists():
+        return None
+
+    state: dict[str, Any] = json.loads(json_path.read_text())
+    silver_csv = log_path / f"{run_id}_silver.csv"
+    if silver_csv.exists():
+        try:
+            state["transformed_data"] = pd.read_csv(silver_csv)
+        except Exception:  # nosec B110 — best-effort reload; a corrupt CSV degrades
+            pass  # to a missing Silver tab, not a failed reload of the whole run.
+
+    gold: list[dict[str, Any]] = []
+    science: list[dict[str, Any]] = []
+    advisor: dict[str, Any] = {}
+    question = ""
+
+    analysis_path = log_path / f"{run_id}_analysis.json"
+    if analysis_path.exists():
+        analysis = json.loads(analysis_path.read_text())
+        question = analysis.get("question", "")
+        gold = [_reload_analysis_entry(e, log_path, "gold_df") for e in analysis.get("gold", [])]
+        science = [
+            _reload_analysis_entry(e, log_path, "predictions_df")
+            for e in analysis.get("science", [])
+        ]
+        advisor = analysis.get("advisor", {})
+
+    return {
+        "bronze": None,
+        "state": state,
+        "gold": gold,
+        "science": science,
+        "advisor": advisor,
+        "question": question,
+        "tokens": _load_analysis_tokens(run_id),
+    }
+
+
+def _reload_analysis_entry(entry: dict[str, Any], log_path: Path, df_key: str) -> dict[str, Any]:
+    """Re-hydrate one gold/science manifest entry: read back the full DataFrame
+    (`data_path`) and Plotly `Figure` (`fig_path`) `_serialize_analysis_result`
+    persisted alongside the JSON-safe preview, if present and readable."""
+    reloaded = dict(entry)
+
+    data_path = entry.get("data_path")
+    if data_path:
+        csv_path = log_path / data_path
+        if csv_path.exists():
+            try:
+                reloaded[df_key] = pd.read_csv(csv_path)
+            except Exception:  # nosec B110 — best-effort per sub-task; a corrupt
+                pass  # CSV omits that entry's data, not the whole reload.
+
+    fig_path = entry.get("fig_path")
+    if fig_path:
+        full_fig_path = log_path / fig_path
+        if full_fig_path.exists():
+            try:
+                import plotly.io as pio
+
+                reloaded["fig"] = pio.from_json(full_fig_path.read_text())
+            except Exception:  # nosec B110 — best-effort per sub-task; a corrupt
+                pass  # figure JSON omits that entry's chart, not the whole reload.
+
+    return reloaded
+
+
+def _load_analysis_tokens(run_id: str) -> TokenUsage:
+    """Read the already-aggregated token totals back from `analysis_runs`
+    (written by `_write_analysis_row`), rather than re-summing every
+    sub-task's `tokens` field from the JSON manifest a second time. Soft-fails
+    to all-zero on any DB error, matching `load_history`'s pattern — a reload
+    should never hard-fail just because the aggregate row is unreachable."""
+    try:
+        stmt = select(
+            analysis_runs.c.input_tokens,
+            analysis_runs.c.output_tokens,
+            analysis_runs.c.total_tokens,
+        ).where(analysis_runs.c.run_id == run_id)
+        with get_engine().connect() as conn:
+            row = conn.execute(stmt).first()
+        if row is None:
+            return {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+        return {
+            "input_tokens": row.input_tokens,
+            "output_tokens": row.output_tokens,
+            "total_tokens": row.total_tokens,
+        }
+    except Exception:
+        return {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
 
 
 def _make_serializable(obj: Any) -> Any:

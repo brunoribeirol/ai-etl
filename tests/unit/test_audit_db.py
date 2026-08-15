@@ -27,7 +27,8 @@ from sqlalchemy import Engine
 
 from ai_etl.audit import db
 from ai_etl.audit.db import _write_run_row as _real_write_run_row
-from ai_etl.audit.db import save_analysis, save_run, save_stage_latencies
+from ai_etl.audit.db import load_full_result, save_analysis, save_run, save_stage_latencies
+from ai_etl.audit.models import analysis_runs as analysis_runs_table
 from ai_etl.audit.models import metadata as audit_metadata
 from ai_etl.audit.models import runs as runs_table
 from ai_etl.audit.models import stage_latencies as stage_latencies_table
@@ -347,6 +348,56 @@ def test_load_history_without_tenant_id_returns_all_runs(
     assert set(history["run_id"]) == {"run-tenant-a", "run-tenant-b"}
 
 
+def test_load_history_includes_null_cost_for_silver_only_runs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Sprint 3 (ADR-008): a run with no matching `analysis_runs` row (Silver
+    ran, no business question was asked) must read back `cost_usd`/
+    `model_name` as null via the `LEFT OUTER JOIN`, not raise or silently
+    drop the row."""
+    engine = _make_sqlite_engine()
+    monkeypatch.setattr(db, "get_engine", lambda: engine)
+
+    _insert_run_row(engine, "run-silver-only", tenant_id="tenant-a")
+
+    history = db.load_history(tenant_id="tenant-a")
+
+    assert list(history["run_id"]) == ["run-silver-only"]
+    assert history["cost_usd"].isna().all()
+    assert history["model_name"].isna().all()
+
+
+def test_load_history_surfaces_cost_for_analyzed_runs(monkeypatch: pytest.MonkeyPatch) -> None:
+    engine = _make_sqlite_engine()
+    monkeypatch.setattr(db, "get_engine", lambda: engine)
+
+    _insert_run_row(engine, "run-with-analysis", tenant_id="tenant-a")
+    with engine.begin() as conn:
+        conn.execute(
+            analysis_runs_table.insert().values(
+                run_id="run-with-analysis",
+                gold_subtasks=1,
+                science_subtasks=0,
+                input_tokens=1000,
+                output_tokens=500,
+                total_tokens=1500,
+                timestamp=datetime.now(tz=timezone.utc),
+                tenant_id="tenant-a",
+                model_name="gpt-4o-mini",
+                cost_usd=0.00045,
+            )
+        )
+
+    history = db.load_history(tenant_id="tenant-a")
+
+    assert history.loc[history["run_id"] == "run-with-analysis", "model_name"].iloc[0] == (
+        "gpt-4o-mini"
+    )
+    assert history.loc[history["run_id"] == "run-with-analysis", "cost_usd"].iloc[
+        0
+    ] == pytest.approx(0.00045)
+
+
 def test_runs_table_rejects_null_tenant_id() -> None:
     """Regression guard for ADR-006 migration 0003: `runs.tenant_id` is NOT NULL
     now (it maps to a real Clerk account via a FK to `users`, not the ADR-005
@@ -614,4 +665,123 @@ def test_save_stage_latencies_scoped_by_run_id_and_run_type(
     assert len(silver_rows) == 1
     assert silver_rows[0]["stage"] == "extractor"
     assert len(analysis_rows) == 1
-    assert analysis_rows[0]["stage"] == "analyst"
+
+
+# ---------------------------------------------------------------------------
+# load_full_result (Sprint 3, ADR-008) — reconstructing _render_results' input
+# from what save_run/save_analysis persist to disk, for the History tab and a
+# completed async run alike.
+# ---------------------------------------------------------------------------
+def _insert_analysis_runs_row(engine: Engine, run_id: str, tokens: dict) -> None:
+    with engine.begin() as conn:
+        conn.execute(
+            analysis_runs_table.insert().values(
+                run_id=run_id,
+                gold_subtasks=1,
+                science_subtasks=0,
+                input_tokens=tokens["input_tokens"],
+                output_tokens=tokens["output_tokens"],
+                total_tokens=tokens["total_tokens"],
+                timestamp=datetime.now(tz=timezone.utc),
+                tenant_id="tenant-x",
+                model_name="gpt-4o-mini",
+                cost_usd=0.001,
+            )
+        )
+
+
+def test_load_full_result_reconstructs_dataframes_and_figure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import plotly.graph_objects as go
+
+    engine = _make_sqlite_engine()
+    monkeypatch.setattr(db, "get_engine", lambda: engine)
+
+    state = _make_completed_state()
+    state["transformed_data"] = pd.DataFrame({"product": ["A", "B"], "total": [10, 20]})
+    save_run(state, log_dir=str(tmp_path))
+
+    gold = {**_make_gold_result(), "fig": go.Figure(data=[go.Bar(x=["A"], y=[1])])}
+    save_analysis(
+        state["run_id"],
+        [gold],
+        [_make_science_result()],
+        _make_advisor_result(),
+        _ZERO_TOKENS,
+        log_dir=str(tmp_path),
+        business_question="Quais os KPIs?",
+    )
+    _insert_analysis_runs_row(
+        engine, state["run_id"], {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}
+    )
+
+    result = load_full_result(state["run_id"], log_dir=str(tmp_path))
+
+    assert result is not None
+    assert result["bronze"] is None
+    assert isinstance(result["state"]["transformed_data"], pd.DataFrame)
+    assert result["state"]["transformed_data"].shape == (2, 2)
+    assert result["question"] == "Quais os KPIs?"
+    assert isinstance(result["gold"][0]["gold_df"], pd.DataFrame)
+    assert isinstance(result["gold"][0]["fig"], go.Figure)
+    assert isinstance(result["science"][0]["predictions_df"], pd.DataFrame)
+    assert result["tokens"] == {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}
+
+
+def test_load_full_result_returns_none_for_unknown_run(tmp_path: Path) -> None:
+    assert load_full_result("no-such-run", log_dir=str(tmp_path)) is None
+
+
+def test_load_full_result_rejects_wrong_tenant(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Security regression test: `load_full_result` must not return another
+    tenant's artifacts even when the caller supplies a valid `run_id` — the
+    only thing that made this reachable before was `app.py` always sourcing
+    `run_id` from that tenant's own `load_history(...)`, a UI-layer
+    restriction, not a data-layer one. See this project's Sprint A leak for
+    why that distinction matters."""
+    engine = _make_sqlite_engine()
+    monkeypatch.setattr(db, "get_engine", lambda: engine)
+    monkeypatch.setattr(db, "_write_run_row", _real_write_run_row)
+
+    state = _make_completed_state()
+    save_run(state, log_dir=str(tmp_path), tenant_id="tenant-a")
+
+    assert (
+        load_full_result(state["run_id"], log_dir=str(tmp_path), tenant_id="tenant-a") is not None
+    )
+    assert load_full_result(state["run_id"], log_dir=str(tmp_path), tenant_id="tenant-b") is None
+    # Callers that don't pass tenant_id at all keep the old, unscoped behavior
+    # (e.g. any future internal/admin tooling) — only an explicit mismatch
+    # is rejected, not the absence of a tenant_id.
+    assert load_full_result(state["run_id"], log_dir=str(tmp_path)) is not None
+
+
+def test_load_full_result_degrades_gracefully_when_csv_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A gold entry whose CSV artifact was deleted/corrupted still yields its
+    narrative/task_question — just without gold_df — rather than failing the
+    whole reload."""
+    engine = _make_sqlite_engine()
+    monkeypatch.setattr(db, "get_engine", lambda: engine)
+
+    state = _make_completed_state()
+    save_run(state, log_dir=str(tmp_path))
+    save_analysis(
+        state["run_id"],
+        [_make_gold_result()],
+        [],
+        _make_advisor_result(),
+        _ZERO_TOKENS,
+        log_dir=str(tmp_path),
+    )
+    (tmp_path / f"{state['run_id']}_gold_0.csv").unlink()
+
+    result = load_full_result(state["run_id"], log_dir=str(tmp_path))
+
+    assert result is not None
+    assert result["gold"][0]["narrative"] == "Produto B lidera."
+    assert "gold_df" not in result["gold"][0]

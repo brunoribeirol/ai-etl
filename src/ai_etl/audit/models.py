@@ -76,4 +76,12 @@ analysis_runs = Table(
     Column("total_tokens", Integer, nullable=False),
     Column("timestamp", DateTime(timezone=True), nullable=False),
     Column("tenant_id", String, ForeignKey("users.id"), nullable=False),
+    # Sprint 3 (ADR-008, migration 0005) — evaluation metric 3, cost per
+    # execution. model_name is persisted per-run (not just read live from
+    # AI_ETL_LLM_MODEL) so a later change to the env var doesn't silently
+    # reprice historical runs. cost_usd is nullable: core/pricing.py returns
+    # None for an unpriced model, which must round-trip as NULL, not 0.0 —
+    # see compute_cost_usd's docstring.
+    Column("model_name", String(50), nullable=True),
+    Column("cost_usd", Float, nullable=True),
 )
