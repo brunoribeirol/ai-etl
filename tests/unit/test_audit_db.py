@@ -744,6 +744,7 @@ def test_load_full_result_rejects_wrong_tenant(
     why that distinction matters."""
     engine = _make_sqlite_engine()
     monkeypatch.setattr(db, "get_engine", lambda: engine)
+    monkeypatch.setattr(db, "_write_run_row", _real_write_run_row)
 
     state = _make_completed_state()
     save_run(state, log_dir=str(tmp_path), tenant_id="tenant-a")
