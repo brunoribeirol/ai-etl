@@ -683,7 +683,7 @@ def _insert_analysis_runs_row(engine: Engine, run_id: str, tokens: dict) -> None
                 output_tokens=tokens["output_tokens"],
                 total_tokens=tokens["total_tokens"],
                 timestamp=datetime.now(tz=timezone.utc),
-                tenant_id=None,
+                tenant_id="tenant-x",
                 model_name="gpt-4o-mini",
                 cost_usd=0.001,
             )

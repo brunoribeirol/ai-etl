@@ -381,6 +381,7 @@ def test_run_full_analysis_calls_stages_in_order_and_persists_analysis(monkeypat
         planner_tokens: Any,
         log_dir: str,
         tenant_id: str | None = None,
+        business_question: str = "",
     ) -> pathlib.Path:
         call_order.append("save_analysis")
         saved_analysis["run_id"] = run_id
