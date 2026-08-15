@@ -35,8 +35,10 @@ than this module inventing a second, redundant transport for the same data.
 
 from __future__ import annotations
 
+import base64
 import os
 import time
+from pathlib import Path
 from typing import Any
 
 import redis
@@ -105,6 +107,8 @@ def run_full_analysis_task(
     business_question: str,
     run_dir: str,
     tenant_id: str,
+    file_path: str | None = None,
+    file_bytes_b64: str | None = None,
 ) -> dict[str, Any]:
     """Celery task wrapping `pipeline_service.run_full_analysis`.
 
@@ -115,7 +119,27 @@ def run_full_analysis_task(
     coarse "queued / running / done" state instead — see `get_task_status`).
     Returns a JSON-safe summary; see this module's docstring for why the full
     result isn't returned here.
+
+    **`file_path`/`file_bytes_b64` — interim fix, not the final design.**
+    `spec` embeds an uploaded file's path as plain text (see `app.py`'s
+    `_auto_generate_spec`), but the web process and this worker are separate
+    Railway services with separate filesystems — a path that exists on the
+    web container's disk does not exist here. Rather than assume shared
+    storage, the web process base64-encodes the uploaded file's bytes and
+    passes them through the task itself; this worker re-materializes the
+    exact file at `file_path` on its own disk, in the same directory shape
+    (`runs/uploads/...`) both containers already agree on (same relative
+    `WORKDIR`), before ever calling `run_full_analysis`. Both are `None` when
+    `spec` came from the manual-spec textarea (no upload to move). This is a
+    deliberate, scoped Sprint 3 fix — Sprint 4 (ADR-009, tenant-scoped S3
+    storage) replaces it with a real shared store; base64-in-task-payload
+    does not scale past small demo-sized files and isn't meant to.
     """
+    if file_path and file_bytes_b64:
+        dest = Path(file_path)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(base64.b64decode(file_bytes_b64))
+
     result = run_full_analysis(spec, business_question, run_dir, tenant_id=tenant_id)
     state = result["state"]
     return {
@@ -126,17 +150,34 @@ def run_full_analysis_task(
     }
 
 
-def enqueue_analysis(spec: str, business_question: str, run_dir: str, tenant_id: str) -> str:
+def enqueue_analysis(
+    spec: str,
+    business_question: str,
+    run_dir: str,
+    tenant_id: str,
+    file_path: str | None = None,
+    file_bytes: bytes | None = None,
+) -> str:
     """Enforce the tenant's rate limit, then enqueue the run.
 
     Raises `RateLimitExceededError` before touching Celery at all if the tenant is
     already over the cap — a rejected run should never occupy a queue slot.
 
+    `file_path`/`file_bytes`: pass both when `spec` references an uploaded
+    file (`app.py`'s upload flow) so the worker — a separate process/
+    container with its own filesystem — can re-materialize it before running;
+    see `run_full_analysis_task`'s docstring. `file_bytes` is base64-encoded
+    here, not by the caller, so callers just pass the raw bytes they already
+    have (e.g. `UploadedFile.getvalue()`).
+
     Returns the Celery task id `app.py` stores in `st.session_state` and
     polls via `get_task_status`.
     """
     check_and_increment_rate_limit(tenant_id)
-    task = run_full_analysis_task.delay(spec, business_question, run_dir, tenant_id)
+    file_bytes_b64 = base64.b64encode(file_bytes).decode("ascii") if file_bytes else None
+    task = run_full_analysis_task.delay(
+        spec, business_question, run_dir, tenant_id, file_path, file_bytes_b64
+    )
     return str(task.id)
 
 
