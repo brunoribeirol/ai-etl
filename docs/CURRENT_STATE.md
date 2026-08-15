@@ -2,13 +2,14 @@
 
 > Living doc. Updated at the end of meaningful work sessions, not per-commit. Source of truth for repo/code state; the Obsidian vault (`~/Documents/Obsidian Vault/tcc/`) is the source of truth for the academic TCC narrative and product/strategy context.
 
-**Last updated:** 2026-08-14
+**Last updated:** 2026-08-15
 
-## Confirmed state (branch `main` @ `a00a4dc`, PR #21 merged 2026-08-14)
+## Confirmed state (branch `main` @ `c989729`, PR #23 merged 2026-08-15)
 
 - 5-agent LangGraph "Silver" pipeline (Orchestrator → Extractor → Transformer → Quality → Loader) + 4-agent "Agentic BI" layer (Planner → Analyst/Gold, Science → Advisor) — both fully implemented and exercised by the case study (15 runs, 100% success) and by the Streamlit app (`app.py`).
 - **Real authentication (Clerk) and account-based tenancy (Supabase Postgres) are live**, both in code and on a real Railway deployment (Sprint 1, PR #18, merged 2026-08-13; deploy debugged and confirmed working 2026-08-14). `runs`/`analysis_runs.tenant_id` are `NOT NULL` foreign keys to a new `users` table, keyed by Clerk `user_id` — the PR #16 session-UUID stopgap is fully retired.
-- Security docs (`SECURITY.md`, `docs/adr/ADR-003-exec-sandbox.md`) accurately describe **three separate, unmerged `exec()` sandboxes** (`core/sandbox.py`, `agents/analyst.py`, `agents/science.py`) — corrected 2026-08-11 (PR #15), still unmerged/unenforced-timeout. **This is now the top open risk**: real auth + a public deploy exist, so this gap is exposed to the internet, not just the project owner (documented and consciously accepted in ADR-006 pending Sprint 2).
+- **The `exec()` sandbox is now unified** (Sprint 2, PR #23, ADR-007) — `core/sandbox.py` is the single call site for Transformer/Analyst/Science, running in a `multiprocessing.Process` (spawn context) with a real enforced timeout (30s/15s/20s respectively) and `os.environ.clear()` in the child before user code runs. `SECURITY.md`/ADR-003 are now stale on this point (still describe 3 separate sites) — worth a follow-up doc pass. The introspection-escape limitation (`().__class__.__mro__[1].__subclasses__()`) remains open, unchanged, still accepted for TCC scope.
+- Per-stage latency instrumentation live: `stage_durations` on `PipelineState`, persisted to a new `stage_latencies` table (migration `0004`) via `save_stage_latencies()` — feeds the evaluation-metrics framework (`artefact/evaluation-metrics.md` in the Vault).
 - Dependencies: `gitpython` bumped to 3.1.59 (cleared 15 CVEs), `pandas`/`pandas-stubs` bumped to `<4.0.0` (Dependabot #13/#14), `pyjwt[crypto]>=2.13.0` added (Sprint 1) — all merged.
 
 ## Changed files (2026-08-13 — Sprint 1 code)
@@ -33,14 +34,15 @@
 
 ## Known risks / open items
 
-- **`exec()` sandbox not yet unified** — 3 independent whitelists, no enforced timeout. Now the top priority: real auth + a public deploy exist, so this is exposed to real (if currently few) external users, not just the project owner. Tracked as Sprint 2 of the SaaS plan.
-- **`alembic upgrade head`'s exact root-cause hang is not fully diagnosed.** With network connectivity independently confirmed healthy (a raw `SELECT 1` succeeded in ~1s from the same environment), the actual `alembic upgrade head` invocation still hung indefinitely — worked around by applying the equivalent schema via direct SQL and manually syncing `alembic_version`, not by fixing Alembic's own connection flow. If migration `0004` is ever needed, this may recur and needs proper diagnosis first (suspected: a heavier schema-introspection query than a trivial `SELECT`, but unconfirmed).
+- **Migration `0004` (`stage_latencies`, Sprint 2) has not been applied to the live Supabase database yet** — created and merged in code, but not yet run against production. Given the unresolved Alembic hang below, apply carefully (see next bullet) before Sprint 3's deploy, or the app will error the first time it tries to write to `stage_latencies`.
+- **`alembic upgrade head`'s exact root-cause hang is still not fully diagnosed.** With network connectivity independently confirmed healthy (a raw `SELECT 1` succeeded in ~1s from the same environment), the actual `alembic upgrade head` invocation hung indefinitely when migration `0003` was applied — worked around at the time by applying the equivalent schema via direct SQL and manually syncing `alembic_version`, not by fixing Alembic's own connection flow. The same workaround will likely be needed for `0004`. Suspected cause: a heavier schema-introspection query than a trivial `SELECT`, but still unconfirmed — worth real diagnosis before this recurs a third time.
+- **`SECURITY.md`/`ADR-003` are now stale** — still describe 3 separate `exec()` sites; ADR-007 supersedes this but the older docs weren't rewritten (only cross-referenced). Low priority, but a reader landing on `SECURITY.md` first would get a wrong picture.
 - **Two unreconciled ICP framings** across the project's own docs (`artefact/saas-potential.md`: data engineers; `writing/drafts/draft-visao-produto.md` + owner's stated framing: SMB entrepreneurs) — not yet resolved, flagged for the owner to decide, not a code task.
 - **`.claude/specs/sr-standard.md` §8 SaaS Roadmap table** — the project's own pre-existing plan for exactly this transition; the current multi-sprint plan follows its sequencing logic but reorders items where the SaaS-readiness audit found reason to.
 
 ## Next steps
 
-Multi-sprint plan: A [done] → 1 [done — auth/tenancy/deploy] → 2 [next — sandbox unification] → 3 [async + metering] → 4 [storage/config] → 5 [e2e + thesis polish]. ADR-007 (unified sandbox policy) is the next artifact to write, at the start of Sprint 2.
+8-sprint plan (Vault: `artefact/sprint-roadmap.md`): A [done] → 1 [done — auth/tenancy/deploy] → 2 [done — sandbox unification + latency instrumentation] → 3 [next — async execution + metering + cost] → 4 [storage/config] → 5 [PDF/DOCX + e2e] → 6 [model comparison + stability] → 7 [human validation study] → 8 [multi-cloud]. Apply migration `0004` to the live Supabase database before Sprint 3 ships (see Known risks).
 
 ## Deploy
 
