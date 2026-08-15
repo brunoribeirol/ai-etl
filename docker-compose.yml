@@ -84,7 +84,17 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    command: uv run celery -A ai_etl.core.celery_app worker --loglevel=info
+    # --pool=threads (not the prefork default): core/sandbox.py needs to spawn
+    # a real multiprocessing.Process per sandboxed execution for its timeout
+    # enforcement (ADR-007) -- Celery's prefork pool runs each worker as a
+    # daemonic process, and Python refuses to let a daemonic process have
+    # children ("daemonic processes are not allowed to have children"). This
+    # only surfaced once the worker actually ran a real pipeline for the
+    # first time (found live against the Railway deploy) -- prefork's own
+    # process-per-task concurrency is redundant with the sandbox's own
+    # per-execution process isolation anyway, so threads is a fix, not a
+    # regression in isolation guarantees.
+    command: uv run celery -A ai_etl.core.celery_app:celery_app worker --loglevel=info --pool=threads --concurrency=2
     env_file:
       - .env
     depends_on:
