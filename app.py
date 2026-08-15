@@ -18,7 +18,7 @@ import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
 
-from ai_etl.audit.db import ensure_user, load_history
+from ai_etl.audit.db import ensure_user, load_full_result, load_history
 from ai_etl.services.auth_service import verify_session_token
 from ai_etl.services.execution_queue import (
     RateLimitExceededError,
@@ -817,12 +817,23 @@ def _tab_historico(tenant_id: str) -> None:
         "Inspecionar run:", history["run_id"].tolist(), label_visibility="visible"
     )
     if selected_run:
+        # Sprint 3 (ADR-008): full reconstruction from the artifacts save_run/
+        # save_analysis persist to disk (`load_full_result`) — this is the
+        # "Ver detalhes completos" the completed-run banner above points to,
+        # for both a synchronous run and one that finished via the async
+        # Celery task (its return value alone never carries the full result).
+        full_result = load_full_result(selected_run, log_dir=str(RUNS_DIR))
+        if full_result is not None:
+            st.divider()
+            _render_results(full_result)
+            st.divider()
+
         json_path = RUNS_DIR / f"{selected_run}.json"
         transform_path = RUNS_DIR / f"{selected_run}_transform.py"
         if json_path.exists():
             with open(json_path) as f:
                 run_data = json.load(f)
-            with st.expander("Ver JSON completo"):
+            with st.expander("Ver JSON completo (bruto)"):
                 st.json(run_data)
         if transform_path.exists():
             code = transform_path.read_text()

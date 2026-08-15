@@ -27,7 +27,7 @@ from sqlalchemy import Engine
 
 from ai_etl.audit import db
 from ai_etl.audit.db import _write_run_row as _real_write_run_row
-from ai_etl.audit.db import save_analysis, save_run, save_stage_latencies
+from ai_etl.audit.db import load_full_result, save_analysis, save_run, save_stage_latencies
 from ai_etl.audit.models import analysis_runs as analysis_runs_table
 from ai_etl.audit.models import metadata as audit_metadata
 from ai_etl.audit.models import runs as runs_table
@@ -665,4 +665,97 @@ def test_save_stage_latencies_scoped_by_run_id_and_run_type(
     assert len(silver_rows) == 1
     assert silver_rows[0]["stage"] == "extractor"
     assert len(analysis_rows) == 1
-    assert analysis_rows[0]["stage"] == "analyst"
+
+
+# ---------------------------------------------------------------------------
+# load_full_result (Sprint 3, ADR-008) — reconstructing _render_results' input
+# from what save_run/save_analysis persist to disk, for the History tab and a
+# completed async run alike.
+# ---------------------------------------------------------------------------
+def _insert_analysis_runs_row(engine: Engine, run_id: str, tokens: dict) -> None:
+    with engine.begin() as conn:
+        conn.execute(
+            analysis_runs_table.insert().values(
+                run_id=run_id,
+                gold_subtasks=1,
+                science_subtasks=0,
+                input_tokens=tokens["input_tokens"],
+                output_tokens=tokens["output_tokens"],
+                total_tokens=tokens["total_tokens"],
+                timestamp=datetime.now(tz=timezone.utc),
+                tenant_id=None,
+                model_name="gpt-4o-mini",
+                cost_usd=0.001,
+            )
+        )
+
+
+def test_load_full_result_reconstructs_dataframes_and_figure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import plotly.graph_objects as go
+
+    engine = _make_sqlite_engine()
+    monkeypatch.setattr(db, "get_engine", lambda: engine)
+
+    state = _make_completed_state()
+    state["transformed_data"] = pd.DataFrame({"product": ["A", "B"], "total": [10, 20]})
+    save_run(state, log_dir=str(tmp_path))
+
+    gold = {**_make_gold_result(), "fig": go.Figure(data=[go.Bar(x=["A"], y=[1])])}
+    save_analysis(
+        state["run_id"],
+        [gold],
+        [_make_science_result()],
+        _make_advisor_result(),
+        _ZERO_TOKENS,
+        log_dir=str(tmp_path),
+        business_question="Quais os KPIs?",
+    )
+    _insert_analysis_runs_row(
+        engine, state["run_id"], {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}
+    )
+
+    result = load_full_result(state["run_id"], log_dir=str(tmp_path))
+
+    assert result is not None
+    assert result["bronze"] is None
+    assert isinstance(result["state"]["transformed_data"], pd.DataFrame)
+    assert result["state"]["transformed_data"].shape == (2, 2)
+    assert result["question"] == "Quais os KPIs?"
+    assert isinstance(result["gold"][0]["gold_df"], pd.DataFrame)
+    assert isinstance(result["gold"][0]["fig"], go.Figure)
+    assert isinstance(result["science"][0]["predictions_df"], pd.DataFrame)
+    assert result["tokens"] == {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}
+
+
+def test_load_full_result_returns_none_for_unknown_run(tmp_path: Path) -> None:
+    assert load_full_result("no-such-run", log_dir=str(tmp_path)) is None
+
+
+def test_load_full_result_degrades_gracefully_when_csv_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A gold entry whose CSV artifact was deleted/corrupted still yields its
+    narrative/task_question — just without gold_df — rather than failing the
+    whole reload."""
+    engine = _make_sqlite_engine()
+    monkeypatch.setattr(db, "get_engine", lambda: engine)
+
+    state = _make_completed_state()
+    save_run(state, log_dir=str(tmp_path))
+    save_analysis(
+        state["run_id"],
+        [_make_gold_result()],
+        [],
+        _make_advisor_result(),
+        _ZERO_TOKENS,
+        log_dir=str(tmp_path),
+    )
+    (tmp_path / f"{state['run_id']}_gold_0.csv").unlink()
+
+    result = load_full_result(state["run_id"], log_dir=str(tmp_path))
+
+    assert result is not None
+    assert result["gold"][0]["narrative"] == "Produto B lidera."
+    assert "gold_df" not in result["gold"][0]

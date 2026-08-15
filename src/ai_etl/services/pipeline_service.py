@@ -422,6 +422,7 @@ def run_full_analysis(
             planner_tokens,
             log_dir=run_dir,
             tenant_id=tenant_id,
+            business_question=question,
         )
         save_stage_latencies(
             silver_state["run_id"],
