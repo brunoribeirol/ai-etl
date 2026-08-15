@@ -2,7 +2,7 @@
 
 > Living doc. Updated at the end of meaningful work sessions, not per-commit. Source of truth for repo/code state; the Obsidian vault (`~/Documents/Obsidian Vault/tcc/`) is the source of truth for the academic TCC narrative and product/strategy context.
 
-**Last updated:** 2026-08-15
+**Last updated:** 2026-08-15 (migration 0004 applied to production)
 
 ## Confirmed state (branch `main` @ `c989729`, PR #23 merged 2026-08-15)
 
@@ -34,15 +34,14 @@
 
 ## Known risks / open items
 
-- **Migration `0004` (`stage_latencies`, Sprint 2) has not been applied to the live Supabase database yet** — created and merged in code, but not yet run against production. Given the unresolved Alembic hang below, apply carefully (see next bullet) before Sprint 3's deploy, or the app will error the first time it tries to write to `stage_latencies`.
-- **`alembic upgrade head`'s exact root-cause hang is still not fully diagnosed.** With network connectivity independently confirmed healthy (a raw `SELECT 1` succeeded in ~1s from the same environment), the actual `alembic upgrade head` invocation hung indefinitely when migration `0003` was applied — worked around at the time by applying the equivalent schema via direct SQL and manually syncing `alembic_version`, not by fixing Alembic's own connection flow. The same workaround will likely be needed for `0004`. Suspected cause: a heavier schema-introspection query than a trivial `SELECT`, but still unconfirmed — worth real diagnosis before this recurs a third time.
+- **`alembic upgrade head`'s exact root-cause hang is still not fully diagnosed, and recurred a second time (2026-08-15) applying migration `0004`.** `uv run --env-file .env alembic upgrade head` hung indefinitely (near-zero CPU) with the same signature as migration `0003`'s hang — worked around the same way: applied the equivalent schema via direct SQL and manually synced `alembic_version` (`0003` → `0004`), confirmed via `information_schema.columns`/`pg_indexes` against the live database. Root cause is still unconfirmed (suspected heavier schema-introspection query than a trivial `SELECT`); this workaround will likely be needed again for migration `0005`+ unless diagnosed. See Vault: `bugs-solved/mypy-pytest-hang-agent-sandbox.md` for the broader sandbox-hang pattern this may share (HTTP/2-related hangs in the same environment were fixed by forcing HTTP/1.1 — untested for Alembic/psycopg2, worth trying next time before falling back to direct SQL).
 - **`SECURITY.md`/`ADR-003` are now stale** — still describe 3 separate `exec()` sites; ADR-007 supersedes this but the older docs weren't rewritten (only cross-referenced). Low priority, but a reader landing on `SECURITY.md` first would get a wrong picture.
 - **Two unreconciled ICP framings** across the project's own docs (`artefact/saas-potential.md`: data engineers; `writing/drafts/draft-visao-produto.md` + owner's stated framing: SMB entrepreneurs) — not yet resolved, flagged for the owner to decide, not a code task.
 - **`.claude/specs/sr-standard.md` §8 SaaS Roadmap table** — the project's own pre-existing plan for exactly this transition; the current multi-sprint plan follows its sequencing logic but reorders items where the SaaS-readiness audit found reason to.
 
 ## Next steps
 
-8-sprint plan (Vault: `artefact/sprint-roadmap.md`): A [done] → 1 [done — auth/tenancy/deploy] → 2 [done — sandbox unification + latency instrumentation] → 3 [next — async execution + metering + cost] → 4 [storage/config] → 5 [PDF/DOCX + e2e] → 6 [model comparison + stability] → 7 [human validation study] → 8 [multi-cloud]. Apply migration `0004` to the live Supabase database before Sprint 3 ships (see Known risks).
+8-sprint plan (Vault: `artefact/sprint-roadmap.md`): A [done] → 1 [done — auth/tenancy/deploy] → 2 [done — sandbox unification + latency instrumentation] → 3 [in progress — async execution + metering + cost] → 4 [storage/config] → 5 [PDF/DOCX + e2e] → 6 [model comparison + stability] → 7 [human validation study] → 8 [multi-cloud]. Migration `0004` applied to the live Supabase database (2026-08-15) — `stage_latencies` is live in production.
 
 ## Deploy
 
