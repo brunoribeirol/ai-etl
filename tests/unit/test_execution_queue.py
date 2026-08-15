@@ -11,6 +11,9 @@ tests/integration, not here.
 
 from __future__ import annotations
 
+import base64
+from pathlib import Path
+
 import pytest
 
 from ai_etl.services import execution_queue as eq_module
@@ -19,6 +22,7 @@ from ai_etl.services.execution_queue import (
     check_and_increment_rate_limit,
     enqueue_analysis,
     get_task_status,
+    run_full_analysis_task,
 )
 
 
@@ -130,6 +134,104 @@ def test_get_task_status_maps_success_result(monkeypatch: pytest.MonkeyPatch) ->
     assert status["ready"] is True
     assert status["result"] == {"run_id": "abc", "status": "completed"}
     assert status["error"] is None
+
+
+def test_enqueue_analysis_base64_encodes_file_bytes(
+    _fake_redis: _FakeRedis, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Security/correctness regression for the cross-container upload fix:
+    `enqueue_analysis` must base64-encode raw bytes before they cross the
+    Celery/Redis JSON boundary (task_serializer="json" can't carry bytes
+    directly) and must pass `file_path` through unchanged."""
+    captured: dict = {}
+
+    class _FakeAsyncResult:
+        id = "task-123"
+
+    class _FakeTask:
+        def delay(self, *args: object, **kwargs: object) -> _FakeAsyncResult:
+            captured["args"] = args
+            return _FakeAsyncResult()
+
+    monkeypatch.setattr(eq_module, "run_full_analysis_task", _FakeTask())
+
+    enqueue_analysis(
+        "spec",
+        "question",
+        "./runs",
+        "tenant-a",
+        file_path="runs/uploads/abc123.csv",
+        file_bytes=b"order_id,amt\n1,10.5\n",
+    )
+
+    spec, question, run_dir, tenant_id, file_path, file_bytes_b64 = captured["args"]
+    assert file_path == "runs/uploads/abc123.csv"
+    assert base64.b64decode(file_bytes_b64) == b"order_id,amt\n1,10.5\n"
+
+
+def test_enqueue_analysis_omits_file_args_when_no_upload(
+    _fake_redis: _FakeRedis, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The manual-spec textarea flow (no file upload) must still work --
+    file_path/file_bytes default to None, not required kwargs."""
+    captured: dict = {}
+
+    class _FakeAsyncResult:
+        id = "task-123"
+
+    class _FakeTask:
+        def delay(self, *args: object, **kwargs: object) -> _FakeAsyncResult:
+            captured["args"] = args
+            return _FakeAsyncResult()
+
+    monkeypatch.setattr(eq_module, "run_full_analysis_task", _FakeTask())
+
+    enqueue_analysis("spec", "question", "./runs", "tenant-a")
+
+    assert captured["args"][4] is None
+    assert captured["args"][5] is None
+
+
+def test_run_full_analysis_task_rematerializes_file_before_running(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The core of the cross-container fix: given file_path/file_bytes_b64,
+    the task must write the file to disk on *this* (worker) filesystem
+    before calling run_full_analysis -- otherwise the Extractor's file read
+    fails exactly like the bug this test guards against."""
+    dest = tmp_path / "uploads" / "abc123.csv"
+    file_existed_at_call_time = {}
+
+    def _fake_run_full_analysis(spec, business_question, run_dir, tenant_id):
+        file_existed_at_call_time["exists"] = dest.exists()
+        file_existed_at_call_time["content"] = dest.read_bytes() if dest.exists() else None
+        return {"state": {"run_id": "r1", "status": "completed", "error": None}, "tokens": {}}
+
+    monkeypatch.setattr(eq_module, "run_full_analysis", _fake_run_full_analysis)
+
+    run_full_analysis_task(
+        "spec",
+        "question",
+        str(tmp_path),
+        "tenant-a",
+        file_path=str(dest),
+        file_bytes_b64=base64.b64encode(b"order_id,amt\n1,10.5\n").decode("ascii"),
+    )
+
+    assert file_existed_at_call_time["exists"] is True
+    assert file_existed_at_call_time["content"] == b"order_id,amt\n1,10.5\n"
+
+
+def test_run_full_analysis_task_skips_write_when_no_file(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The manual-spec flow (no upload) must not require file_path/file_bytes_b64."""
+
+    def _fake_run_full_analysis(spec, business_question, run_dir, tenant_id):
+        return {"state": {"run_id": "r1", "status": "completed", "error": None}, "tokens": {}}
+
+    monkeypatch.setattr(eq_module, "run_full_analysis", _fake_run_full_analysis)
+
+    result = run_full_analysis_task("spec", "question", "./runs", "tenant-a")
+    assert result["run_id"] == "r1"
 
 
 def test_get_task_status_maps_failure_result(monkeypatch: pytest.MonkeyPatch) -> None:

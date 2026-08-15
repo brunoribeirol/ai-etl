@@ -715,12 +715,19 @@ def _tab_executar(tenant_id: str) -> None:
             st.session_state["pipeline_result"] = None
             st.session_state["pending_task_id"] = None
 
+            upload_file_path: Optional[str] = None
+            upload_file_bytes: Optional[bytes] = None
             if uploaded_file and df_bronze is not None:
                 saved_path = _save_upload_to_temp(uploaded_file)
                 output_csv = RUNS_DIR / f"{uuid.uuid4()}_silver.csv"
                 spec = _auto_generate_spec(
                     saved_path, df_bronze, output_csv, business_question.strip()
                 )
+                # Sprint 3 fix: the worker is a separate process/container
+                # from this web process and can't see `saved_path` on this
+                # container's disk — see execution_queue.py's docstring.
+                upload_file_path = str(saved_path)
+                upload_file_bytes = uploaded_file.getvalue()
             else:
                 spec = manual_spec.strip()
 
@@ -734,7 +741,12 @@ def _tab_executar(tenant_id: str) -> None:
             # unit tests and kept for a possible future live-progress channel.
             try:
                 task_id = enqueue_analysis(
-                    spec, business_question, run_dir=str(RUNS_DIR), tenant_id=tenant_id
+                    spec,
+                    business_question,
+                    run_dir=str(RUNS_DIR),
+                    tenant_id=tenant_id,
+                    file_path=upload_file_path,
+                    file_bytes=upload_file_bytes,
                 )
                 st.session_state["pending_task_id"] = task_id
             except RateLimitExceededError as e:
