@@ -748,7 +748,9 @@ def test_load_full_result_rejects_wrong_tenant(
     state = _make_completed_state()
     save_run(state, log_dir=str(tmp_path), tenant_id="tenant-a")
 
-    assert load_full_result(state["run_id"], log_dir=str(tmp_path), tenant_id="tenant-a") is not None
+    assert (
+        load_full_result(state["run_id"], log_dir=str(tmp_path), tenant_id="tenant-a") is not None
+    )
     assert load_full_result(state["run_id"], log_dir=str(tmp_path), tenant_id="tenant-b") is None
     # Callers that don't pass tenant_id at all keep the old, unscoped behavior
     # (e.g. any future internal/admin tooling) — only an explicit mismatch

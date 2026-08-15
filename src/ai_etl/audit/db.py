@@ -414,9 +414,7 @@ def _run_belongs_to_tenant(run_id: str, tenant_id: str) -> bool:
     error, matching this module's existing soft-fail style — a reload should
     never leak data just because the ownership check itself couldn't run."""
     try:
-        stmt = select(runs.c.run_id).where(
-            runs.c.run_id == run_id, runs.c.tenant_id == tenant_id
-        )
+        stmt = select(runs.c.run_id).where(runs.c.run_id == run_id, runs.c.tenant_id == tenant_id)
         with get_engine().connect() as conn:
             return conn.execute(stmt).first() is not None
     except Exception:
