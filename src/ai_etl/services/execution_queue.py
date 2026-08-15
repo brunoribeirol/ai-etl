@@ -98,7 +98,7 @@ def check_and_increment_rate_limit(tenant_id: str) -> None:
         )
 
 
-@celery_app.task(name="ai_etl.run_full_analysis", bind=True)
+@celery_app.task(name="ai_etl.run_full_analysis", bind=True)  # type: ignore[misc]
 def run_full_analysis_task(
     self: Any,
     spec: str,
@@ -137,7 +137,7 @@ def enqueue_analysis(spec: str, business_question: str, run_dir: str, tenant_id:
     """
     check_and_increment_rate_limit(tenant_id)
     task = run_full_analysis_task.delay(spec, business_question, run_dir, tenant_id)
-    return task.id
+    return str(task.id)
 
 
 def get_task_status(task_id: str) -> dict[str, Any]:
