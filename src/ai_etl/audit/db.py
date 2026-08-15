@@ -442,8 +442,8 @@ def load_full_result(run_id: str, log_dir: str = "./runs") -> Optional[dict[str,
     if silver_csv.exists():
         try:
             state["transformed_data"] = pd.read_csv(silver_csv)
-        except Exception:
-            pass
+        except Exception:  # nosec B110 — best-effort reload; a corrupt CSV degrades
+            pass  # to a missing Silver tab, not a failed reload of the whole run.
 
     gold: list[dict[str, Any]] = []
     science: list[dict[str, Any]] = []
@@ -484,8 +484,8 @@ def _reload_analysis_entry(entry: dict[str, Any], log_path: Path, df_key: str) -
         if csv_path.exists():
             try:
                 reloaded[df_key] = pd.read_csv(csv_path)
-            except Exception:
-                pass
+            except Exception:  # nosec B110 — best-effort per sub-task; a corrupt
+                pass  # CSV omits that entry's data, not the whole reload.
 
     fig_path = entry.get("fig_path")
     if fig_path:
@@ -495,8 +495,8 @@ def _reload_analysis_entry(entry: dict[str, Any], log_path: Path, df_key: str) -
                 import plotly.io as pio
 
                 reloaded["fig"] = pio.from_json(full_fig_path.read_text())
-            except Exception:
-                pass
+            except Exception:  # nosec B110 — best-effort per sub-task; a corrupt
+                pass  # figure JSON omits that entry's chart, not the whole reload.
 
     return reloaded
 
