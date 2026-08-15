@@ -12,6 +12,8 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from ai_etl.audit.connection import get_engine
 from ai_etl.audit.models import analysis_runs, runs, stage_latencies, users
 from ai_etl.core.analysis_types import AdvisorResult, GoldResult, ScienceResult, TokenUsage
+from ai_etl.core.llm import get_model_name
+from ai_etl.core.pricing import compute_cost_usd
 from ai_etl.core.state import PipelineState
 
 
@@ -128,6 +130,12 @@ def load_history(limit: int = 20, tenant_id: str | None = None) -> pd.DataFrame:
             leak. When `None` (the default, kept for backward compatibility with
             other callers), no filter is applied. `app.py` should always pass a
             real value going forward.
+
+    `cost_usd`/`model_name` (Sprint 3, ADR-008) come from a `LEFT OUTER JOIN`
+    against `analysis_runs` on `run_id` — a Silver-only run (no business
+    question asked, so `save_analysis` never ran) has no matching row and
+    reads back as `NaN`/`None`, which is the correct "no analysis, no cost"
+    signal, not a bug to backfill.
     """
     stmt = (
         select(
@@ -136,7 +144,10 @@ def load_history(limit: int = 20, tenant_id: str | None = None) -> pd.DataFrame:
             runs.c.rows_loaded,
             runs.c.timestamp,
             func.substr(runs.c.spec, 1, 80).label("spec"),
+            analysis_runs.c.cost_usd,
+            analysis_runs.c.model_name,
         )
+        .select_from(runs.outerjoin(analysis_runs, runs.c.run_id == analysis_runs.c.run_id))
         .order_by(runs.c.timestamp.desc())
         .limit(limit)
     )
@@ -246,6 +257,14 @@ def _write_analysis_row(
     tokens: TokenUsage,
     tenant_id: str | None = None,
 ) -> None:
+    # Sprint 3 (ADR-008): model_name/cost_usd computed here, not threaded
+    # through as a caller-supplied argument — get_model_name() reads the same
+    # AI_ETL_LLM_MODEL env var every agent call in this run already used (see
+    # core/llm.py::get_llm()), so it's the correct model for this row without
+    # widening save_analysis()'s signature for every existing caller.
+    model_name = get_model_name()
+    cost_usd = compute_cost_usd(model_name, tokens)
+
     stmt = pg_insert(analysis_runs).values(
         run_id=run_id,
         gold_subtasks=n_gold,
@@ -255,6 +274,8 @@ def _write_analysis_row(
         total_tokens=tokens.get("total_tokens", 0),
         timestamp=datetime.now(tz=timezone.utc),
         tenant_id=tenant_id,
+        model_name=model_name,
+        cost_usd=cost_usd,
     )
     stmt = stmt.on_conflict_do_update(
         index_elements=[analysis_runs.c.run_id],
@@ -266,6 +287,8 @@ def _write_analysis_row(
             "total_tokens": stmt.excluded.total_tokens,
             "timestamp": stmt.excluded.timestamp,
             "tenant_id": stmt.excluded.tenant_id,
+            "model_name": stmt.excluded.model_name,
+            "cost_usd": stmt.excluded.cost_usd,
         },
     )
     with get_engine().begin() as conn:

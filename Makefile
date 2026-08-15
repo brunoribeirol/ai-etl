@@ -1,4 +1,4 @@
-.PHONY: install test test-e2e lint format format-check type-check security check db-up db-down db-test-up app-db-up app-db-down app-db-test-up db-migrate run-scenario1 run-scenario2 run-scenario3 app clean unhide-pth
+.PHONY: install test test-e2e lint format format-check type-check security check db-up db-down db-test-up app-db-up app-db-down app-db-test-up db-migrate run-scenario1 run-scenario2 run-scenario3 app redis-up celery-worker clean unhide-pth
 
 install:
 	uv sync --all-extras
@@ -63,6 +63,14 @@ app-db-test-up:
 
 db-migrate:
 	uv run alembic upgrade head
+
+# Sprint 3 (ADR-008) — broker/backend for Celery async execution + rate
+# limiting. `app`/`celery-worker` (docker-compose.yml) both need this up.
+redis-up:
+	docker-compose up -d redis
+
+celery-worker:
+	uv run celery -A ai_etl.core.celery_app worker --loglevel=info
 
 run-scenario1:
 	uv run python -m ai_etl run \

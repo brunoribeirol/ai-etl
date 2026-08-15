@@ -28,6 +28,7 @@ from sqlalchemy import Engine
 from ai_etl.audit import db
 from ai_etl.audit.db import _write_run_row as _real_write_run_row
 from ai_etl.audit.db import save_analysis, save_run, save_stage_latencies
+from ai_etl.audit.models import analysis_runs as analysis_runs_table
 from ai_etl.audit.models import metadata as audit_metadata
 from ai_etl.audit.models import runs as runs_table
 from ai_etl.audit.models import stage_latencies as stage_latencies_table
@@ -345,6 +346,56 @@ def test_load_history_without_tenant_id_returns_all_runs(
     history = db.load_history()
 
     assert set(history["run_id"]) == {"run-tenant-a", "run-tenant-b"}
+
+
+def test_load_history_includes_null_cost_for_silver_only_runs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Sprint 3 (ADR-008): a run with no matching `analysis_runs` row (Silver
+    ran, no business question was asked) must read back `cost_usd`/
+    `model_name` as null via the `LEFT OUTER JOIN`, not raise or silently
+    drop the row."""
+    engine = _make_sqlite_engine()
+    monkeypatch.setattr(db, "get_engine", lambda: engine)
+
+    _insert_run_row(engine, "run-silver-only", tenant_id="tenant-a")
+
+    history = db.load_history(tenant_id="tenant-a")
+
+    assert list(history["run_id"]) == ["run-silver-only"]
+    assert history["cost_usd"].isna().all()
+    assert history["model_name"].isna().all()
+
+
+def test_load_history_surfaces_cost_for_analyzed_runs(monkeypatch: pytest.MonkeyPatch) -> None:
+    engine = _make_sqlite_engine()
+    monkeypatch.setattr(db, "get_engine", lambda: engine)
+
+    _insert_run_row(engine, "run-with-analysis", tenant_id="tenant-a")
+    with engine.begin() as conn:
+        conn.execute(
+            analysis_runs_table.insert().values(
+                run_id="run-with-analysis",
+                gold_subtasks=1,
+                science_subtasks=0,
+                input_tokens=1000,
+                output_tokens=500,
+                total_tokens=1500,
+                timestamp=datetime.now(tz=timezone.utc),
+                tenant_id="tenant-a",
+                model_name="gpt-4o-mini",
+                cost_usd=0.00045,
+            )
+        )
+
+    history = db.load_history(tenant_id="tenant-a")
+
+    assert history.loc[history["run_id"] == "run-with-analysis", "model_name"].iloc[0] == (
+        "gpt-4o-mini"
+    )
+    assert history.loc[history["run_id"] == "run-with-analysis", "cost_usd"].iloc[
+        0
+    ] == pytest.approx(0.00045)
 
 
 def test_runs_table_rejects_null_tenant_id() -> None:

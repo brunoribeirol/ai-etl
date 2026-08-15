@@ -1,0 +1,46 @@
+"""Celery application factory (ADR-008).
+
+Single call site for the Celery app instance — `services/execution_queue.py`
+(and any future task module) import `celery_app` from here rather than
+constructing their own, so task registration and broker/backend config stay
+in one place. Mirrors `audit/connection.py`'s "one function, one env var,
+fail loud if unset" shape for the same reason: a silently-defaulted broker
+URL would make a worker connect to the wrong Redis without any error.
+
+Broker and result backend both point at the same Redis instance (`REDIS_URL`)
+— there's no need for a separate result store at this project's scale, and
+splitting them would be one more moving part with no offsetting benefit here.
+
+Unlike `connection.py`'s `get_engine()` (raises if `APP_DATABASE_URL` is
+unset), a missing `REDIS_URL` falls back to the local `docker-compose` default
+instead of raising. `Celery(...)` doesn't connect eagerly — the constructor
+just stores config — so failing loudly here would only punish importing this
+module (e.g. from `services/execution_queue.py`, itself imported by `app.py`)
+in any environment without Redis configured, including plain unit-test
+collection. A real connection failure still surfaces loudly, just later, at
+the point a task is actually enqueued or a worker actually starts.
+"""
+
+import os
+
+from celery import Celery
+
+
+def _redis_url() -> str:
+    return os.getenv("REDIS_URL", "redis://localhost:6379/0")
+
+
+celery_app = Celery("ai_etl", broker=_redis_url(), backend=_redis_url())
+celery_app.conf.update(
+    task_serializer="json",
+    result_serializer="json",
+    accept_content=["json"],
+    # Task return values must stay JSON-safe (see execution_queue.py's task —
+    # it returns a small summary dict, never DataFrames/Figures). Enforcing
+    # the json serializer (over pickle) means a task that ever tries to
+    # return something unpicklable-unsafe fails loudly at serialization time
+    # instead of introducing a deserialization-of-untrusted-data risk on the
+    # worker side.
+    result_expires=3600,
+    task_track_started=True,
+)

@@ -9,6 +9,7 @@ Run with:
 
 import json
 import os
+import time
 import uuid
 from pathlib import Path
 from typing import Any, Optional
@@ -19,7 +20,19 @@ from dotenv import load_dotenv
 
 from ai_etl.audit.db import ensure_user, load_history
 from ai_etl.services.auth_service import verify_session_token
-from ai_etl.services.pipeline_service import AGENT_STEPS, ProgressCallback, run_full_analysis
+from ai_etl.services.execution_queue import (
+    RateLimitExceededError,
+    enqueue_analysis,
+    get_task_status,
+)
+from ai_etl.services.pipeline_service import AGENT_STEPS, ProgressCallback
+
+# Poll interval for the "queued/running" state (Sprint 3, ADR-008) — short
+# enough to feel responsive, long enough not to hammer the Celery result
+# backend every rerun. `time.sleep` + `st.rerun()` is the same pattern
+# Streamlit's own docs use for polling without an extra dependency
+# (streamlit-autorefresh) this project doesn't otherwise need.
+_POLL_INTERVAL_SECONDS = 2
 
 load_dotenv()
 
@@ -700,6 +713,7 @@ def _tab_executar(tenant_id: str) -> None:
         ):
             st.session_state["last_question"] = business_question
             st.session_state["pipeline_result"] = None
+            st.session_state["pending_task_id"] = None
 
             if uploaded_file and df_bronze is not None:
                 saved_path = _save_upload_to_temp(uploaded_file)
@@ -709,35 +723,58 @@ def _tab_executar(tenant_id: str) -> None:
                 )
             else:
                 spec = manual_spec.strip()
-                df_bronze = None
 
-            result = run_full_analysis(
-                spec,
-                business_question,
-                run_dir=str(RUNS_DIR),
-                progress_callback=_make_progress_adapter(),
-                tenant_id=tenant_id,
-            )
-
-            silver_df = result["state"].get("transformed_data")
-            silver_ran_ok = isinstance(silver_df, pd.DataFrame) and not silver_df.empty
-            if not silver_ran_ok and result["state"].get("status") != "completed":
-                st.warning("Pipeline Silver não completou — análise não executada.")
-
-            st.session_state["pipeline_result"] = {
-                "state": result["state"],
-                "bronze": df_bronze,
-                "gold": result["gold"],
-                "science": result["science"],
-                "advisor": result["advisor"],
-                "question": result["question"],
-                "tokens": result["tokens"],
-            }
+            # Sprint 3 (ADR-008): the click no longer blocks on the pipeline
+            # itself — it enqueues a Celery task and stores the task id;
+            # the poll loop below (outside this `if st.button(...)`) picks it
+            # up on the rerun this triggers. `progress_callback` no longer
+            # applies here — it can't cross the task boundary (see
+            # execution_queue.py's docstring) — so `_make_progress_adapter`
+            # is unused on this path; it's exercised directly by its own
+            # unit tests and kept for a possible future live-progress channel.
+            try:
+                task_id = enqueue_analysis(
+                    spec, business_question, run_dir=str(RUNS_DIR), tenant_id=tenant_id
+                )
+                st.session_state["pending_task_id"] = task_id
+            except RateLimitExceededError as e:
+                st.error(f"🚦 {e}")
             st.rerun()
 
-    if st.session_state.get("pipeline_result"):
+        pending_task_id = st.session_state.get("pending_task_id")
+        if pending_task_id:
+            status = get_task_status(pending_task_id)
+            if status["state"] in ("PENDING", "STARTED"):
+                st.info(
+                    "⏳ Executando o pipeline em segundo plano — isso pode levar alguns minutos..."
+                )
+                time.sleep(_POLL_INTERVAL_SECONDS)
+                st.rerun()
+            elif status["state"] == "SUCCESS":
+                st.session_state["pending_task_id"] = None
+                st.session_state["last_run_summary"] = status["result"]
+                st.rerun()
+            elif status["state"] == "FAILURE":
+                st.session_state["pending_task_id"] = None
+                st.error(f"❌ Execução falhou: {status['error']}")
+
+    summary = st.session_state.get("last_run_summary")
+    if summary:
         st.divider()
-        _render_results(st.session_state["pipeline_result"])
+        tokens = summary.get("tokens") or {}
+        total_tok = tokens.get("total_tokens", 0)
+        token_caption = (
+            f" · 🪙 {total_tok:,} tokens "
+            f"({tokens.get('input_tokens', 0):,} entrada + {tokens.get('output_tokens', 0):,} saída)"
+            if total_tok
+            else ""
+        )
+        if summary.get("status") == "completed":
+            st.success(f"✅ Pipeline concluído — Run ID: `{summary.get('run_id')}`{token_caption}")
+        else:
+            err = summary.get("error") or "Erro desconhecido"
+            st.error(f"❌ Pipeline com status `{summary.get('status')}`: {err}")
+        st.caption("Ver detalhes completos (dados, código, recomendações) na aba 📋 Histórico.")
 
 
 # ---------------------------------------------------------------------------
