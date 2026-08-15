@@ -32,6 +32,14 @@ def _redis_url() -> str:
 
 celery_app = Celery("ai_etl", broker=_redis_url(), backend=_redis_url())
 celery_app.conf.update(
+    # `run_full_analysis_task` lives in `services/execution_queue.py`, not
+    # here — a plain `celery -A ai_etl.core.celery_app worker` never imports
+    # that module on its own, so the task would register only on the web
+    # process (which imports `execution_queue` transitively via `app.py`)
+    # and the worker would reject every enqueued run as "unregistered task".
+    # `include` makes the worker import it at startup too, independent of
+    # whatever CLI flags the actual `celery worker` invocation happens to use.
+    include=["ai_etl.services.execution_queue"],
     task_serializer="json",
     result_serializer="json",
     accept_content=["json"],
