@@ -407,7 +407,25 @@ def save_stage_latencies(
         conn.execute(stmt)
 
 
-def load_full_result(run_id: str, log_dir: str = "./runs") -> Optional[dict[str, Any]]:
+def _run_belongs_to_tenant(run_id: str, tenant_id: str) -> bool:
+    """Server-side ownership check for `load_full_result` — queries `runs`
+    directly rather than trusting a `run_id` the caller already claims is
+    tenant-scoped. Soft-fails to `False` (i.e. "not authorized") on any DB
+    error, matching this module's existing soft-fail style — a reload should
+    never leak data just because the ownership check itself couldn't run."""
+    try:
+        stmt = select(runs.c.run_id).where(
+            runs.c.run_id == run_id, runs.c.tenant_id == tenant_id
+        )
+        with get_engine().connect() as conn:
+            return conn.execute(stmt).first() is not None
+    except Exception:
+        return False
+
+
+def load_full_result(
+    run_id: str, log_dir: str = "./runs", tenant_id: str | None = None
+) -> Optional[dict[str, Any]]:
     """Reconstruct the `AnalysisRunResult`-shaped dict `app.py::_render_results`
     expects, from the artifacts `save_run`/`save_analysis` persist to disk.
 
@@ -419,7 +437,22 @@ def load_full_result(run_id: str, log_dir: str = "./runs") -> Optional[dict[str,
     actually reconstructs it into a shape `_render_results` can render, for both
     the History tab and a completed async run.
 
-    Returns `None` if `{run_id}.json` doesn't exist (unknown run id) — mirrors
+    Security note (added on review): this reads artifacts straight off disk by
+    `run_id`, with no inherent ownership check. `app.py`'s only caller today
+    passes a `run_id` sourced from `load_history(..., tenant_id=...)`, so a
+    tenant can normally only ever select their own runs — but that's a UI-layer
+    restriction, not a data-layer one, and this project has already shipped
+    (and fixed) exactly one cross-tenant data leak before (Sprint A). When
+    `tenant_id` is given, ownership is verified against `runs.tenant_id` before
+    any file is read, returning `None` (same soft-fail shape as "unknown run
+    id") on mismatch — a second, defense-in-depth check that doesn't rely on
+    the caller never changing how `run_id` is sourced. `tenant_id` defaults to
+    `None` for callers that intentionally operate without tenant scoping (none
+    exist in `app.py` today; kept optional rather than required so this stays
+    a additive, non-breaking signature change).
+
+    Returns `None` if `{run_id}.json` doesn't exist (unknown run id), or if
+    `tenant_id` is given and doesn't match the run's owner — mirrors
     `load_history`'s soft-fail style rather than raising.
 
     `bronze` is always `None` on reload: the originally-uploaded file only ever
@@ -432,6 +465,9 @@ def load_full_result(run_id: str, log_dir: str = "./runs") -> Optional[dict[str,
     omitted, narrative/model_info still shown) rather than failing the whole
     reload — matches `load_history`'s "soft-fail, don't block the UI" philosophy.
     """
+    if tenant_id is not None and not _run_belongs_to_tenant(run_id, tenant_id):
+        return None
+
     log_path = Path(log_dir)
     json_path = log_path / f"{run_id}.json"
     if not json_path.exists():

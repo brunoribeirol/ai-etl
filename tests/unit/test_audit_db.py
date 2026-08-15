@@ -733,6 +733,29 @@ def test_load_full_result_returns_none_for_unknown_run(tmp_path: Path) -> None:
     assert load_full_result("no-such-run", log_dir=str(tmp_path)) is None
 
 
+def test_load_full_result_rejects_wrong_tenant(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Security regression test: `load_full_result` must not return another
+    tenant's artifacts even when the caller supplies a valid `run_id` — the
+    only thing that made this reachable before was `app.py` always sourcing
+    `run_id` from that tenant's own `load_history(...)`, a UI-layer
+    restriction, not a data-layer one. See this project's Sprint A leak for
+    why that distinction matters."""
+    engine = _make_sqlite_engine()
+    monkeypatch.setattr(db, "get_engine", lambda: engine)
+
+    state = _make_completed_state()
+    save_run(state, log_dir=str(tmp_path), tenant_id="tenant-a")
+
+    assert load_full_result(state["run_id"], log_dir=str(tmp_path), tenant_id="tenant-a") is not None
+    assert load_full_result(state["run_id"], log_dir=str(tmp_path), tenant_id="tenant-b") is None
+    # Callers that don't pass tenant_id at all keep the old, unscoped behavior
+    # (e.g. any future internal/admin tooling) — only an explicit mismatch
+    # is rejected, not the absence of a tenant_id.
+    assert load_full_result(state["run_id"], log_dir=str(tmp_path)) is not None
+
+
 def test_load_full_result_degrades_gracefully_when_csv_missing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

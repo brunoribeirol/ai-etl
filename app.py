@@ -822,7 +822,11 @@ def _tab_historico(tenant_id: str) -> None:
         # "Ver detalhes completos" the completed-run banner above points to,
         # for both a synchronous run and one that finished via the async
         # Celery task (its return value alone never carries the full result).
-        full_result = load_full_result(selected_run, log_dir=str(RUNS_DIR))
+        # `tenant_id` is passed even though `selected_run` already comes from
+        # this same tenant's `load_history(...)` — defense in depth, per
+        # `load_full_result`'s docstring, since that's a UI-layer restriction
+        # and this project has shipped a cross-tenant leak once before.
+        full_result = load_full_result(selected_run, log_dir=str(RUNS_DIR), tenant_id=tenant_id)
         if full_result is not None:
             st.divider()
             _render_results(full_result)
