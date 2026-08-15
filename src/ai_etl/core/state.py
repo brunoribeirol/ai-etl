@@ -59,6 +59,10 @@ class PipelineState(TypedDict):
     # --- Audit (appended by every agent) ---
     audit_log: list[dict[str, Any]]
 
+    # --- Latency instrumentation (ADR-007) ---
+    stage_durations: dict[str, float]  # {"orchestrator": 1.2, "extractor": 0.4, ...} — wall-
+    # clock seconds per LangGraph node, populated by core/graph.py's `_timed()` wrapper.
+
     # --- Control flow ---
     error: Optional[str]  # fatal error message; routes to END if set
     status: str  # "running" | "completed" | "failed"
@@ -79,6 +83,7 @@ def initial_state(spec: str, run_id: str) -> PipelineState:
         quality_report={},
         load_result=None,
         audit_log=[],
+        stage_durations={},
         error=None,
         status="running",
     )

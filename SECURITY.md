@@ -39,6 +39,16 @@ You will receive an acknowledgement within 72 hours.
   comments in `sandbox.py`, `analyst.py`, and `science.py`.
 - Known gap: none of the three sites enforce an actual execution timeout —
   `timeout_seconds` parameters accepted by some callers are not applied.
+- **Update (ADR-007):** all three sites now route through a single
+  `execute_in_sandbox()` in `sandbox.py`, running in an isolated child
+  process (`multiprocessing`, `spawn` context) with a real, enforced
+  `timeout_seconds`. That child clears `os.environ` before any user code
+  executes, so even the introspection bypass above can no longer reach real
+  secrets (`APP_DATABASE_URL`, `OPENAI_API_KEY`-style vars, Clerk config)
+  through it — the child never has them in the first place. This closes the
+  env-var-exposure angle of the introspection limitation; the introspection
+  bypass itself (arbitrary code execution within the child process) remains
+  accepted for the current scope.
 
 ### SQL
 - SQL queries use SQLAlchemy bound parameters (`text("... WHERE id = :id")`)

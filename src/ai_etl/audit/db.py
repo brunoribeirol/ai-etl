@@ -3,14 +3,14 @@
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 import pandas as pd
-from sqlalchemy import func, select
+from sqlalchemy import func, insert, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from ai_etl.audit.connection import get_engine
-from ai_etl.audit.models import analysis_runs, runs, users
+from ai_etl.audit.models import analysis_runs, runs, stage_latencies, users
 from ai_etl.core.analysis_types import AdvisorResult, GoldResult, ScienceResult, TokenUsage
 from ai_etl.core.state import PipelineState
 
@@ -267,6 +267,76 @@ def _write_analysis_row(
             "timestamp": stmt.excluded.timestamp,
             "tenant_id": stmt.excluded.tenant_id,
         },
+    )
+    with get_engine().begin() as conn:
+        conn.execute(stmt)
+
+
+def save_stage_latencies(
+    run_id: str,
+    run_type: str,
+    tenant_id: str | None,
+    durations: Union[dict[str, float], list[dict[str, Any]]],
+    log_dir: str = "./runs",
+) -> None:
+    """Persist per-stage wall-clock durations to the `stage_latencies` table (ADR-007).
+
+    No JSON artifact is written here (unlike `save_run`/`save_analysis`) — `log_dir`
+    is accepted only for signature symmetry with those two, since `stage_latencies`
+    is pure aggregate timing data with no per-run file of its own.
+
+    Args:
+        run_id: `runs.run_id` (run_type="silver") or `analysis_runs.run_id`
+            (run_type="analysis") this batch of timings belongs to.
+        run_type: "silver" | "analysis".
+        tenant_id: Same Sprint A/ADR-006 tenant-scoping stopgap as save_run/save_analysis.
+        durations: either
+            - {"stage_name": seconds} — Silver's `state["stage_durations"]`, one entry
+              per LangGraph node, each run exactly once (seq is always 1), or
+            - a list of {"stage", "duration_seconds", "timed_out"} dicts in call
+              order — Analyst/Science, where a business question can fan out into
+              several sub-tasks plus repair reruns; repeat calls for the same stage
+              get an incrementing `seq` (e.g. a repair call is seq=2).
+        log_dir: unused; kept for signature symmetry with save_run/save_analysis.
+    """
+    rows: list[dict[str, Any]] = []
+    if isinstance(durations, dict):
+        for stage, seconds in durations.items():
+            rows.append(
+                {"stage": stage, "duration_seconds": float(seconds), "timed_out": False, "seq": 1}
+            )
+    else:
+        seq_counters: dict[str, int] = {}
+        for entry in durations:
+            stage = entry["stage"]
+            seq_counters[stage] = seq_counters.get(stage, 0) + 1
+            rows.append(
+                {
+                    "stage": stage,
+                    "duration_seconds": float(entry["duration_seconds"]),
+                    "timed_out": bool(entry.get("timed_out", False)),
+                    "seq": seq_counters[stage],
+                }
+            )
+
+    if not rows:
+        return
+
+    now = datetime.now(tz=timezone.utc)
+    stmt = insert(stage_latencies).values(
+        [
+            {
+                "run_id": run_id,
+                "run_type": run_type,
+                "tenant_id": tenant_id,
+                "stage": row["stage"],
+                "seq": row["seq"],
+                "duration_seconds": row["duration_seconds"],
+                "timed_out": row["timed_out"],
+                "recorded_at": now,
+            }
+            for row in rows
+        ]
     )
     with get_engine().begin() as conn:
         conn.execute(stmt)

@@ -27,9 +27,10 @@ from sqlalchemy import Engine
 
 from ai_etl.audit import db
 from ai_etl.audit.db import _write_run_row as _real_write_run_row
-from ai_etl.audit.db import save_analysis, save_run
+from ai_etl.audit.db import save_analysis, save_run, save_stage_latencies
 from ai_etl.audit.models import metadata as audit_metadata
 from ai_etl.audit.models import runs as runs_table
+from ai_etl.audit.models import stage_latencies as stage_latencies_table
 from ai_etl.audit.models import users as users_table
 from ai_etl.core.state import initial_state
 
@@ -500,3 +501,117 @@ def test_ensure_user_is_idempotent(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert second_created_at == first_created_at
     assert row_count == 1
+
+
+# ---------------------------------------------------------------------------
+# save_stage_latencies (ADR-007) — same in-memory-SQLite-with-FK-enforcement
+# pattern as the tenant-isolation tests above, since `stage_latencies.tenant_id`
+# is a real FK to `users.id` just like `runs`/`analysis_runs`.
+# ---------------------------------------------------------------------------
+
+
+def _select_stage_latencies(engine: Engine, run_id: str | None = None) -> list[dict]:
+    stmt = sqlalchemy.select(stage_latencies_table)
+    if run_id is not None:
+        stmt = stmt.where(stage_latencies_table.c.run_id == run_id)
+    with engine.connect() as conn:
+        return [dict(row) for row in conn.execute(stmt).mappings().all()]
+
+
+def test_save_stage_latencies_silver_dict_form_inserts_one_row_per_stage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Silver's `state["stage_durations"]` is a flat {stage: seconds} dict — one
+    LangGraph node run exactly once each, so every row's `seq` is 1."""
+    engine = _make_sqlite_engine_with_fk_enforcement()
+    monkeypatch.setattr(db, "get_engine", lambda: engine)
+    _insert_user_row(engine, "tenant-a")
+
+    durations = {"orchestrator": 0.5, "extractor": 1.2, "transformer": 3.0}
+    save_stage_latencies("run-1", "silver", "tenant-a", durations)
+
+    rows = _select_stage_latencies(engine, "run-1")
+    assert len(rows) == 3
+    by_stage = {r["stage"]: r for r in rows}
+    assert by_stage["orchestrator"]["duration_seconds"] == 0.5
+    assert all(r["run_type"] == "silver" for r in rows)
+    assert all(r["tenant_id"] == "tenant-a" for r in rows)
+    assert all(r["seq"] == 1 for r in rows)
+    assert all(r["timed_out"] is False for r in rows)
+
+
+def test_save_stage_latencies_list_form_increments_seq_per_repeat_stage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Analyst/Science's call-ordered list form: a repeated stage (e.g. a repair
+    rerun) gets an incrementing `seq` rather than overwriting the first row."""
+    engine = _make_sqlite_engine_with_fk_enforcement()
+    monkeypatch.setattr(db, "get_engine", lambda: engine)
+    _insert_user_row(engine, "tenant-a")
+
+    entries = [
+        {"stage": "analyst", "duration_seconds": 1.0, "timed_out": False},
+        {"stage": "science", "duration_seconds": 2.0, "timed_out": False},
+        {"stage": "analyst", "duration_seconds": 0.8, "timed_out": True},  # repair rerun
+    ]
+    save_stage_latencies("run-2", "analysis", "tenant-a", entries)
+
+    rows = _select_stage_latencies(engine, "run-2")
+    assert len(rows) == 3
+    analyst_rows = sorted((r for r in rows if r["stage"] == "analyst"), key=lambda r: r["seq"])
+    assert [r["seq"] for r in analyst_rows] == [1, 2]
+    assert analyst_rows[0]["timed_out"] is False
+    assert analyst_rows[1]["timed_out"] is True
+    science_rows = [r for r in rows if r["stage"] == "science"]
+    assert science_rows[0]["seq"] == 1
+    assert all(r["run_type"] == "analysis" for r in rows)
+
+
+def test_save_stage_latencies_empty_durations_is_a_noop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = _make_sqlite_engine_with_fk_enforcement()
+    monkeypatch.setattr(db, "get_engine", lambda: engine)
+    _insert_user_row(engine, "tenant-a")
+
+    save_stage_latencies("run-3", "silver", "tenant-a", {})
+    save_stage_latencies("run-3", "analysis", "tenant-a", [])
+
+    assert _select_stage_latencies(engine, "run-3") == []
+
+
+def test_save_stage_latencies_rejects_tenant_id_with_no_matching_user_row(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Same FK-integrity guarantee as `runs`/`analysis_runs` — `tenant_id` must
+    reference a real `users` row, not just be a decorative string column."""
+    engine = _make_sqlite_engine_with_fk_enforcement()
+    monkeypatch.setattr(db, "get_engine", lambda: engine)
+
+    with pytest.raises(sqlalchemy.exc.IntegrityError):
+        save_stage_latencies("run-4", "silver", "ghost-tenant", {"extractor": 1.0})
+
+
+def test_save_stage_latencies_scoped_by_run_id_and_run_type(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Two batches for the same tenant and same `run_id` but different
+    `run_type` (silver vs. analysis — legitimate per ADR-007's schema, since
+    `run_id` alone doesn't disambiguate the parent table) don't bleed into
+    each other's rows."""
+    engine = _make_sqlite_engine_with_fk_enforcement()
+    monkeypatch.setattr(db, "get_engine", lambda: engine)
+    _insert_user_row(engine, "tenant-a")
+
+    save_stage_latencies("run-5", "silver", "tenant-a", {"extractor": 1.0})
+    save_stage_latencies(
+        "run-5", "analysis", "tenant-a", [{"stage": "analyst", "duration_seconds": 2.0}]
+    )
+
+    rows = _select_stage_latencies(engine, "run-5")
+    silver_rows = [r for r in rows if r["run_type"] == "silver"]
+    analysis_rows = [r for r in rows if r["run_type"] == "analysis"]
+    assert len(silver_rows) == 1
+    assert silver_rows[0]["stage"] == "extractor"
+    assert len(analysis_rows) == 1
+    assert analysis_rows[0]["stage"] == "analyst"
