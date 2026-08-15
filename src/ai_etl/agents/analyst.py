@@ -140,9 +140,6 @@ def run_analyst(df: pd.DataFrame, business_question: str) -> GoldResult:
     Returns a GoldResult dict (see ai_etl.core.analysis_types) with `task_question`
     left blank — callers running this per Planner sub-task fill it in themselves.
     """
-    import plotly.express as px
-    import plotly.graph_objects as go
-
     columns_list = str(df.columns.tolist())
     schema = {col: str(dtype) for col, dtype in df.dtypes.items()}
     sample = df.head(5).to_dict(orient="records")
@@ -177,7 +174,7 @@ def run_analyst(df: pd.DataFrame, business_question: str) -> GoldResult:
             {"df": df.copy()},
             mode="script",
             result_vars=["gold_df", "fig", "narrative"],
-            extra_globals={"px": px, "go": go},
+            extra_modules={"px": "plotly.express", "go": "plotly.graph_objects"},
             timeout_seconds=ANALYST_TIMEOUT_SECONDS,
         )
 

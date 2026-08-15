@@ -243,10 +243,6 @@ def run_science(df: pd.DataFrame, business_question: str) -> ScienceResult:
     Returns a ScienceResult dict (see ai_etl.core.analysis_types) with `task_question`
     left blank — callers running this per Planner sub-task fill it in themselves.
     """
-    import math
-
-    import plotly.express as px
-    import plotly.graph_objects as go
     from sklearn.cluster import KMeans
     from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
     from sklearn.linear_model import LinearRegression, LogisticRegression, Ridge
@@ -274,10 +270,14 @@ def run_science(df: pd.DataFrame, business_question: str) -> ScienceResult:
         question=business_question,
     )
 
+    # Modules (px/go/math) go through extra_modules, imported by dotted path
+    # inside the sandboxed child — whole module objects cannot be pickled
+    # across multiprocessing's process boundary (TypeError: cannot pickle
+    # 'module' object), unlike the classes/functions below, which pickle by
+    # reference just fine. See core/sandbox.py's execute_in_sandbox() docstring.
+    extra_modules = {"px": "plotly.express", "go": "plotly.graph_objects", "math": "math"}
+
     extra_globals: dict[str, Any] = {
-        "px": px,
-        "go": go,
-        "math": math,
         # sklearn
         "LinearRegression": LinearRegression,
         "Ridge": Ridge,
@@ -320,6 +320,7 @@ def run_science(df: pd.DataFrame, business_question: str) -> ScienceResult:
             mode="script",
             result_vars=["predictions_df", "fig", "narrative", "model_info"],
             extra_globals=extra_globals,
+            extra_modules=extra_modules,
             timeout_seconds=SCIENCE_TIMEOUT_SECONDS,
         )
 

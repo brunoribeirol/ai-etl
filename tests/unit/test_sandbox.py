@@ -129,8 +129,11 @@ def test_script_mode_exposes_dfs_keys_directly_as_globals() -> None:
 
 
 # Module-level so it pickles by reference (qualified name) under the spawn
-# context, the same way analyst.py's `extra_globals={"px": px, "go": go}"`
-# passes real modules/classes across the process boundary (ADR-007).
+# context — the same way science.py's sklearn/statsmodels classes cross the
+# process boundary via `extra_globals` (ADR-007). Whole *module* objects
+# (plotly, math, os) don't pickle at all and must go through `extra_modules`
+# instead (imported by dotted path inside the child) — see
+# core/sandbox.py's execute_in_sandbox() docstring.
 class _FakeExtraModule:
     LABEL = "extra-global-marker"
 
@@ -278,13 +281,7 @@ def test_setattr_unavailable_for_analyst_science_extra_builtins_config() -> None
     shape (extra_globals present, like Plotly's px/go; extra_builtins=None) and
     confirms a script attempting `setattr` fails inside the sandbox rather than
     silently succeeding."""
-    code = """
-class Dummy:
-    pass
-obj = Dummy()
-setattr(obj, "x", 1)
-result = obj.x
-"""
+    code = "result = setattr"
     result = execute_in_sandbox(
         code,
         {},
@@ -311,13 +308,15 @@ result = obj.x
 # These tests don't exercise that exact mro/subclasses escape path — which
 # module happens to be reachable that way is a fragile implementation detail
 # of whatever's been imported by pandas/plotly/sklearn at the time, not a
-# stable thing to assert on. Instead they inject a direct reference to the
-# real `os` module via `extra_globals` (the same mechanism analyst.py uses
-# for `px`/`go`) as a stable proxy: however sandboxed code ends up holding a
-# reference to `os` — via the accepted escape or (as here) a legitimate
-# extra_globals entry — `os.environ` must already be empty by the time it can
-# use it, which is exactly the property `_sandbox_worker()`'s env-clear is
-# supposed to guarantee.
+# stable thing to assert on. Instead they inject the real `os` module via
+# `extra_modules` (the same mechanism analyst.py/science.py use for
+# `px`/`go`/`math` — modules are imported by dotted path inside the child,
+# not pickled across the process boundary, since whole module objects can't
+# be pickled at all) as a stable proxy: however sandboxed code ends up
+# holding a reference to `os` — via the accepted escape or (as here) a
+# legitimate extra_modules entry — `os.environ` must already be empty by the
+# time it can use it, which is exactly the property `_sandbox_worker()`'s
+# env-clear is supposed to guarantee.
 # ---------------------------------------------------------------------------
 
 
@@ -328,7 +327,7 @@ def test_child_process_environment_is_cleared_before_user_code_runs() -> None:
     process's own `os.environ` (checked below) is untouched."""
     code = "env_len = len(os.environ)"
     result = execute_in_sandbox(
-        code, {}, mode="script", result_vars=["env_len"], extra_globals={"os": os}
+        code, {}, mode="script", result_vars=["env_len"], extra_modules={"os": "os"}
     )
 
     assert result["error"] is None, result["error"]
@@ -350,7 +349,7 @@ def test_injected_parent_env_var_not_visible_in_sandboxed_child(
 
     code = "leaked = os.environ.get('AI_ETL_TEST_SECRET_MARKER')"
     result = execute_in_sandbox(
-        code, {}, mode="script", result_vars=["leaked"], extra_globals={"os": os}
+        code, {}, mode="script", result_vars=["leaked"], extra_modules={"os": "os"}
     )
 
     assert result["error"] is None, result["error"]

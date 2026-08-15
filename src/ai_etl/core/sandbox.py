@@ -21,6 +21,7 @@ See SECURITY.md and docs/adr/ADR-003-exec-sandbox.md / ADR-007 for the full
 risk analysis.
 """
 
+import importlib
 import multiprocessing
 import os
 import queue
@@ -159,6 +160,7 @@ def _sandbox_worker(
     entry_point: str,
     result_vars: list[str],
     extra_globals: Optional[dict[str, Any]],
+    extra_modules: Optional[dict[str, str]],
     extra_builtins: Optional[dict[str, Any]],
     result_queue: "multiprocessing.Queue[dict[str, Any]]",
 ) -> None:
@@ -186,16 +188,18 @@ def _sandbox_worker(
     #
     # Safe to do this late (as the first line of the worker, not earlier):
     # pandas/numpy (imported at module load, above) and any extra_globals
-    # modules/classes (plotly, sklearn, statsmodels — unpickled by
+    # classes (sklearn/statsmodels — pickled by reference and unpickled by
     # multiprocessing's bootstrap before this function is even called) have
     # already finished importing by this point, using the still-intact
-    # environment. Checked for any *runtime* (not just import-time) env-var
-    # dependency in this call path and found none that matters here:
-    # pandas/numpy have none at the operations Analyst/Science/Transformer
-    # code performs; sklearn's estimators here (RandomForest*, KMeans,
-    # LinearRegression/Ridge/LogisticRegression) default to `n_jobs=None`
-    # (no parallel worker subprocesses, so no joblib/loky temp-dir env
-    # lookup); and even if LLM-generated code passed `n_jobs=-1`,
+    # environment. `extra_modules` (plotly, math, ...) import *after* this
+    # clear, via importlib inside this function — checked and none of them
+    # need an env var at import time. Checked for any *runtime* (not just
+    # import-time) env-var dependency in this call path and found none that
+    # matters here: pandas/numpy have none at the operations Analyst/Science/
+    # Transformer code performs; sklearn's estimators here (RandomForest*,
+    # KMeans, LinearRegression/Ridge/LogisticRegression) default to
+    # `n_jobs=None` (no parallel worker subprocesses, so no joblib/loky
+    # temp-dir env lookup); and even if LLM-generated code passed `n_jobs=-1`,
     # `tempfile.gettempdir()` (what joblib/loky falls back to without
     # `TMPDIR`/`TEMP`/`TMP`) has a hardcoded `/tmp` fallback on the Linux
     # containers this project deploys to. Nothing here needs an allowlist.
@@ -203,10 +207,15 @@ def _sandbox_worker(
 
     try:
         builtins_ = {**SAFE_BUILTINS, **(extra_builtins or {})}
+        imported = {
+            name: importlib.import_module(dotted_path)
+            for name, dotted_path in (extra_modules or {}).items()
+        }
         sandbox_globals: dict[str, Any] = {
             "__builtins__": builtins_,
             "pd": pd,
             "np": np,
+            **imported,
             **(extra_globals or {}),
         }
 
@@ -231,6 +240,7 @@ def execute_in_sandbox(
     entry_point: str = "transform",
     result_vars: Optional[list[str]] = None,
     extra_globals: Optional[dict[str, Any]] = None,
+    extra_modules: Optional[dict[str, str]] = None,
     extra_builtins: Optional[dict[str, Any]] = None,
     timeout_seconds: int = 30,
 ) -> SandboxResult:
@@ -246,6 +256,18 @@ def execute_in_sandbox(
     defining a callable — `result_vars` names which ones to collect. `dfs`' keys
     (typically just `{"df": ...}`) are exposed directly as globals to the script,
     matching what the Analyst/Science prompts already assume (`df` in scope).
+
+    `extra_globals` is for values that pickle *by reference* across the `spawn`
+    boundary — classes and functions (e.g. sklearn's `RandomForestRegressor`),
+    which pickle stores as a dotted qualified name and reconstructs by importing
+    it in the child. **Whole module objects do not pickle at all** (`TypeError:
+    cannot pickle 'module' object` — a real bug caught by this project's CI, not
+    a theoretical concern; ADR-007's original assumption that modules pickle by
+    reference was wrong). For a module (`plotly.express`, `math`, `os`, ...), use
+    `extra_modules={"px": "plotly.express"}` instead — the child imports it
+    itself via `importlib.import_module()`, so nothing module-shaped ever has to
+    cross the process boundary through `multiprocessing.Process`'s own pickling
+    of its `args`.
 
     Runs in a multiprocessing.Process (spawn context, pinned explicitly rather than
     relying on the platform default — see ADR-007 for why). The parent calls
@@ -267,6 +289,7 @@ def execute_in_sandbox(
             entry_point,
             result_vars or [],
             extra_globals,
+            extra_modules,
             extra_builtins,
             result_queue,
         ),
