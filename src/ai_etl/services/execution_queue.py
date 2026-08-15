@@ -98,7 +98,7 @@ def check_and_increment_rate_limit(tenant_id: str) -> None:
         )
 
 
-@celery_app.task(name="ai_etl.run_full_analysis", bind=True)  # type: ignore[misc]
+@celery_app.task(name="ai_etl.run_full_analysis", bind=True)  # type: ignore[untyped-decorator]
 def run_full_analysis_task(
     self: Any,
     spec: str,
