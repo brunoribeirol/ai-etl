@@ -15,7 +15,6 @@ from botocore.exceptions import ClientError
 
 from ai_etl.audit.storage import LocalStorageBackend, S3StorageBackend, get_storage_backend
 
-
 # ---------------------------------------------------------------------------
 # LocalStorageBackend — today's exact Path-based behavior, unchanged
 # ---------------------------------------------------------------------------
@@ -54,7 +53,9 @@ def test_local_backend_writes_under_nested_key(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _make_backend_with_mock_client(bucket: str = "ai-etl-artifacts-brlla", prefix: str = "prod/tenant-a"):
+def _make_backend_with_mock_client(
+    bucket: str = "ai-etl-artifacts-brlla", prefix: str = "prod/tenant-a"
+):
     with patch("boto3.client") as mock_client_factory:
         mock_client = MagicMock()
         mock_client_factory.return_value = mock_client
@@ -132,7 +133,9 @@ def test_s3_backend_scopes_keys_by_environment_and_tenant_prefix() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_get_storage_backend_defaults_to_local(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_storage_backend_defaults_to_local(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.delenv("STORAGE_BACKEND", raising=False)
 
     backend = get_storage_backend(str(tmp_path), tenant_id="tenant-a")
@@ -163,7 +166,9 @@ def test_get_storage_backend_s3_scopes_by_environment_and_tenant(
     assert backend.prefix == "prod/tenant-a"
 
 
-def test_get_storage_backend_s3_defaults_environment_to_dev(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_storage_backend_s3_defaults_environment_to_dev(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("STORAGE_BACKEND", "s3")
     monkeypatch.setenv("AI_ETL_S3_BUCKET", "ai-etl-artifacts-brlla")
     monkeypatch.delenv("AI_ETL_ENV", raising=False)
