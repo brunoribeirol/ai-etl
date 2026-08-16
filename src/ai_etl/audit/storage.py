@@ -16,7 +16,7 @@ bucket, without provisioning separate infrastructure for it.
 
 import os
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, cast
 
 
 class StorageBackend(Protocol):
@@ -72,7 +72,10 @@ class S3StorageBackend:
 
     def read_bytes(self, key: str) -> bytes:
         response = self._client.get_object(Bucket=self.bucket, Key=self._full_key(key))
-        return response["Body"].read()
+        # boto3's client has no type stubs installed (ignore_missing_imports=True),
+        # so response["Body"].read() types as Any — cast() documents that it's a
+        # real bytes object at runtime (StreamingBody.read()'s actual return type).
+        return cast(bytes, response["Body"].read())
 
     def exists(self, key: str) -> bool:
         from botocore.exceptions import ClientError
