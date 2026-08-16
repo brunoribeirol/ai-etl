@@ -1,8 +1,8 @@
 """Audit persistence — saves pipeline run state to JSON and the application Postgres."""
 
+import io
 import json
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Optional, Union
 
 import pandas as pd
@@ -11,6 +11,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from ai_etl.audit.connection import get_engine
 from ai_etl.audit.models import analysis_runs, runs, stage_latencies, users
+from ai_etl.audit.storage import StorageBackend, get_storage_backend
 from ai_etl.core.analysis_types import AdvisorResult, GoldResult, ScienceResult, TokenUsage
 from ai_etl.core.llm import get_model_name
 from ai_etl.core.pricing import compute_cost_usd
@@ -41,33 +42,36 @@ def ensure_user(user_id: str) -> None:
         conn.execute(stmt)
 
 
-def save_run(state: PipelineState, log_dir: str = "./runs", tenant_id: str | None = None) -> Path:
+def save_run(state: PipelineState, log_dir: str = "./runs", tenant_id: str | None = None) -> str:
     """Persist the final pipeline state to JSON and record it in the app database.
 
-    Creates:
-        {log_dir}/{run_id}.json          — full state snapshot
-        {log_dir}/{run_id}_transform.py  — generated transformation code (if any)
+    Creates (ADR-009: via the `StorageBackend` selected by `STORAGE_BACKEND` —
+    `local` writes under `log_dir`, `s3` writes under the tenant/environment-scoped
+    bucket prefix; key names below are unchanged either way):
+        {run_id}.json          — full state snapshot
+        {run_id}_transform.py  — generated transformation code (if any)
         a row in the `runs` table of the application Postgres (APP_DATABASE_URL)
 
     Args:
         state: Final pipeline state to persist.
-        log_dir: Directory to write the JSON/transform files into.
+        log_dir: Directory to write the JSON/transform files into (`local` backend only).
         tenant_id: Sprint A session-scoping stopgap — the browser session's UUID
             (see `app.py::_get_session_id`), not a real tenant/account. Defaults to
             `None` for backward compatibility with callers that don't pass one, but
-            `app.py` should always pass a real value going forward.
+            `app.py` should always pass a real value going forward. Also used by the
+            `s3` backend as the tenant segment of the storage key prefix.
 
     Returns:
-        Path to the JSON file.
+        The storage key of the JSON file (relative to `log_dir` for `local`, to the
+        bucket prefix for `s3`).
     """
-    log_path = Path(log_dir)
-    log_path.mkdir(parents=True, exist_ok=True)
+    storage = get_storage_backend(log_dir, tenant_id)
 
     run_id = state["run_id"]
-    transform_code_path: Optional[Path] = None
+    transform_code_key: Optional[str] = None
     if state.get("transformation_code"):
-        transform_code_path = log_path / f"{run_id}_transform.py"
-        transform_code_path.write_text(state["transformation_code"])
+        transform_code_key = f"{run_id}_transform.py"
+        storage.write_bytes(transform_code_key, state["transformation_code"].encode())
 
     # Sprint 3 (ADR-008): also persist the Silver DataFrame as CSV, alongside
     # the (lossy) JSON snapshot below — `_make_serializable` only keeps a
@@ -77,24 +81,25 @@ def save_run(state: PipelineState, log_dir: str = "./runs", tenant_id: str | Non
     # longer pass the live in-memory DataFrame to directly.
     silver_df = state.get("transformed_data")
     if isinstance(silver_df, pd.DataFrame) and not silver_df.empty:
-        (log_path / f"{run_id}_silver.csv").write_text(silver_df.to_csv(index=False))
+        storage.write_bytes(f"{run_id}_silver.csv", silver_df.to_csv(index=False).encode())
 
-    json_path = log_path / f"{run_id}.json"
-    _write_json(state, json_path, transform_code_path=transform_code_path)
+    json_key = f"{run_id}.json"
+    _write_json(state, storage, json_key, transform_code_key=transform_code_key)
     _write_run_row(state, tenant_id=tenant_id)
 
-    return json_path
+    return json_key
 
 
 def _write_json(
     state: PipelineState,
-    path: Path,
-    transform_code_path: Optional[Path] = None,
+    storage: StorageBackend,
+    key: str,
+    transform_code_key: Optional[str] = None,
 ) -> None:
     serializable = _make_serializable(dict(state))
-    if transform_code_path is not None:
-        serializable["transform_code_path"] = str(transform_code_path)
-    path.write_text(json.dumps(serializable, indent=2, default=str))
+    if transform_code_key is not None:
+        serializable["transform_code_path"] = transform_code_key
+    storage.write_bytes(key, json.dumps(serializable, indent=2, default=str).encode())
 
 
 def _write_run_row(state: PipelineState, tenant_id: str | None = None) -> None:
@@ -179,10 +184,11 @@ def save_analysis(
     log_dir: str = "./runs",
     tenant_id: str | None = None,
     business_question: str = "",
-) -> Path:
+) -> str:
     """Persist Gold/Science/Advisor sub-task results alongside the Silver run.
 
-    Creates {log_dir}/{run_id}_analysis.json with narratives, model_info,
+    Creates {run_id}_analysis.json (ADR-009: via the tenant-scoped `StorageBackend`,
+    same as `save_run`) with narratives, model_info,
     recommendations, and a data preview for every sub-task the Planner produced.
     Figures aren't serialized (not JSON-safe, and cheap to regenerate from `code`);
     full DataFrames aren't embedded either — only a preview and shape, since the CSV
@@ -202,18 +208,17 @@ def save_analysis(
             reconstruct the header `_render_results` shows ("O que fazer sobre:
             ..."). Defaults to `""` for backward compatibility with existing callers.
     """
-    log_path = Path(log_dir)
-    log_path.mkdir(parents=True, exist_ok=True)
+    storage = get_storage_backend(log_dir, tenant_id)
 
     payload = {
         "run_id": run_id,
         "question": business_question,
         "gold": [
-            _serialize_analysis_result(g, "gold_df", log_path, f"{run_id}_gold_{i}")
+            _serialize_analysis_result(g, "gold_df", storage, f"{run_id}_gold_{i}")
             for i, g in enumerate(gold_results)
         ],
         "science": [
-            _serialize_analysis_result(s, "predictions_df", log_path, f"{run_id}_science_{i}")
+            _serialize_analysis_result(s, "predictions_df", storage, f"{run_id}_science_{i}")
             for i, s in enumerate(science_results)
         ],
         "advisor": {
@@ -225,17 +230,19 @@ def save_analysis(
         "saved_at": datetime.now(tz=timezone.utc).isoformat(),
     }
 
-    json_path = log_path / f"{run_id}_analysis.json"
-    json_path.write_text(json.dumps(payload, indent=2, default=str, ensure_ascii=False))
+    json_key = f"{run_id}_analysis.json"
+    storage.write_bytes(
+        json_key, json.dumps(payload, indent=2, default=str, ensure_ascii=False).encode()
+    )
 
     total_tokens = _sum_all_tokens(gold_results, science_results, advisor_result, planner_tokens)
     _write_analysis_row(run_id, len(gold_results), len(science_results), total_tokens, tenant_id)
 
-    return json_path
+    return json_key
 
 
 def _serialize_analysis_result(
-    result: "GoldResult | ScienceResult", df_key: str, log_path: Path, file_prefix: str
+    result: "GoldResult | ScienceResult", df_key: str, storage: StorageBackend, file_prefix: str
 ) -> dict[str, Any]:
     """Build one gold/science manifest entry.
 
@@ -263,13 +270,13 @@ def _serialize_analysis_result(
     if isinstance(df, pd.DataFrame) and not df.empty:
         serialized["data_preview"] = df.head(20).to_dict(orient="records")
         serialized["data_shape"] = list(df.shape)
-        data_path = log_path / f"{file_prefix}.csv"
-        data_path.write_text(df.to_csv(index=False))
-        serialized["data_path"] = data_path.name
+        data_key = f"{file_prefix}.csv"
+        storage.write_bytes(data_key, df.to_csv(index=False).encode())
+        serialized["data_path"] = data_key
     if fig is not None:
-        fig_path = log_path / f"{file_prefix}_fig.json"
-        fig_path.write_text(fig.to_json())
-        serialized["fig_path"] = fig_path.name
+        fig_key = f"{file_prefix}_fig.json"
+        storage.write_bytes(fig_key, fig.to_json().encode())
+        serialized["fig_path"] = fig_key
     return serialized
 
 
@@ -466,16 +473,16 @@ def load_full_result(
     if tenant_id is not None and not _run_belongs_to_tenant(run_id, tenant_id):
         return None
 
-    log_path = Path(log_dir)
-    json_path = log_path / f"{run_id}.json"
-    if not json_path.exists():
+    storage = get_storage_backend(log_dir, tenant_id)
+    json_key = f"{run_id}.json"
+    if not storage.exists(json_key):
         return None
 
-    state: dict[str, Any] = json.loads(json_path.read_text())
-    silver_csv = log_path / f"{run_id}_silver.csv"
-    if silver_csv.exists():
+    state: dict[str, Any] = json.loads(storage.read_bytes(json_key))
+    silver_key = f"{run_id}_silver.csv"
+    if storage.exists(silver_key):
         try:
-            state["transformed_data"] = pd.read_csv(silver_csv)
+            state["transformed_data"] = pd.read_csv(io.BytesIO(storage.read_bytes(silver_key)))
         except Exception:  # nosec B110 — best-effort reload; a corrupt CSV degrades
             pass  # to a missing Silver tab, not a failed reload of the whole run.
 
@@ -484,13 +491,13 @@ def load_full_result(
     advisor: dict[str, Any] = {}
     question = ""
 
-    analysis_path = log_path / f"{run_id}_analysis.json"
-    if analysis_path.exists():
-        analysis = json.loads(analysis_path.read_text())
+    analysis_key = f"{run_id}_analysis.json"
+    if storage.exists(analysis_key):
+        analysis = json.loads(storage.read_bytes(analysis_key))
         question = analysis.get("question", "")
-        gold = [_reload_analysis_entry(e, log_path, "gold_df") for e in analysis.get("gold", [])]
+        gold = [_reload_analysis_entry(e, storage, "gold_df") for e in analysis.get("gold", [])]
         science = [
-            _reload_analysis_entry(e, log_path, "predictions_df")
+            _reload_analysis_entry(e, storage, "predictions_df")
             for e in analysis.get("science", [])
         ]
         advisor = analysis.get("advisor", {})
@@ -506,31 +513,29 @@ def load_full_result(
     }
 
 
-def _reload_analysis_entry(entry: dict[str, Any], log_path: Path, df_key: str) -> dict[str, Any]:
+def _reload_analysis_entry(
+    entry: dict[str, Any], storage: StorageBackend, df_key: str
+) -> dict[str, Any]:
     """Re-hydrate one gold/science manifest entry: read back the full DataFrame
     (`data_path`) and Plotly `Figure` (`fig_path`) `_serialize_analysis_result`
     persisted alongside the JSON-safe preview, if present and readable."""
     reloaded = dict(entry)
 
-    data_path = entry.get("data_path")
-    if data_path:
-        csv_path = log_path / data_path
-        if csv_path.exists():
-            try:
-                reloaded[df_key] = pd.read_csv(csv_path)
-            except Exception:  # nosec B110 — best-effort per sub-task; a corrupt
-                pass  # CSV omits that entry's data, not the whole reload.
+    data_key = entry.get("data_path")
+    if data_key and storage.exists(data_key):
+        try:
+            reloaded[df_key] = pd.read_csv(io.BytesIO(storage.read_bytes(data_key)))
+        except Exception:  # nosec B110 — best-effort per sub-task; a corrupt
+            pass  # CSV omits that entry's data, not the whole reload.
 
-    fig_path = entry.get("fig_path")
-    if fig_path:
-        full_fig_path = log_path / fig_path
-        if full_fig_path.exists():
-            try:
-                import plotly.io as pio
+    fig_key = entry.get("fig_path")
+    if fig_key and storage.exists(fig_key):
+        try:
+            import plotly.io as pio
 
-                reloaded["fig"] = pio.from_json(full_fig_path.read_text())
-            except Exception:  # nosec B110 — best-effort per sub-task; a corrupt
-                pass  # figure JSON omits that entry's chart, not the whole reload.
+            reloaded["fig"] = pio.from_json(storage.read_bytes(fig_key).decode())
+        except Exception:  # nosec B110 — best-effort per sub-task; a corrupt
+            pass  # figure JSON omits that entry's chart, not the whole reload.
 
     return reloaded
 

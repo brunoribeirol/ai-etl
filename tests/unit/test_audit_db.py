@@ -64,7 +64,8 @@ def _make_failed_state() -> dict:
 
 def test_save_run_creates_json_file(tmp_path: Path) -> None:
     state = _make_completed_state()
-    json_path = save_run(state, log_dir=str(tmp_path))
+    json_key = save_run(state, log_dir=str(tmp_path))
+    json_path = tmp_path / json_key
 
     assert json_path.exists()
     assert json_path.suffix == ".json"
@@ -102,9 +103,9 @@ def test_save_run_failed_state_has_no_load_result(
 def test_save_run_json_serializes_dataframe(tmp_path: Path) -> None:
     state = _make_completed_state()
     state["transformed_data"] = pd.DataFrame({"a": [1, 2]})
-    json_path = save_run(state, log_dir=str(tmp_path))
+    json_key = save_run(state, log_dir=str(tmp_path))
 
-    data = json.loads(json_path.read_text())
+    data = json.loads((tmp_path / json_key).read_text())
     assert "<DataFrame" in data["transformed_data"]
 
 
@@ -128,9 +129,9 @@ def test_save_run_saves_transform_code_as_py(tmp_path: Path) -> None:
 def test_save_run_json_includes_transform_code_path(tmp_path: Path) -> None:
     state = _make_completed_state()
     state["transformation_code"] = "def transform(dfs):\n    return dfs['x']\n"
-    json_path = save_run(state, log_dir=str(tmp_path))
+    json_key = save_run(state, log_dir=str(tmp_path))
 
-    data = json.loads(json_path.read_text())
+    data = json.loads((tmp_path / json_key).read_text())
     assert "transform_code_path" in data
     assert data["transform_code_path"].endswith("_transform.py")
 
@@ -193,7 +194,7 @@ def _make_advisor_result() -> dict:
 
 
 def test_save_analysis_creates_json_file(tmp_path: Path) -> None:
-    json_path = save_analysis(
+    json_key = save_analysis(
         "run-analysis-1",
         [_make_gold_result()],
         [_make_science_result()],
@@ -202,6 +203,7 @@ def test_save_analysis_creates_json_file(tmp_path: Path) -> None:
         log_dir=str(tmp_path),
     )
 
+    json_path = tmp_path / json_key
     assert json_path.exists()
     data = json.loads(json_path.read_text())
     assert data["run_id"] == "run-analysis-1"
@@ -213,7 +215,7 @@ def test_save_analysis_creates_json_file(tmp_path: Path) -> None:
 
 
 def test_save_analysis_includes_data_preview(tmp_path: Path) -> None:
-    json_path = save_analysis(
+    json_key = save_analysis(
         "run-analysis-2",
         [_make_gold_result()],
         [],
@@ -222,7 +224,7 @@ def test_save_analysis_includes_data_preview(tmp_path: Path) -> None:
         log_dir=str(tmp_path),
     )
 
-    data = json.loads(json_path.read_text())
+    data = json.loads((tmp_path / json_key).read_text())
     assert data["gold"][0]["data_shape"] == [2, 2]
     assert len(data["gold"][0]["data_preview"]) == 2
 
@@ -260,18 +262,18 @@ def test_save_analysis_aggregates_tokens_before_writing_row(
 
 
 def test_save_analysis_handles_empty_results(tmp_path: Path) -> None:
-    json_path = save_analysis(
+    json_key = save_analysis(
         "run-analysis-4", [], [], _make_advisor_result(), _ZERO_TOKENS, log_dir=str(tmp_path)
     )
 
-    data = json.loads(json_path.read_text())
+    data = json.loads((tmp_path / json_key).read_text())
     assert data["gold"] == []
     assert data["science"] == []
 
 
 def test_save_analysis_marks_repaired_subtasks(tmp_path: Path) -> None:
     repaired_gold = {**_make_gold_result(), "repaired": True}
-    json_path = save_analysis(
+    json_key = save_analysis(
         "run-analysis-5",
         [repaired_gold],
         [],
@@ -280,7 +282,7 @@ def test_save_analysis_marks_repaired_subtasks(tmp_path: Path) -> None:
         log_dir=str(tmp_path),
     )
 
-    data = json.loads(json_path.read_text())
+    data = json.loads((tmp_path / json_key).read_text())
     assert data["gold"][0]["repaired"] is True
 
 
