@@ -75,6 +75,19 @@ Six PRs, mostly sequential (API before frontend, since the frontend needs a real
 - Exact Next.js data-fetching approach (Server Components hitting the API directly vs. client-side fetch + React Query) — decide when PR 3 starts, doesn't affect the API contract.
 - Whether `frontend/` lives in this same repo (monorepo) or a separate one — recommend same repo for now (simpler CI/PR flow, matches this project's existing single-repo discipline), revisit only if Vercel's build step becomes awkward sharing the repo with the Python backend.
 
+## Deferred: physical `backend/` split
+
+Owner's call (2026-08-17, after PR 3/PR 39 landed): move `src/ai_etl/`, `tests/`, `docs/`, `app.py`, `Dockerfile`, `alembic/`, `case_study/` etc. into a `backend/` directory, mirroring `frontend/`, for visual clarity. **Deferred until the frontend cutover (PR 6) is fully live** — doing it now would mean also reconfiguring Railway's deploy Root Directory mid-sprint, the same class of dashboard-config fragility PR 3's Vercel deploy just went through (see below). Root's `README.md` documents the current (unmoved) structure clearly in the meantime as the agreed-upon interim fix.
+
+## PR 3 postscript — Vercel deployment troubleshooting (real, not build-related)
+
+`ai-etl.vercel.app` 404'd for over an hour after PR #38/#39 merged, despite every build (local, CI, and Vercel's own) succeeding cleanly. Two distinct, unrelated problems stacked on top of each other:
+
+1. **Next.js 16's `proxy.ts` rename broke Vercel's edge routing** (PR #39 fixes this — downgraded to `next@15.5.23`, `middleware.ts`). Confirmed via zero Runtime Logs for any request — the platform never resolved a function to invoke, not a code-level error.
+2. **After the Next 15 fix, `ai-etl.vercel.app` specifically stayed 404 while the same deployment's raw hash URL (`ai-hp5z3drkx-...vercel.app`) worked correctly** — domain showed "Valid Configuration", removing/re-adding the domain didn't help, cache-busting didn't help, and even the project owner's own authenticated browser session got 404 where an anonymous session correctly hit Vercel's login prompt (backwards from expected — the owner should bypass Deployment Protection automatically). Root cause never conclusively identified from the dashboard/API alone (no Vercel support ticket was needed in the end) — **fixed by deleting the Vercel project entirely and recreating it from the same GitHub import**, this time setting Root Directory to `frontend` *before* anything else and adding all three Clerk-related env vars (`NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `NEXT_PUBLIC_API_URL`) up front. Whatever internal state was broken didn't survive the recreate.
+
+**Reusable lesson**: if a Vercel project ever gets its very first deployment configured through the "New Project" screen with the wrong settings (framework/root directory misdetected, e.g. from importing a monorepo before pointing Root Directory at the right subfolder), don't assume fixing Project Settings afterward is equivalent to a clean project — some deployment/domain-level state can apparently persist in a broken form that dashboard-level fixes (removing/re-adding the domain, changing Framework Preset, redeploying) don't reach. Deleting and recreating the project, configuring Root Directory correctly from the very first screen, is a cheap, effective reset.
+
 ## Related
 
 - Plan (strategic): `~/.claude/plans/adicionar-o-frontend-ir-silly-rabbit.md`
