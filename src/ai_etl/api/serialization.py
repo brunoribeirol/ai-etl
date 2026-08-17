@@ -10,16 +10,31 @@ JSON-safe (the `_make_serializable` placeholder strings, plain
 strings/numbers/lists/dicts in `advisor`/`tokens`).
 """
 
-from typing import Any
+import math
+from typing import Any, cast
 
 import pandas as pd
 from plotly.graph_objects import Figure
 
 
+def nan_to_none_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """NaN/NaT aren't valid JSON — FastAPI's default encoder would otherwise
+    emit the (non-standard, some clients reject it) literal `NaN` token.
+    Post-`to_dict()` cleanup rather than `DataFrame.where(..., None)`: pandas-stubs'
+    `where()` overloads don't accept a bare `None` for `other` under mypy strict.
+    Shared by `_serialize_dataframe` below and `api/routers/runs.py::list_runs`."""
+    return [
+        {
+            key: (None if isinstance(value, float) and math.isnan(value) else value)
+            for key, value in row.items()
+        }
+        for row in records
+    ]
+
+
 def _serialize_dataframe(df: pd.DataFrame) -> list[dict[str, Any]]:
-    # NaN/NaT aren't valid JSON — FastAPI's default encoder would otherwise
-    # emit the (non-standard, some clients reject it) literal `NaN` token.
-    return df.astype(object).where(pd.notnull(df), None).to_dict(orient="records")  # type: ignore[return-value]
+    records = cast("list[dict[str, Any]]", df.to_dict(orient="records"))
+    return nan_to_none_records(records)
 
 
 def _serialize_figure(fig: Figure) -> dict[str, Any]:

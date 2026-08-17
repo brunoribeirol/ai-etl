@@ -5,14 +5,14 @@ already exists and is already tested."""
 import io
 import uuid
 from pathlib import Path
-from typing import Annotated, Any, Optional
+from typing import Annotated, Any, Optional, cast
 
 import pandas as pd
 from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile
 
 from ai_etl.api.config import RUNS_DIR, UPLOADS_DIR
 from ai_etl.api.deps import get_current_tenant_id
-from ai_etl.api.serialization import serialize_full_result
+from ai_etl.api.serialization import nan_to_none_records, serialize_full_result
 from ai_etl.audit.db import load_full_result, load_history
 from ai_etl.services.execution_queue import (
     RateLimitExceededError,
@@ -50,7 +50,8 @@ def list_runs(
     """Wraps `audit.db.load_history` — same tenant-scoped query the Streamlit
     History tab uses."""
     history = load_history(limit=limit, tenant_id=tenant_id)
-    return history.astype(object).where(pd.notnull(history), None).to_dict(orient="records")  # type: ignore[no-any-return]
+    records = cast("list[dict[str, Any]]", history.to_dict(orient="records"))
+    return nan_to_none_records(records)
 
 
 @router.get("/{run_id}")
