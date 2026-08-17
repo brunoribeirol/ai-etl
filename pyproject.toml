@@ -33,6 +33,16 @@ app = [
     "streamlit>=1.35.0",
 ]
 
+# Sprint 6 (ADR-011) — new HTTP API layer for the Next.js frontend. Separate
+# from `app` since `app` (Streamlit) is retired once the frontend cutover
+# (PR 6 of the Sprint 6 plan) completes; the two overlap only during the
+# transition.
+api = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "python-multipart>=0.0.12",
+]
+
 dev = [
     "pytest>=8.0.0",
     "pytest-mock>=3.14.0",
