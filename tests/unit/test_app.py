@@ -12,53 +12,12 @@ Two layers of coverage:
 from pathlib import Path
 from unittest.mock import MagicMock
 
-import pandas as pd
 import pytest
 from streamlit.testing.v1 import AppTest
 
 import app as app_module
 from ai_etl.audit import db as db_module
 from ai_etl.services import auth_service as auth_service_module
-
-# ---------------------------------------------------------------------------
-# _auto_generate_spec
-# ---------------------------------------------------------------------------
-
-
-def test_auto_generate_spec_includes_file_path_and_columns() -> None:
-    df = pd.DataFrame({"name": ["A"], "price": [1.0]})
-    spec = app_module._auto_generate_spec(Path("runs/uploads/abc123.csv"), df, Path("out.csv"))
-
-    assert "runs/uploads/abc123.csv" in spec
-    assert "name, price" in spec
-    assert "out.csv" in spec
-
-
-def test_auto_generate_spec_includes_business_question_hint() -> None:
-    df = pd.DataFrame({"a": [1]})
-    spec = app_module._auto_generate_spec(
-        Path("f.csv"), df, Path("out.csv"), business_question="Quais produtos vendem mais?"
-    )
-
-    assert "Quais produtos vendem mais?" in spec
-
-
-def test_auto_generate_spec_forbids_fabricating_critical_fields() -> None:
-    """Regression guard: this instruction is what stopped the Transformer from
-    inventing a fake row (fillna("Unknown") etc.) for missing name/category/price."""
-    df = pd.DataFrame({"name": ["A"]})
-    spec = app_module._auto_generate_spec(Path("f.csv"), df, Path("out.csv"))
-
-    assert "Do NOT fabricate values" in spec
-    assert "is_incomplete" in spec
-
-
-def test_auto_generate_spec_reports_row_and_column_counts() -> None:
-    df = pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]})
-    spec = app_module._auto_generate_spec(Path("f.csv"), df, Path("out.csv"))
-
-    assert "3 rows and 2 columns" in spec
-
 
 # ---------------------------------------------------------------------------
 # _save_upload_to_temp

@@ -1,4 +1,4 @@
-.PHONY: install test test-e2e lint format format-check type-check security check db-up db-down db-test-up app-db-up app-db-down app-db-test-up db-migrate run-scenario1 run-scenario2 run-scenario3 app redis-up celery-worker clean unhide-pth
+.PHONY: install test test-e2e lint format format-check type-check security check db-up db-down db-test-up app-db-up app-db-down app-db-test-up db-migrate run-scenario1 run-scenario2 run-scenario3 app api redis-up celery-worker clean unhide-pth
 
 install:
 	uv sync --all-extras
@@ -8,6 +8,13 @@ app:
 	uv sync --all-extras --quiet
 	@$(MAKE) unhide-pth
 	uv run streamlit run app.py
+
+# Sprint 6 (ADR-011) — the new HTTP API the Next.js frontend calls. Coexists
+# with `app` (Streamlit) until the frontend cutover retires it.
+api:
+	uv sync --all-extras --quiet
+	@$(MAKE) unhide-pth
+	uv run uvicorn ai_etl.api.main:app --reload
 
 # macOS + uv workaround: uv marks the .pth files it writes for editable
 # installs as "hidden" (UF_HIDDEN). Python >= 3.12.7 skips hidden .pth

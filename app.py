@@ -26,6 +26,7 @@ from ai_etl.services.execution_queue import (
     get_task_status,
 )
 from ai_etl.services.pipeline_service import AGENT_STEPS, ProgressCallback
+from ai_etl.services.spec_builder import auto_generate_spec
 
 # Poll interval for the "queued/running" state (Sprint 3, ADR-008) — short
 # enough to feel responsive, long enough not to hammer the Celery result
@@ -149,31 +150,6 @@ def _save_upload_to_temp(uploaded_file) -> Path:
     dest = UPLOADS_DIR / f"{uuid.uuid4().hex[:12]}{suffix}"
     dest.write_bytes(uploaded_file.getvalue())
     return dest
-
-
-def _auto_generate_spec(
-    file_path: Path,
-    df: pd.DataFrame,
-    output_csv: Path,
-    business_question: str = "",
-) -> str:
-    cols = ", ".join(df.columns.tolist())
-    n_rows, n_cols = df.shape
-    question_hint = f" A análise responderá: {business_question}." if business_question else ""
-    return (
-        f"Read the file at {file_path}. "
-        f"The file has {n_rows} rows and {n_cols} columns: {cols}.{question_hint} "
-        f"Clean the data: remove completely duplicate rows, standardize column names to snake_case, "
-        f"parse date columns where obvious. "
-        f"For missing values in non-critical numeric columns, fill with a reasonable default "
-        f"(e.g. 0 or the column mean) only when that is a safe assumption. "
-        f"Do NOT fabricate values for missing identifying or categorical fields "
-        f"(e.g. name, id, category) — never invent a name, category, or price. "
-        f"Instead, add a boolean column 'is_incomplete' set to true for rows with missing "
-        f"critical fields, and leave the original value missing (NaN) in those rows. "
-        f"Preserve all rows and all original columns. "
-        f"Save the cleaned result to {output_csv}."
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -720,7 +696,7 @@ def _tab_executar(tenant_id: str) -> None:
             if uploaded_file and df_bronze is not None:
                 saved_path = _save_upload_to_temp(uploaded_file)
                 output_csv = RUNS_DIR / f"{uuid.uuid4()}_silver.csv"
-                spec = _auto_generate_spec(
+                spec = auto_generate_spec(
                     saved_path, df_bronze, output_csv, business_question.strip()
                 )
                 # Sprint 3 fix: the worker is a separate process/container
