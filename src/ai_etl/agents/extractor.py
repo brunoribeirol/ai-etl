@@ -7,6 +7,7 @@ import pandas as pd
 from ai_etl.audit.logger import log_action
 from ai_etl.core.state import PipelineState
 from ai_etl.sources.csv_source import load_csv
+from ai_etl.sources.document_source import load_document
 from ai_etl.sources.postgres_source import load_postgres
 from ai_etl.sources.rest_source import load_rest
 
@@ -35,6 +36,8 @@ def extractor_node(state: PipelineState) -> PipelineState:
                 df = load_postgres(source["table"])
             elif source_type == "rest":
                 df = load_rest(source["url"], source.get("params", {}))
+            elif source_type == "document":
+                df = load_document(source["path"])
             else:
                 raise ValueError(f"Unsupported source type: {source_type}")
 

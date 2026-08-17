@@ -15,6 +15,49 @@ jobs:
       matrix:
         python-version: ["3.11", "3.12"]
 
+    # Postgres/Redis service containers, mirroring docker-compose.yml's
+    # postgres-test/app-postgres-test/redis (same ports/creds tests already
+    # default to) — added in Sprint 5 for tests/e2e/, and also lets
+    # tests/integration/ actually run here instead of self-skipping on an
+    # unreachable database (see tests/integration/test_audit_persistence.py's
+    # `_database_reachable()` skip).
+    services:
+      postgres-test:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: testdb
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      app-postgres-test:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: ai_etl_app_test
+          POSTGRES_PASSWORD: ai_etl_app_test
+          POSTGRES_DB: ai_etl_app_test_db
+        ports:
+          - 5435:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - uses: actions/checkout@v7
 
@@ -42,6 +85,11 @@ jobs:
 
       - name: Integration tests
         run: uv run pytest tests/integration/ -v
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+      - name: E2E tests
+        run: uv run pytest tests/e2e/ -v --timeout=300
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 

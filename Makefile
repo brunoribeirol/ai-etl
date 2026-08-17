@@ -41,7 +41,7 @@ security:
 	uv run bandit -c pyproject.toml -r src/ai_etl/
 	uv run pip-audit
 
-check: lint format-check type-check test security
+check: lint format-check type-check test test-e2e security
 
 db-up:
 	docker-compose up -d postgres

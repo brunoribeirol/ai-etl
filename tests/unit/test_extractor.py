@@ -24,6 +24,18 @@ def test_csv_source_extracted(mocker) -> None:
     assert result["error"] is None
 
 
+def test_document_source_extracted(mocker) -> None:
+    df = pd.DataFrame({"product": ["A", "B"], "revenue": [100, 200]})
+    mocker.patch("ai_etl.agents.extractor.load_document", return_value=df)
+
+    sources = [{"name": "report", "type": "document", "path": "report.pdf"}]
+    result = extractor_node(_make_state(sources))
+
+    assert "report" in result["extracted_data"]
+    assert result["extracted_data"]["report"].equals(df)
+    assert result["error"] is None
+
+
 def test_source_schema_has_required_fields(mocker) -> None:
     df = pd.DataFrame({"price": [10.0, None], "qty": [2, 3]})
     mocker.patch("ai_etl.agents.extractor.load_csv", return_value=df)
