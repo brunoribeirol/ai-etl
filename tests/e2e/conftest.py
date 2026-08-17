@@ -180,12 +180,20 @@ def test_tenant(
 def mock_pipeline_llm(mocker) -> Callable[[dict, str], None]:
     """Patches every LLM call site `run_full_analysis` touches, so e2e
     scenarios exercise the real pipeline/sandbox/async/auth plumbing without a
-    real OpenAI call. Planner is always mocked to return zero sub-tasks — these
-    scenarios are Silver-ETL only, no business question — but `run_full_analysis`
-    calls Advisor unconditionally whenever Silver produces a non-empty
-    DataFrame, regardless of how many (if any) Gold/Science sub-tasks ran, so
-    Advisor's LLM call is mocked too, or these scenarios would hit a real
-    (credential-less, in CI) OpenAI call and fail with OpenAIError.
+    real OpenAI call.
+
+    These scenarios pass `business_question=""` (Silver-ETL only, no real
+    question) — but `agents/planner.py::plan_analysis_tasks` treats an empty
+    (or unparseable) LLM response as a *decomposition failure*, not "zero
+    tasks", and falls back to exactly one descriptive task wrapping the
+    (empty) question. That one task always reaches Gold (`agents/analyst.py`),
+    never Science (the fallback is hardcoded `"type": "descriptive"`), so
+    Analyst's LLM call must be mocked too — and `run_full_analysis` also calls
+    Advisor unconditionally afterward regardless of how many sub-tasks ran.
+    Skipping any of the three (Planner/Analyst/Advisor) makes a real,
+    credential-less `ChatOpenAI` get constructed in CI and fail with
+    `OpenAIError` well before the mocked orchestrator/transformer code ever
+    gets exercised.
 
     Returns `configure(plan: dict, transform_code: str) -> None`.
     """
@@ -214,6 +222,17 @@ def mock_pipeline_llm(mocker) -> Callable[[dict, str], None]:
         planner_llm = MagicMock()
         planner_llm.invoke.return_value = _mock_response("[]")
         mocker.patch("ai_etl.agents.planner.get_llm", return_value=planner_llm)
+
+        # Reached via Planner's fallback-to-one-task path (see docstring
+        # above) — a trivial, always-valid Gold script wrapping the real
+        # `df` global the sandbox exposes (script mode's contract, ADR-007).
+        analyst_llm = MagicMock()
+        analyst_llm.invoke.return_value = _mock_response(
+            "gold_df = df.head(1)\n"
+            "fig = go.Figure()\n"  # `fig` must be a real Figure, not None (analyst.py's contract)
+            'narrative = "No business question was asked."'
+        )
+        mocker.patch("ai_etl.agents.analyst.get_llm", return_value=analyst_llm)
 
         advisor_llm = MagicMock()
         advisor_llm.invoke.return_value = _mock_response(
