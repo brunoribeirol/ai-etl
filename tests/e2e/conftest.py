@@ -178,26 +178,48 @@ def test_tenant(
 
 @pytest.fixture
 def mock_pipeline_llm(mocker) -> Callable[[dict, str], None]:
-    """Patches every LLM call site the Silver-ETL + Planner path touches, so
-    e2e scenarios exercise the real pipeline/sandbox/async/auth plumbing
-    without a real OpenAI call. Planner is always mocked to return zero
-    sub-tasks — these scenarios are Silver-ETL only, no business question.
+    """Patches every LLM call site `run_full_analysis` touches, so e2e
+    scenarios exercise the real pipeline/sandbox/async/auth plumbing without a
+    real OpenAI call. Planner is always mocked to return zero sub-tasks — these
+    scenarios are Silver-ETL only, no business question — but `run_full_analysis`
+    calls Advisor unconditionally whenever Silver produces a non-empty
+    DataFrame, regardless of how many (if any) Gold/Science sub-tasks ran, so
+    Advisor's LLM call is mocked too, or these scenarios would hit a real
+    (credential-less, in CI) OpenAI call and fail with OpenAIError.
 
     Returns `configure(plan: dict, transform_code: str) -> None`.
     """
 
+    _zero_usage = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+
+    def _mock_response(content: str) -> MagicMock:
+        # `extract_token_usage` (core/llm.py) reads `.usage_metadata` off the
+        # response — a bare MagicMock auto-vivifies that attribute into
+        # another (truthy, non-dict) MagicMock instead of leaving it unset,
+        # which breaks `int(usage.get(...))` downstream. Must be set
+        # explicitly, same pattern tests/unit/test_planner.py already uses.
+        response = MagicMock(content=content)
+        response.usage_metadata = dict(_zero_usage)
+        return response
+
     def configure(plan: dict, transform_code: str) -> None:
         orchestrator_llm = MagicMock()
-        orchestrator_llm.invoke.return_value = MagicMock(content=json.dumps(plan))
+        orchestrator_llm.invoke.return_value = _mock_response(json.dumps(plan))
         mocker.patch("ai_etl.agents.orchestrator.get_llm", return_value=orchestrator_llm)
 
         transformer_llm = MagicMock()
-        transformer_llm.invoke.return_value = MagicMock(content=transform_code)
+        transformer_llm.invoke.return_value = _mock_response(transform_code)
         mocker.patch("ai_etl.agents.transformer.get_llm", return_value=transformer_llm)
 
         planner_llm = MagicMock()
-        planner_llm.invoke.return_value = MagicMock(content="[]")
+        planner_llm.invoke.return_value = _mock_response("[]")
         mocker.patch("ai_etl.agents.planner.get_llm", return_value=planner_llm)
+
+        advisor_llm = MagicMock()
+        advisor_llm.invoke.return_value = _mock_response(
+            json.dumps({"recommendations": [], "summary": "No sub-tasks were run."})
+        )
+        mocker.patch("ai_etl.agents.advisor.get_llm", return_value=advisor_llm)
 
     return configure
 
