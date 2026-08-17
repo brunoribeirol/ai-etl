@@ -28,6 +28,9 @@ were removed in `@clerk/nextjs` v7 "Core 3").
 
 ```bash
 npm run lint
-npx tsc --noEmit
-npm run build
+npm run build   # runs its own TypeScript check as part of the build
 ```
+
+(`npx tsc --noEmit` also works, but only *after* a build has run at least
+once — it needs Next.js's generated global types, e.g. `LayoutProps`, from
+`.next/types/`.)
