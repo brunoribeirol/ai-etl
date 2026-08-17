@@ -1,0 +1,12 @@
+version: 2
+secret:
+  ignored-matches:
+    # CI service-container Postgres password (.github/workflows/ci.yml,
+    # app-postgres-test service) — a throwaway, local-only test credential,
+    # not a real secret. Identical value already committed in plaintext in
+    # docker-compose.yml (app-postgres-test service), predating GitGuardian's
+    # installation on this repo, so this is the exact same non-issue
+    # resurfacing in a new file (Sprint 5, ADR-010/tests/e2e/ PR), not a new
+    # credential.
+    - match: "ai_etl_app_test"
+      name: "ci-postgres-test-password"

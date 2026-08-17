@@ -15,10 +15,11 @@ The user provided this pipeline specification:
 Extract a structured pipeline plan as JSON with these fields:
 - sources: list of data sources, each with:
     - name (string identifier)
-    - type: "csv" | "postgres" | "rest"
+    - type: "csv" | "postgres" | "rest" | "document"
     - For csv: path (file path)
     - For postgres: table (schema.table)
     - For rest: url (endpoint URL), params (optional query params dict)
+    - For document: path (PDF or DOCX file path)
 - destination: target output, with:
     - type: "csv" | "postgres"
     - For csv: path (output file path)
@@ -26,7 +27,7 @@ Extract a structured pipeline plan as JSON with these fields:
 - transformations: list of transformation descriptions in plain English
 - quality_checks: list of quality checks to apply (infer from spec, default to: null_check, duplicate_check)
 
-Available source types: csv, postgres, rest
+Available source types: csv, postgres, rest, document
 Available destination types: csv, postgres
 
 Respond ONLY with valid JSON. No explanation, no markdown code fences.

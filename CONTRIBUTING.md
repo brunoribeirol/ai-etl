@@ -31,7 +31,7 @@ make check         # all of the above in one command
 ## Branching and commits
 
 - Branch from `main`. Use one of the following prefixes:
-  - `feature/` — new functionality
+  - `feat/` — new functionality
   - `fix/` — bug fixes
   - `chore/` — maintenance (deps, CI, docs)
 - Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/):

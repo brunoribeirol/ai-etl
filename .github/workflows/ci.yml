@@ -50,3 +50,70 @@ jobs:
 
       - name: Security — pip-audit
         run: uv run pip-audit
+
+  e2e:
+    name: "E2E (Sprint 5) — full stack against real Postgres/Redis"
+    runs-on: ubuntu-latest
+    # Deliberately its own job, not folded into `check`'s matrix: giving the
+    # `check` job's services a live Postgres would also make
+    # tests/integration/ stop self-skipping (see
+    # tests/integration/test_audit_persistence.py's `_database_reachable()`
+    # guard) and start running for real — which surfaced pre-existing,
+    # unrelated integration-test bugs predating this PR (a tenant_id NOT NULL
+    # constraint mismatch, an Alembic migration-test table-already-exists
+    # conflict) that are out of Sprint 5's scope to fix here. Isolating e2e in
+    # its own job with its own services keeps `check` behavior unchanged.
+    services:
+      postgres-test:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: testdb
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      app-postgres-test:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: ai_etl_app_test
+          POSTGRES_PASSWORD: ai_etl_app_test
+          POSTGRES_DB: ai_etl_app_test_db
+        ports:
+          - 5435:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: E2E tests
+        run: uv run pytest tests/e2e/ -v --timeout=300
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
