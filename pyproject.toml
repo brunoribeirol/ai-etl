@@ -23,13 +23,24 @@ dependencies = [
     "boto3>=1.34.0",
     "pypdf>=4.0.0",
     "python-docx>=1.1.0",
-]
-
-[project.optional-dependencies]
-app = [
+    # Real pipeline runtime dependencies, not Streamlit-only despite living
+    # under the `app` extra until Sprint 6 (2026-08-17): `agents/analyst.py`/
+    # `agents/science.py` import these inside the sandbox via `extra_modules`
+    # (`px`/`go` -> plotly, sklearn estimators, statsmodels) to generate
+    # charts and fit models — code paths the API (`src/ai_etl/api/`) exercises
+    # too, same as Streamlit. Moved to base `dependencies` so a future
+    # Streamlit-only trim (Sprint 6 PR 6's Railway cutover) can't silently
+    # drop something the pipeline itself needs at runtime.
     "plotly>=6.8.0",
     "scikit-learn>=1.4.0",
     "statsmodels>=0.14.0",
+]
+
+[project.optional-dependencies]
+# Streamlit UI only, now that plotly/sklearn/statsmodels moved to base
+# dependencies above — being retired in Sprint 6 (ADR-011) once the Next.js
+# frontend covers the same surface.
+app = [
     "streamlit>=1.35.0",
 ]
 
