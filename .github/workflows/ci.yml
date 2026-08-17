@@ -15,12 +15,54 @@ jobs:
       matrix:
         python-version: ["3.11", "3.12"]
 
-    # Postgres/Redis service containers, mirroring docker-compose.yml's
-    # postgres-test/app-postgres-test/redis (same ports/creds tests already
-    # default to) — added in Sprint 5 for tests/e2e/, and also lets
-    # tests/integration/ actually run here instead of self-skipping on an
-    # unreachable database (see tests/integration/test_audit_persistence.py's
-    # `_database_reachable()` skip).
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Lint
+        run: uv run ruff check src/ tests/
+
+      - name: Format check
+        run: uv run ruff format --check src/ tests/
+
+      - name: Type check
+        run: uv run mypy src/
+
+      - name: Unit tests
+        run: uv run pytest tests/unit/ -v --cov=src/ai_etl --cov-report=term-missing --cov-fail-under=80
+
+      - name: Integration tests
+        run: uv run pytest tests/integration/ -v
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+      - name: Security — bandit
+        run: uv run bandit -c pyproject.toml -r src/ai_etl/
+
+      - name: Security — pip-audit
+        run: uv run pip-audit
+
+  e2e:
+    name: "E2E (Sprint 5) — full stack against real Postgres/Redis"
+    runs-on: ubuntu-latest
+    # Deliberately its own job, not folded into `check`'s matrix: giving the
+    # `check` job's services a live Postgres would also make
+    # tests/integration/ stop self-skipping (see
+    # tests/integration/test_audit_persistence.py's `_database_reachable()`
+    # guard) and start running for real — which surfaced pre-existing,
+    # unrelated integration-test bugs predating this PR (a tenant_id NOT NULL
+    # constraint mismatch, an Alembic migration-test table-already-exists
+    # conflict) that are out of Sprint 5's scope to fix here. Isolating e2e in
+    # its own job with its own services keeps `check` behavior unchanged.
     services:
       postgres-test:
         image: postgres:15-alpine
@@ -65,36 +107,13 @@ jobs:
         with:
           version: "latest"
 
-      - name: Set up Python ${{ matrix.python-version }}
-        run: uv python install ${{ matrix.python-version }}
+      - name: Set up Python
+        run: uv python install 3.12
 
       - name: Install dependencies
         run: uv sync --all-extras
-
-      - name: Lint
-        run: uv run ruff check src/ tests/
-
-      - name: Format check
-        run: uv run ruff format --check src/ tests/
-
-      - name: Type check
-        run: uv run mypy src/
-
-      - name: Unit tests
-        run: uv run pytest tests/unit/ -v --cov=src/ai_etl --cov-report=term-missing --cov-fail-under=80
-
-      - name: Integration tests
-        run: uv run pytest tests/integration/ -v
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
       - name: E2E tests
         run: uv run pytest tests/e2e/ -v --timeout=300
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-
-      - name: Security — bandit
-        run: uv run bandit -c pyproject.toml -r src/ai_etl/
-
-      - name: Security — pip-audit
-        run: uv run pip-audit
