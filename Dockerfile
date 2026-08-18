@@ -13,21 +13,20 @@ WORKDIR /app
 COPY pyproject.toml uv.lock* README.md ./
 COPY src/ ./src/
 
-# Install production dependencies + the `app` extra (streamlit, required to
-# run app.py) and the `api` extra (fastapi/uvicorn, required to run the new
-# ai_etl.api.main FastAPI app, Sprint 6/ADR-011). One shared image serves
-# all three Railway services (Streamlit web, FastAPI web, Celery worker)
-# during the transition — both extras stay installed until app.py/`app` is
-# retired in Sprint 6's PR 6 cutover. No dev extras (pytest, mypy, ruff, ...)
-# in the runtime image.
-RUN uv sync --no-dev --no-editable --extra app --extra api
+# Install production dependencies + the `api` extra (fastapi/uvicorn,
+# required to run ai_etl.api.main, Sprint 6/ADR-011). This one shared image
+# serves all Railway services (FastAPI web, Celery worker). Streamlit's
+# `app` extra was retired in Sprint 6's PR 6 cutover — app.py is gone.
+# No dev extras (pytest, mypy, ruff, ...) in the runtime image.
+RUN uv sync --no-dev --no-editable --extra api
 
 # Copy remaining files
 COPY case_study/ ./case_study/
 COPY .env.example .env.example
-COPY app.py ./app.py
 
 ENV PATH="/app/.venv/bin:$PATH"
 
-# Railway injects $PORT at runtime; do not hardcode 8501.
-ENTRYPOINT ["sh", "-c", "streamlit run app.py --server.port=$PORT --server.address=0.0.0.0"]
+# Railway injects $PORT at runtime; `sh -c` is required for it to expand —
+# Railway runs ENTRYPOINT/startCommand without a shell otherwise (see
+# docs/CURRENT_STATE.md's PR #20/#46 history).
+ENTRYPOINT ["sh", "-c", "uvicorn ai_etl.api.main:app --host 0.0.0.0 --port $PORT"]
