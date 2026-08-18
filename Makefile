@@ -1,16 +1,11 @@
-.PHONY: install test test-e2e lint format format-check type-check security check db-up db-down db-test-up app-db-up app-db-down app-db-test-up db-migrate run-scenario1 run-scenario2 run-scenario3 app api redis-up celery-worker clean unhide-pth
+.PHONY: install test test-e2e lint format format-check type-check security check db-up db-down db-test-up app-db-up app-db-down app-db-test-up db-migrate run-scenario1 run-scenario2 run-scenario3 api redis-up celery-worker clean unhide-pth
 
 install:
 	uv sync --all-extras
 	@$(MAKE) unhide-pth
 
-app:
-	uv sync --all-extras --quiet
-	@$(MAKE) unhide-pth
-	uv run streamlit run app.py
-
-# Sprint 6 (ADR-011) — the new HTTP API the Next.js frontend calls. Coexists
-# with `app` (Streamlit) until the frontend cutover retires it.
+# Sprint 6 (ADR-011) — the HTTP API the Next.js frontend calls. Replaced
+# the old Streamlit `app` target in the PR 6 cutover.
 api:
 	uv sync --all-extras --quiet
 	@$(MAKE) unhide-pth

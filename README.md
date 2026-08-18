@@ -30,7 +30,6 @@ ai-etl/
 │   ├── audit/            #   Postgres audit trail (runs/analysis_runs) + storage.py (local/S3)
 │   ├── services/          #   pipeline orchestration, Celery async queue, auth, spec builder
 │   └── api/               #   FastAPI HTTP layer for the frontend (ADR-011)
-├── app.py                # Streamlit UI — being retired in favor of frontend/ (Sprint 6, ADR-011)
 ├── tests/{unit,integration,e2e}/
 ├── alembic/               # Postgres migrations for the audit-trail database
 ├── docs/{adr,work}/       # Architecture Decision Records + implementation plans
@@ -59,7 +58,7 @@ Physically separating the Python backend into its own `backend/` directory (mirr
 
 Every agent shares a `PipelineState` TypedDict — no agent communicates directly with another, all information flows through state. Every action is logged to an auditable trail (Postgres `runs`/`analysis_runs`, plus JSON/CSV/figure artifacts via `audit/storage.py`, local disk by default or S3 when `STORAGE_BACKEND=s3` — ADR-009).
 
-Auth is Clerk (JWT/JWKS, verified server-side, ADR-006); the API (`src/ai_etl/api/`) and the Streamlit UI both call the exact same `services/auth_service.verify_session_token()` — no separate auth path per surface.
+Auth is Clerk (JWT/JWKS, verified server-side, ADR-006), verified by the API (`src/ai_etl/api/`) via `services/auth_service.verify_session_token()`.
 
 ---
 
@@ -75,7 +74,6 @@ make app-db-up               # application database (audit trail)
 make db-migrate
 make redis-up                # Redis (Celery broker/backend, ADR-008)
 
-make app                     # Streamlit UI, http://localhost:8501
 make api                     # FastAPI, http://localhost:8000 (Sprint 6, ADR-011)
 make celery-worker           # async pipeline execution worker
 
