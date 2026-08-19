@@ -202,7 +202,9 @@ def test_run_full_analysis_task_rematerializes_file_before_running(
     dest = tmp_path / "uploads" / "abc123.csv"
     file_existed_at_call_time = {}
 
-    def _fake_run_full_analysis(spec, business_question, run_dir, tenant_id):
+    def _fake_run_full_analysis(
+        spec, business_question, run_dir, progress_callback=None, tenant_id=None
+    ):
         file_existed_at_call_time["exists"] = dest.exists()
         file_existed_at_call_time["content"] = dest.read_bytes() if dest.exists() else None
         return {"state": {"run_id": "r1", "status": "completed", "error": None}, "tokens": {}}
@@ -225,7 +227,9 @@ def test_run_full_analysis_task_rematerializes_file_before_running(
 def test_run_full_analysis_task_skips_write_when_no_file(monkeypatch: pytest.MonkeyPatch) -> None:
     """The manual-spec flow (no upload) must not require file_path/file_bytes_b64."""
 
-    def _fake_run_full_analysis(spec, business_question, run_dir, tenant_id):
+    def _fake_run_full_analysis(
+        spec, business_question, run_dir, progress_callback=None, tenant_id=None
+    ):
         return {"state": {"run_id": "r1", "status": "completed", "error": None}, "tokens": {}}
 
     monkeypatch.setattr(eq_module, "run_full_analysis", _fake_run_full_analysis)
