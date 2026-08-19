@@ -14,6 +14,17 @@ from ai_etl.sources.postgres_source import load_postgres
 from ai_etl.sources.rest_source import load_rest
 from ai_etl.sources.sqlite_source import load_sqlite
 
+# Sprint 12 (ADR-012): the raw per-row sample used to scale with column count with no
+# cap — `df.head(3).to_dict(orient="records")` over ALL columns is 3 x n_cols values per
+# source. Real profiling against a 200k x 300 benchmark confirmed this as the dominant
+# contributor to source_schemas' serialized size, growing linearly and unbounded with
+# source width. Capping the sample to the first MAX_SAMPLE_COLUMNS columns keeps the
+# sample's job (help the LLM infer formats/units from a few concrete values) without
+# paying full-width cost for every source, at every source-count multiplier. 20 is chosen
+# as comfortably enough columns to infer format conventions from, well above every
+# existing case-study source (<=8 columns), so this is a no-op for current scenarios.
+MAX_SAMPLE_COLUMNS = 20
+
 
 def extractor_node(state: PipelineState) -> PipelineState:
     """Load each source defined in pipeline_plan into a DataFrame.
@@ -87,10 +98,24 @@ def extractor_node(state: PipelineState) -> PipelineState:
 
 
 def _extract_schema(df: pd.DataFrame) -> dict[str, Any]:
+    """Build the schema summary fed into the Orchestrator/Transformer prompts.
+
+    `dtypes`/`null_counts`/`columns` stay full-width — one small scalar per column,
+    not per-row sampled values, so they don't scale the way the raw sample does.
+    `sample` is capped to the first MAX_SAMPLE_COLUMNS columns (ADR-012, Sprint 12
+    scale profiling) — see module-level constant docstring for why.
+    """
+    null_counts = df.isnull().sum().to_dict()
+    n_rows = len(df)
+    sample_columns = df.columns[:MAX_SAMPLE_COLUMNS]
     return {
         "columns": df.columns.tolist(),
         "dtypes": {col: str(dtype) for col, dtype in df.dtypes.items()},
         "shape": list(df.shape),
-        "sample": df.head(3).to_dict(orient="records"),
-        "null_counts": df.isnull().sum().to_dict(),
+        "sample": df[sample_columns].head(3).to_dict(orient="records"),
+        "sample_truncated": len(df.columns) > MAX_SAMPLE_COLUMNS,
+        "null_counts": null_counts,
+        "null_ratio": {
+            col: round(count / n_rows, 4) if n_rows else 0.0 for col, count in null_counts.items()
+        },
     }

@@ -2,7 +2,7 @@
 
 import pandas as pd
 
-from ai_etl.agents.extractor import _extract_schema, extractor_node
+from ai_etl.agents.extractor import MAX_SAMPLE_COLUMNS, _extract_schema, extractor_node
 from ai_etl.core.state import initial_state
 
 
@@ -153,7 +153,10 @@ def test_source_schema_has_required_fields(mocker) -> None:
     assert "shape" in schema
     assert "sample" in schema
     assert "null_counts" in schema
+    assert "null_ratio" in schema
+    assert "sample_truncated" in schema
     assert schema["null_counts"]["price"] == 1
+    assert schema["null_ratio"]["price"] == 0.5
 
 
 def test_connector_failure_sets_error(mocker) -> None:
@@ -204,3 +207,46 @@ def test_extract_schema_shape_is_list() -> None:
     schema = _extract_schema(df)
     assert isinstance(schema["shape"], list)
     assert schema["shape"] == [3, 1]
+
+
+def test_extract_schema_narrow_source_not_truncated() -> None:
+    """A source narrower than MAX_SAMPLE_COLUMNS (every case-study source today) gets
+    a full-width sample, unchanged from pre-ADR-012 behavior."""
+    df = pd.DataFrame({"a": [1, 2], "b": ["x", "y"]})
+    schema = _extract_schema(df)
+
+    assert schema["sample_truncated"] is False
+    assert len(schema["sample"][0]) == 2
+    assert set(schema["sample"][0].keys()) == {"a", "b"}
+
+
+def test_extract_schema_wide_source_sample_capped() -> None:
+    """ADR-012: a wide source's raw sample is capped to MAX_SAMPLE_COLUMNS columns,
+    not the full column count — this is the fix for the confirmed Sprint 12 finding
+    that the sample scaled linearly and unbounded with column count."""
+    n_cols = MAX_SAMPLE_COLUMNS + 50
+    df = pd.DataFrame({f"col_{i}": [1, 2, 3] for i in range(n_cols)})
+
+    schema = _extract_schema(df)
+
+    assert schema["sample_truncated"] is True
+    assert len(schema["sample"][0]) == MAX_SAMPLE_COLUMNS
+    # dtypes/columns/null_counts/null_ratio stay full-width — only the raw sample is capped.
+    assert len(schema["dtypes"]) == n_cols
+    assert len(schema["columns"]) == n_cols
+    assert len(schema["null_counts"]) == n_cols
+    assert len(schema["null_ratio"]) == n_cols
+
+
+def test_extract_schema_null_ratio_is_proportional() -> None:
+    df = pd.DataFrame({"price": [10.0, None, None, 5.0]})
+    schema = _extract_schema(df)
+
+    assert schema["null_ratio"]["price"] == 0.5
+
+
+def test_extract_schema_null_ratio_empty_dataframe_no_zero_division() -> None:
+    df = pd.DataFrame({"price": pd.Series([], dtype=float)})
+    schema = _extract_schema(df)
+
+    assert schema["null_ratio"]["price"] == 0.0

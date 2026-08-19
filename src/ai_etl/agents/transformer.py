@@ -4,8 +4,13 @@ import json
 
 from ai_etl.audit.logger import log_action
 from ai_etl.core.llm import get_llm
-from ai_etl.core.sandbox import execute_in_sandbox
+from ai_etl.core.sandbox import execute_in_sandbox, scale_timeout_for_rows
 from ai_etl.core.state import PipelineState
+
+# Matches core/sandbox.py's own default — made explicit here (rather than relying on
+# execute_in_sandbox()'s default parameter) so it has a name to scale via
+# scale_timeout_for_rows() below (ADR-012).
+TRANSFORMER_TIMEOUT_SECONDS = 30
 
 TRANSFORMER_PROMPT = """You are a Python data transformation expert.
 
@@ -81,13 +86,21 @@ def transformer_node(state: PipelineState) -> PipelineState:
 
     last_error: str | None = None
     attempts = state.get("transformation_attempts", 0)
+    # ADR-012: scaled by the largest source — Transformer receives every extracted
+    # source at once (unlike Analyst/Science, which get a single already-merged
+    # Silver DataFrame), so the widest single input bounds how long legitimate
+    # cleaning/merging code over it can take.
+    max_source_rows = max((len(df) for df in state["extracted_data"].values()), default=0)
+    timeout_seconds = scale_timeout_for_rows(TRANSFORMER_TIMEOUT_SECONDS, max_source_rows)
 
     for _ in range(MAX_ATTEMPTS):
         attempts += 1
         response = llm.invoke(prompt)
         code = _clean_code(str(response.content))
 
-        sandbox_result = execute_in_sandbox(code, state["extracted_data"], mode="function")
+        sandbox_result = execute_in_sandbox(
+            code, state["extracted_data"], mode="function", timeout_seconds=timeout_seconds
+        )
         result = sandbox_result["values"].get("result")
         error = sandbox_result["error"]
 

@@ -15,7 +15,7 @@ import pandas as pd
 
 from ai_etl.core.analysis_types import ScienceResult, TokenUsage
 from ai_etl.core.llm import extract_token_usage, get_llm, sum_token_usage
-from ai_etl.core.sandbox import execute_in_sandbox
+from ai_etl.core.sandbox import execute_in_sandbox, scale_timeout_for_rows
 
 # Higher than Analyst's (15s) but still lower than Transformer's default (30s,
 # core/sandbox.py) — Science's sandboxed code can legitimately do model fitting
@@ -302,6 +302,9 @@ def run_science(df: pd.DataFrame, business_question: str) -> ScienceResult:
     last_error = ""
     last_code = ""
     attempt_usages: list[TokenUsage] = []
+    # ADR-012: scaled once per call (not per attempt) — the input size doesn't
+    # change across retries, only the generated code does.
+    timeout_seconds = scale_timeout_for_rows(SCIENCE_TIMEOUT_SECONDS, len(df))
 
     for attempt in range(1, 4):
         if attempt == 1:
@@ -321,14 +324,14 @@ def run_science(df: pd.DataFrame, business_question: str) -> ScienceResult:
             result_vars=["predictions_df", "fig", "narrative", "model_info"],
             extra_globals=extra_globals,
             extra_modules=extra_modules,
-            timeout_seconds=SCIENCE_TIMEOUT_SECONDS,
+            timeout_seconds=timeout_seconds,
         )
 
         if sandbox_result["timed_out"]:
             # Distinct failure mode from an exception (ADR-007) — feeds the same
             # last_error/retry-prompt channel, but with a message that hints the
             # LLM toward cheaper code on the next attempt instead of an opaque trace.
-            last_error = f"Execution exceeded {SCIENCE_TIMEOUT_SECONDS}s — simplify the computation"
+            last_error = f"Execution exceeded {timeout_seconds}s — simplify the computation"
             continue
 
         if sandbox_result["error"] is not None:

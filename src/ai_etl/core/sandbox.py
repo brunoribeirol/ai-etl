@@ -80,6 +80,41 @@ SAFE_GLOBALS: dict[str, Any] = {
 # already misbehaving; this just bounds how long that can delay the caller.
 _TERMINATE_GRACE_SECONDS = 2
 
+# Sprint 12 (ADR-012): real profiling against a 200k-row x 300-col benchmark
+# (docs/work/2026-08-19-sprint12-scale-profiling.md) confirmed the fixed
+# per-call-site timeout (Transformer 30s default, Analyst 15s, Science 20s) does
+# NOT scale with input size — at 204,000 rows, representative Science-style code
+# (a real RandomForestRegressor fit, the exact operation Science's own prompt asks
+# the LLM to write) hit the 20s ceiling and timed out; representative Analyst-style
+# code (a single groupby+aggregate) used ~90% of its 15s budget. Every existing
+# case-study scenario tops out at 10,000 rows, well under the threshold below, so
+# this is a no-op for current scenarios — it only engages for inputs materially
+# larger than anything exercised before this sprint.
+LARGE_DATASET_ROW_THRESHOLD = 50_000
+LARGE_DATASET_TIMEOUT_MULTIPLIER = 2
+
+# Deliberately a simple step function, not a continuous formula fit to a curve —
+# only one large-scale data point (204k rows) has been measured so far;
+# extrapolating a precise row-count-proportional curve from a single point would
+# be false precision. A flat 2x multiplier above the threshold gave real
+# headroom against that one measured point (Science: 20s -> 40s effective budget,
+# comfortably above the ~21s it actually needed) without guessing at the true
+# shape of the timing curve between 10k and 204k rows. Revisit with intermediate
+# measurements (50k/100k/150k rows) before refining further.
+
+
+def scale_timeout_for_rows(base_timeout_seconds: int, n_rows: int) -> int:
+    """Scale a sandbox `timeout_seconds` budget for large inputs.
+
+    Called by Transformer/Analyst/Science with the row count of the DataFrame(s)
+    actually being processed, before passing `timeout_seconds` to
+    `execute_in_sandbox()`. See the module-level constants above for the
+    real-measurement rationale behind the threshold and multiplier.
+    """
+    if n_rows > LARGE_DATASET_ROW_THRESHOLD:
+        return base_timeout_seconds * LARGE_DATASET_TIMEOUT_MULTIPLIER
+    return base_timeout_seconds
+
 
 class SandboxResult(TypedDict):
     """Outcome of one `execute_in_sandbox()` call.

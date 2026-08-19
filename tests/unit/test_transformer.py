@@ -76,6 +76,48 @@ def test_audit_log_entry_added_on_success(mock_get_llm) -> None:
     assert any(e["action"] == "code_executed" for e in result["audit_log"])
 
 
+def test_scales_timeout_for_large_source(mocker, mock_get_llm) -> None:
+    """ADR-012: the largest extracted source (not just the Silver output)
+    determines the sandbox timeout budget — Transformer receives every raw
+    source at once, unlike Analyst/Science's single merged Silver input."""
+    from ai_etl.core import sandbox as sandbox_module
+
+    mock_get_llm.return_value = _mock_llm([VALID_CODE])
+    state = _make_state()
+    big_df = pd.concat(
+        [state["extracted_data"]["orders"]]
+        * (
+            (sandbox_module.LARGE_DATASET_ROW_THRESHOLD // len(state["extracted_data"]["orders"]))
+            + 1
+        ),
+        ignore_index=True,
+    )
+    state["extracted_data"]["orders"] = big_df
+    spy = mocker.patch(
+        "ai_etl.agents.transformer.execute_in_sandbox", wraps=sandbox_module.execute_in_sandbox
+    )
+
+    transformer_node(state)
+
+    assert (
+        spy.call_args.kwargs["timeout_seconds"]
+        == 30 * sandbox_module.LARGE_DATASET_TIMEOUT_MULTIPLIER
+    )
+
+
+def test_timeout_unchanged_for_small_source(mocker, mock_get_llm) -> None:
+    from ai_etl.core import sandbox as sandbox_module
+
+    mock_get_llm.return_value = _mock_llm([VALID_CODE])
+    spy = mocker.patch(
+        "ai_etl.agents.transformer.execute_in_sandbox", wraps=sandbox_module.execute_in_sandbox
+    )
+
+    transformer_node(_make_state())
+
+    assert spy.call_args.kwargs["timeout_seconds"] == 30
+
+
 def test_sandbox_error_triggers_retry(mock_get_llm) -> None:
     mock_get_llm.return_value = _mock_llm([INVALID_CODE, INVALID_CODE, VALID_CODE])
     result = transformer_node(_make_state())

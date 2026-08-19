@@ -13,7 +13,7 @@ import pandas as pd
 
 from ai_etl.core.analysis_types import GoldResult, TokenUsage
 from ai_etl.core.llm import extract_token_usage, get_llm, sum_token_usage
-from ai_etl.core.sandbox import execute_in_sandbox
+from ai_etl.core.sandbox import execute_in_sandbox, scale_timeout_for_rows
 
 # Lower than Transformer's default (30s, core/sandbox.py) — deliberately, per
 # ADR-007's flagged-but-unfixed compounding concern. Analyst retries up to 3x
@@ -157,6 +157,9 @@ def run_analyst(df: pd.DataFrame, business_question: str) -> GoldResult:
     last_error = ""
     last_code = ""
     attempt_usages: list[TokenUsage] = []
+    # ADR-012: scaled once per call (not per attempt) — the input size doesn't
+    # change across retries, only the generated code does.
+    timeout_seconds = scale_timeout_for_rows(ANALYST_TIMEOUT_SECONDS, len(df))
 
     for attempt in range(1, 4):
         if attempt == 1:
@@ -175,14 +178,14 @@ def run_analyst(df: pd.DataFrame, business_question: str) -> GoldResult:
             mode="script",
             result_vars=["gold_df", "fig", "narrative"],
             extra_modules={"px": "plotly.express", "go": "plotly.graph_objects"},
-            timeout_seconds=ANALYST_TIMEOUT_SECONDS,
+            timeout_seconds=timeout_seconds,
         )
 
         if sandbox_result["timed_out"]:
             # Distinct failure mode from an exception (ADR-007) — feeds the same
             # last_error/retry-prompt channel, but with a message that hints the
             # LLM toward cheaper code on the next attempt instead of an opaque trace.
-            last_error = f"Execution exceeded {ANALYST_TIMEOUT_SECONDS}s — simplify the computation"
+            last_error = f"Execution exceeded {timeout_seconds}s — simplify the computation"
             continue
 
         if sandbox_result["error"] is not None:

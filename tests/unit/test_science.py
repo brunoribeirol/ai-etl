@@ -115,6 +115,31 @@ def test_run_science_happy_path(mock_get_llm, sample_df: pd.DataFrame) -> None:
     assert result["attempts"] == 1
 
 
+def test_run_science_scales_timeout_for_large_df(
+    mocker, mock_get_llm, sample_df: pd.DataFrame
+) -> None:
+    """ADR-012: real profiling showed representative Science-style code (a real
+    RandomForestRegressor fit) TIMES OUT at the unscaled 20s budget on a
+    ~200k-row benchmark — this is the confirmed fix."""
+    from ai_etl.core import sandbox as sandbox_module
+
+    mock_get_llm.return_value = _mock_llm([HAPPY_CODE])
+    big_df = pd.concat(
+        [sample_df] * ((sandbox_module.LARGE_DATASET_ROW_THRESHOLD // len(sample_df)) + 1),
+        ignore_index=True,
+    )
+    spy = mocker.patch(
+        "ai_etl.agents.science.execute_in_sandbox", wraps=sandbox_module.execute_in_sandbox
+    )
+
+    run_science(big_df, "Qual será a receita nos próximos meses?")
+
+    assert (
+        spy.call_args.kwargs["timeout_seconds"]
+        == 20 * sandbox_module.LARGE_DATASET_TIMEOUT_MULTIPLIER
+    )
+
+
 NESTED_FUNCTION_CODE = """\
 def _fit():
     X = df[['units']].fillna(0)
