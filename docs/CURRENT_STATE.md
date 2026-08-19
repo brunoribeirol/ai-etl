@@ -2,7 +2,7 @@
 
 > Living doc. Updated at the end of meaningful work sessions, not per-commit. Source of truth for repo/code state; the Obsidian vault (`~/Documents/Obsidian Vault/tcc/`) is the source of truth for the academic TCC narrative and product/strategy context.
 
-**Last updated:** 2026-08-20, mid-session — **parallel sprint batch (8-12, 23) in flight. Merged so far: Sprint 9, Sprint 8, Sprint 11 (+ MySQL/MongoDB/OAuth2 extension). Sprint 12 (this branch) merging next; Sprint 23 and Sprint 10 still pending review.** See "Start here next session" below. This section will get a full consolidated rewrite once all pending PRs land — treat the per-sprint subsections below as interim.
+**Last updated:** 2026-08-20, end of session — **parallel sprint batch complete: Sprints 8, 9, 10, 11, 12, and 23 all merged to `main`.** See "Start here next session" below for the full orchestration writeup and what's still open.
 
 ## Start here next session
 
@@ -245,7 +245,7 @@ findings, no known CVEs. `tests/integration`/`tests/e2e` not run locally
 
 ## Next steps
 
-11-sprint plan (Vault: `artefact/sprint-roadmap.md`): A [done] → 1 [done — auth/tenancy/deploy] → 2 [done — sandbox unification + latency instrumentation] → 3 [done, verified live — async execution + rate limiting + cost per run] → 4 [done, verified live — S3 storage] → 5 [done — PDF/DOCX source + e2e] → 6 [done, verified live — real frontend, Streamlit retired] → 7 [done, verified live — frontend redesign + Streamlit feature parity] → **8 [PR open, not merged — harness + dry-run done, real model-comparison numbers need a real OPENAI_API_KEY/Ollama]** → 9 [human validation study, unblocked since Sprint 6, UI now polished since Sprint 7] → 10 [multi-cloud] → 11 [source diversity beyond Postgres]. Migrations `0004`/`0005` both applied to the live Supabase database. Celery worker deployed and verified live on Railway.
+11-sprint plan (Vault: `artefact/sprint-roadmap.md`): A [done] → 1 [done — auth/tenancy/deploy] → 2 [done — sandbox unification + latency instrumentation] → 3 [done, verified live — async execution + rate limiting + cost per run] → 4 [done, verified live — S3 storage] → 5 [done — PDF/DOCX source + e2e] → 6 [done, verified live — real frontend, Streamlit retired] → 7 [done, verified live — frontend redesign + Streamlit feature parity] → 8 [merged — model comparison harness, real numbers pending real OPENAI_API_KEY/Ollama] → 9 [merged — human validation study protocol] → **10 [multi-cloud AWS portability IaC drafted (ADR-015), PR open, not merged, not applied]** → 11 [merged — SQLite/authenticated REST + MySQL/MongoDB/OAuth2 extension]. Plus Sprint 23 (multi-provider LLM) pulled forward out of order. Migrations `0004`/`0005` both applied to the live Supabase database. Celery worker deployed and verified live on Railway.
 
 **Sprint 7: complete.** PR #52 (shadcn/ui redesign + Streamlit feature parity — see the Sprint 7 section above) merged and verified live in production 2026-08-19.
 

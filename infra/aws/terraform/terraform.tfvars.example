@@ -1,0 +1,27 @@
+# Copy to terraform.tfvars (git-ignored, see infra/aws/terraform/.gitignore)
+# and fill in real values before running `terraform plan` / `apply`.
+# Never commit the filled-in file.
+
+aws_region     = "sa-east-1"
+environment    = "aws-poc"
+project_name   = "ai-etl"
+
+# Build and push first (README.md "Build and push the image"), then paste
+# the resulting ECR URI:tag here.
+container_image = "123456789012.dkr.ecr.sa-east-1.amazonaws.com/ai-etl-aws-poc:latest"
+
+# A separate bucket from the live Railway deployment's ai-etl-artifacts-brlla
+# -- create it manually first (same manual step ADR-009 already expects),
+# do not point this at production data.
+s3_bucket_name = "ai-etl-artifacts-aws-poc"
+
+openai_api_key         = "sk-..."
+app_database_url       = "postgresql://..."
+clerk_secret_key       = "sk_test_..."
+clerk_publishable_key  = "pk_test_..."
+clerk_jwks_url         = "https://your-instance.clerk.accounts.dev/.well-known/jwks.json"
+clerk_issuer           = "https://your-instance.clerk.accounts.dev"
+
+# Point at whatever frontend origin you're verifying against (a Vercel
+# preview URL, or omit CORS testing entirely and hit the ALB with curl).
+api_allowed_origins = "https://your-preview.vercel.app"
