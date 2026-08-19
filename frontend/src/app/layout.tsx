@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import Link from "next/link";
 import { AuthHeader } from "@/components/auth-header";
+import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -20,22 +21,39 @@ export const metadata: Metadata = {
   description: "Agentic ETL — upload messy data, ask a business question.",
 };
 
+/**
+ * Sprint 7 redesign (ADR-011 surface, no route/auth contract change) — dark
+ * mode by default (shadcn's recommendation for dashboard/AI product surfaces:
+ * see vercel:shadcn skill, "Default aesthetic for product UI"), shadcn Card
+ * header nav instead of plain links, Toaster mounted once at the root for
+ * error/success notifications the old plain-text `<p>` errors didn't have.
+ */
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <ClerkProvider>
       <html
         lang="en"
-        className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+        className={`dark ${geistSans.variable} ${geistMono.variable} h-full antialiased`}
       >
-        <body className="min-h-full flex flex-col">
-          <header className="flex justify-between items-center p-4 gap-4 h-16 border-b">
-            <nav className="flex gap-4 text-sm font-medium">
-              <Link href="/">Executar</Link>
-              <Link href="/historico">Histórico</Link>
-            </nav>
+        <body className="min-h-full flex flex-col bg-background text-foreground">
+          <header className="sticky top-0 z-10 flex justify-between items-center px-6 h-16 border-b border-border/60 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+            <div className="flex items-center gap-8">
+              <Link href="/" className="font-semibold tracking-tight text-sm">
+                AI-ETL
+              </Link>
+              <nav className="flex gap-6 text-sm text-muted-foreground">
+                <Link href="/" className="hover:text-foreground transition-colors">
+                  Executar
+                </Link>
+                <Link href="/historico" className="hover:text-foreground transition-colors">
+                  Histórico
+                </Link>
+              </nav>
+            </div>
             <AuthHeader />
           </header>
-          {children}
+          <div className="flex-1 flex flex-col">{children}</div>
+          <Toaster richColors position="top-right" />
         </body>
       </html>
     </ClerkProvider>
