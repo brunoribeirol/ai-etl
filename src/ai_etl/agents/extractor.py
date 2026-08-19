@@ -10,6 +10,7 @@ from ai_etl.sources.csv_source import load_csv
 from ai_etl.sources.document_source import load_document
 from ai_etl.sources.postgres_source import load_postgres
 from ai_etl.sources.rest_source import load_rest
+from ai_etl.sources.sqlite_source import load_sqlite
 
 
 def extractor_node(state: PipelineState) -> PipelineState:
@@ -34,8 +35,10 @@ def extractor_node(state: PipelineState) -> PipelineState:
                 df = load_csv(source["path"])
             elif source_type == "postgres":
                 df = load_postgres(source["table"])
+            elif source_type == "sqlite":
+                df = load_sqlite(source["path"], source["table"], source.get("query"))
             elif source_type == "rest":
-                df = load_rest(source["url"], source.get("params", {}))
+                df = load_rest(source["url"], source.get("params", {}), source.get("auth"))
             elif source_type == "document":
                 df = load_document(source["path"])
             else:

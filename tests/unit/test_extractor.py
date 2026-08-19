@@ -36,6 +36,48 @@ def test_document_source_extracted(mocker) -> None:
     assert result["error"] is None
 
 
+def test_sqlite_source_extracted(mocker) -> None:
+    df = pd.DataFrame({"id": [1, 2], "product": ["A", "B"]})
+    mock_load = mocker.patch("ai_etl.agents.extractor.load_sqlite", return_value=df)
+
+    sources = [{"name": "orders", "type": "sqlite", "path": "shop.db", "table": "orders"}]
+    result = extractor_node(_make_state(sources))
+
+    mock_load.assert_called_once_with("shop.db", "orders", None)
+    assert "orders" in result["extracted_data"]
+    assert result["extracted_data"]["orders"].equals(df)
+    assert result["error"] is None
+
+
+def test_sqlite_source_passes_optional_query(mocker) -> None:
+    df = pd.DataFrame({"product": ["A"]})
+    mock_load = mocker.patch("ai_etl.agents.extractor.load_sqlite", return_value=df)
+
+    sources = [
+        {
+            "name": "orders",
+            "type": "sqlite",
+            "path": "shop.db",
+            "table": "orders",
+            "query": "SELECT product FROM orders",
+        }
+    ]
+    extractor_node(_make_state(sources))
+
+    mock_load.assert_called_once_with("shop.db", "orders", "SELECT product FROM orders")
+
+
+def test_rest_source_passes_optional_auth(mocker) -> None:
+    df = pd.DataFrame({"id": [1]})
+    mock_load = mocker.patch("ai_etl.agents.extractor.load_rest", return_value=df)
+
+    auth = {"type": "bearer", "env_var": "MY_API_TOKEN"}
+    sources = [{"name": "api", "type": "rest", "url": "http://example.com/api", "auth": auth}]
+    extractor_node(_make_state(sources))
+
+    mock_load.assert_called_once_with("http://example.com/api", {}, auth)
+
+
 def test_source_schema_has_required_fields(mocker) -> None:
     df = pd.DataFrame({"price": [10.0, None], "qty": [2, 3]})
     mocker.patch("ai_etl.agents.extractor.load_csv", return_value=df)
