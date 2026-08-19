@@ -2,11 +2,13 @@
 
 > Living doc. Updated at the end of meaningful work sessions, not per-commit. Source of truth for repo/code state; the Obsidian vault (`~/Documents/Obsidian Vault/tcc/`) is the source of truth for the academic TCC narrative and product/strategy context.
 
-**Last updated:** 2026-08-18, end of session — **Sprint 6 is complete.** PR 6 (the Streamlit→uvicorn cutover) landed and was verified live; Streamlit no longer runs anywhere in this project. See "Start here next session" below for the immediate follow-ups and the reusable lessons from this session's deploy troubleshooting.
+**Last updated:** 2026-08-19, end of session — **Sprint 7 is complete.** PR #52 (frontend redesign + feature parity with the old Streamlit sidebar/tabs) merged and verified live in production. See "Start here next session" below.
 
 ## Start here next session
 
-Sprint 6 (ADR-011, real Next.js + Clerk + FastAPI frontend replacing Streamlit) is done, all 6 PRs merged, live-verified end-to-end twice (once against the interim `ai-etl-api` service, once again post-cutover against the consolidated `ai-etl` service). Nothing is currently blocked.
+**Sprint 7 (frontend redesign, PR #52) is done, merged to `main`, and live-verified in production (2026-08-19).** Scope grew mid-sprint on owner request past the original "visual layer only, no API contract change" plan — see the Sprint 7 section below for what that added and why it's still additive/backward-compatible. Nothing is currently blocked. Next up per the roadmap: Sprint 8 (model comparison) or Sprint 9 (human validation), both unblocked.
+
+Sprint 6 (ADR-011, real Next.js + Clerk + FastAPI frontend replacing Streamlit) is done, all 6 PRs merged, live-verified end-to-end twice (once against the interim `ai-etl-api` service, once again post-cutover against the consolidated `ai-etl` service).
 
 **Final architecture**: Railway's `ai-etl` service (`ai-etl-production.up.railway.app`) now runs the FastAPI API directly (`uvicorn ai_etl.api.main:app`) — `app.py`/Streamlit are gone from the codebase (PR #49). The interim `ai-etl-api` service (created mid-session to unblock live verification without touching the working Streamlit deploy) was decommissioned once the cutover was confirmed live — `NEXT_PUBLIC_API_URL` on Vercel now points at `ai-etl`'s own domain.
 
@@ -18,6 +20,26 @@ Sprint 6 (ADR-011, real Next.js + Clerk + FastAPI frontend replacing Streamlit) 
 **Residual, harmless cleanup opportunity (not urgent)**: `ai-etl`'s Railway service config now has an explicit `deploy.startCommand` that duplicates the Dockerfile's `ENTRYPOINT` exactly — could be removed to let it fall back to the Dockerfile again, purely for tidiness, not correctness.
 
 **Already de-risked ahead of time** (PR #43, merged 2026-08-17): `pyproject.toml`'s `plotly`/`scikit-learn`/`statsmodels` were misclassified under the Streamlit-only `app` extra — actually real pipeline runtime deps (`agents/analyst.py`/`science.py` use them inside the sandbox for charts/models). Fixed before it could cause a silent production regression during the cutover.
+
+## Sprint 7 — frontend redesign + feature parity (PR #52, merged 2026-08-19)
+
+**Scope grew mid-session on owner request.** The plan going in (Vault `artefact/sprint-roadmap.md`) was "visual layer only, no API contract or business-logic change." Partway through, the owner asked for feature parity with the old Streamlit sidebar/tabs too — agent explanations, which model is running, and a working live-progress view with per-agent code/charts. That needed three small, additive, backward-compatible backend changes; each is called out below as a deliberate scope exception, not scope creep left undocumented.
+
+**Visual redesign** (the original plan): shadcn/ui (`base-ui` primitives, `base-nova` style) initialized over the existing Tailwind v4 setup; dark mode by default (shadcn's own guidance for dashboard/AI product surfaces); Motion for the polling status card and a staggered entrance on the run-detail page; Histórico's card-list replaced with a shadcn `Table`; Plotly charts given dark-friendly transparent/gridline defaults. Fixed a self-referential `--font-sans: var(--font-sans)` left by `shadcn init` that would have silently broken the Geist Sans font.
+
+**Feature parity additions** (backend, small/additive/read-only or opt-in — no existing field removed or changed):
+- `GET /config` (new, `api/main.py`) — read-only current model name (`AI_ETL_LLM_MODEL`). Mirrors the old Streamlit sidebar's caption; *choosing* a model per run is real business logic (allowlist, cost-tracking, ~6 `get_llm()` call sites) and was deliberately left out of this sprint — a candidate for its own future item if wanted.
+- `services/execution_queue.py` — `pipeline_service.py`'s existing `progress_callback` hook (previously wired to a no-op, "no progress_callback crosses the task boundary" was explicitly documented as out of scope in Sprint 3) now reports through Celery's own `update_state(state="PROGRESS", meta=...)` — no new infra, same Redis result backend already in use. `get_task_status()` returns the latest `{stage, message}` while a task is running; the frontend's existing 2s poll surfaces it live.
+- `audit/db.py::_serialize_analysis_result` now persists Gold/Science generated code (the `"code"` key `agents/analyst.py`/`science.py` already produce). **This was a real pre-existing bug, not new scope**: the old Streamlit's "Código Gold/Science" tab read this same key, but nothing had ever written it to storage past Sprint 3's move to async execution — silently broken for roughly half the project's history, never noticed because no test exercised a completed-and-reloaded run's code field. Fixed here, verified live (a Science Agent's generated `science_1.py` renders correctly in Histórico's run detail post-fix).
+- Also fixed in passing: the old Streamlit's per-agent timing table read a `state["_agent_timings"]` key that was **never actually set anywhere in `PipelineState`** — dead code since it was written; the real field is `stage_durations`. The new "Pipeline" tab uses the real field and shows real per-node timings.
+
+**New frontend surface**: `agents-info.tsx` (Sheet, "Como funciona" — pyramid + agent list + current model, replaces the always-visible Streamlit sidebar with an on-demand panel), `agent-progress.tsx` (4-phase live stepper: Silver → Planner → Gold/Science → Advisor), `pipeline-tab.tsx` + `code-tab.tsx` + `code-block.tsx` (new "Pipeline"/"Código" tabs on the run-detail page).
+
+**Live-verified in production (2026-08-19)**, twice — once against the PR's Vercel preview (old backend, confirmed every new UI piece degrades gracefully when the new backend fields aren't there yet), once against `ai-etl.vercel.app` post-merge (new backend live): real Clerk login (Google OAuth, no password ever handled by the agent), two real uploads (`sales.csv`, `orders.csv`) with different business questions, real Celery+LLM execution, live per-agent progress messages streaming during the run ("Planner — decompondo...", "Science Agent — Treinando modelo..."), model badge showing `gpt-4o-mini`, Histórico table, and the run-detail Pipeline/Código tabs — including a real Science Agent code block rendering post-fix.
+
+**CI caught one real regression before merge**: the progress-callback change added a new kwarg to `run_full_analysis`'s call site; two existing unit tests (`tests/unit/test_execution_queue.py`) had fakes with the old fixed signature and broke. Fixed by widening both fakes to accept the new kwarg (matches the real function's signature) — not a design problem, just tests needing to catch up.
+
+**Also touched mid-session, unrelated to the redesign itself**: a genuine Railway platform incident (`status.railway.com/incident/YYU63JUO`, deployments stuck `QUEUED` platform-wide for ~40 min) blocked live verification twice; diagnosed via `railway-agent`, not a real config issue, resolved on its own. `API_ALLOWED_ORIGINS` was temporarily widened to include two Vercel preview URLs for pre-merge verification, then reverted to the single production origin once verification moved to production.
 
 ## Confirmed state (branch `main`, PRs #37-#43 merged 2026-08-17)
 
@@ -143,11 +165,9 @@ Sprint 6 (ADR-011, real Next.js + Clerk + FastAPI frontend replacing Streamlit) 
 
 ## Next steps
 
-11-sprint plan (Vault: `artefact/sprint-roadmap.md`, renumbered 2026-08-18 to schedule two previously-unscheduled items as Sprints 7 and 11): A [done] → 1 [done — auth/tenancy/deploy] → 2 [done — sandbox unification + latency instrumentation] → 3 [done, verified live — async execution + rate limiting + cost per run] → 4 [done, verified live — S3 storage] → 5 [done — PDF/DOCX source + e2e] → **6 [done, verified live — real frontend, Streamlit retired]** → 7 [new — frontend redesign, before human validation so participants see a polished UI] → 8 [model comparison + stability, was 7] → 9 [human validation study, was 8 — unblocked since Sprint 6, ideally after Sprint 7] → 10 [multi-cloud, was 9] → 11 [new — source diversity beyond Postgres]. Migrations `0004`/`0005` both applied to the live Supabase database. Celery worker deployed and verified live on Railway. Sprint 6 plan: `docs/work/2026-08-17-sprint6-frontend-nextjs-clerk-fastapi.md` (implementation detail) / `~/.claude/plans/adicionar-o-frontend-ir-silly-rabbit.md` (original strategic plan).
+11-sprint plan (Vault: `artefact/sprint-roadmap.md`): A [done] → 1 [done — auth/tenancy/deploy] → 2 [done — sandbox unification + latency instrumentation] → 3 [done, verified live — async execution + rate limiting + cost per run] → 4 [done, verified live — S3 storage] → 5 [done — PDF/DOCX source + e2e] → 6 [done, verified live — real frontend, Streamlit retired] → **7 [done, verified live — frontend redesign + Streamlit feature parity]** → 8 [model comparison + stability, unblocked, independent] → 9 [human validation study, unblocked since Sprint 6, UI now polished since Sprint 7] → 10 [multi-cloud] → 11 [source diversity beyond Postgres]. Migrations `0004`/`0005` both applied to the live Supabase database. Celery worker deployed and verified live on Railway.
 
-**Sprint 6: complete.** PR 6 (Railway `ai-etl` web service `ENTRYPOINT` cut over from Streamlit to `uvicorn`, `app.py` retired) merged and verified live 2026-08-18. Next up per the roadmap: Sprint 7 (frontend redesign) or Sprint 8 (model comparison, independent, can run in parallel).
-
-**Scheduled 2026-08-18** (were "deferred, no sprint" as of earlier today): the frontend redesign (owner flagged it visually minimal after live-testing Sprint 6) is now **Sprint 7**; broadening `sources/` beyond Postgres (owner direction, 2026-08-17) is now **Sprint 11**. Full detail: Vault `artefact/sprint-roadmap.md`.
+**Sprint 7: complete.** PR #52 (shadcn/ui redesign + Streamlit feature parity — see the Sprint 7 section above) merged and verified live in production 2026-08-19. Next up per the roadmap: Sprint 8 (model comparison) or Sprint 9 (human validation), both unblocked and independent of each other.
 
 ## Deploy
 
