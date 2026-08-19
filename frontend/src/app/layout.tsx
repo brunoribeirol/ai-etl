@@ -2,8 +2,11 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import Link from "next/link";
+import { AgentsInfo } from "@/components/agents-info";
 import { AuthHeader } from "@/components/auth-header";
 import { Toaster } from "@/components/ui/sonner";
+import { apiFetch } from "@/lib/api";
+import type { ApiConfig } from "@/lib/types";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -28,7 +31,17 @@ export const metadata: Metadata = {
  * header nav instead of plain links, Toaster mounted once at the root for
  * error/success notifications the old plain-text `<p>` errors didn't have.
  */
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  // Best-effort: the model badge / "Como funciona" panel is informational,
+  // not load-bearing — a config-fetch failure shouldn't break every page's
+  // layout the way a failed page-level fetch would.
+  let modelName: string | null = null;
+  try {
+    modelName = (await apiFetch<ApiConfig>("/config")).model_name;
+  } catch {
+    modelName = null;
+  }
+
   return (
     <ClerkProvider>
       <html
@@ -50,7 +63,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
                 </Link>
               </nav>
             </div>
-            <AuthHeader />
+            <div className="flex items-center gap-1">
+              <AgentsInfo modelName={modelName} />
+              <AuthHeader />
+            </div>
           </header>
           <div className="flex-1 flex flex-col">{children}</div>
           <Toaster richColors position="top-right" />

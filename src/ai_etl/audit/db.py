@@ -264,6 +264,14 @@ def _serialize_analysis_result(
         "error": result.get("error"),
         "repaired": result.get("repaired", False),
         "tokens": result.get("tokens"),
+        # Sprint 7: the generated pandas/sklearn code (`agents/analyst.py`/
+        # `science.py`'s `"code"` key, ADR-007's sandbox `exec()`s it) was never
+        # persisted here — only ever available in-memory for a synchronous run,
+        # which stopped being how this ran once Sprint 3 made execution async.
+        # `app.py`'s old "Código Gold/Science" tab read this same key and had
+        # silently shown nothing since Sprint 3 as a result. Plain string,
+        # cheap to keep inline rather than a sibling file like data/fig.
+        "code": result.get("code"),
     }
     if "model_info" in result:
         serialized["model_info"] = result.get("model_info")

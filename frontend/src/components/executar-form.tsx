@@ -3,15 +3,17 @@
 import { useAuth } from "@clerk/nextjs";
 import { AnimatePresence, motion } from "motion/react";
 import { Loader2, UploadCloud } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { AgentProgress } from "@/components/agent-progress";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Progress } from "@/components/ui/progress";
 import { StatusBadge } from "@/components/status-badge";
+import type { TaskStatus } from "@/lib/types";
 
 /**
  * PR 4 (Sprint 6, ADR-011), restyled in Sprint 7 — the API contract, polling
@@ -24,13 +26,6 @@ import { StatusBadge } from "@/components/status-badge";
  * refreshes the session token, so a long-running analysis never hits an
  * expired-token dead end the way the old UI could.
  */
-
-type TaskStatus = {
-  state: string;
-  ready: boolean;
-  result: { run_id?: string; status?: string; error?: string | null } | null;
-  error: string | null;
-};
 
 const POLL_INTERVAL_MS = 2000;
 
@@ -219,10 +214,13 @@ export function ExecutarForm() {
                   <span className="text-muted-foreground">Status</span>
                   {displayStatus && <StatusBadge status={displayStatus} />}
                 </div>
-                {!status?.ready && <Progress value={null} className="animate-pulse" />}
+                <AgentProgress meta={status?.meta ?? null} done={!!status?.ready} />
                 {status?.ready && status.result?.status === "completed" && (
                   <p className="text-emerald-400">
-                    ✅ Concluído — run_id: {status.result.run_id}
+                    ✅ Concluído —{" "}
+                    <Link href={`/historico/${status.result.run_id}`} className="underline">
+                      ver run {status.result.run_id}
+                    </Link>
                   </p>
                 )}
                 {status?.ready && status.error && (

@@ -40,6 +40,22 @@ export type AnalysisEntry = {
   gold_df?: Record<string, unknown>[];
   predictions_df?: Record<string, unknown>[];
   fig?: PlotlyFigure;
+  /** Sprint 7 — generated pandas/sklearn source (`agents/analyst.py`/
+   * `science.py`), now persisted by `_serialize_analysis_result`. Optional:
+   * absent on any run saved before this field existed. */
+  code?: string | null;
+};
+
+/** Sprint 7 — per-check entry inside `state.quality_report.checks`
+ * (`core/state.py`'s `PipelineState.quality_report` docstring). */
+export type QualityCheck = {
+  check: string;
+  column?: string;
+  severity: "ok" | "warning" | "error";
+  null_ratio?: number;
+  count?: number;
+  outlier_count?: number;
+  [key: string]: unknown;
 };
 
 export type AdvisorRecommendation = {
@@ -64,6 +80,17 @@ export type FullResult = {
     spec?: string;
     error?: string | null;
     transformed_data?: Record<string, unknown>[];
+    /** Transformer's generated code (`core/state.py::PipelineState.transformation_code`). */
+    transformation_code?: string;
+    transformation_attempts?: number;
+    transformation_error?: string | null;
+    pipeline_plan?: Record<string, unknown>;
+    quality_report?: { checks?: QualityCheck[]; severity?: string; summary?: string };
+    /** Wall-clock seconds per Silver LangGraph node — the field the old
+     * Streamlit sidebar meant to read as `_agent_timings` (a key that was
+     * never actually set on `state`, a pre-existing dead-code bug; the real
+     * field has always been `stage_durations`). */
+    stage_durations?: Record<string, number>;
     [key: string]: unknown;
   };
   gold: AnalysisEntry[];
@@ -71,4 +98,19 @@ export type FullResult = {
   advisor: AdvisorResult;
   question: string;
   tokens: TokenUsage;
+};
+
+/** Sprint 7 — `GET /runs/{task_id}/status` response shape, extended with the
+ * live-progress `meta` field (`services/execution_queue.py::get_task_status`). */
+export type TaskStatus = {
+  state: string;
+  ready: boolean;
+  result: { run_id?: string; status?: string; error?: string | null } | null;
+  error: string | null;
+  meta: { stage: string; message: string } | null;
+};
+
+/** `GET /config` — read-only, which model every agent in a run currently uses. */
+export type ApiConfig = {
+  model_name: string;
 };

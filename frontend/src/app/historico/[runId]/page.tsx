@@ -1,5 +1,7 @@
 import { AnalysisSection } from "@/components/analysis-section";
+import { CodeTab } from "@/components/code-tab";
 import { DataTable } from "@/components/data-table";
+import { PipelineTab } from "@/components/pipeline-tab";
 import { RunSections } from "@/components/run-sections";
 import { StatusBadge } from "@/components/status-badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -66,6 +68,13 @@ export default async function RunDetail({
             </>
           ) : null
         }
+        pipeline={
+          <PipelineTab
+            stageDurations={result.state.stage_durations}
+            pipelinePlan={result.state.pipeline_plan}
+            qualityReport={result.state.quality_report}
+          />
+        }
         gold={result.gold.map((entry, i) => (
           <AnalysisSection key={`gold-${i}`} title="Gold" entry={entry} dataKey="gold_df" />
         ))}
@@ -101,6 +110,13 @@ export default async function RunDetail({
               )}
             </div>
           ) : null
+        }
+        code={
+          <CodeTab
+            transformationCode={result.state.transformation_code}
+            gold={result.gold}
+            science={result.science}
+          />
         }
       />
     </main>

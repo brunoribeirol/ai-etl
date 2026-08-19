@@ -15,17 +15,22 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
  */
 export function RunSections({
   silver,
+  pipeline,
   gold,
   science,
   advisor,
+  code,
 }: {
   silver: ReactNode;
+  pipeline: ReactNode;
   gold: ReactNode[];
   science: ReactNode[];
   advisor: ReactNode;
+  code: ReactNode;
 }) {
   const tabs = [
     silver && { value: "silver", label: "Silver", content: silver },
+    pipeline && { value: "pipeline", label: "Pipeline", content: pipeline },
     gold.length > 0 && { value: "gold", label: `Gold (${gold.length})`, content: gold },
     science.length > 0 && {
       value: "science",
@@ -33,6 +38,7 @@ export function RunSections({
       content: science,
     },
     advisor && { value: "advisor", label: "Advisor", content: advisor },
+    code && { value: "code", label: "Código", content: code },
   ].filter(Boolean) as { value: string; label: string; content: ReactNode | ReactNode[] }[];
 
   if (tabs.length === 0) {
