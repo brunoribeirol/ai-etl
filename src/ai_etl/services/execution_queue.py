@@ -112,11 +112,14 @@ def run_full_analysis_task(
 ) -> dict[str, Any]:
     """Celery task wrapping `pipeline_service.run_full_analysis`.
 
-    No `progress_callback` crosses the task boundary — it's a plain Python
-    callable, not something Celery's JSON serializer can carry, and live
-    per-node progress streaming from inside a worker back to a polling
-    Streamlit session is out of scope for this sprint (`app.py` shows a
-    coarse "queued / running / done" state instead — see `get_task_status`).
+    Sprint 7: live per-node progress, previously out of scope ("no
+    `progress_callback` crosses the task boundary" — true, it still doesn't,
+    as a Python callable), now uses Celery's own `update_state(meta=...)`
+    instead — no new infra (still just the existing Redis result backend).
+    `_report_progress` below is a plain closure over `self`, called from
+    *inside* the worker process, so it never needs to be serialized itself;
+    only the plain `(stage, message)` strings it sends via `update_state` do.
+    `get_task_status` surfaces the latest one while state is `"PROGRESS"`.
     Returns a JSON-safe summary; see this module's docstring for why the full
     result isn't returned here.
 
@@ -140,7 +143,17 @@ def run_full_analysis_task(
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_bytes(base64.b64decode(file_bytes_b64))
 
-    result = run_full_analysis(spec, business_question, run_dir, tenant_id=tenant_id)
+    def _report_progress(stage: str, message: str) -> None:
+        # Best-effort: a Redis hiccup here should never fail the actual
+        # analysis over a progress update no one may even be polling for.
+        try:
+            self.update_state(state="PROGRESS", meta={"stage": stage, "message": message})
+        except Exception:  # nosec B110
+            pass
+
+    result = run_full_analysis(
+        spec, business_question, run_dir, progress_callback=_report_progress, tenant_id=tenant_id
+    )
     state = result["state"]
     return {
         "run_id": state.get("run_id"),
@@ -185,9 +198,14 @@ def get_task_status(task_id: str) -> dict[str, Any]:
     """Poll a previously-enqueued task's status.
 
     `state` is one of Celery's own values (`PENDING`, `STARTED`, `SUCCESS`,
-    `FAILURE`, ...) — `app.py` maps these to UI copy rather than this module
-    inventing a parallel vocabulary. `result` is the task's JSON-safe summary
-    dict on success; `error` is the stringified exception on failure.
+    `FAILURE`, ...) plus the custom `"PROGRESS"` state `run_full_analysis_task`
+    reports via `update_state` (Sprint 7) — `app.py` used to map these to UI
+    copy rather than this module inventing a parallel vocabulary; the
+    frontend now does the same. `result` is the task's JSON-safe summary dict
+    on success; `error` is the stringified exception on failure; `meta` is
+    the latest `{"stage", "message"}` progress update while `state ==
+    "PROGRESS"`, `None` otherwise (`result.info` holds the raw exception
+    object on failure, not something JSON-safe to hand back as-is).
     """
     result = AsyncResult(task_id, app=celery_app)
     return {
@@ -195,4 +213,5 @@ def get_task_status(task_id: str) -> dict[str, Any]:
         "ready": result.ready(),
         "result": result.result if result.successful() else None,
         "error": str(result.result) if result.failed() else None,
+        "meta": result.info if result.state == "PROGRESS" else None,
     }

@@ -1,15 +1,20 @@
 import { ExecutarForm } from "@/components/executar-form";
 
 /**
- * "Executar" page (Sprint 6, PR 4, ADR-011) — replaces app.py's
- * `_tab_executar`. The auth-loop smoke test from PR 3 (a raw `GET /runs`
- * JSON dump) is gone now that there's a real page to render; auth itself is
- * unchanged — `middleware.ts` still gates this whole app via Clerk.
+ * "Executar" page (Sprint 6, PR 4 → Sprint 7 redesign, ADR-011). Same route
+ * and behavior — the API call and auth flow live entirely in
+ * `<ExecutarForm />`, unchanged; this is layout/copy only.
  */
 export default function Home() {
   return (
-    <main className="p-8 flex flex-col items-center gap-6">
-      <h1 className="text-xl font-semibold">AI-ETL — Executar</h1>
+    <main className="flex-1 flex flex-col items-center px-6 py-16 gap-10">
+      <div className="flex flex-col items-center gap-2 text-center max-w-lg">
+        <h1 className="text-2xl font-semibold tracking-tight">Executar análise</h1>
+        <p className="text-sm text-muted-foreground">
+          Suba um arquivo ou escreva um spec manual, opcionalmente com uma pergunta
+          de negócio. O pipeline agente cuida do resto.
+        </p>
+      </div>
       <ExecutarForm />
     </main>
   );
