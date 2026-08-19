@@ -1,0 +1,77 @@
+{
+  "gpt-4o-mini": {
+    "n": 5,
+    "n_completed": 5,
+    "elapsed_ms": {
+      "mean": 15001.04,
+      "stdev": 6662.404,
+      "cv": 0.4441,
+      "min": 9880.4,
+      "max": 25845.4
+    },
+    "rows_loaded": {
+      "mean": 3649,
+      "stdev": 0.0,
+      "cv": 0.0,
+      "min": 3649,
+      "max": 3649
+    },
+    "quality_score": {
+      "mean": 88.0,
+      "stdev": 0.0,
+      "cv": 0.0,
+      "min": 88.0,
+      "max": 88.0
+    }
+  },
+  "gpt-4o": {
+    "n": 5,
+    "n_completed": 5,
+    "elapsed_ms": {
+      "mean": 11281.54,
+      "stdev": 724.127,
+      "cv": 0.0642,
+      "min": 10104.2,
+      "max": 11884.4
+    },
+    "rows_loaded": {
+      "mean": 3649,
+      "stdev": 0.0,
+      "cv": 0.0,
+      "min": 3649,
+      "max": 3649
+    },
+    "quality_score": {
+      "mean": 88.0,
+      "stdev": 0.0,
+      "cv": 0.0,
+      "min": 88.0,
+      "max": 88.0
+    }
+  },
+  "ollama:llama3.1": {
+    "n": 5,
+    "n_completed": 5,
+    "elapsed_ms": {
+      "mean": 12093.46,
+      "stdev": 1032.034,
+      "cv": 0.0853,
+      "min": 10712.1,
+      "max": 13344.8
+    },
+    "rows_loaded": {
+      "mean": 3649,
+      "stdev": 0.0,
+      "cv": 0.0,
+      "min": 3649,
+      "max": 3649
+    },
+    "quality_score": {
+      "mean": 88.0,
+      "stdev": 0.0,
+      "cv": 0.0,
+      "min": 88.0,
+      "max": 88.0
+    }
+  }
+}
