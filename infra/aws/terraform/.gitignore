@@ -1,0 +1,13 @@
+.terraform/
+# .terraform.lock.hcl is intentionally NOT ignored -- HashiCorp recommends
+# committing it for reproducible provider versions across machines/CI.
+*.tfstate
+*.tfstate.*
+*.tfvars
+!terraform.tfvars.example
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
