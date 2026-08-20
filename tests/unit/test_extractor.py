@@ -78,6 +78,68 @@ def test_rest_source_passes_optional_auth(mocker) -> None:
     mock_load.assert_called_once_with("http://example.com/api", {}, auth)
 
 
+def test_mysql_source_extracted(mocker) -> None:
+    df = pd.DataFrame({"id": [1, 2], "product": ["A", "B"]})
+    mock_load = mocker.patch("ai_etl.agents.extractor.load_mysql", return_value=df)
+
+    sources = [{"name": "orders", "type": "mysql", "table": "shop.orders"}]
+    result = extractor_node(_make_state(sources))
+
+    mock_load.assert_called_once_with("shop.orders", None)
+    assert "orders" in result["extracted_data"]
+    assert result["extracted_data"]["orders"].equals(df)
+    assert result["error"] is None
+
+
+def test_mysql_source_passes_optional_query(mocker) -> None:
+    df = pd.DataFrame({"product": ["A"]})
+    mock_load = mocker.patch("ai_etl.agents.extractor.load_mysql", return_value=df)
+
+    sources = [
+        {
+            "name": "orders",
+            "type": "mysql",
+            "table": "shop.orders",
+            "query": "SELECT product FROM shop.orders",
+        }
+    ]
+    extractor_node(_make_state(sources))
+
+    mock_load.assert_called_once_with("shop.orders", "SELECT product FROM shop.orders")
+
+
+def test_mongodb_source_extracted(mocker) -> None:
+    df = pd.DataFrame({"_id": ["1", "2"], "product": ["A", "B"]})
+    mock_load = mocker.patch("ai_etl.agents.extractor.load_mongodb", return_value=df)
+
+    sources = [{"name": "orders", "type": "mongodb", "database": "shop", "collection": "orders"}]
+    result = extractor_node(_make_state(sources))
+
+    mock_load.assert_called_once_with("shop", "orders", None, None)
+    assert "orders" in result["extracted_data"]
+    assert result["extracted_data"]["orders"].equals(df)
+    assert result["error"] is None
+
+
+def test_mongodb_source_passes_optional_query_and_limit(mocker) -> None:
+    df = pd.DataFrame({"product": ["A"]})
+    mock_load = mocker.patch("ai_etl.agents.extractor.load_mongodb", return_value=df)
+
+    sources = [
+        {
+            "name": "orders",
+            "type": "mongodb",
+            "database": "shop",
+            "collection": "orders",
+            "query": {"status": "active"},
+            "limit": 50,
+        }
+    ]
+    extractor_node(_make_state(sources))
+
+    mock_load.assert_called_once_with("shop", "orders", {"status": "active"}, 50)
+
+
 def test_source_schema_has_required_fields(mocker) -> None:
     df = pd.DataFrame({"price": [10.0, None], "qty": [2, 3]})
     mocker.patch("ai_etl.agents.extractor.load_csv", return_value=df)

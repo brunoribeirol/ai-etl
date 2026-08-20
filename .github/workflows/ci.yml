@@ -14,6 +14,36 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.11", "3.12"]
+    # mysql-test/mongodb-test (Sprint 11, ADR-012) are deliberately added
+    # here, not to the `e2e` job's services below — unlike a live Postgres
+    # (see the `e2e` job's comment on why THAT stays isolated from `check`),
+    # these two only gate tests/integration/test_mysql_source_real.py and
+    # test_mongodb_source_real.py's own reachability checks, so adding them
+    # doesn't unblock any pre-existing self-skipping integration test.
+    services:
+      mysql-test:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: test
+          MYSQL_USER: test
+          MYSQL_PASSWORD: test
+          MYSQL_DATABASE: testdb
+        ports:
+          - 3307:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h localhost -u root -ptest"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      mongodb-test:
+        image: mongo:7
+        ports:
+          - 27018:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.runCommand(\"ping\").ok' --quiet"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
 
     steps:
       - uses: actions/checkout@v7

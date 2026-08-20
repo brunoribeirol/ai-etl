@@ -8,6 +8,8 @@ from ai_etl.audit.logger import log_action
 from ai_etl.core.state import PipelineState
 from ai_etl.sources.csv_source import load_csv
 from ai_etl.sources.document_source import load_document
+from ai_etl.sources.mongodb_source import load_mongodb
+from ai_etl.sources.mysql_source import load_mysql
 from ai_etl.sources.postgres_source import load_postgres
 from ai_etl.sources.rest_source import load_rest
 from ai_etl.sources.sqlite_source import load_sqlite
@@ -37,6 +39,15 @@ def extractor_node(state: PipelineState) -> PipelineState:
                 df = load_postgres(source["table"])
             elif source_type == "sqlite":
                 df = load_sqlite(source["path"], source["table"], source.get("query"))
+            elif source_type == "mysql":
+                df = load_mysql(source["table"], source.get("query"))
+            elif source_type == "mongodb":
+                df = load_mongodb(
+                    source["database"],
+                    source["collection"],
+                    source.get("query"),
+                    source.get("limit"),
+                )
             elif source_type == "rest":
                 df = load_rest(source["url"], source.get("params", {}), source.get("auth"))
             elif source_type == "document":
