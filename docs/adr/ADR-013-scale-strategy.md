@@ -1,4 +1,4 @@
-# ADR-012 — Scale strategy for large sources (100k–500k rows, 100–300+ columns)
+# ADR-013 — Scale strategy for large sources (100k–500k rows, 100–300+ columns)
 
 **Status:** Accepted
 **Date:** 2026-08-19

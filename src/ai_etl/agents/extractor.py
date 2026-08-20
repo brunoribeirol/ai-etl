@@ -14,7 +14,7 @@ from ai_etl.sources.postgres_source import load_postgres
 from ai_etl.sources.rest_source import load_rest
 from ai_etl.sources.sqlite_source import load_sqlite
 
-# Sprint 12 (ADR-012): the raw per-row sample used to scale with column count with no
+# Sprint 12 (ADR-013): the raw per-row sample used to scale with column count with no
 # cap — `df.head(3).to_dict(orient="records")` over ALL columns is 3 x n_cols values per
 # source. Real profiling against a 200k x 300 benchmark confirmed this as the dominant
 # contributor to source_schemas' serialized size, growing linearly and unbounded with
@@ -102,7 +102,7 @@ def _extract_schema(df: pd.DataFrame) -> dict[str, Any]:
 
     `dtypes`/`null_counts`/`columns` stay full-width — one small scalar per column,
     not per-row sampled values, so they don't scale the way the raw sample does.
-    `sample` is capped to the first MAX_SAMPLE_COLUMNS columns (ADR-012, Sprint 12
+    `sample` is capped to the first MAX_SAMPLE_COLUMNS columns (ADR-013, Sprint 12
     scale profiling) — see module-level constant docstring for why.
     """
     null_counts = df.isnull().sum().to_dict()
