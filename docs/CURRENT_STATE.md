@@ -143,6 +143,27 @@ for the full local verification against both sprints' real migration files
 (temporarily staged, not committed, same trick Sprint 14 used against
 Sprint 17).
 
+**Rebased onto `main` after Sprints 17 and 14 actually merged (real conflict,
+resolved by hand)**: `execution_queue.py`'s `enqueue_analysis`/
+`run_full_analysis_task` had been touched by all three sprints in parallel —
+Sprint 17's `saved_pipeline_id` threading, Sprint 14's post-completion drift
+check, and this sprint's budget/rate-limit gate + in-flight lock. Resolved
+by keeping all three: budget and rate-limit stay *entry* checks (before
+`.delay()`, budget first per the earlier fix), `saved_pipeline_id` still
+flows through to `.delay()`/`run_full_analysis`, and the drift check still
+runs as an *exit* action after completion — with the budget lock's release
+placed in the `finally` immediately after `run_full_analysis` returns, ahead
+of the drift check, so a drift/digest hiccup can never hold a tenant's
+budget lock open past the run's own completion. `audit/db.py` had no real
+overlap (different function names for different concerns) — confirmed via
+`grep "^def " | sort | uniq -d` returning nothing. Full detail (including
+the one test fixed post-rebase — a fake missing the `saved_pipeline_id`
+kwarg Sprint 17 added) in ADR-019's "Addendum — rebase onto merged Sprints
+17 and 14". Re-verified after rebase: full `pytest tests/unit` (531 passed,
+including Sprint 17/14's own tests), and the concurrency guard re-confirmed
+for real against a fresh Postgres + Redis, this time against the actual
+merged `0007`/`0008` migrations rather than temporarily staged copies.
+
 `services/execution_queue.py::check_budget_cap` (new) mirrors
 `check_and_increment_rate_limit`'s shape but **deliberately does not**
 mirror its Redis storage for spend itself — spend is read directly from

@@ -625,7 +625,12 @@ def test_inflight_lock_is_released_after_the_task_finishes(
     enqueue_analysis("spec", "question", "./runs", "tenant-a")
 
     def _fake_run_full_analysis(
-        spec, business_question, run_dir, progress_callback=None, tenant_id=None
+        spec,
+        business_question,
+        run_dir,
+        progress_callback=None,
+        tenant_id=None,
+        saved_pipeline_id=None,
     ):
         return {"state": {"run_id": "r1", "status": "completed", "error": None}, "tokens": {}}
 

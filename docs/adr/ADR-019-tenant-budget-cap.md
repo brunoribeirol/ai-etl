@@ -320,6 +320,62 @@ dropped only this migration's column, leaving Sprint 17/14's schema intact;
 re-`upgrade head` reapplied cleanly. The two staged files were removed
 afterward — this branch commits only its own `0009_tenant_budget_cap.py`.
 
+## Addendum — rebase onto merged Sprints 17 and 14 (real conflict, resolved)
+
+Sprints 17 and 14 merged to `main` (in that order) before this sprint did.
+Rebasing this branch onto the updated `main` produced a **real** conflict —
+not just the renumbering already handled above — in `src/ai_etl/services/execution_queue.py`
+and `src/ai_etl/audit/db.py`: three sprints had modified the same
+`enqueue_analysis`/`run_full_analysis_task` functions in parallel. Resolved
+by hand, not accepted blindly from either side:
+
+- **`audit/db.py`**: no real overlap — Sprint 17/14 added
+  `list_pipeline_run_history`/`get_previous_completed_run` (their own new
+  functions), this sprint added `get_monthly_budget`/`set_monthly_budget`/
+  `get_monthly_spend_usd` (different names, different concern). Resolution
+  was concatenation, confirmed with `grep "^def " | sort | uniq -d` returning
+  nothing (no duplicate function definitions) after resolving.
+- **`execution_queue.py`**: genuine three-way interleaving inside the same
+  two functions:
+  - `enqueue_analysis`: Sprint 17 added a `saved_pipeline_id` parameter,
+    threaded through to `.delay()`'s 7th positional argument. This sprint's
+    own post-review fix (see the Addendum above) wrapped the call in a
+    `try`/`except` to release the budget in-flight lock if enqueueing itself
+    fails. Merged: the `try`/`except` structure is kept, and the `.delay()`
+    call inside it now passes all 7 arguments including `saved_pipeline_id`.
+  - `run_full_analysis_task`: Sprint 17 passes `saved_pipeline_id` through to
+    `run_full_analysis`; Sprint 14 added a drift-check call
+    (`_run_drift_check_best_effort`) after the run completes, gated on
+    `saved_pipeline_id is not None`. This sprint's fix wrapped the
+    `run_full_analysis` call in `try`/`finally` to release the budget lock.
+    Merged: the `try`/`finally` releases the lock immediately after
+    `run_full_analysis` returns (passing `saved_pipeline_id` through, from
+    Sprint 17) — **before** the drift check runs, not after — so a drift/
+    digest-delivery hiccup can never leave a tenant's budget lock held past
+    the run's own completion. This ordering was a deliberate check, not an
+    accident: budget and rate-limit are *entry* gates (before `.delay()`),
+    while drift detection is an *exit* action (after the run's real result
+    is known) — the two categories don't need to interleave, only to run in
+    a sequence where the entry gate's own cleanup (lock release) isn't
+    accidentally delayed by an unrelated exit action.
+
+**Verified after resolving, against the real Sprint 17/`0007` and Sprint
+14/`0008` migration files now in `main`** (no more temporary staging
+needed): `alembic upgrade head` applied the real 0001→0009 chain cleanly;
+`\d users` matched exactly; `alembic downgrade -1` / re-`upgrade head` clean.
+The concurrency fix from the first Addendum was re-verified for real against
+a fresh throwaway Postgres + Redis after the rebase: two concurrent
+`enqueue_analysis` calls near a tenant's cap — exactly one still passes,
+confirming the merge didn't silently drop the in-flight lock logic. Full
+test suite (`pytest tests/unit`, including Sprint 17's and Sprint 14's own
+`execution_queue`/`scheduler`/`audit_db` tests): 531 passed. One test in
+this sprint's own suite needed a fix post-rebase — a fake
+`run_full_analysis` in `test_inflight_lock_is_released_after_the_task_finishes`
+was missing the new `saved_pipeline_id=None` parameter Sprint 17 added to
+the real function's signature (every other fake in the file already had it,
+merged in cleanly from Sprint 17/14's own tests) — a real signature drift a
+rebase should catch, not a logic bug.
+
 ## Related
 
 - ADR-008 — async execution, per-tenant rate limiting (the pattern this ADR
