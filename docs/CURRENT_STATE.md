@@ -88,11 +88,36 @@ row-length/header-detection logic); `src/ai_etl/agents/extractor.py` — 2-line 
 to the `csv` dispatch branch. `pyproject.toml` — `charset-normalizer` promoted from transitive
 to a declared base dependency.
 
-Verification this session: `ruff check`/`format --check` clean on every touched file (pre-existing
-findings only in untouched `case_study/baselines/*.ipynb`/`generate_*.py`, unrelated);
-`mypy src/` clean (49 files, no hang this session); `pytest tests/unit tests/integration`
-— 411 passed, 14 skipped (pre-existing DB/network-unreachable skip pattern), 91% overall
-coverage, `csv_source.py` at 98% (well above the 70% adapter floor); `bandit`/`pip-audit`
+**Post-open-PR code review caught a real regression, fixed same session**: `/code-review`
+on PR #61 found that `_validate_row_lengths()` — the check added for the malformed-quote/
+stray-delimiter bug above — re-walks the whole file a second time in pure-Python `csv.reader`
+on top of pandas' own C-engine parse, with no size short-circuit, measurably doubling
+`load_csv`'s CPU time at scale (the exact metric Sprint 12/ADR-013 optimized). Fixed with a
+row-count-based fast path: below `_LARGE_FILE_ROW_THRESHOLD=50_000` lines (matching Sprint
+12's own `LARGE_DATASET_ROW_THRESHOLD` convention in `core/sandbox.py`) every row is still
+validated, unchanged; above it, only a bounded leading sample (`_VALIDATION_SAMPLE_ROWS=5_000`)
+is checked — an explicit, documented trade-off (a malformed row past the sample boundary in a
+very large file is no longer guaranteed to be caught), not a silent one. **Measured, not
+assumed**: the official Sprint 12 200k-row benchmark generator hit this session's
+already-documented iCloud-sync I/O stall (`~/Documents` — see Known risks below) and was
+killed after 20+ minutes with no reliable progress; substituted with a 250k-row × 40-col CSV
+generated directly in the non-iCloud scratch path (8s to generate) for the timing comparison
+instead — a valid substitute since the regression is a generic O(rows) cost, not
+dataset-content-specific. Results: pure `pandas.read_csv` floor ≈2.09s; **after** the fix
+≈2.29s (~10% overhead); **before** the fix (full second pass, simulated by disabling the
+threshold) ≈4.30s (~2.06×) — confirms both the review's "doubles CPU time" finding and that
+the fix restores near-baseline performance. New tests: 3 more in
+`tests/unit/test_csv_source_dirty_data.py` (malformed row caught within the sample on a large
+file; malformed row past the sample boundary correctly *not* caught, the documented trade-off;
+small-file behavior unchanged) — 22 tests total in that file, `csv_source.py` now at 99%
+coverage.
+
+Verification this session (including the post-review fix): `ruff check`/`format --check`
+clean on every touched file (pre-existing findings only in untouched
+`case_study/baselines/*.ipynb`/`generate_*.py`, unrelated); `mypy src/` clean (49 files, no
+hang this session); `pytest tests/unit tests/integration`
+— 414 passed, 14 skipped (pre-existing DB/network-unreachable skip pattern), 91% overall
+coverage, `csv_source.py` at 99% (well above the 70% adapter floor); `bandit`/`pip-audit`
 — only the two pre-existing, documented `exec()` sites in `core/sandbox.py` and one
 pre-existing `assert` in `api/deps.py`, no new findings, no known CVEs (including the new
 `charset-normalizer` dependency). `tests/e2e` not run locally (same Postgres/Redis

@@ -14,6 +14,8 @@ import pandas as pd
 import pytest
 
 from ai_etl.sources.csv_source import (
+    _LARGE_FILE_ROW_THRESHOLD,
+    _VALIDATION_SAMPLE_ROWS,
     _decode_bytes,
     _detect_delimiter,
     _validate_row_lengths,
@@ -105,6 +107,47 @@ def test_validate_row_lengths_rejects_field_count_mismatch() -> None:
 
 def test_validate_row_lengths_noop_on_empty_file() -> None:
     _validate_row_lengths("", ",", "empty.csv")  # must not raise
+
+
+def _large_well_formed_csv(n_rows: int) -> str:
+    lines = ["a,b,c"] + [f"{i},{i},{i}" for i in range(n_rows)]
+    return "\n".join(lines) + "\n"
+
+
+def test_validate_row_lengths_large_file_catches_mismatch_within_sample() -> None:
+    """Sprint 22 code-review fix: above the row threshold, only a bounded
+    leading sample is validated (not a second full-file pass) — a malformed
+    row inside that sample must still be caught."""
+    lines = ["a,b,c"] + [f"{i},{i},{i}" for i in range(_LARGE_FILE_ROW_THRESHOLD + 1000)]
+    lines[10] = "1,2,3,4"  # well within _VALIDATION_SAMPLE_ROWS
+    text = "\n".join(lines) + "\n"
+    with pytest.raises(ValueError, match="expected 3 fields"):
+        _validate_row_lengths(text, ",", "large_bad_early.csv")
+
+
+def test_validate_row_lengths_large_file_skips_rows_past_sample_boundary() -> None:
+    """Documented, accepted trade-off: a malformed row past the sample
+    boundary in a very large file is not guaranteed to be caught by this
+    check — must not raise (and must not scan the whole file to find out)."""
+    n_rows = _LARGE_FILE_ROW_THRESHOLD + 1000
+    lines = ["a,b,c"] + [f"{i},{i},{i}" for i in range(n_rows)]
+    # Header is line 1, data starts at line 2, so line (2 + sample_rows) is
+    # the first line past the validated sample.
+    past_sample_idx = _VALIDATION_SAMPLE_ROWS + 5
+    lines[past_sample_idx] = "1,2,3,4"
+    text = "\n".join(lines) + "\n"
+    _validate_row_lengths(text, ",", "large_bad_late.csv")  # must not raise
+
+
+def test_validate_row_lengths_small_file_still_fully_validated() -> None:
+    """Below the threshold, behavior is unchanged — every row checked,
+    including one deep into a file that's still well under the threshold."""
+    n_rows = 100
+    lines = ["a,b,c"] + [f"{i},{i},{i}" for i in range(n_rows)]
+    lines[-1] = "1,2,3,4"  # last row, well past _VALIDATION_SAMPLE_ROWS if it applied
+    text = "\n".join(lines) + "\n"
+    with pytest.raises(ValueError, match="expected 3 fields"):
+        _validate_row_lengths(text, ",", "small_bad_late.csv")
 
 
 def test_validate_row_lengths_wraps_csv_error(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -33,7 +33,11 @@ found and are each fixed below:
    `_validate_row_lengths()` re-walks the raw text with `csv.reader` and
    raises a specific, line-numbered error instead of ever returning that
    DataFrame — this is the case the sprint's Definition of Done singles out
-   as strictly worse than a loud failure.
+   as strictly worse than a loud failure. Post-merge code review measured
+   this second pass doubling `load_csv`'s CPU time against the Sprint 12
+   204k-row benchmark, so it's full-file below `_LARGE_FILE_ROW_THRESHOLD`
+   rows and a bounded leading sample above it — an explicit, documented
+   trade-off (see the function's own docstring), not a silent one.
 
 Excel gets equivalent treatment via `_load_excel()`: a workbook with more
 than one sheet raises rather than silently reading only the first (unless
@@ -54,6 +58,8 @@ this is hardening of validation/parsing logic in an existing one).
 
 import csv
 import io
+import itertools
+from collections.abc import Iterable
 
 import pandas as pd
 from charset_normalizer import from_bytes
@@ -66,6 +72,24 @@ _CANDIDATE_DELIMITERS = ",;\t|"
 # row — generous enough for a few title/spacer rows without scanning an
 # entire large sheet for no benefit.
 _MAX_HEADER_SCAN_ROWS = 20
+
+# Sprint 22 code-review finding: `_validate_row_lengths()` re-walking every
+# row of a file in pure Python (on top of pandas' own C-engine parse just
+# after it) measurably doubled `extractor_load_csv`'s CPU time against the
+# Sprint 12 204k-row benchmark (`case_study/data/profile_scale.py`) — the
+# exact metric that sprint optimized. Below this row-count threshold, every
+# row is still validated (unchanged, full guarantee) — this covers the
+# realistic case for the malformed-quote/stray-delimiter bug the check
+# exists to catch: small, hand-edited, or ad-hoc exports, not large
+# machine-generated bulk extracts. Above it, only a bounded leading sample
+# (`_VALIDATION_SAMPLE_ROWS`) is validated — an explicit, documented
+# trade-off, not a silent one (see `_validate_row_lengths()`'s docstring).
+# Chosen to match the order of magnitude Sprint 12/ADR-013 already
+# established for sandbox timeout scaling (`LARGE_DATASET_ROW_THRESHOLD` in
+# `core/sandbox.py`), for a consistent "large dataset" definition across the
+# pipeline rather than a second, unrelated number.
+_LARGE_FILE_ROW_THRESHOLD = 50_000
+_VALIDATION_SAMPLE_ROWS = 5_000
 
 
 def load_csv(
@@ -146,7 +170,30 @@ def _validate_row_lengths(text: str, delimiter: str, path: str) -> None:
     consistent quoting — catches both root causes in one check: a quote
     character appearing mid-field (not at the start), and a stray
     unescaped delimiter inside what should have been one field.
+
+    Sprint 22 code-review fix: below `_LARGE_FILE_ROW_THRESHOLD` lines every
+    row is checked, same guarantee as before. Above it, only the first
+    `_VALIDATION_SAMPLE_ROWS` rows are checked — a bounded-cost sample
+    instead of a second full-file pass. This is a real, accepted trade-off:
+    a malformed row that first appears past the sample boundary in a very
+    large file will not be caught here. pandas' own default
+    `on_bad_lines="error"` (still active on the real `read_csv` call right
+    after this) remains a partial backstop, but does *not* catch the
+    quote-confusion variant of this bug (confirmed by direct testing — see
+    module docstring, point 3) — only a genuine extra-field row with no
+    quote character involved. Large, machine-generated bulk extracts (the
+    case this threshold targets) are overwhelmingly the case where that
+    residual gap is acceptable; small/hand-edited files — where the bug
+    this check exists for actually originates — stay fully covered.
     """
+    # A cheap `str.count` to decide the strategy, not a second CSV-aware
+    # pass — this is O(n) over raw text same as the read that already
+    # happened, negligible next to the parse itself.
+    approx_line_count = text.count("\n") + 1
+    sample_limit = (
+        _VALIDATION_SAMPLE_ROWS if approx_line_count > _LARGE_FILE_ROW_THRESHOLD else None
+    )
+
     reader = csv.reader(io.StringIO(text), delimiter=delimiter)
     try:
         header = next(reader)
@@ -154,8 +201,12 @@ def _validate_row_lengths(text: str, delimiter: str, path: str) -> None:
         return  # empty file — let pandas raise its own (accurate) error
     expected = len(header)
 
+    numbered_rows: Iterable[tuple[int, list[str]]] = enumerate(reader, start=2)
+    if sample_limit is not None:
+        numbered_rows = itertools.islice(numbered_rows, sample_limit)
+
     try:
-        for line_num, row in enumerate(reader, start=2):
+        for line_num, row in numbered_rows:
             if not row:
                 continue
             if len(row) != expected:
