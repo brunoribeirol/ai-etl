@@ -843,9 +843,22 @@ def record_pipeline_run(pipeline_id: str, task_id: str) -> None:
         conn.execute(stmt)
 
 
-def list_pipeline_run_history(pipeline_id: str, tenant_id: str) -> list[dict[str, Any]]:
-    """Sprint 17 (ADR-017) — every execution of one saved pipeline, oldest
-    first, with the Gold/Science KPIs the time-series view charts.
+# Sprint 17 code review (PR #64): a tight-cron saved pipeline (ADR-016 allows
+# any valid cron, including every few minutes) accumulates thousands of runs
+# over weeks/months with no cap — same class of unbounded-query risk
+# `load_history`'s own `limit=20` default already guards against for the
+# avulso run list. 200 (vs. `load_history`'s 20) is a deliberate, larger
+# default: a KPI *trend* chart needs more points to actually show a trend,
+# but still bounded, not "every run ever."
+DEFAULT_PIPELINE_HISTORY_LIMIT = 200
+
+
+def list_pipeline_run_history(
+    pipeline_id: str, tenant_id: str, limit: int = DEFAULT_PIPELINE_HISTORY_LIMIT
+) -> list[dict[str, Any]]:
+    """Sprint 17 (ADR-017) — the `limit` most recent executions of one saved
+    pipeline, oldest first, with the Gold/Science KPIs the time-series view
+    charts.
 
     Scoped by `tenant_id` in addition to `saved_pipeline_id` — same
     defense-in-depth pattern as `get_saved_pipeline`/`_run_belongs_to_tenant`:
@@ -858,8 +871,16 @@ def list_pipeline_run_history(pipeline_id: str, tenant_id: str) -> list[dict[str
     come from a `LEFT OUTER JOIN` against `analysis_runs`, same as
     `load_history` — a scheduled fire with no `business_question` (Silver-only)
     has no matching row and reads back as `None`/`NaN`, not zero.
+
+    `limit` bounds the query itself (not a post-hoc slice of every row ever
+    fetched) — the *most recent* `limit` executions, since "the last 200"
+    is what a trend view needs, not an arbitrary 200 from the beginning of
+    the pipeline's history. Implemented as an inner query ordered `DESC`
+    with the `LIMIT`, then re-ordered `ASC` in the outer query so the
+    caller (and the chart) still gets oldest-first — the shape every
+    existing caller/test expects.
     """
-    stmt = (
+    base = (
         select(
             runs.c.run_id,
             runs.c.status,
@@ -874,8 +895,11 @@ def list_pipeline_run_history(pipeline_id: str, tenant_id: str) -> list[dict[str
         )
         .select_from(runs.outerjoin(analysis_runs, runs.c.run_id == analysis_runs.c.run_id))
         .where(runs.c.saved_pipeline_id == pipeline_id, runs.c.tenant_id == tenant_id)
-        .order_by(runs.c.timestamp.asc())
+        .order_by(runs.c.timestamp.desc())
+        .limit(limit)
+        .subquery()
     )
+    stmt = select(base).order_by(base.c.timestamp.asc())
     with get_engine().connect() as conn:
         rows_ = conn.execute(stmt).fetchall()
     return [

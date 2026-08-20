@@ -25,6 +25,14 @@ import type { AnalysisEntry, FullResult, PipelineRunHistoryEntry } from "@/lib/t
  * existing `GET /runs/{run_id}` (no new backend diff endpoint — ADR-017's
  * own scope note) and computes the diff entirely client-side.
  */
+
+// Mirrors `audit/db.py::DEFAULT_PIPELINE_HISTORY_LIMIT` (Sprint 17 code
+// review, PR #64) — passed explicitly rather than relying on the backend's
+// own default, so this component always knows the exact cap it requested
+// and can tell "this is everything" from "this is truncated" (see the
+// `history.length === HISTORY_LIMIT` check below).
+const HISTORY_LIMIT = 200;
+
 export function PipelineHistory({ pipelineId }: { pipelineId: string }) {
   const { getToken } = useAuth();
   const apiUrl = process.env.NEXT_PUBLIC_API_URL;
@@ -60,7 +68,9 @@ export function PipelineHistory({ pipelineId }: { pipelineId: string }) {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    authedFetch<PipelineRunHistoryEntry[]>(`/pipelines/${pipelineId}/history`)
+    authedFetch<PipelineRunHistoryEntry[]>(
+      `/pipelines/${pipelineId}/history?limit=${HISTORY_LIMIT}`,
+    )
       .then((data) => {
         if (!cancelled) setHistory(data);
       })
@@ -154,15 +164,28 @@ export function PipelineHistory({ pipelineId }: { pipelineId: string }) {
     <div className="flex flex-col gap-8">
       <Card>
         <CardContent>
-          <h2 className="text-sm font-medium mb-2">KPIs ao longo do tempo</h2>
+          <h2 className="text-sm font-medium mb-1">KPIs ao longo do tempo</h2>
+          {history.length === HISTORY_LIMIT && (
+            <p className="text-xs text-muted-foreground mb-2">
+              Últimas {HISTORY_LIMIT} execuções.
+            </p>
+          )}
           <PlotlyChart figure={chartFigure} />
         </CardContent>
       </Card>
 
       <div className="flex flex-col gap-3">
-        <h2 className="text-sm font-medium text-muted-foreground">
-          Execuções ({history.length})
-        </h2>
+        <div>
+          <h2 className="text-sm font-medium text-muted-foreground">
+            Execuções ({history.length})
+          </h2>
+          {history.length === HISTORY_LIMIT && (
+            <p className="text-xs text-muted-foreground">
+              Mostrando as últimas {HISTORY_LIMIT} execuções — este pipeline pode ter mais no
+              histórico.
+            </p>
+          )}
+        </div>
         <div className="flex flex-col gap-2">
           {history.map((run) => (
             <div

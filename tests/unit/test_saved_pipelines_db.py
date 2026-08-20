@@ -331,3 +331,27 @@ def test_list_pipeline_run_history_joins_analysis_kpis(engine: Engine) -> None:
     assert history[1]["run_id"] == "run-2"
     assert history[1]["cost_usd"] is None
     assert history[1]["gold_subtasks"] is None
+
+
+def test_list_pipeline_run_history_limit_keeps_most_recent_runs_oldest_first(
+    engine: Engine,
+) -> None:
+    """Sprint 17 code review (PR #64) — a tight-cron pipeline can accumulate
+    thousands of runs; `limit` must bound the query to the *most recent* N
+    executions (not an arbitrary N from the start of history), while still
+    returning them oldest-first — the shape every other caller/the chart
+    expects."""
+    _insert_user(engine, "tenant-a")
+    pipeline = db.create_saved_pipeline("tenant-a", "A", "postgres", "spec a", "0 3 * * *")
+    t0 = datetime(2026, 8, 1, tzinfo=timezone.utc)
+    for i in range(5):
+        _insert_run(engine, f"run-{i}", "tenant-a", pipeline["id"], t0 + timedelta(days=i))
+
+    history = db.list_pipeline_run_history(pipeline["id"], "tenant-a", limit=2)
+
+    # The 2 most recent runs (run-3, run-4), still oldest-first.
+    assert [row["run_id"] for row in history] == ["run-3", "run-4"]
+
+
+def test_list_pipeline_run_history_default_limit_is_200(engine: Engine) -> None:
+    assert db.DEFAULT_PIPELINE_HISTORY_LIMIT == 200
