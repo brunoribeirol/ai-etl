@@ -114,3 +114,35 @@ export type TaskStatus = {
 export type ApiConfig = {
   model_name: string;
 };
+
+/**
+ * Sprint 13 (ADR-016) — `/pipelines` CRUD. Mirrors
+ * `audit/db.py::_saved_pipeline_row_to_dict`. `source_type` is restricted to
+ * "live" connectors only (no browser-uploaded csv/document) — see ADR-016
+ * Decision 3.
+ */
+export type SchedulableSourceType = "postgres" | "sqlite" | "mysql" | "mongodb" | "rest";
+
+export const SCHEDULABLE_SOURCE_TYPES: SchedulableSourceType[] = [
+  "postgres",
+  "sqlite",
+  "mysql",
+  "mongodb",
+  "rest",
+];
+
+export type SavedPipeline = {
+  id: string;
+  tenant_id: string;
+  name: string;
+  source_type: SchedulableSourceType;
+  spec: string;
+  business_question: string;
+  cron_schedule: string;
+  is_active: boolean;
+  next_run_at: string;
+  last_task_id: string | null;
+  last_run_at: string | null;
+  created_at: string;
+  updated_at: string;
+};

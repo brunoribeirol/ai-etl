@@ -2,19 +2,21 @@
 
 import io
 import json
+import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional, Union
 
 import pandas as pd
-from sqlalchemy import func, insert, select
+from sqlalchemy import func, insert, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from ai_etl.audit.connection import get_engine
-from ai_etl.audit.models import analysis_runs, runs, stage_latencies, users
+from ai_etl.audit.models import analysis_runs, runs, saved_pipelines, stage_latencies, users
 from ai_etl.audit.storage import StorageBackend, get_storage_backend
 from ai_etl.core.analysis_types import AdvisorResult, GoldResult, ScienceResult, TokenUsage
 from ai_etl.core.llm import get_model_name
 from ai_etl.core.pricing import compute_cost_usd
+from ai_etl.core.scheduling import compute_next_run_at
 from ai_etl.core.state import PipelineState
 
 
@@ -571,6 +573,191 @@ def _load_analysis_tokens(run_id: str) -> TokenUsage:
         }
     except Exception:
         return {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+
+
+def _saved_pipeline_row_to_dict(row: Any) -> dict[str, Any]:
+    return {
+        "id": row.id,
+        "tenant_id": row.tenant_id,
+        "name": row.name,
+        "source_type": row.source_type,
+        "spec": row.spec,
+        "business_question": row.business_question,
+        "cron_schedule": row.cron_schedule,
+        "is_active": row.is_active,
+        "next_run_at": row.next_run_at,
+        "last_task_id": row.last_task_id,
+        "last_run_at": row.last_run_at,
+        "created_at": row.created_at,
+        "updated_at": row.updated_at,
+    }
+
+
+def create_saved_pipeline(
+    tenant_id: str,
+    name: str,
+    source_type: str,
+    spec: str,
+    cron_schedule: str,
+    business_question: str = "",
+) -> dict[str, Any]:
+    """Persist a new saved pipeline (Sprint 13, ADR-016).
+
+    Caller (the `/pipelines` router) is responsible for validating
+    `cron_schedule` (`core.scheduling.validate_cron_schedule`) and
+    `source_type` (`core.scheduling.SCHEDULABLE_SOURCE_TYPES`, ADR-016
+    Decision 3) before calling this — this function trusts its inputs,
+    matching `save_run`/`save_analysis`'s existing "no revalidation at the
+    persistence layer" pattern.
+    """
+    now = datetime.now(tz=timezone.utc)
+    pipeline_id = str(uuid.uuid4())
+    next_run_at = compute_next_run_at(cron_schedule, now)
+    stmt = insert(saved_pipelines).values(
+        id=pipeline_id,
+        tenant_id=tenant_id,
+        name=name,
+        source_type=source_type,
+        spec=spec,
+        business_question=business_question,
+        cron_schedule=cron_schedule,
+        is_active=True,
+        next_run_at=next_run_at,
+        last_task_id=None,
+        last_run_at=None,
+        created_at=now,
+        updated_at=now,
+    )
+    with get_engine().begin() as conn:
+        conn.execute(stmt)
+    return {
+        "id": pipeline_id,
+        "tenant_id": tenant_id,
+        "name": name,
+        "source_type": source_type,
+        "spec": spec,
+        "business_question": business_question,
+        "cron_schedule": cron_schedule,
+        "is_active": True,
+        "next_run_at": next_run_at,
+        "last_task_id": None,
+        "last_run_at": None,
+        "created_at": now,
+        "updated_at": now,
+    }
+
+
+def list_saved_pipelines(tenant_id: str) -> list[dict[str, Any]]:
+    """Return every saved pipeline belonging to `tenant_id`, most recently updated first."""
+    stmt = (
+        select(saved_pipelines)
+        .where(saved_pipelines.c.tenant_id == tenant_id)
+        .order_by(saved_pipelines.c.updated_at.desc())
+    )
+    with get_engine().connect() as conn:
+        rows = conn.execute(stmt).fetchall()
+    return [_saved_pipeline_row_to_dict(row) for row in rows]
+
+
+def get_saved_pipeline(pipeline_id: str, tenant_id: str) -> Optional[dict[str, Any]]:
+    """Return one saved pipeline, scoped to `tenant_id` — `None` covers both
+    "unknown id" and "belongs to another tenant" (same soft-fail shape as
+    `load_full_result`'s ownership check)."""
+    stmt = select(saved_pipelines).where(
+        saved_pipelines.c.id == pipeline_id, saved_pipelines.c.tenant_id == tenant_id
+    )
+    with get_engine().connect() as conn:
+        row = conn.execute(stmt).first()
+    return _saved_pipeline_row_to_dict(row) if row is not None else None
+
+
+def update_saved_pipeline(
+    pipeline_id: str,
+    tenant_id: str,
+    name: Optional[str] = None,
+    source_type: Optional[str] = None,
+    spec: Optional[str] = None,
+    cron_schedule: Optional[str] = None,
+    business_question: Optional[str] = None,
+    is_active: Optional[bool] = None,
+) -> Optional[dict[str, Any]]:
+    """Partial update (PATCH semantics) — only fields passed as non-`None` change.
+
+    Recomputes `next_run_at` whenever `cron_schedule` changes, or whenever a
+    paused pipeline (`is_active=False -> True`) is resumed — a schedule that
+    was paused for a week should fire from "now", not immediately catch up
+    on every tick it missed while paused.
+
+    Returns the updated row, or `None` if `pipeline_id` doesn't exist or
+    doesn't belong to `tenant_id` (ownership check happens first, before any
+    write — same pattern as `_run_belongs_to_tenant`).
+    """
+    existing = get_saved_pipeline(pipeline_id, tenant_id)
+    if existing is None:
+        return None
+
+    now = datetime.now(tz=timezone.utc)
+    values: dict[str, Any] = {"updated_at": now}
+    if name is not None:
+        values["name"] = name
+    if source_type is not None:
+        values["source_type"] = source_type
+    if spec is not None:
+        values["spec"] = spec
+    if business_question is not None:
+        values["business_question"] = business_question
+
+    resolved_cron = cron_schedule if cron_schedule is not None else existing["cron_schedule"]
+    became_active = is_active is True and existing["is_active"] is False
+    if cron_schedule is not None:
+        values["cron_schedule"] = cron_schedule
+    if is_active is not None:
+        values["is_active"] = is_active
+    if cron_schedule is not None or became_active:
+        values["next_run_at"] = compute_next_run_at(resolved_cron, now)
+
+    stmt = (
+        update(saved_pipelines)
+        .where(saved_pipelines.c.id == pipeline_id, saved_pipelines.c.tenant_id == tenant_id)
+        .values(**values)
+    )
+    with get_engine().begin() as conn:
+        conn.execute(stmt)
+    return get_saved_pipeline(pipeline_id, tenant_id)
+
+
+def list_due_pipelines(now: Optional[datetime] = None) -> list[dict[str, Any]]:
+    """Return every active saved pipeline (across all tenants) whose
+    `next_run_at` has passed — the query `services/scheduler.py`'s Celery
+    beat task runs on each tick. No `tenant_id` filter: the beat task itself
+    isn't acting on behalf of any one tenant."""
+    cutoff = now or datetime.now(tz=timezone.utc)
+    stmt = select(saved_pipelines).where(
+        saved_pipelines.c.is_active.is_(True), saved_pipelines.c.next_run_at <= cutoff
+    )
+    with get_engine().connect() as conn:
+        rows = conn.execute(stmt).fetchall()
+    return [_saved_pipeline_row_to_dict(row) for row in rows]
+
+
+def mark_pipeline_fired(pipeline_id: str, task_id: str, next_run_at: datetime) -> None:
+    """Record that a saved pipeline just fired: advance `next_run_at` and
+    remember `last_task_id`/`last_run_at`. Called by `services/scheduler.py`
+    immediately after `enqueue_analysis` succeeds for this pipeline — a
+    failed `enqueue_analysis` call (e.g. rate limit) must not advance
+    `next_run_at`, so the caller only invokes this on success.
+
+    `task_id` is the Celery task id `enqueue_analysis` returns, not yet the
+    eventual `runs.run_id` (generated later, inside the task itself) — same
+    distinction `GET /runs/{task_id}/status` already relies on."""
+    now = datetime.now(tz=timezone.utc)
+    stmt = (
+        update(saved_pipelines)
+        .where(saved_pipelines.c.id == pipeline_id)
+        .values(last_task_id=task_id, last_run_at=now, next_run_at=next_run_at, updated_at=now)
+    )
+    with get_engine().begin() as conn:
+        conn.execute(stmt)
 
 
 def _make_serializable(obj: Any) -> Any:

@@ -157,7 +157,7 @@ Template: `## [Unreleased]` → mover para `## [vX.Y.Z] - YYYY-MM-DD` ao taggear
 | Contexto do TCC | `~/Documents/Obsidian Vault/tcc/` |
 
 ### ADR Numbering
-Próximo ADR disponível: ADR-016 (atualizado 20/08/2026 — ADR-005 a ADR-015 já existem, ver `docs/adr/`).
+Próximo ADR disponível: ADR-017 (atualizado 20/08/2026 — ADR-005 a ADR-016 já existem, ver `docs/adr/`; ADR-016 usado pela Sprint 13, checkpoint pré-merge — confirmar que não colide com a Sprint 22 rodando em paralelo antes de reusar o número).
 Verificar `docs/adr/` antes de criar.
 
 ---

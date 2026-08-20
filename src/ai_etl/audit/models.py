@@ -85,3 +85,44 @@ analysis_runs = Table(
     Column("model_name", String(50), nullable=True),
     Column("cost_usd", Float, nullable=True),
 )
+
+# Sprint 13 (ADR-016, migration 0006) — a "saved pipeline" is a persisted
+# spec + cron schedule + tenant, reexecuted unattended by Celery beat
+# (services/scheduler.py). Distinct from `runs`/`analysis_runs`, which stay
+# one row per *execution* (avulso or scheduled alike) — a saved pipeline
+# produces many `runs` rows over time, linked loosely via `last_task_id` only
+# (no FK: a saved pipeline can be deleted independently of its run history,
+# and `runs.run_id` values already exist before this table does).
+saved_pipelines = Table(
+    "saved_pipelines",
+    metadata,
+    Column("id", String, primary_key=True),
+    Column("tenant_id", String, ForeignKey("users.id"), nullable=False),
+    Column("name", String(200), nullable=False),
+    # ADR-016 Decision 3: declared explicitly by the caller (not LLM-inferred
+    # from spec) and validated against `core.scheduling.SCHEDULABLE_SOURCE_TYPES`
+    # at the API layer before a row is ever written — only "live" sources
+    # (postgres/sqlite/mysql/mongodb/rest) may be scheduled, since only those
+    # are re-resolvable from connection info alone on every scheduled fire,
+    # with no dependency on a browser-uploaded file surviving between runs.
+    Column("source_type", String(20), nullable=False),
+    # Same free-text shape as runs.spec — the Orchestrator LLM re-derives the
+    # actual structured plan from this at execution time, same as an avulso
+    # run. `source_type` above is only a save-time validation gate, not
+    # threaded any further into execution.
+    Column("spec", Text, nullable=False),
+    Column("business_question", Text, nullable=False, server_default=""),
+    # Standard 5-field cron string (e.g. "0 3 * * *"), validated via
+    # croniter at the API layer before being persisted.
+    Column("cron_schedule", String(100), nullable=False),
+    Column("is_active", Boolean, nullable=False, server_default="true"),
+    # Precomputed via croniter so services/scheduler.py's due-pipeline query
+    # is an indexed range scan, not a per-row cron evaluation every tick.
+    Column("next_run_at", DateTime(timezone=True), nullable=False),
+    Column("last_task_id", String, nullable=True),
+    Column("last_run_at", DateTime(timezone=True), nullable=True),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+    Index("ix_saved_pipelines_active_next_run", "is_active", "next_run_at"),
+    Index("ix_saved_pipelines_tenant", "tenant_id"),
+)

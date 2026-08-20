@@ -2,7 +2,7 @@
 
 > Living doc. Updated at the end of meaningful work sessions, not per-commit. Source of truth for repo/code state; the Obsidian vault (`~/Documents/Obsidian Vault/tcc/`) is the source of truth for the academic TCC narrative and product/strategy context.
 
-**Last updated:** 2026-08-20, end of session — **parallel sprint batch complete: Sprints 8, 9, 10, 11, 12, and 23 all merged to `main`.** See "Start here next session" below for the full orchestration writeup and what's still open.
+**Last updated:** 2026-08-20 — **second parallel batch: Sprints 22 and 13 merged to `main`** (Sprints 8, 9, 10, 11, 12, 23 already merged earlier the same day — see below). Sprint 13's code (including migration `0006`) is in `main`, but the migration has **not** been applied to production Supabase and Celery beat has **not** been deployed as a new Railway service — both deliberately deferred, pending owner decision. See "Start here next session" below for the full orchestration writeup.
 
 ## Start here next session
 
@@ -122,6 +122,67 @@ coverage, `csv_source.py` at 99% (well above the 70% adapter floor); `bandit`/`p
 pre-existing `assert` in `api/deps.py`, no new findings, no known CVEs (including the new
 `charset-normalizer` dependency). `tests/e2e` not run locally (same Postgres/Redis
 unavailability as every prior session) — CI is the real gate.
+
+## Sprint 13 — scheduled (recurring) pipelines (branch `feat/sprint13-scheduled-pipelines`, PR open, not merged, checkpoint required)
+
+New `saved_pipelines` table (migration `0006`, ADR-016) — a persisted spec +
+cron schedule + tenant, distinct from `runs`/`analysis_runs` (still one row
+per *execution*, avulso or scheduled). Fired by a new Celery beat entry
+(`core/celery_app.py::beat_schedule`, `services/scheduler.py::
+check_scheduled_pipelines_task`, `AI_ETL_SCHEDULER_INTERVAL_SECONDS`, default
+60s) that reuses the existing `execution_queue.enqueue_analysis()` — the same
+function `POST /runs` calls — so a scheduled run is audited identically to
+an avulso one and still respects the per-tenant rate limit. **Requires a new
+Celery beat process in production** (same Docker image as the existing
+worker, different Custom Start Command: `celery -A ai_etl.core.celery_app
+beat`) — not yet deployed to Railway, since the PR isn't merged.
+
+**ADR-016 Decision 3 (data-model decision other sprints inherit)**: only
+"live" source types — `postgres`/`sqlite`/`mysql`/`mongodb`/`rest` — can be
+scheduled, never `csv`/`document` (browser uploads). Enforced by an explicit
+`source_type` field on `saved_pipelines`, validated against an allowlist at
+`POST /pipelines`/`PATCH /pipelines/{id}` time — deliberately **not** an LLM
+round-trip through the Orchestrator (would add cost/latency/an
+`OPENAI_API_KEY` dependency to a plain CRUD request for a check that should
+be deterministic).
+
+New: `docs/adr/ADR-016-scheduled-pipelines-data-model.md`,
+`alembic/versions/0006_saved_pipelines.py`, `src/ai_etl/core/scheduling.py`
+(cron validation/next-fire-time via `croniter`, new dependency),
+`src/ai_etl/services/scheduler.py`, `src/ai_etl/api/routers/pipelines.py`
+(`GET/POST /pipelines`, `GET/PATCH /pipelines/{id}`), CRUD functions in
+`audit/db.py` (`create_saved_pipeline`/`list_saved_pipelines`/
+`get_saved_pipeline`/`update_saved_pipeline`/`list_due_pipelines`/
+`mark_pipeline_fired`). Frontend: `frontend/src/app/pipelines/page.tsx` +
+`frontend/src/components/pipelines-manager.tsx` — minimal create/pause/
+resume/edit UI, reuses existing shadcn `Card`/`Button`/`Input`/`Textarea`
+(no new shadcn component installed; `source_type` is a plain native
+`<select>`).
+
+**Verified locally** (no Docker daemon in this sandbox, consistent with
+prior sessions' documented limitation): `make check`'s pieces run directly —
+`ruff check`/`format --check` clean, `mypy --strict` clean (no local hang
+this session), `pytest tests/unit` 416 passed, 92% coverage; `bandit`/
+`pip-audit` clean, no new findings. The Alembic migration was verified for
+real against a throwaway local Postgres (Homebrew `postgresql@17` binary,
+not Docker): `alembic upgrade head` (0001→0006) applied cleanly, `\d
+saved_pipelines` matched the table definition exactly, `alembic downgrade
+-1` cleanly dropped the table, and re-`upgrade head` reapplied cleanly. The
+sprint's "3 consecutive fires, no manual intervention" definition of done
+was exercised against that same real Postgres — `check_scheduled_pipelines_task`
+called directly 3 times with a forced-due pipeline, `enqueue_analysis`
+mocked at its own boundary (no real Celery/Redis broker available in this
+sandbox) — each tick fired, persisted a new `last_task_id`, and advanced
+`next_run_at`, exactly the mechanics a real beat process would exercise
+automatically. Frontend: `npm run lint` and `npm run build` both clean with
+the new `/pipelines` route included.
+
+**Not done in this session, flagged for the merge-checkpoint conversation**:
+Celery beat isn't yet deployed as a Railway service (no new Railway
+provisioning was done — checkpoint is explicitly pre-merge); no real
+end-to-end fire was observed against a live Redis/Celery worker (sandbox has
+no Docker daemon); Stripe/billing per saved pipeline is out of scope
+(ADR-016's own Consequences section).
 
 ## Sprint 8 — model comparison + stability (branch `feat/sprint8-model-comparison`, PR open, not merged)
 
