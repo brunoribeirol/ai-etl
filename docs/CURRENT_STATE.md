@@ -149,32 +149,76 @@ be deterministic).
 New: `docs/adr/ADR-016-scheduled-pipelines-data-model.md`,
 `alembic/versions/0006_saved_pipelines.py`, `src/ai_etl/core/scheduling.py`
 (cron validation/next-fire-time via `croniter`, new dependency),
-`src/ai_etl/services/scheduler.py`, `src/ai_etl/api/routers/pipelines.py`
-(`GET/POST /pipelines`, `GET/PATCH /pipelines/{id}`), CRUD functions in
-`audit/db.py` (`create_saved_pipeline`/`list_saved_pipelines`/
-`get_saved_pipeline`/`update_saved_pipeline`/`list_due_pipelines`/
-`mark_pipeline_fired`). Frontend: `frontend/src/app/pipelines/page.tsx` +
-`frontend/src/components/pipelines-manager.tsx` — minimal create/pause/
-resume/edit UI, reuses existing shadcn `Card`/`Button`/`Input`/`Textarea`
-(no new shadcn component installed; `source_type` is a plain native
-`<select>`).
+`src/ai_etl/core/paths.py` (shared `RUNS_DIR`, re-exported from
+`api/config.py`), `src/ai_etl/services/scheduler.py`,
+`src/ai_etl/api/routers/pipelines.py` (`GET/POST /pipelines`,
+`GET/PATCH /pipelines/{id}`), CRUD functions in `audit/db.py`
+(`create_saved_pipeline`/`list_saved_pipelines`/`get_saved_pipeline`/
+`update_saved_pipeline`/`list_due_pipelines`/`claim_due_pipeline`/
+`release_pipeline_claim`/`record_pipeline_run`). Frontend:
+`frontend/src/app/pipelines/page.tsx` + `frontend/src/components/
+pipelines-manager.tsx` — minimal create/pause/resume/edit UI, reuses
+existing shadcn `Card`/`Button`/`Input`/`Textarea` (no new shadcn component
+installed; `source_type` is a plain native `<select>`).
+
+**Post-PR code review (`/code-review` on PR #62) caught two real
+concurrency bugs, both fixed same-session, before merge — see ADR-016's
+"Addendum" section for full detail:**
+1. **Duplicate fires from overlapping Celery beat ticks.** The first cut
+   only advanced `next_run_at` *after* `enqueue_analysis` succeeded; an
+   overrunning tick (many due pipelines, a slow Redis check, worker
+   backlog) would let the next tick see the same pipeline as still due and
+   fire it twice. Fixed with `claim_due_pipeline` — a `next_run_at`
+   compare-and-swap `UPDATE`, executed *before* `enqueue_analysis`, so only
+   one overlapping tick can win a given due fire; the loser skips it,
+   no duplicate run. `release_pipeline_claim` reverts the claim if
+   `enqueue_analysis` then fails, so the pipeline retries next tick rather
+   than waiting a full cron period.
+2. **Schedule drift.** The replacement `next_run_at` was computed from
+   `datetime.now()` at tick time, not from the pipeline's own previous
+   `next_run_at` — a "every minute" cron under load would drift later on
+   every fire. Fixed by passing the pipeline's pre-claim `next_run_at` as
+   `compute_next_run_at`'s base.
+3. **Minor**: `services/scheduler.py` duplicated the `"./runs"` literal
+   instead of sharing `api/config.py`'s `RUNS_DIR` — fixed by extracting the
+   constant to `core/paths.py` (services/core sit below api/ in this
+   project's layering, so services/ imports from core/, not api/;
+   `api/config.py` now re-exports it unchanged for existing call sites).
 
 **Verified locally** (no Docker daemon in this sandbox, consistent with
 prior sessions' documented limitation): `make check`'s pieces run directly —
 `ruff check`/`format --check` clean, `mypy --strict` clean (no local hang
-this session), `pytest tests/unit` 416 passed, 92% coverage; `bandit`/
+this session), `pytest tests/unit` 422 passed, 92% coverage; `bandit`/
 `pip-audit` clean, no new findings. The Alembic migration was verified for
 real against a throwaway local Postgres (Homebrew `postgresql@17` binary,
 not Docker): `alembic upgrade head` (0001→0006) applied cleanly, `\d
 saved_pipelines` matched the table definition exactly, `alembic downgrade
 -1` cleanly dropped the table, and re-`upgrade head` reapplied cleanly. The
 sprint's "3 consecutive fires, no manual intervention" definition of done
-was exercised against that same real Postgres — `check_scheduled_pipelines_task`
-called directly 3 times with a forced-due pipeline, `enqueue_analysis`
-mocked at its own boundary (no real Celery/Redis broker available in this
-sandbox) — each tick fired, persisted a new `last_task_id`, and advanced
-`next_run_at`, exactly the mechanics a real beat process would exercise
-automatically. Frontend: `npm run lint` and `npm run build` both clean with
+was re-exercised against that same real Postgres **after the concurrency
+fix** (3 sequential real fires each still advance `next_run_at` and record a
+new `last_task_id`, unchanged from before the fix), then extended with two
+scenarios targeting the review's findings directly:
+- **Overlapping-tick duplicate-fire guard**: forced a pipeline due, then
+  called `check_scheduled_pipelines_task` twice back-to-back with no
+  re-forcing in between (simulating a second tick starting before the first
+  finished) — `enqueue_analysis` was called exactly once, not twice. The
+  first call's claim atomically advanced `next_run_at` past "now" as part of
+  firing, so the second call's own `list_due_pipelines()` read no longer
+  saw the pipeline as due at all — the same guarantee a losing
+  `claim_due_pipeline` compare-and-swap gives if a second tick's read
+  happens to race in between (covered directly, without needing real
+  thread/process concurrency, by `test_claim_due_pipeline_is_a_compare_and_
+  swap_second_caller_loses` in `tests/unit/test_saved_pipelines_db.py`).
+- **Rate-limit release-and-retry**: forced a pipeline due, made
+  `enqueue_analysis` raise `RateLimitExceededError` — the tick reported it
+  skipped, and `next_run_at` was confirmed back at its original due time
+  (not advanced) via `release_pipeline_claim`; a following tick with
+  `enqueue_analysis` succeeding fired it normally, proving a rate-limited
+  scheduled pipeline is retried on the very next tick rather than silently
+  waiting a full cron period.
+
+Frontend: `npm run lint` and `npm run build` both clean with
 the new `/pipelines` route included.
 
 **Not done in this session, flagged for the merge-checkpoint conversation**:

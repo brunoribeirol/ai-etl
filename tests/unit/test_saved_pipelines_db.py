@@ -139,16 +139,76 @@ def test_list_due_pipelines_only_returns_active_and_past_next_run(engine: Engine
     assert paused["id"] not in ids
 
 
-def test_mark_pipeline_fired_updates_task_and_next_run(engine: Engine) -> None:
+def test_claim_due_pipeline_succeeds_when_next_run_at_matches(engine: Engine) -> None:
     created = db.create_saved_pipeline("tenant-a", "A", "postgres", "spec a", "* * * * *")
-    new_next_run = datetime.now(tz=timezone.utc) + timedelta(minutes=1)
+    expected = created["next_run_at"].replace(tzinfo=None)
+    new_next_run = expected + timedelta(minutes=1)
 
-    db.mark_pipeline_fired(created["id"], "task-123", new_next_run)
+    won = db.claim_due_pipeline(created["id"], expected, new_next_run)
+
+    assert won is True
+    reloaded = db.get_saved_pipeline(created["id"], "tenant-a")
+    assert reloaded is not None
+    assert reloaded["next_run_at"] == new_next_run
+
+
+def test_claim_due_pipeline_is_a_compare_and_swap_second_caller_loses(engine: Engine) -> None:
+    """The concurrency guard itself (Sprint 13 code review fix): two
+    "ticks" racing to claim the same due fire — only the first wins, the
+    second (whose `expected_next_run_at` no longer matches once the winner
+    committed) must get `False`, never overwrite the winner's claim."""
+    created = db.create_saved_pipeline("tenant-a", "A", "postgres", "spec a", "* * * * *")
+    expected = created["next_run_at"].replace(tzinfo=None)
+    tick_a_next = expected + timedelta(minutes=1)
+    tick_b_next = expected + timedelta(minutes=1)  # computed independently, same value
+
+    won_by_a = db.claim_due_pipeline(created["id"], expected, tick_a_next)
+    won_by_b = db.claim_due_pipeline(created["id"], expected, tick_b_next)
+
+    assert won_by_a is True
+    assert won_by_b is False  # lost the race — next_run_at no longer equals `expected`
+
+    reloaded = db.get_saved_pipeline(created["id"], "tenant-a")
+    assert reloaded is not None
+    assert reloaded["next_run_at"] == tick_a_next  # tick A's claim, untouched by tick B
+
+
+def test_claim_due_pipeline_returns_false_for_unknown_id(engine: Engine) -> None:
+    now = datetime.now(tz=timezone.utc)
+    won = db.claim_due_pipeline("no-such-id", now, now + timedelta(minutes=1))
+    assert won is False
+
+
+def test_release_pipeline_claim_reverts_next_run_at(engine: Engine) -> None:
+    """A failed `enqueue_analysis` after a successful claim must roll the
+    claim back so the pipeline is retried on the very next tick, not
+    silently skipped for a full cron period."""
+    created = db.create_saved_pipeline("tenant-a", "A", "postgres", "spec a", "* * * * *")
+    original = created["next_run_at"].replace(tzinfo=None)
+    claimed_next = original + timedelta(minutes=1)
+
+    db.claim_due_pipeline(created["id"], original, claimed_next)
+    db.release_pipeline_claim(created["id"], claimed_next, original)
+
+    reloaded = db.get_saved_pipeline(created["id"], "tenant-a")
+    assert reloaded is not None
+    assert reloaded["next_run_at"] == original
+
+
+def test_record_pipeline_run_updates_task_and_leaves_next_run_at_untouched(
+    engine: Engine,
+) -> None:
+    created = db.create_saved_pipeline("tenant-a", "A", "postgres", "spec a", "* * * * *")
+    original = created["next_run_at"].replace(tzinfo=None)
+    claimed_next = original + timedelta(minutes=1)
+    db.claim_due_pipeline(created["id"], original, claimed_next)
+
+    db.record_pipeline_run(created["id"], "task-123")
 
     reloaded = db.get_saved_pipeline(created["id"], "tenant-a")
     assert reloaded is not None
     assert reloaded["last_task_id"] == "task-123"
-    # SQLite doesn't round-trip tzinfo — compare naive-vs-naive (see the
-    # comment in test_update_saved_pipeline_resuming_recomputes_next_run_from_now).
-    assert reloaded["next_run_at"] == new_next_run.replace(tzinfo=None)
     assert reloaded["last_run_at"] is not None
+    # next_run_at is exactly what claim_due_pipeline set — record_pipeline_run
+    # must not touch it (the claim, not the record step, owns that field).
+    assert reloaded["next_run_at"] == claimed_next

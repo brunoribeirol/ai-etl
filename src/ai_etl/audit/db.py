@@ -740,12 +740,68 @@ def list_due_pipelines(now: Optional[datetime] = None) -> list[dict[str, Any]]:
     return [_saved_pipeline_row_to_dict(row) for row in rows]
 
 
-def mark_pipeline_fired(pipeline_id: str, task_id: str, next_run_at: datetime) -> None:
-    """Record that a saved pipeline just fired: advance `next_run_at` and
-    remember `last_task_id`/`last_run_at`. Called by `services/scheduler.py`
-    immediately after `enqueue_analysis` succeeds for this pipeline — a
-    failed `enqueue_analysis` call (e.g. rate limit) must not advance
-    `next_run_at`, so the caller only invokes this on success.
+def claim_due_pipeline(
+    pipeline_id: str, expected_next_run_at: datetime, new_next_run_at: datetime
+) -> bool:
+    """Atomically claim one due fire of a saved pipeline (Sprint 13 code
+    review fix — see ADR-016 addendum on beat-tick concurrency).
+
+    A compare-and-swap on `next_run_at`: the `UPDATE` only affects a row if
+    `next_run_at` still equals `expected_next_run_at` (the value
+    `list_due_pipelines` read it as). If a Celery beat tick overruns the
+    next tick's start (many due pipelines, a slow Redis rate-limit check,
+    worker backlog — `next_run_at` was previously only advanced *after*
+    `enqueue_analysis` returned, so an overlapping tick would still see the
+    same pipeline as due and fire it twice), only one tick's `UPDATE` can
+    win this race: Postgres serializes concurrent `UPDATE`s to the same row,
+    so the loser's `WHERE` clause simply matches 0 rows once the winner's
+    transaction commits. No separate lock table or Redis dependency needed.
+
+    Returns `True` if this call won the claim (must proceed to
+    `enqueue_analysis`), `False` if another tick already claimed this fire
+    (must skip — not an error, just lost the race).
+    """
+    stmt = (
+        update(saved_pipelines)
+        .where(
+            saved_pipelines.c.id == pipeline_id,
+            saved_pipelines.c.next_run_at == expected_next_run_at,
+        )
+        .values(next_run_at=new_next_run_at, updated_at=datetime.now(tz=timezone.utc))
+    )
+    with get_engine().begin() as conn:
+        result = conn.execute(stmt)
+        return result.rowcount == 1
+
+
+def release_pipeline_claim(
+    pipeline_id: str, claimed_next_run_at: datetime, original_next_run_at: datetime
+) -> None:
+    """Undo a `claim_due_pipeline` win when `enqueue_analysis` then fails
+    (rate limit or any other error) — reverts `next_run_at` back to the
+    original due time so the pipeline is retried on the very next tick
+    instead of silently waiting a full cron period.
+
+    Guarded the same way as the claim itself (`next_run_at` must still equal
+    what this call's claim just set) — in the normal single-claimant flow
+    this is always true; the guard is defensive, not load-bearing."""
+    stmt = (
+        update(saved_pipelines)
+        .where(
+            saved_pipelines.c.id == pipeline_id,
+            saved_pipelines.c.next_run_at == claimed_next_run_at,
+        )
+        .values(next_run_at=original_next_run_at, updated_at=datetime.now(tz=timezone.utc))
+    )
+    with get_engine().begin() as conn:
+        conn.execute(stmt)
+
+
+def record_pipeline_run(pipeline_id: str, task_id: str) -> None:
+    """Record that a claimed saved pipeline actually fired: remember
+    `last_task_id`/`last_run_at`. `next_run_at` is *not* touched here — by
+    the time this is called, `claim_due_pipeline` has already advanced it
+    atomically (see that function's docstring for why the ordering matters).
 
     `task_id` is the Celery task id `enqueue_analysis` returns, not yet the
     eventual `runs.run_id` (generated later, inside the task itself) — same
@@ -754,7 +810,7 @@ def mark_pipeline_fired(pipeline_id: str, task_id: str, next_run_at: datetime) -
     stmt = (
         update(saved_pipelines)
         .where(saved_pipelines.c.id == pipeline_id)
-        .values(last_task_id=task_id, last_run_at=now, next_run_at=next_run_at, updated_at=now)
+        .values(last_task_id=task_id, last_run_at=now, updated_at=now)
     )
     with get_engine().begin() as conn:
         conn.execute(stmt)

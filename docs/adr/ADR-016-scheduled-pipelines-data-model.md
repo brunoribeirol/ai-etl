@@ -65,6 +65,46 @@ same bar `pymysql`/`pymongo` were added under in Sprint 11) rather than
 hand-rolling cron parsing/next-fire-time math, which has enough real edge
 cases (month-end, DST, leap years) to not be worth reimplementing.
 
+### Addendum — overlapping-tick concurrency and schedule drift (post-review fix)
+
+Code review on the initial PR caught two real bugs in the first cut of
+Decision 2, both in how `next_run_at` was advanced:
+
+**Duplicate fires from overlapping ticks.** The first cut called
+`enqueue_analysis` for every due pipeline and only advanced `next_run_at`
+*afterward*, on success. Celery beat's interval scheduling does not wait for
+one tick to finish before starting the next — if a tick overruns
+`AI_ETL_SCHEDULER_INTERVAL_SECONDS` (many due pipelines, a slow Redis
+rate-limit check, worker backlog), the next tick would still see the same
+pipeline as due (`next_run_at` hadn't moved yet) and fire it a second time —
+a duplicate run, and two rate-limit slots burned for what should have been
+one scheduled fire.
+
+Fixed with **`audit.db.claim_due_pipeline`**: a `next_run_at`
+compare-and-swap (`UPDATE saved_pipelines SET next_run_at = :new WHERE id =
+:id AND next_run_at = :expected`), executed *before* calling
+`enqueue_analysis`, not after. Only one tick's `UPDATE` can match the row —
+Postgres serializes concurrent writers to the same row, so the loser's
+`WHERE` clause matches 0 rows once the winner's transaction commits, and the
+loser just skips that pipeline for this tick. This is the "atomically
+advance `next_run_at` before enqueueing" option from the roadmap's two
+proposed fixes, chosen over a separate Redis distributed lock because it
+needs no new primitive (no lock TTL/expiry semantics to get right) and
+reuses the row this code was already writing to. If `enqueue_analysis` then
+fails (rate limit or otherwise), `release_pipeline_claim` reverts the claim
+so the pipeline is retried on the very next tick instead of silently
+skipping a full cron period.
+
+**Schedule drift.** The first cut computed the replacement `next_run_at` from
+`datetime.now()` (`compute_next_run_at`'s default base) at the moment the
+tick actually ran, not from the pipeline's previously scheduled
+`next_run_at`. Under sustained load, a cron firing "every minute" would
+drift progressively later — each fire's delay got baked into the base time
+for computing the *next* fire. Fixed by passing the pipeline's own
+(pre-claim) `next_run_at` as `compute_next_run_at`'s `base_time` — the
+schedule advances from the scheduled time, never from however late a given
+tick happened to actually run.
+
 ## Decision 3 — how "the source stays the same" between scheduled runs
 
 The roadmap names three options:
