@@ -2,11 +2,13 @@
 
 > Living doc. Updated at the end of meaningful work sessions, not per-commit. Source of truth for repo/code state; the Obsidian vault (`~/Documents/Obsidian Vault/tcc/`) is the source of truth for the academic TCC narrative and product/strategy context.
 
-**Last updated:** 2026-08-19, end of session — **Sprint 7 is complete.** PR #52 (frontend redesign + feature parity with the old Streamlit sidebar/tabs) merged and verified live in production. See "Start here next session" below.
+**Last updated:** 2026-08-19, end of session — **Sprint 8 (model comparison + stability) done, PR open, awaiting owner review before merge — not yet merged to `main`.** See "Start here next session" below.
 
 ## Start here next session
 
-**Sprint 7 (frontend redesign, PR #52) is done, merged to `main`, and live-verified in production (2026-08-19).** Scope grew mid-sprint on owner request past the original "visual layer only, no API contract change" plan — see the Sprint 7 section below for what that added and why it's still additive/backward-compatible. Nothing is currently blocked. Next up per the roadmap: Sprint 8 (model comparison) or Sprint 9 (human validation), both unblocked.
+**Sprint 8 (model comparison + stability) is implemented on `feat/sprint8-model-comparison`, PR open against `main`, deliberately not merged — the task's own checkpoint rule.** Headline finding: **this session had no `OPENAI_API_KEY` and no `ollama` binary**, so no real cost/latency/quality comparison data exists yet — the deliverable is a verified, reproducible harness (`case_study/scripts/model_comparison.py`) plus an honestly-labeled dry run (every row tagged `data_source`: `mock`/`simulated`/`skipped_no_infra`, never faked as `real`). Full writeup: `case_study/results/sprint8/README.md`. Rerun with a real key (and Ollama installed) for real numbers — no code change needed. Next up once this is reviewed: Sprint 9 (human validation), unblocked and independent.
+
+**Sprint 7 (frontend redesign, PR #52) is done, merged to `main`, and live-verified in production (2026-08-19).** Scope grew mid-sprint on owner request past the original "visual layer only, no API contract change" plan — see the Sprint 7 section below for what that added and why it's still additive/backward-compatible.
 
 Sprint 6 (ADR-011, real Next.js + Clerk + FastAPI frontend replacing Streamlit) is done, all 6 PRs merged, live-verified end-to-end twice (once against the interim `ai-etl-api` service, once again post-cutover against the consolidated `ai-etl` service).
 
@@ -20,6 +22,40 @@ Sprint 6 (ADR-011, real Next.js + Clerk + FastAPI frontend replacing Streamlit) 
 **Residual, harmless cleanup opportunity (not urgent)**: `ai-etl`'s Railway service config now has an explicit `deploy.startCommand` that duplicates the Dockerfile's `ENTRYPOINT` exactly — could be removed to let it fall back to the Dockerfile again, purely for tidiness, not correctness.
 
 **Already de-risked ahead of time** (PR #43, merged 2026-08-17): `pyproject.toml`'s `plotly`/`scikit-learn`/`statsmodels` were misclassified under the Streamlit-only `app` extra — actually real pipeline runtime deps (`agents/analyst.py`/`science.py` use them inside the sandbox for charts/models). Fixed before it could cause a silent production regression during the cutover.
+
+## Sprint 8 — model comparison + stability (branch `feat/sprint8-model-comparison`, PR open, not merged)
+
+CLI/headless only, per scope — no `api/` or `frontend/` touched. New:
+`case_study/scripts/model_comparison.py` (runs Scenario 1 N times per model
+via `pipeline_service.run_full_analysis`, bypassing Celery/Postgres — see the
+script's own docstring for why — recording real `core/pricing.py` cost, real
+`stage_durations` latency, and a new objective `score_quality()` metric),
+`tests/unit/test_model_comparison.py` (16 tests, the script's pure helpers),
+`case_study/results/sprint8/` (`README.md` full report, `comparison_runs.csv`,
+`stability_summary.json`).
+
+**This session had no `OPENAI_API_KEY` and no `ollama` binary** (confirmed,
+not assumed) — every run this session used mocked/simulated LLM calls,
+clearly tagged `data_source` in the output (`mock`/`simulated`, never `real`).
+No fabricated cost/latency/model-comparison numbers were produced — the
+`README.md` is explicit that this session validated the harness (real
+pipeline execution, real cost formula, real latency instrumentation, real
+quality scoring) end to end, not "which model wins." A rerun with a real key
+(and Ollama installed) needs zero code changes to produce real numbers.
+Scenarios 2-4 also weren't executed (need Postgres, unreachable — no Docker
+daemon in this sandbox) — recorded as explicit `skipped_no_infra` rows, not
+silently omitted. No ADR: adding a real Ollama provider to `core/llm.py`
+(currently `ChatOpenAI`-only) would be one, but was deliberately not
+implemented untested with no Ollama available to verify against — flagged in
+the report for a future session.
+
+Verification: `ruff check`/`format --check` clean on all touched files (21
+pre-existing findings in `case_study/baselines/*.ipynb`, untouched);
+`mypy --strict` clean on `src/` + new files (no local hang this session);
+`pytest tests/unit` — 292 passed; `bandit`/`pip-audit` — only the two
+pre-existing, documented `exec()` sites in `core/sandbox.py`, no new
+findings, no known CVEs. `tests/integration`/`tests/e2e` not run locally
+(same Postgres/Redis unavailability) — CI is the real gate.
 
 ## Sprint 7 — frontend redesign + feature parity (PR #52, merged 2026-08-19)
 
@@ -165,9 +201,11 @@ Sprint 6 (ADR-011, real Next.js + Clerk + FastAPI frontend replacing Streamlit) 
 
 ## Next steps
 
-11-sprint plan (Vault: `artefact/sprint-roadmap.md`): A [done] → 1 [done — auth/tenancy/deploy] → 2 [done — sandbox unification + latency instrumentation] → 3 [done, verified live — async execution + rate limiting + cost per run] → 4 [done, verified live — S3 storage] → 5 [done — PDF/DOCX source + e2e] → 6 [done, verified live — real frontend, Streamlit retired] → **7 [done, verified live — frontend redesign + Streamlit feature parity]** → 8 [model comparison + stability, unblocked, independent] → 9 [human validation study, unblocked since Sprint 6, UI now polished since Sprint 7] → 10 [multi-cloud] → 11 [source diversity beyond Postgres]. Migrations `0004`/`0005` both applied to the live Supabase database. Celery worker deployed and verified live on Railway.
+11-sprint plan (Vault: `artefact/sprint-roadmap.md`): A [done] → 1 [done — auth/tenancy/deploy] → 2 [done — sandbox unification + latency instrumentation] → 3 [done, verified live — async execution + rate limiting + cost per run] → 4 [done, verified live — S3 storage] → 5 [done — PDF/DOCX source + e2e] → 6 [done, verified live — real frontend, Streamlit retired] → 7 [done, verified live — frontend redesign + Streamlit feature parity] → **8 [PR open, not merged — harness + dry-run done, real model-comparison numbers need a real OPENAI_API_KEY/Ollama]** → 9 [human validation study, unblocked since Sprint 6, UI now polished since Sprint 7] → 10 [multi-cloud] → 11 [source diversity beyond Postgres]. Migrations `0004`/`0005` both applied to the live Supabase database. Celery worker deployed and verified live on Railway.
 
-**Sprint 7: complete.** PR #52 (shadcn/ui redesign + Streamlit feature parity — see the Sprint 7 section above) merged and verified live in production 2026-08-19. Next up per the roadmap: Sprint 8 (model comparison) or Sprint 9 (human validation), both unblocked and independent of each other.
+**Sprint 7: complete.** PR #52 (shadcn/ui redesign + Streamlit feature parity — see the Sprint 7 section above) merged and verified live in production 2026-08-19.
+
+**Sprint 8: PR open, awaiting review — not merged.** Harness + honestly-labeled dry run done this session (no real API/Ollama access — see the Sprint 8 section above and `case_study/results/sprint8/README.md`). Once reviewed/merged, Sprint 9 (human validation) is next, unblocked and independent.
 
 ## Deploy
 
