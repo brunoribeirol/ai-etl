@@ -18,9 +18,12 @@ import pytest
 
 from ai_etl.services import execution_queue as eq_module
 from ai_etl.services.execution_queue import (
+    BudgetExceededError,
     RateLimitExceededError,
     check_and_increment_rate_limit,
+    check_budget_cap,
     enqueue_analysis,
+    get_budget_status,
     get_task_status,
     run_full_analysis_task,
 )
@@ -48,6 +51,11 @@ def _fake_redis(monkeypatch: pytest.MonkeyPatch) -> _FakeRedis:
     monkeypatch.setattr(eq_module, "_redis_client", lambda: fake)
     monkeypatch.setattr(eq_module, "RATE_LIMIT_MAX_RUNS", 3)
     monkeypatch.setattr(eq_module, "RATE_LIMIT_WINDOW_SECONDS", 3600)
+    # Sprint 29 (ADR-017): default every test to "no budget cap configured"
+    # (a real Postgres call otherwise) — tests below that actually exercise
+    # budget enforcement override this via monkeypatch themselves.
+    monkeypatch.setattr(eq_module, "get_monthly_budget", lambda tenant_id: None)
+    monkeypatch.setattr(eq_module, "get_monthly_spend_usd", lambda tenant_id: 0.0)
     return fake
 
 
@@ -430,3 +438,101 @@ def test_get_task_status_maps_failure_result(monkeypatch: pytest.MonkeyPatch) ->
     assert status["state"] == "FAILURE"
     assert status["result"] is None
     assert status["error"] == "boom"
+
+
+# --- Sprint 29 (ADR-017): tenant budget cap -------------------------------
+
+
+def test_budget_status_reports_no_cap_when_unconfigured(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(eq_module, "get_monthly_budget", lambda tenant_id: None)
+    status = get_budget_status("tenant-a")
+    assert status == {
+        "cap_usd": None,
+        "spent_usd": 0.0,
+        "ratio": None,
+        "near_limit": False,
+        "exceeded": False,
+    }
+
+
+def test_budget_status_under_cap_is_not_near_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(eq_module, "get_monthly_budget", lambda tenant_id: 10.0)
+    monkeypatch.setattr(eq_module, "get_monthly_spend_usd", lambda tenant_id: 1.0)
+    status = get_budget_status("tenant-a")
+    assert status["near_limit"] is False
+    assert status["exceeded"] is False
+    assert status["ratio"] == pytest.approx(0.1)
+
+
+def test_budget_status_flags_near_limit_before_it_is_exceeded(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(eq_module, "get_monthly_budget", lambda tenant_id: 10.0)
+    monkeypatch.setattr(eq_module, "get_monthly_spend_usd", lambda tenant_id: 8.5)
+    status = get_budget_status("tenant-a")
+    assert status["near_limit"] is True
+    assert status["exceeded"] is False
+
+
+def test_budget_status_flags_exceeded_and_not_near_limit_once_over(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # exceeded and near_limit are mutually exclusive in this shape — "near
+    # limit" only describes the warning zone strictly below the cap.
+    monkeypatch.setattr(eq_module, "get_monthly_budget", lambda tenant_id: 10.0)
+    monkeypatch.setattr(eq_module, "get_monthly_spend_usd", lambda tenant_id: 10.0)
+    status = get_budget_status("tenant-a")
+    assert status["exceeded"] is True
+    assert status["near_limit"] is False
+
+
+def test_check_budget_cap_raises_once_spend_meets_the_cap(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(eq_module, "get_monthly_budget", lambda tenant_id: 5.0)
+    monkeypatch.setattr(eq_module, "get_monthly_spend_usd", lambda tenant_id: 5.0)
+    with pytest.raises(BudgetExceededError):
+        check_budget_cap("tenant-a")
+
+
+def test_check_budget_cap_does_not_raise_under_the_cap(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(eq_module, "get_monthly_budget", lambda tenant_id: 5.0)
+    monkeypatch.setattr(eq_module, "get_monthly_spend_usd", lambda tenant_id: 4.99)
+    check_budget_cap("tenant-a")  # should not raise
+
+
+def test_check_budget_cap_never_raises_when_no_cap_is_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(eq_module, "get_monthly_budget", lambda tenant_id: None)
+    monkeypatch.setattr(eq_module, "get_monthly_spend_usd", lambda tenant_id: 999_999.0)
+    check_budget_cap("tenant-a")  # should not raise — no cap means unlimited
+
+
+def test_enqueue_analysis_raises_before_touching_celery_when_over_budget(
+    _fake_redis: _FakeRedis, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(eq_module, "get_monthly_budget", lambda tenant_id: 1.0)
+    monkeypatch.setattr(eq_module, "get_monthly_spend_usd", lambda tenant_id: 1.0)
+
+    class _FakeTask:
+        def delay(self, *args: object, **kwargs: object) -> object:
+            raise AssertionError("delay() should not be called once over budget")
+
+    monkeypatch.setattr(eq_module, "run_full_analysis_task", _FakeTask())
+
+    with pytest.raises(BudgetExceededError):
+        enqueue_analysis("spec", "question", "./runs", "tenant-a")
+
+
+def test_enqueue_analysis_checks_rate_limit_before_budget(
+    _fake_redis: _FakeRedis, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Both gates run before `.delay()`, but the cheap Redis rate-limit check
+    runs first (matches `enqueue_analysis`'s own call order) — a tenant over
+    both should see the rate-limit error, not the budget one."""
+    monkeypatch.setattr(eq_module, "get_monthly_budget", lambda tenant_id: 1.0)
+    monkeypatch.setattr(eq_module, "get_monthly_spend_usd", lambda tenant_id: 1.0)
+    for _ in range(3):
+        check_and_increment_rate_limit("tenant-a")
+
+    with pytest.raises(RateLimitExceededError):
+        enqueue_analysis("spec", "question", "./runs", "tenant-a")

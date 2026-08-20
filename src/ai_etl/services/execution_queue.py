@@ -36,20 +36,23 @@ than this module inventing a second, redundant transport for the same data.
 from __future__ import annotations
 
 import base64
+import logging
 import os
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 import redis
 from celery.result import AsyncResult
 
-from ai_etl.audit.db import get_saved_pipeline
+from ai_etl.audit.db import get_monthly_budget, get_monthly_spend_usd, get_saved_pipeline
 from ai_etl.core.analysis_types import AnalysisRunResult
 from ai_etl.core.celery_app import celery_app
 from ai_etl.core.state import PipelineState
 from ai_etl.services.alerting import check_drift_and_notify
 from ai_etl.services.pipeline_service import run_full_analysis
+
+logger = logging.getLogger(__name__)
 
 # Defaults are deliberately generous for a TCC-scale deployment (few tenants,
 # manual testing) rather than tuned for real production load — revisit once
@@ -57,11 +60,31 @@ from ai_etl.services.pipeline_service import run_full_analysis
 RATE_LIMIT_MAX_RUNS = int(os.getenv("AI_ETL_RATE_LIMIT_MAX_RUNS", "10"))
 RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("AI_ETL_RATE_LIMIT_WINDOW_SECONDS", "3600"))
 
+# Sprint 29 (ADR-017) — fraction of a tenant's monthly_budget_usd at which
+# check_budget_cap starts warning, before the cap is actually reached.
+BUDGET_WARNING_THRESHOLD_RATIO = float(os.getenv("AI_ETL_BUDGET_WARNING_THRESHOLD_RATIO", "0.8"))
+
 
 class RateLimitExceededError(Exception):
     """Raised by `enqueue_analysis` when a tenant is over the cap for the
     current window. Carries no extra fields — the message alone is enough for
     `app.py` to render an `st.error`."""
+
+
+class BudgetExceededError(Exception):
+    """Raised by `enqueue_analysis` when a tenant has a `monthly_budget_usd`
+    cap configured and has already spent at or above it this calendar month
+    (ADR-017). Never raised for a tenant with no cap configured (`None`)."""
+
+
+class BudgetStatus(TypedDict):
+    """Return shape of `check_budget_cap` — also what `GET /budget` exposes."""
+
+    cap_usd: float | None
+    spent_usd: float
+    ratio: float | None
+    near_limit: bool
+    exceeded: bool
 
 
 def _redis_client() -> redis.Redis:
@@ -102,6 +125,78 @@ def check_and_increment_rate_limit(tenant_id: str) -> None:
             f"{RATE_LIMIT_WINDOW_SECONDS // 60} minutos atingido para esta conta. "
             "Tente novamente mais tarde."
         )
+
+
+def get_budget_status(tenant_id: str) -> BudgetStatus:
+    """Read-only: current cap, spend-so-far this calendar month, and whether
+    the tenant is near or over it. Never raises — `check_budget_cap` below is
+    the enforcement wrapper around this for call sites that must block;
+    `GET /budget` uses this directly so status can always be read, even for
+    a tenant already over their cap."""
+    cap = get_monthly_budget(tenant_id)
+    if cap is None:
+        return BudgetStatus(
+            cap_usd=None, spent_usd=0.0, ratio=None, near_limit=False, exceeded=False
+        )
+
+    spent = get_monthly_spend_usd(tenant_id)
+    ratio = spent / cap if cap > 0 else float("inf")
+    exceeded = spent >= cap
+    near_limit = not exceeded and ratio >= BUDGET_WARNING_THRESHOLD_RATIO
+    return BudgetStatus(
+        cap_usd=cap, spent_usd=spent, ratio=ratio, near_limit=near_limit, exceeded=exceeded
+    )
+
+
+def check_budget_cap(tenant_id: str) -> BudgetStatus:
+    """Pre-enqueue budget gate (ADR-017, Sprint 29) — mirrors
+    `check_and_increment_rate_limit`'s shape (a cheap, synchronous check
+    ahead of `.delay()`, its own exception the API layer maps to an HTTP
+    error) but the "count" being checked is real accumulated USD spend for
+    the current calendar month, not a request counter.
+
+    **Approach (a), not (b)** (see ADR-017's "Decisão real" section for the
+    full trade-off): this checks spend *already accumulated* from completed
+    runs (`get_budget_status`, itself `SUM(analysis_runs.cost_usd)` for the
+    tenant this month via `audit.db.get_monthly_spend_usd`) against the cap,
+    and rejects the *next* execution once the tenant is at or over it. It
+    does not estimate this run's own cost ahead of time, so a single run can
+    still itself push spend past the cap — flagged as an accepted
+    limitation, not fixed here.
+
+    Deliberately queries Postgres directly rather than mirroring spend into
+    a second Redis-resident running total (unlike the rate limiter's own
+    Redis `INCR`): `analysis_runs.cost_usd` is already the canonical,
+    per-run persisted cost this project computes once (Sprint 3) — a
+    parallel Redis counter would only add a second value that can drift from
+    it (e.g. a task that dies after being enqueued but before `save_analysis`
+    runs), for no correctness benefit at this project's scale.
+
+    Raises `BudgetExceededError` if a cap is configured and already met or
+    exceeded. Otherwise returns the same `BudgetStatus`, logging a warning
+    (not an audit-log `log_action()` entry — no `PipelineState`/`run_id`
+    exists yet at enqueue-time, before a run has even started) if spend is
+    near the cap but not yet over it.
+    """
+    status = get_budget_status(tenant_id)
+    if status["near_limit"]:
+        logger.warning(
+            "Tenant %s is near its monthly budget cap: $%.4f of $%.2f spent (%.0f%%).",
+            tenant_id,
+            status["spent_usd"],
+            status["cap_usd"],
+            (status["ratio"] or 0.0) * 100,
+        )
+
+    if status["exceeded"]:
+        cap = status["cap_usd"]
+        raise BudgetExceededError(
+            f"Limite de orçamento mensal de US$ {cap:.2f} atingido para esta conta "
+            f"(gasto atual: US$ {status['spent_usd']:.4f}). Novas execuções ficarão "
+            "bloqueadas até o próximo período ou até o teto ser ajustado."
+        )
+
+    return status
 
 
 @celery_app.task(name="ai_etl.run_full_analysis", bind=True)  # type: ignore[untyped-decorator]
@@ -234,6 +329,11 @@ def enqueue_analysis(
 
     Raises `RateLimitExceededError` before touching Celery at all if the tenant is
     already over the cap — a rejected run should never occupy a queue slot.
+    Raises `BudgetExceededError` (ADR-017, Sprint 29) the same way if the
+    tenant has a `monthly_budget_usd` cap configured and has already spent at
+    or above it this calendar month — checked after the rate limit (a cheap
+    Redis check first, a Postgres query second) but still before `.delay()`,
+    so a rejected run never occupies a queue slot either way.
 
     `file_path`/`file_bytes`: pass both when `spec` references an uploaded
     file (`app.py`'s upload flow) so the worker — a separate process/
@@ -253,6 +353,7 @@ def enqueue_analysis(
     polls via `get_task_status`.
     """
     check_and_increment_rate_limit(tenant_id)
+    check_budget_cap(tenant_id)
     file_bytes_b64 = base64.b64encode(file_bytes).decode("ascii") if file_bytes else None
     task = run_full_analysis_task.delay(
         spec,

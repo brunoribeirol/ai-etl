@@ -32,6 +32,14 @@ users = Table(
     metadata,
     Column("id", String, primary_key=True),  # Clerk user_id — not a UUID
     Column("created_at", DateTime(timezone=True), nullable=False),
+    # Sprint 29 (ADR-017) — optional per-tenant spend cap, USD, calendar-month
+    # window. NULL (the default for every existing and new tenant) means "no
+    # cap configured" — opt-in, zero behavior change for a tenant that never
+    # sets one. See services/execution_queue.py::check_budget_cap for
+    # enforcement and ADR-017 for why this is a single nullable column rather
+    # than a new table (no history/versioning of the cap value is needed —
+    # actual spend history already lives in analysis_runs.cost_usd).
+    Column("monthly_budget_usd", Float, nullable=True),
 )
 
 runs = Table(

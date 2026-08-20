@@ -49,7 +49,11 @@ from ai_etl.audit.db import (
 from ai_etl.core.celery_app import celery_app
 from ai_etl.core.paths import RUNS_DIR
 from ai_etl.core.scheduling import InvalidCronScheduleError, compute_next_run_at
-from ai_etl.services.execution_queue import RateLimitExceededError, enqueue_analysis
+from ai_etl.services.execution_queue import (
+    BudgetExceededError,
+    RateLimitExceededError,
+    enqueue_analysis,
+)
 
 
 @celery_app.task(name="ai_etl.check_scheduled_pipelines")  # type: ignore[untyped-decorator]
@@ -95,7 +99,10 @@ def check_scheduled_pipelines_task() -> dict[str, Any]:
                 tenant_id=pipeline["tenant_id"],
                 saved_pipeline_id=pipeline_id,
             )
-        except RateLimitExceededError:
+        except (RateLimitExceededError, BudgetExceededError):
+            # Sprint 29 (ADR-017): a scheduled pipeline whose tenant is over
+            # their monthly budget cap is skipped exactly like a rate-limited
+            # one — released to retry next tick, never silently charged.
             release_pipeline_claim(pipeline_id, new_next_run_at, expected_next_run_at)
             skipped.append(pipeline_id)
             continue

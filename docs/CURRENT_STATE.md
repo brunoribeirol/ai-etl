@@ -114,6 +114,59 @@ resolution once Sprint 17 actually merges (both branches declare the same
 column in the same file — expected, flagged, not silently overwritten by
 either side).
 
+## Sprint 29 — tenant budget cap (branch `feat/sprint29-tenant-budget-cap`, PR open, not merged, checkpoint required)
+
+Per-tenant monthly LLM spend cap, enforced *before* enqueueing a new
+execution (previously cost was only visible after the fact — Sprint 3/ADR-008).
+New `users.monthly_budget_usd` column (migration `0007`, nullable — `NULL` =
+no cap, zero behavior change for every existing tenant). `ADR-017` documents
+the real trade-off: approach (a) — check spend already accumulated
+(`SUM(analysis_runs.cost_usd)` this calendar month) and reject the *next*
+run once at/over the cap — was chosen over approach (b) — estimating a
+per-run cost ceiling from tenant history and blocking preemptively — because
+real observed per-run costs (Sprint 8: ~$0.0006/run) make the "one run
+overshoots the cap" edge case low-blast-radius for now; (b) is documented as
+explicitly out of scope, to revisit if real per-run costs grow.
+
+`services/execution_queue.py::check_budget_cap` (new) mirrors
+`check_and_increment_rate_limit`'s shape (called from `enqueue_analysis`
+right after the rate-limit check, before `.delay()`) but **deliberately
+does not** mirror its Redis storage — spend is read directly from Postgres
+(`audit.db.get_monthly_spend_usd`), the already-canonical number Sprint 3
+computes, rather than duplicating it into a second Redis-resident running
+total that could drift. `services/scheduler.py` treats `BudgetExceededError`
+exactly like `RateLimitExceededError` (release the claim, retry next tick).
+`POST /runs` maps it to `402` (rate limit stays `429` — distinct semantics,
+see ADR-017). New `GET/PATCH /budget` (self-service, same trust model as
+`/pipelines`) exposes live `{cap_usd, spent_usd, ratio, near_limit,
+exceeded}` status and lets a tenant set/clear their own cap — the "alert
+before hitting the cap" surface (`near_limit` at 80% of cap by default,
+`AI_ETL_BUDGET_WARNING_THRESHOLD_RATIO`), plus a `logging.warning(...)` at
+enqueue time (not `log_action()` — no `PipelineState` exists yet at
+enqueue-time, before a run has even started).
+
+**Known limitation carried over from Sprint 3, not fixed here**:
+`analysis_runs.cost_usd` (and therefore this cap) only covers the Agentic BI
+layer's LLM cost (`save_analysis`) — a Silver-only run (no business
+question) makes real Orchestrator/Transformer LLM calls with no cost row at
+all today. Flagged in ADR-017, out of this sprint's scope.
+
+**Verified locally** (Homebrew Postgres, no Docker daemon, same pattern as
+Sprint 13's `0006`): `alembic upgrade head` (0001→0007) applied cleanly,
+`\d users` matched the new column exactly, `alembic downgrade -1` cleanly
+dropped it, re-`upgrade head` reapplied cleanly. `ruff check`/`format
+--check` clean; `mypy src/` clean (54 files); `pytest tests/unit` — 471
+passed, 92% overall coverage; `bandit`/`pip-audit` — only the two
+pre-existing, documented `exec()` sites in `core/sandbox.py`, no new
+findings, no known CVEs.
+
+**Not done in this session, flagged for the merge-checkpoint conversation**:
+migration `0007` not applied to production Supabase (owner confirmation
+required, same checkpoint discipline as Sprint 13's `0006`); no admin/billing
+role exists, so the cap is self-service (tenant sets their own — ADR-017's
+own "Known limitation"); no frontend UI consumes `GET /budget` yet (backend
+contract only, same posture as Sprint 7's `GET /config`).
+
 ## Start here next session
 
 **Orchestration session (2026-08-19/20): Sprints 8, 9, 10, 11, 12 were built in parallel via isolated worktree subagents, each opening its own PR without merging (explicit checkpoint).** Sprint 11 was later extended (same PR) with MySQL, MongoDB, and OAuth2 client-credentials at the owner's request. Sprint 23 (multi-provider LLM — Anthropic/Google/Ollama) was pulled forward out of roadmap order, also at the owner's explicit request, since its only dependency (Sprint 8) was already done.

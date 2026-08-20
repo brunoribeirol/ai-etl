@@ -17,7 +17,7 @@ so the actual SQLAlchemy Core `select(...).where(...)` executes for real.
 """
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -27,7 +27,15 @@ from sqlalchemy import Engine
 
 from ai_etl.audit import db
 from ai_etl.audit.db import _write_run_row as _real_write_run_row
-from ai_etl.audit.db import load_full_result, save_analysis, save_run, save_stage_latencies
+from ai_etl.audit.db import (
+    get_monthly_budget,
+    get_monthly_spend_usd,
+    load_full_result,
+    save_analysis,
+    save_run,
+    save_stage_latencies,
+    set_monthly_budget,
+)
 from ai_etl.audit.models import analysis_runs as analysis_runs_table
 from ai_etl.audit.models import metadata as audit_metadata
 from ai_etl.audit.models import runs as runs_table
@@ -807,3 +815,142 @@ def test_load_full_result_degrades_gracefully_when_csv_missing(
     assert result is not None
     assert result["gold"][0]["narrative"] == "Produto B lidera."
     assert "gold_df" not in result["gold"][0]
+
+
+# ---------------------------------------------------------------------------
+# Sprint 29 (ADR-017): tenant budget cap — get/set_monthly_budget,
+# get_monthly_spend_usd. All against the real in-memory SQLite schema, same
+# pattern as the load_history tests above.
+# ---------------------------------------------------------------------------
+
+
+def test_get_monthly_budget_returns_none_when_unset(monkeypatch: pytest.MonkeyPatch) -> None:
+    engine = _make_sqlite_engine()
+    monkeypatch.setattr(db, "get_engine", lambda: engine)
+    _insert_user_row(engine, "tenant-a")
+
+    assert get_monthly_budget("tenant-a") is None
+
+
+def test_get_monthly_budget_returns_none_for_unknown_tenant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = _make_sqlite_engine()
+    monkeypatch.setattr(db, "get_engine", lambda: engine)
+
+    assert get_monthly_budget("no-such-tenant") is None
+
+
+def test_set_monthly_budget_then_get_round_trips(monkeypatch: pytest.MonkeyPatch) -> None:
+    engine = _make_sqlite_engine()
+    monkeypatch.setattr(db, "get_engine", lambda: engine)
+    _insert_user_row(engine, "tenant-a")
+
+    set_monthly_budget("tenant-a", 50.0)
+
+    assert get_monthly_budget("tenant-a") == 50.0
+
+
+def test_set_monthly_budget_none_clears_a_previously_set_cap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = _make_sqlite_engine()
+    monkeypatch.setattr(db, "get_engine", lambda: engine)
+    _insert_user_row(engine, "tenant-a")
+
+    set_monthly_budget("tenant-a", 50.0)
+    set_monthly_budget("tenant-a", None)
+
+    assert get_monthly_budget("tenant-a") is None
+
+
+def test_get_monthly_spend_usd_sums_only_the_current_calendar_month(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = _make_sqlite_engine()
+    monkeypatch.setattr(db, "get_engine", lambda: engine)
+    _insert_user_row(engine, "tenant-a")
+
+    now = datetime.now(tz=timezone.utc)
+    last_month = now.replace(day=1) - timedelta(days=1)
+
+    with engine.begin() as conn:
+        conn.execute(
+            analysis_runs_table.insert().values(
+                run_id="run-this-month",
+                gold_subtasks=1,
+                science_subtasks=0,
+                input_tokens=100,
+                output_tokens=50,
+                total_tokens=150,
+                timestamp=now,
+                tenant_id="tenant-a",
+                model_name="gpt-4o-mini",
+                cost_usd=1.50,
+            )
+        )
+        conn.execute(
+            analysis_runs_table.insert().values(
+                run_id="run-last-month",
+                gold_subtasks=1,
+                science_subtasks=0,
+                input_tokens=100,
+                output_tokens=50,
+                total_tokens=150,
+                timestamp=last_month,
+                tenant_id="tenant-a",
+                model_name="gpt-4o-mini",
+                cost_usd=999.0,
+            )
+        )
+
+    assert get_monthly_spend_usd("tenant-a") == pytest.approx(1.50)
+
+
+def test_get_monthly_spend_usd_is_scoped_per_tenant(monkeypatch: pytest.MonkeyPatch) -> None:
+    engine = _make_sqlite_engine()
+    monkeypatch.setattr(db, "get_engine", lambda: engine)
+    _insert_user_row(engine, "tenant-a")
+    _insert_user_row(engine, "tenant-b")
+
+    now = datetime.now(tz=timezone.utc)
+    with engine.begin() as conn:
+        conn.execute(
+            analysis_runs_table.insert().values(
+                run_id="run-a",
+                gold_subtasks=1,
+                science_subtasks=0,
+                input_tokens=100,
+                output_tokens=50,
+                total_tokens=150,
+                timestamp=now,
+                tenant_id="tenant-a",
+                model_name="gpt-4o-mini",
+                cost_usd=3.0,
+            )
+        )
+        conn.execute(
+            analysis_runs_table.insert().values(
+                run_id="run-b",
+                gold_subtasks=1,
+                science_subtasks=0,
+                input_tokens=100,
+                output_tokens=50,
+                total_tokens=150,
+                timestamp=now,
+                tenant_id="tenant-b",
+                model_name="gpt-4o-mini",
+                cost_usd=7.0,
+            )
+        )
+
+    assert get_monthly_spend_usd("tenant-a") == pytest.approx(3.0)
+    assert get_monthly_spend_usd("tenant-b") == pytest.approx(7.0)
+
+
+def test_get_monthly_spend_usd_is_zero_with_no_runs(monkeypatch: pytest.MonkeyPatch) -> None:
+    engine = _make_sqlite_engine()
+    monkeypatch.setattr(db, "get_engine", lambda: engine)
+    _insert_user_row(engine, "tenant-a")
+
+    assert get_monthly_spend_usd("tenant-a") == 0.0
