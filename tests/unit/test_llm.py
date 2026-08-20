@@ -1,8 +1,8 @@
-"""Unit tests for core/llm.py's multi-provider factory (ADR-012).
+"""Unit tests for core/llm.py's multi-provider factory (ADR-014).
 
 No real credentials are used — provider selection is verified by mocking env vars
 and asserting the correct LangChain class is instantiated with the correct model,
-never by making a live API call. See ADR-012's Consequences section for why.
+never by making a live API call. See ADR-014's Consequences section for why.
 """
 
 import pytest
@@ -105,7 +105,7 @@ class TestGetLlmProviderSelection:
 
 class TestGetLlmFailFast:
     """Missing credentials or an unknown provider must fail immediately and clearly
-    — never silently fall back to OpenAI (ADR-012 §3).
+    — never silently fall back to OpenAI (ADR-014 §3).
     """
 
     def test_anthropic_without_api_key_raises_clear_error(

@@ -2,7 +2,7 @@
 
 Supports OpenAI, Anthropic, Google (Gemini), and local models via Ollama, selected
 via AI_ETL_LLM_PROVIDER (default: openai, preserving existing behavior). See
-docs/adr/ADR-012-multi-provider-llm.md for the full rationale, the env var contract,
+docs/adr/ADR-014-multi-provider-llm.md for the full rationale, the env var contract,
 and what's explicitly out of scope (no automatic cross-provider fallback).
 """
 
@@ -15,7 +15,7 @@ from ai_etl.core.analysis_types import TokenUsage
 
 # Default model per provider, applied when AI_ETL_LLM_MODEL is unset. Each value is a
 # literal, provider-native model id — no cross-provider name translation is attempted
-# (see ADR-012 §2).
+# (see ADR-014 §2).
 _DEFAULT_MODEL_BY_PROVIDER = {
     "openai": "gpt-4o-mini",
     "anthropic": "claude-sonnet-5",
@@ -105,7 +105,7 @@ def get_llm(temperature: float = 0.0) -> BaseChatModel:
     for existing deployments). Model is read from AI_ETL_LLM_MODEL, defaulting per
     provider (see _DEFAULT_MODEL_BY_PROVIDER). Raises RuntimeError immediately (never
     silently falls back to OpenAI) if AI_ETL_LLM_PROVIDER names an unsupported
-    provider or a required provider credential is missing — see ADR-012 §3.
+    provider or a required provider credential is missing — see ADR-014 §3.
     """
     provider = get_provider()
     builder = _BUILDERS.get(provider)

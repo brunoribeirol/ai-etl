@@ -1,4 +1,4 @@
-# ADR-012: Multi-provider LLM support (OpenAI, Anthropic, Google, Ollama)
+# ADR-014: Multi-provider LLM support (OpenAI, Anthropic, Google, Ollama)
 
 **Status:** Proposed
 **Date:** 2026-08-19
