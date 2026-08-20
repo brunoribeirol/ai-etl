@@ -172,7 +172,9 @@ computes `ratio = spent / cap` whenever a cap is configured. If
 - **Known limitation (by design, see Decision 3):** a single execution can
   still push a tenant's spend past their cap; only the *next* execution is
   blocked. Revisit with approach (b) if real per-run costs grow enough for
-  this to matter.
+  this to matter. (The Addendum below closes the *concurrent*-execution
+  version of this gap — multiple simultaneous overshoots — but not the
+  single-execution one, which remains an accepted trade-off.)
 - **Known limitation:** `analysis_runs.cost_usd` is only written when a
   business question triggers the Agentic BI layer (`save_analysis` /
   `_write_analysis_row`) — a Silver-only run (extract/transform/load, no
@@ -188,10 +190,95 @@ computes `ratio = spent / cap` whenever a cap is configured. If
   **Not applied to the live Supabase database** — pending explicit owner
   confirmation, same checkpoint discipline as Sprint 13's `0006`.
 
+## Addendum — concurrency fixes (post-PR-#63 code review, before merge)
+
+`/code-review` on PR #63 caught two real bugs in the first cut of this
+enforcement, both fixed before merge:
+
+**1. Wrong check order — a budget rejection was still consuming a
+rate-limit slot.** The first cut called `check_and_increment_rate_limit`
+before `check_budget_cap`, so a request rejected for being over budget
+(`402`) had *already* incremented the tenant's rate-limit counter for a run
+that never executed. A tenant near the rate-limit cap but already over
+budget would stay locked out of legitimate calls for the rest of the
+rate-limit window even after raising their cap or waiting for the budget
+period to roll over — punished twice for one rejected call. **Fixed** by
+swapping the order in `enqueue_analysis`: `check_budget_cap` now runs
+first, `check_and_increment_rate_limit` only runs (and only ever increments)
+once the budget gate has already passed.
+
+**2. Race condition — concurrent enqueues could all pass the budget check.**
+`check_budget_cap` read `SUM(analysis_runs.cost_usd)` and compared it to the
+cap with no locking. Two `enqueue_analysis` calls for the same tenant
+arriving close together both read the same pre-execution `spent` (neither
+run had completed yet, so neither's cost had landed in Postgres), both saw
+`spent < cap`, and both would pass — N concurrent runs pushing spend past
+the cap, not the "bounded to one run's overshoot" guarantee Decision 3
+actually promises.
+
+**Fix chosen: a Redis lock, reusing the rate limiter's own atomicity
+primitive — not a Postgres compare-and-swap.** Two mechanisms already exist
+elsewhere in this codebase for exactly this class of problem:
+- `execution_queue.py`'s own rate limiter: Redis `INCR`, atomic by
+  construction, no external lock needed.
+- `audit.db.claim_due_pipeline` (Sprint 13, ADR-016): a Postgres
+  compare-and-swap `UPDATE ... WHERE next_run_at = :expected`, atomic
+  because it claims one specific, already-identified row before acting on
+  it.
+
+The budget check doesn't have a single row to compare-and-swap — it gates
+access to an *aggregate* (`SUM(...)` across every `analysis_runs` row this
+month), which is exactly what `claim_due_pipeline`'s row-level CAS pattern
+doesn't fit. What does fit is the rate limiter's own primitive, applied to a
+lock instead of a counter: Redis `SET key value NX EX <ttl>` is atomic
+"claim only if nobody else holds it right now," the same one-winner
+guarantee `INCR` gives the rate limiter, reused rather than reinvented.
+`check_budget_cap` now acquires a per-tenant `budget-inflight:{tenant_id}`
+lock (`_try_acquire_budget_inflight_lock`) immediately after confirming the
+tenant isn't already over the cap, **only when a cap is configured** — an
+uncapped tenant (the default) never touches this lock at all, so nothing
+changes for the common case. A second concurrent call for the same capped
+tenant fails to acquire the lock and is rejected with `BudgetExceededError`
+before it ever reaches `.delay()`. The lock is released once the run's real
+cost is durably persisted (`run_full_analysis_task`'s `finally`, after
+`run_full_analysis` returns — success or failure, cost may or may not have
+been written, but either way the run is no longer "in flight"), or
+immediately if enqueueing itself then fails before the task ever starts
+(`enqueue_analysis`'s own `except` — e.g. the rate limiter rejects the call
+after the budget lock was already acquired). A `BUDGET_INFLIGHT_LOCK_TTL_SECONDS`
+(default 900s) safety-net expiry guards against a worker crashing between
+acquiring the lock and reaching the `finally`, so a capped tenant can never
+be locked out indefinitely by a dead worker.
+
+**Trade-off, stated plainly:** a capped tenant can now have at most one
+execution in flight and unreconciled at a time — a second submission while
+the first is still running is rejected, not queued. Uncapped tenants are
+entirely unaffected. This is a real (if usually small, given typical run
+durations) reduction in concurrency for capped tenants, accepted in
+exchange for the overshoot bound Decision 3 actually claims; revisit if a
+real customer's workload needs concurrent capped executions.
+
+**Verified for real** against a throwaway local Redis (`brew install redis`,
+no Docker daemon in this environment — same substitution pattern prior
+sprints used for Postgres) plus the same throwaway Homebrew Postgres used
+for migration `0007`: two `enqueue_analysis` calls issued back-to-back for a
+tenant near its cap — first passes and is enqueued, second (before the
+first's cost is written) is rejected with `BudgetExceededError`, confirming
+only one passes; a tenant already over its cap making repeated calls never
+increments the rate-limit counter at all (confirmed by then successfully
+making calls up to the rate limit afterward). See `tests/unit/test_execution_queue.py`
+for the equivalent fake-Redis unit coverage (`test_concurrent_enqueue_for_a_capped_tenant_only_one_passes`,
+`test_enqueue_analysis_over_budget_does_not_consume_a_rate_limit_slot`,
+`test_inflight_lock_is_released_after_the_task_finishes`,
+`test_inflight_lock_is_released_when_enqueueing_itself_fails`,
+`test_uncapped_tenant_never_touches_the_inflight_lock`).
+
 ## Related
 
 - ADR-008 — async execution, per-tenant rate limiting (the pattern this ADR
   reuses/diverges from).
+- ADR-016 — `claim_due_pipeline`'s compare-and-swap pattern, considered and
+  set aside for the Addendum's concurrency fix above.
 - `core/pricing.py::compute_cost_usd` — the per-run cost this ADR's
   enforcement reads (unchanged by this sprint).
 - Vault: `artefact/product-roadmap-post-tcc.md`, Sprint 29.
