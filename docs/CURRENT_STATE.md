@@ -31,6 +31,98 @@ Sprint 6 (ADR-011, real Next.js + Clerk + FastAPI frontend replacing Streamlit) 
 
 **Already de-risked ahead of time** (PR #43, merged 2026-08-17): `pyproject.toml`'s `plotly`/`scikit-learn`/`statsmodels` were misclassified under the Streamlit-only `app` extra — actually real pipeline runtime deps (`agents/analyst.py`/`science.py` use them inside the sandbox for charts/models). Fixed before it could cause a silent production regression during the cutover.
 
+## Sprint 22 — dirty-data robustness (branch `feat/sprint22-dirty-data-corpus`, PR open, not merged)
+
+Scope: the Sprint 12 benchmark (204k×300) is synthetic and clean; this sprint tests
+`sources/csv_source.py` against the kind of dirt a synthetic generator never reproduces.
+Investigated first, per the sprint's own instructions, before writing any fix — direct
+reproduction against a new versioned corpus (`tests/fixtures/dirty_data/`, 11 small files,
+~56KB total, committed normally — unlike the Sprint 12 benchmark, small enough not to need
+gitignoring) found three **real** bugs in `load_csv`, all fixed:
+
+1. **Encoding** — Latin-1/Windows-1252/mixed-encoding files hard-crashed with a raw
+   `UnicodeDecodeError`. Fixed: `charset_normalizer` (was already a transitive `requests`
+   dependency, now declared directly in `pyproject.toml`) detects and decodes on UTF-8 failure;
+   raises a specific, actionable `ValueError` only if detection itself can't find a confident
+   candidate.
+2. **Delimiter ambiguity** — `;`/tab-delimited files (common Brazilian/EU locale exports)
+   didn't error at all under pandas' default `sep=","`: they silently returned a single
+   column holding the whole raw line. Fixed: `csv.Sniffer` detects the real delimiter first.
+3. **Malformed quoting / stray delimiter in an unquoted field** — the worst case found:
+   pandas' C engine silently accepted a row whose field count didn't match the header and
+   returned a **DataFrame with shifted, wrong values in every column, no exception at all**
+   (confirmed against `csv_ambiguous_delimiter.csv`). Fixed: `_validate_row_lengths()`
+   re-walks the raw text with the stdlib `csv` module and raises a specific, line-numbered
+   `ValueError` instead of ever returning that DataFrame.
+
+Excel (`.xlsx`, already handled by `load_csv` via `pandas.read_excel` before this sprint —
+no new connector, no ADR) got equivalent treatment: a multi-sheet workbook now raises
+(listing the sheet names) instead of silently reading only the first and dropping the rest;
+a header row that isn't row 0 (title rows, blank spacer rows, or a merged title cell — which
+`openpyxl`/pandas represent identically to a title row: one populated cell, `NaN` neighbors)
+is located by a small heuristic (`_detect_header_row()`: first row that fills every column
+with text-only values) instead of silently treating the title as column names. Both
+ambiguities are also resolvable explicitly via new optional `sheet_name`/`header_row` fields
+on a `csv`-type source, threaded through `extractor_node`'s dispatch (additive, backward
+compatible — omitting them preserves the old default behavior for every existing
+single-sheet, header-in-row-0 source).
+
+JSON (deeply nested + irregular array/key shapes between records) was investigated too —
+`rest_source.py`'s existing `pd.json_normalize` call already handled both correctly (dotted
+column flattening, `NaN`-filled missing keys, no crash, no silent misalignment). No fix
+needed there; added `tests/unit/test_rest_source_dirty_json.py` to pin that already-correct
+behavior against the same corpus rather than leave it unverified.
+
+No ADR: every fix stayed inside the existing `csv_source.py`/`rest_source.py` connectors —
+hardening validation/parsing logic in modules that already existed, not new connector
+architecture (per `.claude/specs/sr-standard.md`'s own criterion, and the ADR-010 precedent
+it points to). Checked for the parallel Sprint 13 before starting: no `sprint13` branch or
+open PR existed at the time of this session, so no ADR-numbering collision was possible to
+avoid — none needed anyway since no ADR was created.
+
+New: `tests/fixtures/dirty_data/` (corpus, 11 files), `tests/unit/test_csv_source_dirty_data.py`
+(19 tests), `tests/unit/test_rest_source_dirty_json.py` (2 tests), 2 new tests in
+`tests/unit/test_extractor.py` for the `sheet_name`/`header_row` passthrough.
+`src/ai_etl/sources/csv_source.py` rewritten (was 11 lines, now has real encoding/delimiter/
+row-length/header-detection logic); `src/ai_etl/agents/extractor.py` — 2-line additive change
+to the `csv` dispatch branch. `pyproject.toml` — `charset-normalizer` promoted from transitive
+to a declared base dependency.
+
+**Post-open-PR code review caught a real regression, fixed same session**: `/code-review`
+on PR #61 found that `_validate_row_lengths()` — the check added for the malformed-quote/
+stray-delimiter bug above — re-walks the whole file a second time in pure-Python `csv.reader`
+on top of pandas' own C-engine parse, with no size short-circuit, measurably doubling
+`load_csv`'s CPU time at scale (the exact metric Sprint 12/ADR-013 optimized). Fixed with a
+row-count-based fast path: below `_LARGE_FILE_ROW_THRESHOLD=50_000` lines (matching Sprint
+12's own `LARGE_DATASET_ROW_THRESHOLD` convention in `core/sandbox.py`) every row is still
+validated, unchanged; above it, only a bounded leading sample (`_VALIDATION_SAMPLE_ROWS=5_000`)
+is checked — an explicit, documented trade-off (a malformed row past the sample boundary in a
+very large file is no longer guaranteed to be caught), not a silent one. **Measured, not
+assumed**: the official Sprint 12 200k-row benchmark generator hit this session's
+already-documented iCloud-sync I/O stall (`~/Documents` — see Known risks below) and was
+killed after 20+ minutes with no reliable progress; substituted with a 250k-row × 40-col CSV
+generated directly in the non-iCloud scratch path (8s to generate) for the timing comparison
+instead — a valid substitute since the regression is a generic O(rows) cost, not
+dataset-content-specific. Results: pure `pandas.read_csv` floor ≈2.09s; **after** the fix
+≈2.29s (~10% overhead); **before** the fix (full second pass, simulated by disabling the
+threshold) ≈4.30s (~2.06×) — confirms both the review's "doubles CPU time" finding and that
+the fix restores near-baseline performance. New tests: 3 more in
+`tests/unit/test_csv_source_dirty_data.py` (malformed row caught within the sample on a large
+file; malformed row past the sample boundary correctly *not* caught, the documented trade-off;
+small-file behavior unchanged) — 22 tests total in that file, `csv_source.py` now at 99%
+coverage.
+
+Verification this session (including the post-review fix): `ruff check`/`format --check`
+clean on every touched file (pre-existing findings only in untouched
+`case_study/baselines/*.ipynb`/`generate_*.py`, unrelated); `mypy src/` clean (49 files, no
+hang this session); `pytest tests/unit tests/integration`
+— 414 passed, 14 skipped (pre-existing DB/network-unreachable skip pattern), 91% overall
+coverage, `csv_source.py` at 99% (well above the 70% adapter floor); `bandit`/`pip-audit`
+— only the two pre-existing, documented `exec()` sites in `core/sandbox.py` and one
+pre-existing `assert` in `api/deps.py`, no new findings, no known CVEs (including the new
+`charset-normalizer` dependency). `tests/e2e` not run locally (same Postgres/Redis
+unavailability as every prior session) — CI is the real gate.
+
 ## Sprint 8 — model comparison + stability (branch `feat/sprint8-model-comparison`, PR open, not merged)
 
 CLI/headless only, per scope — no `api/` or `frontend/` touched. New:

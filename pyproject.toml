@@ -37,6 +37,11 @@ dependencies = [
     # so mongodb_source.py talks to it directly.
     "pymysql>=1.1.0",
     "pymongo>=4.8.0",
+    # Sprint 22 (dirty-data robustness) — was already resolved transitively
+    # via `requests` (a `langchain`/`openai` sub-dependency), but importing
+    # it directly from `sources/csv_source.py` needs it pinned as a real,
+    # declared dependency rather than relying on another package's internals.
+    "charset-normalizer>=3.3.0",
     # Real pipeline runtime dependencies, not Streamlit-only despite living
     # under the `app` extra until Sprint 6 (2026-08-17): `agents/analyst.py`/
     # `agents/science.py` import these inside the sandbox via `extra_modules`

@@ -24,6 +24,35 @@ def test_csv_source_extracted(mocker) -> None:
     assert result["error"] is None
 
 
+def test_csv_source_passes_sheet_name_and_header_row(mocker) -> None:
+    """Sprint 22: optional Excel disambiguation fields reach load_csv unchanged."""
+    df = pd.DataFrame({"a": [1, 2], "b": ["x", "y"]})
+    mock_load = mocker.patch("ai_etl.agents.extractor.load_csv", return_value=df)
+
+    sources = [
+        {
+            "name": "stock",
+            "type": "csv",
+            "path": "data/report.xlsx",
+            "sheet_name": "Estoque",
+            "header_row": 3,
+        }
+    ]
+    extractor_node(_make_state(sources))
+
+    mock_load.assert_called_once_with("data/report.xlsx", sheet_name="Estoque", header_row=3)
+
+
+def test_csv_source_omits_sheet_name_and_header_row_by_default(mocker) -> None:
+    df = pd.DataFrame({"a": [1, 2], "b": ["x", "y"]})
+    mock_load = mocker.patch("ai_etl.agents.extractor.load_csv", return_value=df)
+
+    sources = [{"name": "orders", "type": "csv", "path": "data/orders.csv"}]
+    extractor_node(_make_state(sources))
+
+    mock_load.assert_called_once_with("data/orders.csv", sheet_name=None, header_row=None)
+
+
 def test_document_source_extracted(mocker) -> None:
     df = pd.DataFrame({"product": ["A", "B"], "revenue": [100, 200]})
     mocker.patch("ai_etl.agents.extractor.load_document", return_value=df)

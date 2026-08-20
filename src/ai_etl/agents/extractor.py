@@ -45,7 +45,11 @@ def extractor_node(state: PipelineState) -> PipelineState:
 
         try:
             if source_type == "csv":
-                df = load_csv(source["path"])
+                df = load_csv(
+                    source["path"],
+                    sheet_name=source.get("sheet_name"),
+                    header_row=source.get("header_row"),
+                )
             elif source_type == "postgres":
                 df = load_postgres(source["table"])
             elif source_type == "sqlite":
