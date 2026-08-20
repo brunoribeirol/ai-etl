@@ -1,0 +1,48 @@
+[
+  {
+    "id": 1,
+    "cliente": {
+      "nome": "Ana",
+      "endereco": {
+        "cidade": "Recife",
+        "geo": {
+          "lat": -8.05,
+          "lon": -34.9
+        }
+      }
+    },
+    "pedido": {
+      "itens": [
+        {
+          "sku": "A1",
+          "qtd": 2
+        },
+        {
+          "sku": "B2",
+          "qtd": 1
+        }
+      ]
+    }
+  },
+  {
+    "id": 2,
+    "cliente": {
+      "nome": "Bruno",
+      "endereco": {
+        "cidade": "Recife",
+        "geo": {
+          "lat": -8.06,
+          "lon": -34.88
+        }
+      }
+    },
+    "pedido": {
+      "itens": [
+        {
+          "sku": "C3",
+          "qtd": 5
+        }
+      ]
+    }
+  }
+]
