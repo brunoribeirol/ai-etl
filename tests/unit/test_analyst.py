@@ -109,6 +109,31 @@ def test_run_analyst_happy_path(mock_get_llm, sample_df: pd.DataFrame) -> None:
     assert result["attempts"] == 1
 
 
+def test_run_analyst_scales_timeout_for_large_df(
+    mocker, mock_get_llm, sample_df: pd.DataFrame
+) -> None:
+    """ADR-012: a Silver DataFrame above LARGE_DATASET_ROW_THRESHOLD gets a
+    doubled sandbox timeout budget — real profiling confirmed the fixed 15s
+    budget is too tight for representative Analyst-style code at large scale."""
+    from ai_etl.core import sandbox as sandbox_module
+
+    mock_get_llm.return_value = _make_llm_mock([HAPPY_CODE])
+    big_df = pd.concat(
+        [sample_df] * ((sandbox_module.LARGE_DATASET_ROW_THRESHOLD // len(sample_df)) + 1),
+        ignore_index=True,
+    )
+    spy = mocker.patch(
+        "ai_etl.agents.analyst.execute_in_sandbox", wraps=sandbox_module.execute_in_sandbox
+    )
+
+    run_analyst(big_df, "Qual produto gerou mais receita?")
+
+    assert (
+        spy.call_args.kwargs["timeout_seconds"]
+        == 15 * sandbox_module.LARGE_DATASET_TIMEOUT_MULTIPLIER
+    )
+
+
 NESTED_FUNCTION_CODE = """\
 def _compute():
     return df.groupby('product')['revenue'].sum().reset_index()

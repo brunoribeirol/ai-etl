@@ -16,7 +16,13 @@ import time
 import pandas as pd
 import pytest
 
-from ai_etl.core.sandbox import SAFE_BUILTINS, execute_in_sandbox
+from ai_etl.core.sandbox import (
+    LARGE_DATASET_ROW_THRESHOLD,
+    LARGE_DATASET_TIMEOUT_MULTIPLIER,
+    SAFE_BUILTINS,
+    execute_in_sandbox,
+    scale_timeout_for_rows,
+)
 
 # ---------------------------------------------------------------------------
 # mode="function" (Transformer contract) — rewritten for the SandboxResult
@@ -357,3 +363,34 @@ def test_injected_parent_env_var_not_visible_in_sandboxed_child(
     # Confirm the marker really was set in the parent at call time — otherwise
     # this test would trivially pass for the wrong reason.
     assert os.environ.get("AI_ETL_TEST_SECRET_MARKER") == "should-not-leak-into-sandbox"
+
+
+# ---------------------------------------------------------------------------
+# scale_timeout_for_rows() (ADR-012, Sprint 12 scale profiling) — real
+# profiling against a 200k-row benchmark confirmed the fixed per-call timeout
+# doesn't scale with input size; see docs/adr/ADR-012-scale-strategy.md and
+# docs/work/2026-08-19-sprint12-scale-profiling.md for the measurements.
+# ---------------------------------------------------------------------------
+
+
+def test_scale_timeout_unchanged_below_threshold() -> None:
+    """Every existing case-study scenario (max 10k rows) must see identical
+    behavior to before this sprint — no-op below the threshold."""
+    assert scale_timeout_for_rows(30, 10_000) == 30
+    assert scale_timeout_for_rows(15, LARGE_DATASET_ROW_THRESHOLD) == 15
+
+
+def test_scale_timeout_doubles_above_threshold() -> None:
+    result = scale_timeout_for_rows(20, LARGE_DATASET_ROW_THRESHOLD + 1)
+    assert result == 20 * LARGE_DATASET_TIMEOUT_MULTIPLIER
+
+
+def test_scale_timeout_at_benchmark_scale() -> None:
+    """The real scale this sprint measured against (~204k rows)."""
+    assert scale_timeout_for_rows(20, 204_000) == 40
+    assert scale_timeout_for_rows(15, 204_000) == 30
+    assert scale_timeout_for_rows(30, 204_000) == 60
+
+
+def test_scale_timeout_zero_rows_unchanged() -> None:
+    assert scale_timeout_for_rows(30, 0) == 30

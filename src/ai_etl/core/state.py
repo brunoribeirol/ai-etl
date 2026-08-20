@@ -30,7 +30,9 @@ class PipelineState(TypedDict):
 
     # --- Extractor output ---
     extracted_data: dict[str, Any]  # {"source_name": pd.DataFrame}
-    source_schemas: dict[str, Any]  # {"source_name": {columns, dtypes, shape, sample}}
+    source_schemas: dict[str, Any]  # {"source_name": {columns, dtypes, shape, sample,
+    # sample_truncated, null_counts, null_ratio}} — sample is capped to
+    # extractor.MAX_SAMPLE_COLUMNS columns for wide sources (ADR-013).
 
     # --- Transformer output ---
     transformation_code: str  # generated Python function as string

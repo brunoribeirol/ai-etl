@@ -2,13 +2,21 @@
 
 > Living doc. Updated at the end of meaningful work sessions, not per-commit. Source of truth for repo/code state; the Obsidian vault (`~/Documents/Obsidian Vault/tcc/`) is the source of truth for the academic TCC narrative and product/strategy context.
 
-**Last updated:** 2026-08-19, end of session — **Sprint 8 (model comparison + stability) done, PR open, awaiting owner review before merge — not yet merged to `main`.** See "Start here next session" below.
+**Last updated:** 2026-08-20, mid-session — **parallel sprint batch (8-12, 23) in flight. Merged so far: Sprint 9, Sprint 8, Sprint 11 (+ MySQL/MongoDB/OAuth2 extension). Sprint 12 (this branch) merging next; Sprint 23 and Sprint 10 still pending review.** See "Start here next session" below. This section will get a full consolidated rewrite once all pending PRs land — treat the per-sprint subsections below as interim.
 
 ## Start here next session
 
-**Sprint 8 (model comparison + stability) is implemented on `feat/sprint8-model-comparison`, PR open against `main`, deliberately not merged — the task's own checkpoint rule.** Headline finding: **this session had no `OPENAI_API_KEY` and no `ollama` binary**, so no real cost/latency/quality comparison data exists yet — the deliverable is a verified, reproducible harness (`case_study/scripts/model_comparison.py`) plus an honestly-labeled dry run (every row tagged `data_source`: `mock`/`simulated`/`skipped_no_infra`, never faked as `real`). Full writeup: `case_study/results/sprint8/README.md`. Rerun with a real key (and Ollama installed) for real numbers — no code change needed. Next up once this is reviewed: Sprint 9 (human validation), unblocked and independent.
+**Orchestration session (2026-08-19/20): Sprints 8, 9, 10, 11, 12 were built in parallel via isolated worktree subagents, each opening its own PR without merging (explicit checkpoint).** Sprint 11 was later extended (same PR) with MySQL, MongoDB, and OAuth2 client-credentials at the owner's request. Sprint 23 (multi-provider LLM — Anthropic/Google/Ollama) was pulled forward out of roadmap order, also at the owner's explicit request, since its only dependency (Sprint 8) was already done.
 
-**Sprint 7 (frontend redesign, PR #52) is done, merged to `main`, and live-verified in production (2026-08-19).** Scope grew mid-sprint on owner request past the original "visual layer only, no API contract change" plan — see the Sprint 7 section below for what that added and why it's still additive/backward-compatible.
+**Merge sequencing decision:** PRs touching shared pipeline infrastructure (Sprint 11 — `extractor.py`/`orchestrator.py` dispatch; Sprint 12 — `extractor.py`/`sandbox.py`; Sprint 23 — `core/llm.py`; Sprint 10 — new AWS IaC) require explicit owner confirmation before merge even with CI green, per this session's standing rule. Sprints 9 and 8 (docs/scripts only, no shared-infra touch) merged immediately without that extra checkpoint. Merge order: 9 → 8 → 11 → 12 → 23 → 10, chosen by risk/blast-radius. **A local Git object-store corruption was hit mid-session** (multiple worktrees running concurrent Git operations against the same shared `.git/objects`) — recovered by cloning fresh from GitHub rather than attempting local repair; no data was lost since all branches were already pushed.
+
+**ADR numbering conflict**: Sprints 10, 11, 12, and 23 were all built in parallel and each independently claimed `ADR-012`. Resolved by merge order — first to merge keeps ADR-012, the rest renumber sequentially at merge time (Sprint 11 → ADR-012 real, Sprint 12 → ADR-013, Sprint 23 → ADR-014, Sprint 10 → ADR-015).
+
+**Sprint 12 (scale robustness, branch `feat/sprint12-scale-robustness`) is implemented, `make check` green.** Real profiling against a 204,000-row x 300-column synthetic benchmark (`case_study/data/generate_benchmark.py`, not committed — gitignored like the other case-study CSVs) confirmed BOTH points flagged going into this sprint:
+1. `extractor.py::_extract_schema`'s raw per-row sample scaled unbounded with column count (38,837 chars / ~9,709 tokens for one 300-col source) — fixed by capping the sample to `MAX_SAMPLE_COLUMNS=20` (38.6% reduction, measured).
+2. `core/sandbox.py`'s fixed per-call timeout did not scale with input size — representative Science-style code (a real `RandomForestRegressor` fit) **actually timed out** at the unscaled 20s budget against the 204k-row benchmark, reproduced directly, not hypothesized. Fixed via `scale_timeout_for_rows()` (doubles the timeout above 50,000 rows), applied at all 3 sandbox call sites (Transformer/Analyst/Science).
+
+Full detail: `docs/adr/ADR-013-scale-strategy.md` (renumbered from ADR-012, see above), `docs/work/2026-08-19-sprint12-scale-profiling.md`. No real LLM call was made during this sprint's profiling — this environment has no `OPENAI_API_KEY` configured, so real end-to-end LLM-driven validation at 300-column scale (does the LLM actually produce working code against the now-compacted schema?) is an explicit, flagged open item for a follow-up session with real credentials.
 
 Sprint 6 (ADR-011, real Next.js + Clerk + FastAPI frontend replacing Streamlit) is done, all 6 PRs merged, live-verified end-to-end twice (once against the interim `ai-etl-api` service, once again post-cutover against the consolidated `ai-etl` service).
 
@@ -97,6 +105,42 @@ findings, no known CVEs. `tests/integration`/`tests/e2e` not run locally
 - Per-stage latency instrumentation live: `stage_durations` on `PipelineState`, persisted to a `stage_latencies` table (migration `0004`, applied to production 2026-08-15) via `save_stage_latencies()` — feeds the evaluation-metrics framework (`artefact/evaluation-metrics.md` in the Vault).
 - **Sprint 3 complete (PR #27, ADR-008)** — pipeline/analysis execution is now asynchronous via Celery + Redis (`core/celery_app.py`, `services/execution_queue.py`); `app.py` enqueues and polls instead of blocking. Per-tenant rate limiting uses a fixed-window counter directly on Redis (Celery's own `rate_limit` is global per task type, not per tenant — a deliberate divergence from ADR-008's initial sketch, documented inline). Cost per execution (`core/pricing.py`, migration `0005` — `model_name`/`cost_usd` on `analysis_runs`, applied to production 2026-08-15) is now visible in the History tab. Full results (DataFrames, Plotly figures) are persisted as CSV/JSON artifacts alongside the existing lossy JSON audit log, and reloaded via `load_full_result()` to re-render the complete results UI (`_render_results`) after an async run completes or from History — `load_full_result` enforces a server-side `tenant_id` ownership check (added in security review) rather than relying solely on the UI only ever offering a tenant's own `run_id`s.
 - Dependencies: `boto3` (Sprint 4); `pypdf`, `python-docx` (Sprint 5); `celery`, `redis` (Sprint 3); `gitpython` bumped to 3.1.59 (cleared 15 CVEs), `pandas`/`pandas-stubs` bumped to `<4.0.0` (Dependabot #13/#14), `pyjwt[crypto]>=2.13.0` added (Sprint 1) — all merged.
+
+## Changed files (2026-08-19 — Sprint 12: scale robustness, PR open not merged)
+
+- `docs/adr/ADR-012-scale-strategy.md` (new) — real profiling against a 204k-row x 300-col
+  synthetic benchmark; both flagged points confirmed as real bottlenecks and fixed.
+- `docs/work/2026-08-19-sprint12-scale-profiling.md` (new) — full raw profiling numbers.
+- `case_study/data/generate_benchmark.py` (new) — configurable heterogeneous benchmark
+  dataset generator (default 200k rows x 300 cols), reusing `generate_sales.py`/
+  `generate_orders.py`'s seed/null/outlier/duplicate-injection patterns. Not committed
+  (gitignored, like the other case-study CSVs) — script is the versioned artifact.
+- `case_study/data/profile_scale.py` (new) — profiling harness: real extractor schema-size
+  measurement, real `execute_in_sandbox()` timing for representative Transformer/Analyst/
+  Science-style code (no LLM calls — see ADR-012 for why), real `quality_node` timing.
+- `src/ai_etl/agents/extractor.py` — `_extract_schema()`'s raw sample capped to
+  `MAX_SAMPLE_COLUMNS=20` columns; adds `null_ratio`/`sample_truncated` keys. Additive,
+  backward-compatible — no-op for every source narrower than 20 columns (every existing
+  case-study source).
+- `src/ai_etl/core/sandbox.py` — new `scale_timeout_for_rows()` helper (doubles the
+  timeout above `LARGE_DATASET_ROW_THRESHOLD=50,000` rows); `execute_in_sandbox()`'s own
+  signature/contract unchanged.
+- `src/ai_etl/agents/transformer.py`, `analyst.py`, `science.py` — each calls
+  `scale_timeout_for_rows()` once per `run_*()`/`transformer_node()` call, using the real
+  row count of the DataFrame(s) about to be sandboxed.
+- `src/ai_etl/core/state.py` — `source_schemas` docstring updated to match the new schema
+  shape.
+- `tests/unit/test_extractor.py`, `test_sandbox.py`, `test_analyst.py`, `test_science.py`,
+  `test_transformer.py` — new tests for the schema cap and timeout scaling (happy path +
+  no-op-below-threshold + real large-scale trigger). Full suite: 292 passed, 8 skipped
+  (pre-existing DB-skip pattern), 90.35% coverage. `make check` (ruff/format/mypy/tests/
+  bandit/pip-audit) green — mypy/pytest ran fine directly this session (no sandbox hang
+  encountered), unlike some prior sessions' documented workaround.
+- **Not changed**: `execute_in_sandbox()`'s public signature/contract (ADR-007) — the new
+  helper is opt-in at call sites, not a change to the shared sandbox itself. No LangGraph
+  node signature touched beyond `extractor_node`'s existing `(state) -> state` contract
+  (unchanged, only its internal `_extract_schema()` helper changed).
+- **PR open against `main`, deliberately NOT merged** — see "Start here next session" above.
 
 ## Changed files (2026-08-18 — Sprint 6 PR 6: cutover, Streamlit retired)
 
@@ -205,7 +249,7 @@ findings, no known CVEs. `tests/integration`/`tests/e2e` not run locally
 
 **Sprint 7: complete.** PR #52 (shadcn/ui redesign + Streamlit feature parity — see the Sprint 7 section above) merged and verified live in production 2026-08-19.
 
-**Sprint 8: PR open, awaiting review — not merged.** Harness + honestly-labeled dry run done this session (no real API/Ollama access — see the Sprint 8 section above and `case_study/results/sprint8/README.md`). Once reviewed/merged, Sprint 9 (human validation) is next, unblocked and independent.
+**Sprint 9: merged.** **Sprint 8: merged** (harness + honestly-labeled dry run — no real API/Ollama access this session, see the Sprint 8 section above and `case_study/results/sprint8/README.md`; rerun with real credentials for real numbers, no code change needed). **Sprint 11: merged** (SQLite/authenticated REST + a same-session extension adding MySQL, MongoDB, OAuth2 client-credentials). **Sprint 12 (scale robustness, out-of-numeric-order per owner's explicit post-TCC roadmap request — see `docs/adr/ADR-013-scale-strategy.md`): merging now.** **Sprint 23 (multi-provider LLM, also pulled forward at owner's request) and Sprint 10 (multi-cloud AWS)** still have open PRs awaiting review before merge.
 
 ## Deploy
 
