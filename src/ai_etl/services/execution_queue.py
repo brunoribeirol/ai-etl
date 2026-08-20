@@ -36,6 +36,7 @@ than this module inventing a second, redundant transport for the same data.
 from __future__ import annotations
 
 import base64
+import logging
 import os
 import time
 from pathlib import Path
@@ -43,19 +44,35 @@ from typing import Any
 
 import redis
 from celery.result import AsyncResult
+from typing_extensions import TypedDict
 
-from ai_etl.audit.db import get_saved_pipeline
+from ai_etl.audit.db import get_monthly_budget, get_monthly_spend_usd, get_saved_pipeline
 from ai_etl.core.analysis_types import AnalysisRunResult
 from ai_etl.core.celery_app import celery_app
 from ai_etl.core.state import PipelineState
 from ai_etl.services.alerting import check_drift_and_notify
 from ai_etl.services.pipeline_service import run_full_analysis
 
+logger = logging.getLogger(__name__)
+
 # Defaults are deliberately generous for a TCC-scale deployment (few tenants,
 # manual testing) rather than tuned for real production load — revisit once
 # Sprint 6's load/stability testing has real numbers to tune against.
 RATE_LIMIT_MAX_RUNS = int(os.getenv("AI_ETL_RATE_LIMIT_MAX_RUNS", "10"))
 RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("AI_ETL_RATE_LIMIT_WINDOW_SECONDS", "3600"))
+
+# Sprint 29 (ADR-019) — fraction of a tenant's monthly_budget_usd at which
+# check_budget_cap starts warning, before the cap is actually reached.
+BUDGET_WARNING_THRESHOLD_RATIO = float(os.getenv("AI_ETL_BUDGET_WARNING_THRESHOLD_RATIO", "0.8"))
+
+# Sprint 29 (ADR-019 addendum) — safety-net TTL on the per-tenant in-flight
+# budget lock (see check_budget_cap's docstring). Only matters if a worker
+# crashes/is killed after acquiring the lock and before releasing it in
+# run_full_analysis_task's `finally` — bounds how long a capped tenant could
+# otherwise be stuck unable to enqueue anything. Generous relative to a real
+# run's worst-case duration (sandbox timeouts scale up to a few minutes at
+# large row counts, ADR-013) without being effectively unbounded.
+BUDGET_INFLIGHT_LOCK_TTL_SECONDS = int(os.getenv("AI_ETL_BUDGET_INFLIGHT_LOCK_TTL_SECONDS", "900"))
 
 
 class RateLimitExceededError(Exception):
@@ -64,8 +81,51 @@ class RateLimitExceededError(Exception):
     `app.py` to render an `st.error`."""
 
 
+class BudgetExceededError(Exception):
+    """Raised by `enqueue_analysis` when a tenant has a `monthly_budget_usd`
+    cap configured and has already spent at or above it this calendar month
+    (ADR-019). Never raised for a tenant with no cap configured (`None`)."""
+
+
+class BudgetStatus(TypedDict):
+    """Return shape of `check_budget_cap` — also what `GET /budget` exposes."""
+
+    cap_usd: float | None
+    spent_usd: float
+    ratio: float | None
+    near_limit: bool
+    exceeded: bool
+
+
 def _redis_client() -> redis.Redis:
     return redis.Redis.from_url(os.getenv("REDIS_URL", "redis://localhost:6379/0"))
+
+
+def _budget_inflight_key(tenant_id: str) -> str:
+    return f"budget-inflight:{tenant_id}"
+
+
+def _try_acquire_budget_inflight_lock(tenant_id: str) -> bool:
+    """`SET ... NX EX` — Redis's own atomic "set only if absent" primitive,
+    the same building block `check_and_increment_rate_limit` already relies
+    on for its own atomicity (there, `INCR`; here, `SET NX`). Returns `True`
+    if this call won the lock, `False` if another unreconciled execution for
+    this tenant already holds it. See `check_budget_cap`'s docstring for why
+    this exists."""
+    client = _redis_client()
+    return bool(
+        client.set(
+            _budget_inflight_key(tenant_id), "1", nx=True, ex=BUDGET_INFLIGHT_LOCK_TTL_SECONDS
+        )
+    )
+
+
+def _release_budget_inflight_lock(tenant_id: str) -> None:
+    """Best-effort release — a plain `DELETE` is a no-op if the lock was
+    never acquired (uncapped tenant) or already expired, so this is always
+    safe to call unconditionally."""
+    client = _redis_client()
+    client.delete(_budget_inflight_key(tenant_id))
 
 
 def check_and_increment_rate_limit(tenant_id: str) -> None:
@@ -102,6 +162,116 @@ def check_and_increment_rate_limit(tenant_id: str) -> None:
             f"{RATE_LIMIT_WINDOW_SECONDS // 60} minutos atingido para esta conta. "
             "Tente novamente mais tarde."
         )
+
+
+def get_budget_status(tenant_id: str) -> BudgetStatus:
+    """Read-only: current cap, spend-so-far this calendar month, and whether
+    the tenant is near or over it. Never raises — `check_budget_cap` below is
+    the enforcement wrapper around this for call sites that must block;
+    `GET /budget` uses this directly so status can always be read, even for
+    a tenant already over their cap."""
+    cap = get_monthly_budget(tenant_id)
+    if cap is None:
+        return BudgetStatus(
+            cap_usd=None, spent_usd=0.0, ratio=None, near_limit=False, exceeded=False
+        )
+
+    spent = get_monthly_spend_usd(tenant_id)
+    ratio = spent / cap if cap > 0 else float("inf")
+    exceeded = spent >= cap
+    near_limit = not exceeded and ratio >= BUDGET_WARNING_THRESHOLD_RATIO
+    return BudgetStatus(
+        cap_usd=cap, spent_usd=spent, ratio=ratio, near_limit=near_limit, exceeded=exceeded
+    )
+
+
+def check_budget_cap(tenant_id: str) -> BudgetStatus:
+    """Pre-enqueue budget gate (ADR-019, Sprint 29) — mirrors
+    `check_and_increment_rate_limit`'s shape (a cheap, synchronous check
+    ahead of `.delay()`, its own exception the API layer maps to an HTTP
+    error) but the "count" being checked is real accumulated USD spend for
+    the current calendar month, not a request counter.
+
+    **Approach (a), not (b)** (see ADR-019's "Decisão real" section for the
+    full trade-off): this checks spend *already accumulated* from completed
+    runs (`get_budget_status`, itself `SUM(analysis_runs.cost_usd)` for the
+    tenant this month via `audit.db.get_monthly_spend_usd`) against the cap,
+    and rejects the *next* execution once the tenant is at or over it. It
+    does not estimate this run's own cost ahead of time, so a single run can
+    still itself push spend past the cap — flagged as an accepted
+    limitation, not fixed here.
+
+    Deliberately queries Postgres directly rather than mirroring spend into
+    a second Redis-resident running total (unlike the rate limiter's own
+    Redis `INCR`): `analysis_runs.cost_usd` is already the canonical,
+    per-run persisted cost this project computes once (Sprint 3) — a
+    parallel Redis counter would only add a second value that can drift from
+    it (e.g. a task that dies after being enqueued but before `save_analysis`
+    runs), for no correctness benefit at this project's scale.
+
+    **Concurrency (ADR-019 addendum, post-PR-#63 code review fix)**: reading
+    `spent` from Postgres and comparing it to the cap is not, by itself,
+    enough to bound the overshoot to "at most one run" the way ADR-019's
+    Decision 3 originally promised. Two `enqueue_analysis` calls arriving
+    close together both read the same pre-execution `spent` (neither run has
+    completed yet, so neither's cost has landed in `analysis_runs`), both see
+    `spent < cap`, and both would pass — N concurrent runs, not one. Fixed by
+    reusing the rate limiter's own atomicity primitive (Redis `SET NX`,
+    exactly `INCR`'s "one winner" guarantee, applied to a lock instead of a
+    counter) rather than inventing a third concurrency pattern in this
+    module: once a cap is configured, at most one of this tenant's
+    executions may be "in flight and unreconciled" (enqueued but not yet
+    priced) at a time — `_try_acquire_budget_inflight_lock` below. A second
+    concurrent call for the same capped tenant is rejected here with
+    `BudgetExceededError`, not silently queued, until the first execution's
+    real cost is persisted and the lock is released (`run_full_analysis_task`'s
+    `finally`) or the safety-net TTL expires. This trades some concurrency
+    for capped tenants (at most one execution in flight while unreconciled)
+    for the overshoot guarantee ADR-019 actually promises; uncapped tenants
+    (the default) are entirely unaffected — the lock is only acquired when
+    `monthly_budget_usd` is set.
+
+    A Postgres compare-and-swap (`audit.db.claim_due_pipeline`'s pattern,
+    Sprint 13) was considered and rejected here: that pattern fits "claim one
+    specific row before acting on it," which doesn't map onto "gate access to
+    an aggregate `SUM(...)` across many rows" the way a lock does — reusing
+    the rate limiter's existing Redis-lock family is the smaller, more
+    consistent change for this specific problem.
+
+    Raises `BudgetExceededError` if a cap is configured and either the
+    tenant is already at/over it, or another of the tenant's executions is
+    still in flight and unreconciled. Otherwise returns the `BudgetStatus`,
+    logging a warning (not an audit-log `log_action()` entry — no
+    `PipelineState`/`run_id` exists yet at enqueue-time, before a run has
+    even started) if spend is near the cap but not yet over it. Caller
+    (`enqueue_analysis`) is responsible for releasing the lock this acquires
+    if enqueueing then fails before the task ever starts.
+    """
+    status = get_budget_status(tenant_id)
+    if status["near_limit"]:
+        logger.warning(
+            "Tenant %s is near its monthly budget cap: $%.4f of $%.2f spent (%.0f%%).",
+            tenant_id,
+            status["spent_usd"],
+            status["cap_usd"],
+            (status["ratio"] or 0.0) * 100,
+        )
+
+    if status["exceeded"]:
+        cap = status["cap_usd"]
+        raise BudgetExceededError(
+            f"Limite de orçamento mensal de US$ {cap:.2f} atingido para esta conta "
+            f"(gasto atual: US$ {status['spent_usd']:.4f}). Novas execuções ficarão "
+            "bloqueadas até o próximo período ou até o teto ser ajustado."
+        )
+
+    if status["cap_usd"] is not None and not _try_acquire_budget_inflight_lock(tenant_id):
+        raise BudgetExceededError(
+            "Outra execução desta conta ainda está sendo precificada. Aguarde ela terminar "
+            "antes de iniciar uma nova, para respeitar o teto de orçamento com segurança."
+        )
+
+    return status
 
 
 @celery_app.task(name="ai_etl.run_full_analysis", bind=True)  # type: ignore[untyped-decorator]
@@ -165,14 +335,28 @@ def run_full_analysis_task(
         except Exception:  # nosec B110
             pass
 
-    result = run_full_analysis(
-        spec,
-        business_question,
-        run_dir,
-        progress_callback=_report_progress,
-        tenant_id=tenant_id,
-        saved_pipeline_id=saved_pipeline_id,
-    )
+    try:
+        result = run_full_analysis(
+            spec,
+            business_question,
+            run_dir,
+            progress_callback=_report_progress,
+            tenant_id=tenant_id,
+            saved_pipeline_id=saved_pipeline_id,
+        )
+    finally:
+        # Sprint 29 (ADR-019 addendum): release the per-tenant "in-flight"
+        # budget lock `check_budget_cap` may have acquired, regardless of
+        # success/failure — the tenant's real cost for this run (if any) is
+        # already durably persisted by `run_full_analysis` (`save_analysis`)
+        # by the time this runs, so the next `check_budget_cap` call will see
+        # it via `get_monthly_spend_usd`. A no-op if no cap was configured
+        # (lock never acquired) — see `_release_budget_inflight_lock`. This
+        # release must happen before the Sprint 14 drift check below, not
+        # just before the return, so a drift-check hiccup can never leave
+        # the tenant's budget lock held past this run's own completion.
+        _release_budget_inflight_lock(tenant_id)
+
     state = result["state"]
 
     if saved_pipeline_id is not None and state.get("status") == "completed":
@@ -230,10 +414,20 @@ def enqueue_analysis(
     file_bytes: bytes | None = None,
     saved_pipeline_id: str | None = None,
 ) -> str:
-    """Enforce the tenant's rate limit, then enqueue the run.
+    """Enforce the tenant's budget cap and rate limit, then enqueue the run.
 
-    Raises `RateLimitExceededError` before touching Celery at all if the tenant is
-    already over the cap — a rejected run should never occupy a queue slot.
+    Raises `BudgetExceededError` (ADR-019, Sprint 29) before touching Celery
+    or the rate limiter at all if the tenant has a `monthly_budget_usd` cap
+    configured and has already spent at or above it this calendar month, or
+    if another of the tenant's executions is still in flight and
+    unreconciled (see `check_budget_cap`'s docstring for the concurrency
+    guard). **Checked first, before the rate limit** (post-PR-#63 code
+    review fix) — a request rejected for being over budget must not still
+    consume a rate-limit slot; the tenant would otherwise be locked out of
+    legitimate calls for the rest of the rate-limit window even after fixing
+    their budget, for a run that never actually executed. Raises
+    `RateLimitExceededError` the same way if the tenant is over the rate-limit
+    cap. Either way, a rejected run never occupies a queue slot.
 
     `file_path`/`file_bytes`: pass both when `spec` references an uploaded
     file (`app.py`'s upload flow) so the worker — a separate process/
@@ -252,17 +446,30 @@ def enqueue_analysis(
     Returns the Celery task id `app.py` stores in `st.session_state` and
     polls via `get_task_status`.
     """
-    check_and_increment_rate_limit(tenant_id)
-    file_bytes_b64 = base64.b64encode(file_bytes).decode("ascii") if file_bytes else None
-    task = run_full_analysis_task.delay(
-        spec,
-        business_question,
-        run_dir,
-        tenant_id,
-        file_path,
-        file_bytes_b64,
-        saved_pipeline_id,
-    )
+    status = check_budget_cap(tenant_id)
+    budget_lock_held = status["cap_usd"] is not None
+    try:
+        check_and_increment_rate_limit(tenant_id)
+        file_bytes_b64 = base64.b64encode(file_bytes).decode("ascii") if file_bytes else None
+        task = run_full_analysis_task.delay(
+            spec,
+            business_question,
+            run_dir,
+            tenant_id,
+            file_path,
+            file_bytes_b64,
+            saved_pipeline_id,
+        )
+    except Exception:
+        # The run never actually started (rate-limited, or the broker call
+        # itself failed) — release the in-flight budget lock `check_budget_cap`
+        # just acquired so it isn't held for BUDGET_INFLIGHT_LOCK_TTL_SECONDS
+        # over a run that will never happen. Once `.delay()` succeeds, the
+        # lock's release is `run_full_analysis_task`'s responsibility instead
+        # (it's now held for the run's real, in-progress duration).
+        if budget_lock_held:
+            _release_budget_inflight_lock(tenant_id)
+        raise
     return str(task.id)
 
 

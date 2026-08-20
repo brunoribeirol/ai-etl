@@ -46,6 +46,12 @@ dependencies = [
     # parsing/next-fire-time computation (month-end, leap years, DST), same
     # "no compiled/system dependency" bar as pymysql/pymongo above.
     "croniter>=2.0.0",
+    # Sprint 29 (ADR-019) — was already resolved transitively (pydantic/fastapi
+    # depend on it), but `services/execution_queue.py::BudgetStatus` needs it
+    # imported directly: `typing.TypedDict` fails Pydantic's schema generation
+    # on Python < 3.12 (used as a FastAPI route return type in
+    # `api/routers/budget.py`) — CI's Python 3.11 job caught this for real.
+    "typing_extensions>=4.12.0",
     # Real pipeline runtime dependencies, not Streamlit-only despite living
     # under the `app` extra until Sprint 6 (2026-08-17): `agents/analyst.py`/
     # `agents/science.py` import these inside the sandbox via `extra_modules`

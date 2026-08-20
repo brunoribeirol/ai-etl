@@ -114,6 +114,109 @@ resolution once Sprint 17 actually merges (both branches declare the same
 column in the same file — expected, flagged, not silently overwritten by
 either side).
 
+## Sprint 29 — tenant budget cap (branch `feat/sprint29-tenant-budget-cap`, PR #63 open, not merged, checkpoint required)
+
+Per-tenant monthly LLM spend cap, enforced *before* enqueueing a new
+execution (previously cost was only visible after the fact — Sprint 3/ADR-008).
+New `users.monthly_budget_usd` column (migration `0009`, nullable — `NULL` =
+no cap, zero behavior change for every existing tenant). `ADR-019` documents
+the real trade-off: approach (a) — check spend already accumulated
+(`SUM(analysis_runs.cost_usd)` this calendar month) and reject the *next*
+run once at/over the cap — was chosen over approach (b) — estimating a
+per-run cost ceiling from tenant history and blocking preemptively — because
+real observed per-run costs (Sprint 8: ~$0.0006/run) make the "one run
+overshoots the cap" edge case low-blast-radius for now; (b) is documented as
+explicitly out of scope, to revisit if real per-run costs grow.
+
+**Renumbered from ADR-017/migration `0007` to ADR-019/migration `0009`**:
+Sprints 17, 14, and 29 were built in parallel and all three independently
+claimed `ADR-017`/`0007`. Merge order settled as **17 → 14 → 29** — Sprint 17
+kept `ADR-017`/`0007`, Sprint 14 became `ADR-018`/`0008` (`down_revision`
+onto Sprint 17's `0007`, plus a real schema reconciliation for a
+`runs.saved_pipeline_id` column both 17 and 14 had independently added), this
+sprint became `ADR-019`/`0009` (`down_revision` onto Sprint 14's `0008`).
+Confirmed pure renumbering, no schema reconciliation needed for this
+migration specifically — it only ever touches `users`, and neither Sprint 17
+(`runs`/`analysis_runs`) nor Sprint 14 (`saved_pipelines`, an index on
+`runs`) touches that table. See ADR-019's "Addendum — renumbering" section
+for the full local verification against both sprints' real migration files
+(temporarily staged, not committed, same trick Sprint 14 used against
+Sprint 17).
+
+**Rebased onto `main` after Sprints 17 and 14 actually merged (real conflict,
+resolved by hand)**: `execution_queue.py`'s `enqueue_analysis`/
+`run_full_analysis_task` had been touched by all three sprints in parallel —
+Sprint 17's `saved_pipeline_id` threading, Sprint 14's post-completion drift
+check, and this sprint's budget/rate-limit gate + in-flight lock. Resolved
+by keeping all three: budget and rate-limit stay *entry* checks (before
+`.delay()`, budget first per the earlier fix), `saved_pipeline_id` still
+flows through to `.delay()`/`run_full_analysis`, and the drift check still
+runs as an *exit* action after completion — with the budget lock's release
+placed in the `finally` immediately after `run_full_analysis` returns, ahead
+of the drift check, so a drift/digest hiccup can never hold a tenant's
+budget lock open past the run's own completion. `audit/db.py` had no real
+overlap (different function names for different concerns) — confirmed via
+`grep "^def " | sort | uniq -d` returning nothing. Full detail (including
+the one test fixed post-rebase — a fake missing the `saved_pipeline_id`
+kwarg Sprint 17 added) in ADR-019's "Addendum — rebase onto merged Sprints
+17 and 14". Re-verified after rebase: full `pytest tests/unit` (531 passed,
+including Sprint 17/14's own tests), and the concurrency guard re-confirmed
+for real against a fresh Postgres + Redis, this time against the actual
+merged `0007`/`0008` migrations rather than temporarily staged copies.
+
+`services/execution_queue.py::check_budget_cap` (new) mirrors
+`check_and_increment_rate_limit`'s shape but **deliberately does not**
+mirror its Redis storage for spend itself — spend is read directly from
+Postgres (`audit.db.get_monthly_spend_usd`), the already-canonical number
+Sprint 3 computes, rather than duplicating it into a second Redis-resident
+running total that could drift. **Checked before the rate limit, not
+after** (post-PR-#63 code-review fix) — a budget rejection (`402`) must
+never also consume a rate-limit slot (`429`) for a run that never executed.
+A second, real concurrency bug from the same review — concurrent enqueues
+for the same tenant could both read stale pre-execution spend and both
+pass — is closed by reusing the rate limiter's own Redis `SET NX` atomicity
+(a per-tenant "in-flight and unreconciled execution" lock, acquired only
+when a cap is configured, released once the run's real cost lands or the
+enqueue attempt itself fails); a Postgres compare-and-swap
+(`claim_due_pipeline`'s pattern, Sprint 13) was considered and rejected —
+it fits claiming one identified row, not gating an aggregate `SUM(...)`.
+Full addendum in ADR-019. `services/scheduler.py` treats
+`BudgetExceededError` exactly like `RateLimitExceededError` (release the
+claim, retry next tick). New `GET/PATCH /budget` (self-service, same trust
+model as `/pipelines`) exposes live `{cap_usd, spent_usd, ratio,
+near_limit, exceeded}` status and lets a tenant set/clear their own cap —
+the "alert before hitting the cap" surface (`near_limit` at 80% of cap by
+default, `AI_ETL_BUDGET_WARNING_THRESHOLD_RATIO`), plus a
+`logging.warning(...)` at enqueue time (not `log_action()` — no
+`PipelineState` exists yet at enqueue-time, before a run has even started).
+
+**Known limitation carried over from Sprint 3, not fixed here**:
+`analysis_runs.cost_usd` (and therefore this cap) only covers the Agentic BI
+layer's LLM cost (`save_analysis`) — a Silver-only run (no business
+question) makes real Orchestrator/Transformer LLM calls with no cost row at
+all today. Flagged in ADR-019, out of this sprint's scope.
+
+**Verified locally** (Homebrew Postgres + a throwaway local Redis via
+`brew install redis`, no Docker daemon in this environment): `alembic
+upgrade head` (0001→0009, including Sprint 17's and Sprint 14's temporarily
+staged real migrations) applied cleanly, `\d users` matched the new column
+exactly alongside both other sprints' schema changes, `alembic downgrade -1`
+cleanly dropped only this migration's column, re-`upgrade head` reapplied
+cleanly. Concurrency fixes verified against real Postgres + real Redis: two
+concurrent `enqueue_analysis` calls near a tenant's cap — exactly one
+passes; a tenant already over cap making repeated calls never consumes a
+rate-limit slot. `ruff check`/`format --check` clean; `mypy src/` clean (54
+files); `pytest tests/unit` — 476 passed, 92% overall coverage;
+`bandit`/`pip-audit` — only the two pre-existing, documented `exec()` sites
+in `core/sandbox.py`, no new findings, no known CVEs.
+
+**Not done in this session, flagged for the merge-checkpoint conversation**:
+migration `0009` not applied to production Supabase (owner confirmation
+required, same checkpoint discipline as Sprint 13's `0006`); no admin/billing
+role exists, so the cap is self-service (tenant sets their own — ADR-019's
+own "Known limitation"); no frontend UI consumes `GET /budget` yet (backend
+contract only, same posture as Sprint 7's `GET /config`).
+
 ## Start here next session
 
 **Orchestration session (2026-08-19/20): Sprints 8, 9, 10, 11, 12 were built in parallel via isolated worktree subagents, each opening its own PR without merging (explicit checkpoint).** Sprint 11 was later extended (same PR) with MySQL, MongoDB, and OAuth2 client-credentials at the owner's request. Sprint 23 (multi-provider LLM — Anthropic/Google/Ollama) was pulled forward out of roadmap order, also at the owner's explicit request, since its only dependency (Sprint 8) was already done.

@@ -11,7 +11,7 @@ control flow (claim win/loss, release-on-failure, drift-free next-run base).
 from datetime import datetime, timedelta, timezone
 
 from ai_etl.services import scheduler
-from ai_etl.services.execution_queue import RateLimitExceededError
+from ai_etl.services.execution_queue import BudgetExceededError, RateLimitExceededError
 
 
 def _due_pipeline(
@@ -86,6 +86,28 @@ def test_rate_limited_pipeline_releases_its_claim(mocker) -> None:
     mocker.patch(
         "ai_etl.services.scheduler.enqueue_analysis",
         side_effect=RateLimitExceededError("over cap"),
+    )
+    mock_release = mocker.patch("ai_etl.services.scheduler.release_pipeline_claim")
+    mock_record = mocker.patch("ai_etl.services.scheduler.record_pipeline_run")
+
+    result = scheduler.check_scheduled_pipelines_task()
+
+    mock_release.assert_called_once()
+    mock_record.assert_not_called()
+    assert result == {"fired": [], "skipped": ["pl-1"]}
+
+
+def test_budget_exceeded_pipeline_releases_its_claim(mocker) -> None:
+    """Sprint 29 (ADR-019): a tenant over their monthly budget cap must not
+    stop the tick, and the claim it won must be released so the pipeline is
+    retried next tick — same treatment as a rate-limited pipeline above."""
+    mocker.patch(
+        "ai_etl.services.scheduler.list_due_pipelines", return_value=[_due_pipeline("pl-1")]
+    )
+    mocker.patch("ai_etl.services.scheduler.claim_due_pipeline", return_value=True)
+    mocker.patch(
+        "ai_etl.services.scheduler.enqueue_analysis",
+        side_effect=BudgetExceededError("over budget"),
     )
     mock_release = mocker.patch("ai_etl.services.scheduler.release_pipeline_claim")
     mock_record = mocker.patch("ai_etl.services.scheduler.record_pipeline_run")

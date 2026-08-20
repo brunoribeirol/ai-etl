@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 
 from ai_etl.api.deps import get_current_tenant_id
 from ai_etl.api.main import app
-from ai_etl.services.execution_queue import RateLimitExceededError
+from ai_etl.services.execution_queue import BudgetExceededError, RateLimitExceededError
 
 
 @pytest.fixture(autouse=True)
@@ -120,6 +120,19 @@ def test_create_run_rate_limited(client: TestClient, mocker) -> None:
     response = client.post("/runs", data={"manual_spec": "load sales.csv"})
 
     assert response.status_code == 429
+
+
+def test_create_run_over_budget(client: TestClient, mocker) -> None:
+    """Sprint 29 (ADR-019): a tenant over their monthly budget cap gets a 402,
+    distinct from the 429 rate-limit case above."""
+    mocker.patch(
+        "ai_etl.api.routers.runs.enqueue_analysis",
+        side_effect=BudgetExceededError("budget exceeded"),
+    )
+
+    response = client.post("/runs", data={"manual_spec": "load sales.csv"})
+
+    assert response.status_code == 402
 
 
 def test_create_run_with_uploaded_csv(client: TestClient, mocker) -> None:

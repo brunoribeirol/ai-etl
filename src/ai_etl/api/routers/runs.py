@@ -15,6 +15,7 @@ from ai_etl.api.deps import get_current_tenant_id
 from ai_etl.api.serialization import nan_to_none_records, serialize_full_result
 from ai_etl.audit.db import load_full_result, load_history
 from ai_etl.services.execution_queue import (
+    BudgetExceededError,
     RateLimitExceededError,
     enqueue_analysis,
     get_task_status,
@@ -124,5 +125,11 @@ async def create_run(
         )
     except RateLimitExceededError as e:
         raise HTTPException(status_code=429, detail=str(e)) from e
+    except BudgetExceededError as e:
+        # 402 Payment Required — semantically distinct from 429 (rate limit):
+        # this rejection is about accumulated spend, not request cadence, and
+        # doesn't self-resolve after a window; it needs the cap raised or the
+        # next billing period, not just "wait and retry" (ADR-019).
+        raise HTTPException(status_code=402, detail=str(e)) from e
 
     return {"task_id": task_id}
