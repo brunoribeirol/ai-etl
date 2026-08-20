@@ -1,4 +1,4 @@
-# ADR-012 — Multi-cloud deploy: AWS as the portability proof (Terraform, not applied)
+# ADR-015 — Multi-cloud deploy: AWS as the portability proof (Terraform, not applied)
 
 **Status:** Accepted
 **Date:** 2026-08-19

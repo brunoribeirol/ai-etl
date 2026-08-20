@@ -1,13 +1,13 @@
 # AI-ETL — AWS deploy (Sprint 10 portability proof)
 
-> Companion to `docs/adr/ADR-012-multi-cloud-deploy-aws-portability.md` and
+> Companion to `docs/adr/ADR-015-multi-cloud-deploy-aws-portability.md` and
 > `docs/deploy-diff-railway-vs-aws.md`.
 
 ## STOP — before you run `apply`
 
 **Nothing in this directory has been provisioned.** This IaC was written and
 validated (`terraform validate`, clean — see below) but deliberately never
-applied, per the checkpoint in ADR-012's PR. Running `terraform apply`
+applied, per the checkpoint in ADR-015's PR. Running `terraform apply`
 creates real, billable AWS resources (ECS Fargate tasks, an ALB,
 ElastiCache, ECR, Secrets Manager entries). **Get Bruno's explicit
 go-ahead before running `apply`** — this file existing is not that

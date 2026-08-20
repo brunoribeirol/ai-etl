@@ -1,6 +1,6 @@
 # Deploy diff — Railway (current, live) vs. AWS (Sprint 10 portability proof)
 
-> Companion to `docs/adr/ADR-012-multi-cloud-deploy-aws-portability.md`. This
+> Companion to `docs/adr/ADR-015-multi-cloud-deploy-aws-portability.md`. This
 > document is descriptive (what would change if this stack were applied),
 > not a record of anything actually provisioned — **nothing in the AWS
 > column below has been created.** See `infra/aws/terraform/README.md` for
@@ -25,7 +25,7 @@ Same application-level variables either way (`.env.example` is the source of tru
 |---|---|---|
 | `OPENAI_API_KEY`, `APP_DATABASE_URL`, `CLERK_SECRET_KEY`, `CLERK_PUBLISHABLE_KEY` | Railway dashboard "Variables" tab (encrypted at rest, not individually access-audited) | AWS Secrets Manager, injected into the container via the ECS task definition's `secrets` block (not plaintext `environment`) — `iam.tf` scopes exactly which role can read them |
 | `CLERK_JWKS_URL`, `CLERK_ISSUER`, `AI_ETL_LLM_MODEL`, `AI_ETL_LOG_DIR`, `AI_ETL_MAX_RETRIES`, `AI_ETL_SANDBOX_TIMEOUT`, `AI_ETL_RATE_LIMIT_*` | Railway dashboard, plaintext | ECS task definition, plaintext `environment` block (non-secret, matches Railway's own treatment) |
-| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | **Required** on Railway — boto3 has no other way to get AWS credentials from a non-AWS host | **Absent by design on AWS.** boto3 (`audit/storage.py`'s `S3StorageBackend`) picks up temporary credentials automatically from the ECS task's IAM role (`aws_iam_role.ecs_task`, `iam.tf`). No static long-lived key to provision, rotate, or ever leak in a log. This is the one genuine security *improvement* this ADR's stack has over the current Railway setup — noted in ADR-012, not backported to Railway (no equivalent mechanism exists there). |
+| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | **Required** on Railway — boto3 has no other way to get AWS credentials from a non-AWS host | **Absent by design on AWS.** boto3 (`audit/storage.py`'s `S3StorageBackend`) picks up temporary credentials automatically from the ECS task's IAM role (`aws_iam_role.ecs_task`, `iam.tf`). No static long-lived key to provision, rotate, or ever leak in a log. This is the one genuine security *improvement* this ADR's stack has over the current Railway setup — noted in ADR-015, not backported to Railway (no equivalent mechanism exists there). |
 | `AI_ETL_S3_BUCKET` | `ai-etl-artifacts-brlla` (production bucket) | A **separate** bucket (e.g. `ai-etl-artifacts-aws-poc`), created manually before any `apply` — this proof must never point at production data |
 | `AI_ETL_ENV` | `prod` | `aws-poc` (or whatever `environment` var is set to) — ADR-009's existing key-prefix isolation means this alone prevents any collision with Railway's `prod/` prefix even if the buckets were ever shared (they aren't here) |
 | `PORT` | Injected by Railway at runtime, read via `$PORT` in the Dockerfile's `sh -c` entrypoint | Fixed at `8000` via Terraform (`container_port` variable), passed as a normal env var — same `$PORT`-reading `ENTRYPOINT` works unmodified |

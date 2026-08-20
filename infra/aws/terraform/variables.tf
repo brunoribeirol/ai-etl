@@ -1,4 +1,4 @@
-# AI-ETL — AWS portability proof (Sprint 10, ADR-012)
+# AI-ETL — AWS portability proof (Sprint 10, ADR-015)
 #
 # Variable defaults intentionally mirror the values already in use on
 # Railway (see .env.example / docs/CURRENT_STATE.md's "Deploy" section) so
