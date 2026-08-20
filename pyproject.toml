@@ -7,6 +7,12 @@ requires-python = ">=3.11"
 dependencies = [
     "langchain>=0.3.0",
     "langchain-openai>=0.3.0",
+    # Multi-provider LLM support (Sprint 23, ADR-012) — base dependencies, not
+    # extras, since core/llm.py's get_llm() is called unconditionally by every
+    # agent regardless of which AI_ETL_LLM_PROVIDER is configured at runtime.
+    "langchain-anthropic>=0.3.0",
+    "langchain-google-genai>=2.0.0",
+    "langchain-ollama>=0.2.0",
     "langgraph>=0.2.0",
     "openai>=1.50.0",
     "pandas>=2.0.0,<4.0.0",
