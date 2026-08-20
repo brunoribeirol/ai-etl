@@ -10,6 +10,13 @@ avulso one (ADR-016 Decision 1/2). Sprint 17 (ADR-017) passes this call's own
 resulting `runs`/`analysis_runs` rows are linked back to this saved pipeline
 for the comparable-run-history view.
 
+Sprint 14 (ADR-018) passes this pipeline's own id through as
+`enqueue_analysis`'s `saved_pipeline_id` so the eventual `runs` row records
+which saved pipeline produced it — `run_full_analysis_task` uses that link,
+once the run completes, to run drift detection against the pipeline's
+previous fire and (if triggered) deliver a digest. Nothing here changes:
+the beat task's own job is still only to enqueue the run.
+
 Requires a `celery beat` process running in production alongside the
 existing worker (same Docker image, different Custom Start Command — see
 ADR-016) for scheduled pipelines to actually fire; the web/API process and

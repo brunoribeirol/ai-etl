@@ -4,6 +4,116 @@
 
 **Last updated:** 2026-08-20 — **second parallel batch: Sprints 22 and 13 merged to `main`** (Sprints 8, 9, 10, 11, 12, 23 already merged earlier the same day — see below). Sprint 13's code (including migration `0006`) is in `main`, but the migration has **not** been applied to production Supabase and Celery beat has **not** been deployed as a new Railway service — both deliberately deferred, pending owner decision. See "Start here next session" below for the full orchestration writeup.
 
+## Sprint 14 — drift detection + digest delivery (branch `feat/sprint14-drift-alerts-digest`, PR open, not merged, checkpoint required)
+
+Reuses Gold/Science/Advisor's existing narrative/recommendations (no new
+agent). Uses `runs.saved_pipeline_id` to link a scheduled fire back to the
+`saved_pipeline` that produced it — `services/scheduler.py` threads the
+pipeline id through `enqueue_analysis` → the Celery task →
+`run_full_analysis` → `run_silver_pipeline` → `save_run`.
+`audit/db.py::get_previous_completed_run` then finds "the second most recent
+completed run of this same pipeline" (ADR-018 Decision 1 — a simple,
+non-blocking placeholder ahead of Sprint 17's expected general
+comparable-run-history model, not a wait-for-it design).
+
+**Migration reconciled against Sprint 17 mid-session**: Sprint 17
+(`feat/sprint17-comparable-run-history`, PR #64, ADR-017) independently added
+the *same* `runs.saved_pipeline_id` column in parallel — a more complete
+version (also adds it to `analysis_runs`, `ON DELETE SET NULL` on both,
+claims migration slot `0007` first). Rather than have two migrations both
+try to create the same column, this sprint's migration was rewritten to
+**not** create `runs.saved_pipeline_id` at all — `alembic/versions/0008_drift_threshold_pct.py`
+(renumbered from `0007_drift_alerts.py`, `down_revision = "0007"`, i.e. it
+revises *Sprint 17's* migration, not `0006` directly) now only adds
+`saved_pipelines.drift_threshold_pct` (this sprint's own, non-overlapping
+concern) and a composite `(saved_pipeline_id, timestamp)` index on `runs`
+that Sprint 17's own single-column index doesn't give
+`get_previous_completed_run`'s `ORDER BY timestamp DESC LIMIT 1` query for
+free. `audit/models.py`'s Python `runs.saved_pipeline_id` column declaration
+was kept (needed for this branch's own standalone tests/queries to work
+before Sprint 17 actually merges) but its `ondelete` was aligned to
+`"SET NULL"` to match what Sprint 17's migration really creates — flagged
+inline as needing reconciliation into a single declaration at merge time,
+not a silent duplicate. See ADR-018 §Decision 1/2 and the PR thread for the
+full writeup; `core/drift.py`/`services/alerting.py` needed no changes —
+they only read `runs.c.saved_pipeline_id`/the dict key, which is unaffected
+by which migration created the column.
+
+**Drift comparison** (`core/drift.py`, pure functions): four KPI families —
+`rows_loaded`, `cost_usd`, `total_tokens`, and every numeric
+`model_info.metrics` entry from each Science sub-task (keyed by task
+question so a multi-part business question tracks each sub-task's own model
+independently). **Threshold**: `saved_pipelines.drift_threshold_pct`
+(new column, migration `0008`, default `20.0`, configurable per pipeline via
+`POST`/`PATCH /pipelines`) — a KPI is "drifted" when
+`abs(pct_change) >= threshold_pct`; a `previous == 0` KPI can't express a
+percentage and is instead flagged whenever `current != 0`.
+
+**Delivery** (`services/notifications.py`): Resend (email,
+`RESEND_API_KEY`/`AI_ETL_ALERT_EMAIL_FROM`/`AI_ETL_ALERT_EMAIL_TO`) and a
+Slack incoming webhook (`SLACK_WEBHOOK_URL`) — both built on `httpx` (already
+a base dependency, no new one added), both fully optional and independently
+configured, both no-op (return `False`, never raise) when unconfigured.
+`services/digest.py` formats the triggered findings + the Advisor's existing
+summary/recommendations into subject/text/HTML/Slack Block Kit content.
+`services/alerting.py::check_drift_and_notify` orchestrates the above; called
+from `services/execution_queue.py::run_full_analysis_task` only when the run
+carries a `saved_pipeline_id`, wrapped in a best-effort try/except so a
+drift/delivery failure never fails the run itself.
+
+**Not tested against a real provider in this environment** — no
+`RESEND_API_KEY` and no real Slack webhook URL available here (same
+"flagged, not faked" pattern as Sprint 8/23's missing LLM credentials). What
+*is* verified: the HTTP request shape against each provider's published API
+contract, full success/failure/not-configured control flow via
+`httpx`-mocked unit tests, and the entire drift-comparison + previous-run
+lookup path exercised for real against a throwaway local Postgres (Homebrew
+`postgresql@17`, not Docker — same substitute prior sessions used) — **twice**:
+once before the Sprint 17 reconciliation (`alembic upgrade head` 0001→0007
+of this sprint's own original migration), and again after, this time by
+temporarily staging a copy of Sprint 17's real `0007_run_pipeline_linkage.py`
+(not committed to this branch — that file is Sprint 17's to add) alongside
+this sprint's rewritten `0008`, confirming `alembic upgrade head` (0001→0006
+→ Sprint 17's 0007 → this sprint's 0008) applies cleanly end-to-end, `\d
+runs`/`\d saved_pipelines` match exactly (including Sprint 17's
+`ON DELETE SET NULL` FK and this sprint's composite index), `alembic
+downgrade -1` cleanly drops only this sprint's own additions, and a real
+`get_previous_completed_run` + `detect_kpi_drift` round trip against real
+inserted rows produces the expected triggered finding.
+
+New: `docs/adr/ADR-018-drift-detection-and-digest-delivery.md`,
+`alembic/versions/0008_drift_threshold_pct.py`, `src/ai_etl/core/drift.py`,
+`src/ai_etl/services/{alerting,digest,notifications}.py`,
+`tests/unit/test_{drift,digest,notifications,alerting}.py`. Changed:
+`audit/models.py` (`runs.saved_pipeline_id` — declared here pending Sprint
+17's merge, see reconciliation note above —,
+`saved_pipelines.drift_threshold_pct`), `audit/db.py`
+(`get_previous_completed_run`, `saved_pipeline_id`/`drift_threshold_pct`
+threaded through `save_run`/`create_saved_pipeline`/`update_saved_pipeline`),
+`services/{pipeline_service,execution_queue,scheduler}.py`
+(`saved_pipeline_id` threaded end-to-end), `api/routers/pipelines.py`
+(`drift_threshold_pct` on `POST`/`PATCH /pipelines`, `gt=0` validated).
+
+Verified locally (after the reconciliation): `ruff check`/`format --check`
+clean, `mypy --strict` clean (57 files, no hang this session), `pytest
+tests/unit` — 494 passed, 93% overall coverage (`core/drift.py`,
+`services/alerting.py`, `services/digest.py`, `services/notifications.py`
+all at 100%); `bandit`/`pip-audit` — only the two pre-existing, documented
+`exec()` sites in `core/sandbox.py` and one pre-existing `assert` in
+`api/deps.py`, no new findings, no known CVEs.
+
+**Not done in this session, flagged for the merge-checkpoint conversation**:
+frontend UI for setting `drift_threshold_pct` or viewing past drift findings
+(`frontend/src/components/pipelines-manager.tsx` not touched — deliberate
+scope cut, same kind Sprint 7 made for model selection); drift findings are
+not persisted to their own table (computed, formatted, delivered
+best-effort, then discarded — no drift history to query later); no real
+send was made against Resend/Slack (see above); `audit/models.py`'s
+`runs.saved_pipeline_id` declaration still needs a human merge-conflict
+resolution once Sprint 17 actually merges (both branches declare the same
+column in the same file — expected, flagged, not silently overwritten by
+either side).
+
 ## Start here next session
 
 **Orchestration session (2026-08-19/20): Sprints 8, 9, 10, 11, 12 were built in parallel via isolated worktree subagents, each opening its own PR without merging (explicit checkpoint).** Sprint 11 was later extended (same PR) with MySQL, MongoDB, and OAuth2 client-credentials at the owner's request. Sprint 23 (multi-provider LLM — Anthropic/Google/Ollama) was pulled forward out of roadmap order, also at the owner's explicit request, since its only dependency (Sprint 8) was already done.

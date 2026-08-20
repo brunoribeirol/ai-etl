@@ -39,6 +39,7 @@ def _saved_pipeline_row(**overrides: object) -> dict:
         "next_run_at": datetime.now(tz=timezone.utc).isoformat(),
         "last_task_id": None,
         "last_run_at": None,
+        "drift_threshold_pct": 20.0,
         "created_at": datetime.now(tz=timezone.utc).isoformat(),
         "updated_at": datetime.now(tz=timezone.utc).isoformat(),
     }
@@ -214,7 +215,56 @@ def test_create_pipeline_happy_path(client: TestClient, mocker) -> None:
         spec="Read schema.orders from postgres",
         cron_schedule="0 3 * * *",
         business_question="",
+        drift_threshold_pct=20.0,
     )
+
+
+def test_create_pipeline_accepts_custom_drift_threshold(client: TestClient, mocker) -> None:
+    mock_create = mocker.patch(
+        "ai_etl.api.routers.pipelines.create_saved_pipeline",
+        return_value=_saved_pipeline_row(drift_threshold_pct=5.0),
+    )
+
+    response = client.post(
+        "/pipelines",
+        json={
+            "name": "Nightly sync",
+            "source_type": "postgres",
+            "spec": "Read schema.orders from postgres",
+            "cron_schedule": "0 3 * * *",
+            "drift_threshold_pct": 5.0,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["drift_threshold_pct"] == 5.0
+    mock_create.assert_called_once_with(
+        tenant_id="tenant-a",
+        name="Nightly sync",
+        source_type="postgres",
+        spec="Read schema.orders from postgres",
+        cron_schedule="0 3 * * *",
+        business_question="",
+        drift_threshold_pct=5.0,
+    )
+
+
+def test_create_pipeline_rejects_non_positive_drift_threshold(client: TestClient, mocker) -> None:
+    mock_create = mocker.patch("ai_etl.api.routers.pipelines.create_saved_pipeline")
+
+    response = client.post(
+        "/pipelines",
+        json={
+            "name": "Bad",
+            "source_type": "postgres",
+            "spec": "Read schema.orders from postgres",
+            "cron_schedule": "0 3 * * *",
+            "drift_threshold_pct": 0,
+        },
+    )
+
+    assert response.status_code == 422
+    mock_create.assert_not_called()
 
 
 def test_patch_pipeline_pause(client: TestClient, mocker) -> None:
@@ -236,6 +286,30 @@ def test_patch_pipeline_pause(client: TestClient, mocker) -> None:
         cron_schedule=None,
         business_question=None,
         is_active=False,
+        drift_threshold_pct=None,
+    )
+
+
+def test_patch_pipeline_updates_drift_threshold(client: TestClient, mocker) -> None:
+    mock_update = mocker.patch(
+        "ai_etl.api.routers.pipelines.update_saved_pipeline",
+        return_value=_saved_pipeline_row(drift_threshold_pct=50.0),
+    )
+
+    response = client.patch("/pipelines/pl-1", json={"drift_threshold_pct": 50.0})
+
+    assert response.status_code == 200
+    assert response.json()["drift_threshold_pct"] == 50.0
+    mock_update.assert_called_once_with(
+        "pl-1",
+        "tenant-a",
+        name=None,
+        source_type=None,
+        spec=None,
+        cron_schedule=None,
+        business_question=None,
+        is_active=None,
+        drift_threshold_pct=50.0,
     )
 
 

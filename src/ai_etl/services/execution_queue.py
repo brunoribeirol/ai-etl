@@ -44,7 +44,11 @@ from typing import Any
 import redis
 from celery.result import AsyncResult
 
+from ai_etl.audit.db import get_saved_pipeline
+from ai_etl.core.analysis_types import AnalysisRunResult
 from ai_etl.core.celery_app import celery_app
+from ai_etl.core.state import PipelineState
+from ai_etl.services.alerting import check_drift_and_notify
 from ai_etl.services.pipeline_service import run_full_analysis
 
 # Defaults are deliberately generous for a TCC-scale deployment (few tenants,
@@ -143,7 +147,10 @@ def run_full_analysis_task(
     `run_full_analysis`/`save_run`/`save_analysis` so this execution can be
     grouped with the rest of its saved pipeline's run history. `None` for
     every avulso (one-off) `POST /runs` call — only `services/scheduler.py`
-    passes a real value.
+    passes a real value. Sprint 14 (ADR-018) also uses it here, after the
+    run completes, to run drift detection against the pipeline's previous
+    fire and, if triggered, deliver a digest — an avulso run (`None`) never
+    runs drift detection at all.
     """
     if file_path and file_bytes_b64:
         dest = Path(file_path)
@@ -167,12 +174,51 @@ def run_full_analysis_task(
         saved_pipeline_id=saved_pipeline_id,
     )
     state = result["state"]
+
+    if saved_pipeline_id is not None and state.get("status") == "completed":
+        _run_drift_check_best_effort(
+            saved_pipeline_id, tenant_id, run_dir, business_question, state, result
+        )
+
     return {
         "run_id": state.get("run_id"),
         "status": state.get("status"),
         "error": state.get("error"),
         "tokens": dict(result.get("tokens", {})),
     }
+
+
+def _run_drift_check_best_effort(
+    saved_pipeline_id: str,
+    tenant_id: str,
+    run_dir: str,
+    business_question: str,
+    state: PipelineState,
+    result: AnalysisRunResult,
+) -> None:
+    """Fetch the saved pipeline, run drift detection, deliver a digest if
+    triggered — all best-effort (Sprint 14, ADR-018 Decision 6). Any
+    failure here (a DB hiccup, an unreachable delivery provider) is caught
+    and swallowed: the run itself already completed and was persisted above,
+    an alerting side-effect must never retroactively fail it.
+    """
+    try:
+        pipeline = get_saved_pipeline(saved_pipeline_id, tenant_id)
+        if pipeline is None or not pipeline.get("is_active"):
+            return
+        load_result = state.get("load_result") or {}
+        check_drift_and_notify(
+            pipeline=pipeline,
+            run_id=state.get("run_id", ""),
+            rows_loaded=load_result.get("rows_loaded"),
+            tokens=result.get("tokens", {}),
+            science_results=result.get("science", []),
+            advisor_result=result.get("advisor", {}),
+            business_question=business_question,
+            log_dir=run_dir,
+        )
+    except Exception:  # nosec B110 — best-effort alerting, never fails the run
+        pass
 
 
 def enqueue_analysis(
@@ -199,7 +245,9 @@ def enqueue_analysis(
     `saved_pipeline_id` (Sprint 17, ADR-017): pass the `saved_pipelines.id`
     when this call is a scheduled fire (`services/scheduler.py`), so the
     resulting `runs`/`analysis_runs` rows are linked back to it. `None` (the
-    default) for every avulso call, e.g. `POST /runs`.
+    default) for every avulso call, e.g. `POST /runs`. Sprint 14 (ADR-018)
+    also relies on this to gate its drift check — see
+    `run_full_analysis_task`'s docstring.
 
     Returns the Celery task id `app.py` stores in `st.session_state` and
     polls via `get_task_status`.

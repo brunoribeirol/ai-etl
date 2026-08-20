@@ -105,6 +105,7 @@ def test_run_silver_pipeline_emits_progress_and_persists(monkeypatch) -> None:
         saved["state"] = state
         saved["log_dir"] = log_dir
         saved["tenant_id"] = tenant_id
+        saved["saved_pipeline_id"] = saved_pipeline_id
         return pathlib.Path(log_dir) / "run.json"
 
     monkeypatch.setattr(pipeline_service, "save_run", fake_save_run)
@@ -133,6 +134,31 @@ def test_run_silver_pipeline_emits_progress_and_persists(monkeypatch) -> None:
     assert stages == {"silver"}
     assert events[0][1] == "⚡ Executando pipeline Silver..."
     assert events[-1][1].startswith("✅ Silver concluído em")
+
+
+def test_run_silver_pipeline_forwards_saved_pipeline_id_to_save_run(monkeypatch) -> None:
+    """Sprint 14 (ADR-018): a scheduled fire's pipeline id must reach
+    `save_run` so `runs.saved_pipeline_id` records the link."""
+    chunks = [{"loader": {"status": "completed"}}]
+    monkeypatch.setattr(pipeline_service, "build_graph", lambda: _FakeGraph(chunks))
+
+    saved: dict[str, Any] = {}
+
+    def fake_save_run(
+        state: Any,
+        log_dir: str,
+        tenant_id: str | None = None,
+        saved_pipeline_id: str | None = None,
+    ) -> pathlib.Path:
+        saved["saved_pipeline_id"] = saved_pipeline_id
+        return pathlib.Path(log_dir) / "run.json"
+
+    monkeypatch.setattr(pipeline_service, "save_run", fake_save_run)
+    monkeypatch.setattr(pipeline_service, "save_stage_latencies", lambda *a, **k: None)
+
+    pipeline_service.run_silver_pipeline("read file.csv", run_dir="runs", saved_pipeline_id="pl-1")
+
+    assert saved["saved_pipeline_id"] == "pl-1"
 
 
 def test_run_silver_pipeline_reports_failure(monkeypatch) -> None:
