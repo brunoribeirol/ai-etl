@@ -98,7 +98,7 @@ def test_rate_limited_pipeline_releases_its_claim(mocker) -> None:
 
 
 def test_one_pipeline_failing_does_not_block_the_others(mocker) -> None:
-    def _enqueue_side_effect(spec, question, run_dir, tenant_id):
+    def _enqueue_side_effect(spec, question, run_dir, tenant_id, saved_pipeline_id=None):
         if tenant_id == "tenant-broken":
             raise RuntimeError("boom")
         return "task-ok"
@@ -148,6 +148,7 @@ def test_enqueue_analysis_called_with_pipeline_spec_and_question(mocker) -> None
         "Top products?",
         run_dir=str(scheduler.RUNS_DIR),
         tenant_id="tenant-a",
+        saved_pipeline_id="pl-1",
     )
 
 

@@ -5,7 +5,10 @@ on a fixed interval (`AI_ETL_SCHEDULER_INTERVAL_SECONDS`, default 60s). Each
 tick: query `audit.db.list_due_pipelines()`, and for every due pipeline call
 the *same* `execution_queue.enqueue_analysis()` `POST /runs` already uses —
 no separate execution path, so a scheduled run is audited exactly like an
-avulso one (ADR-016 Decision 1/2).
+avulso one (ADR-016 Decision 1/2). Sprint 17 (ADR-017) passes this call's own
+`pipeline_id` through as `enqueue_analysis(..., saved_pipeline_id=...)` so the
+resulting `runs`/`analysis_runs` rows are linked back to this saved pipeline
+for the comparable-run-history view.
 
 Requires a `celery beat` process running in production alongside the
 existing worker (same Docker image, different Custom Start Command — see
@@ -83,6 +86,7 @@ def check_scheduled_pipelines_task() -> dict[str, Any]:
                 pipeline["business_question"],
                 run_dir=str(RUNS_DIR),
                 tenant_id=pipeline["tenant_id"],
+                saved_pipeline_id=pipeline_id,
             )
         except RateLimitExceededError:
             release_pipeline_claim(pipeline_id, new_next_run_at, expected_next_run_at)

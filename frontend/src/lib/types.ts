@@ -146,3 +146,24 @@ export type SavedPipeline = {
   created_at: string;
   updated_at: string;
 };
+
+/**
+ * Sprint 17 (ADR-017) — `GET /pipelines/{id}/history` response entry. Mirrors
+ * `audit/db.py::list_pipeline_run_history`. One entry per execution of a
+ * saved pipeline, oldest first. `cost_usd`/`model_name`/`total_tokens`/
+ * `gold_subtasks`/`science_subtasks` are `null` for a Silver-only fire (no
+ * `business_question` set), same "no analysis, no cost" semantics as
+ * `RunSummary`.
+ */
+export type PipelineRunHistoryEntry = {
+  run_id: string;
+  status: string;
+  rows_loaded: number | null;
+  timestamp: string;
+  error: string | null;
+  cost_usd: number | null;
+  model_name: string | null;
+  total_tokens: number | null;
+  gold_subtasks: number | null;
+  science_subtasks: number | null;
+};

@@ -1,7 +1,8 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import { PauseCircle, PlayCircle, Plus } from "lucide-react";
+import { LineChart, PauseCircle, PlayCircle, Plus } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -284,6 +285,15 @@ export function PipelinesManager() {
                 )}
               </div>
               <div className="flex gap-2 pt-1">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  render={
+                    <Link href={`/pipelines/${pipeline.id}/historico`}>
+                      <LineChart className="h-4 w-4" /> Histórico
+                    </Link>
+                  }
+                />
                 <Button size="sm" variant="outline" onClick={() => startEdit(pipeline)}>
                   Editar
                 </Button>

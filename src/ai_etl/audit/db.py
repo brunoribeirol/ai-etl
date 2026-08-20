@@ -44,7 +44,12 @@ def ensure_user(user_id: str) -> None:
         conn.execute(stmt)
 
 
-def save_run(state: PipelineState, log_dir: str = "./runs", tenant_id: str | None = None) -> str:
+def save_run(
+    state: PipelineState,
+    log_dir: str = "./runs",
+    tenant_id: str | None = None,
+    saved_pipeline_id: str | None = None,
+) -> str:
     """Persist the final pipeline state to JSON and record it in the app database.
 
     Creates (ADR-009: via the `StorageBackend` selected by `STORAGE_BACKEND` —
@@ -62,6 +67,10 @@ def save_run(state: PipelineState, log_dir: str = "./runs", tenant_id: str | Non
             `None` for backward compatibility with callers that don't pass one, but
             `app.py` should always pass a real value going forward. Also used by the
             `s3` backend as the tenant segment of the storage key prefix.
+        saved_pipeline_id: Sprint 17 (ADR-017) — the `saved_pipelines.id` that
+            produced this execution, if it was a scheduled fire (`services/
+            scheduler.py`). `None` for every avulso (one-off) run, which is the
+            majority of callers — defaults to `None` for backward compatibility.
 
     Returns:
         The storage key of the JSON file (relative to `log_dir` for `local`, to the
@@ -87,7 +96,7 @@ def save_run(state: PipelineState, log_dir: str = "./runs", tenant_id: str | Non
 
     json_key = f"{run_id}.json"
     _write_json(state, storage, json_key, transform_code_key=transform_code_key)
-    _write_run_row(state, tenant_id=tenant_id)
+    _write_run_row(state, tenant_id=tenant_id, saved_pipeline_id=saved_pipeline_id)
 
     return json_key
 
@@ -104,7 +113,9 @@ def _write_json(
     storage.write_bytes(key, json.dumps(serializable, indent=2, default=str).encode())
 
 
-def _write_run_row(state: PipelineState, tenant_id: str | None = None) -> None:
+def _write_run_row(
+    state: PipelineState, tenant_id: str | None = None, saved_pipeline_id: str | None = None
+) -> None:
     load_result = state.get("load_result")
     rows_loaded = load_result.get("rows_loaded") if load_result else None
     stmt = pg_insert(runs).values(
@@ -115,6 +126,7 @@ def _write_run_row(state: PipelineState, tenant_id: str | None = None) -> None:
         rows_loaded=rows_loaded,
         timestamp=datetime.now(tz=timezone.utc),
         tenant_id=tenant_id,
+        saved_pipeline_id=saved_pipeline_id,
     )
     stmt = stmt.on_conflict_do_update(
         index_elements=[runs.c.run_id],
@@ -125,6 +137,7 @@ def _write_run_row(state: PipelineState, tenant_id: str | None = None) -> None:
             "rows_loaded": stmt.excluded.rows_loaded,
             "timestamp": stmt.excluded.timestamp,
             "tenant_id": stmt.excluded.tenant_id,
+            "saved_pipeline_id": stmt.excluded.saved_pipeline_id,
         },
     )
     with get_engine().begin() as conn:
@@ -186,6 +199,7 @@ def save_analysis(
     log_dir: str = "./runs",
     tenant_id: str | None = None,
     business_question: str = "",
+    saved_pipeline_id: str | None = None,
 ) -> str:
     """Persist Gold/Science/Advisor sub-task results alongside the Silver run.
 
@@ -209,6 +223,9 @@ def save_analysis(
         business_question: Sprint 3 addition — persisted so `load_full_result` can
             reconstruct the header `_render_results` shows ("O que fazer sobre:
             ..."). Defaults to `""` for backward compatibility with existing callers.
+        saved_pipeline_id: Sprint 17 (ADR-017) — same linkage as `save_run`'s
+            argument of the same name; threaded through to `analysis_runs` so a
+            scheduled pipeline's Gold/Science KPIs can be charted over time.
     """
     storage = get_storage_backend(log_dir, tenant_id)
 
@@ -238,7 +255,14 @@ def save_analysis(
     )
 
     total_tokens = _sum_all_tokens(gold_results, science_results, advisor_result, planner_tokens)
-    _write_analysis_row(run_id, len(gold_results), len(science_results), total_tokens, tenant_id)
+    _write_analysis_row(
+        run_id,
+        len(gold_results),
+        len(science_results),
+        total_tokens,
+        tenant_id,
+        saved_pipeline_id=saved_pipeline_id,
+    )
 
     return json_key
 
@@ -315,6 +339,7 @@ def _write_analysis_row(
     n_science: int,
     tokens: TokenUsage,
     tenant_id: str | None = None,
+    saved_pipeline_id: str | None = None,
 ) -> None:
     # Sprint 3 (ADR-008): model_name/cost_usd computed here, not threaded
     # through as a caller-supplied argument — get_model_name() reads the same
@@ -335,6 +360,7 @@ def _write_analysis_row(
         tenant_id=tenant_id,
         model_name=model_name,
         cost_usd=cost_usd,
+        saved_pipeline_id=saved_pipeline_id,
     )
     stmt = stmt.on_conflict_do_update(
         index_elements=[analysis_runs.c.run_id],
@@ -348,6 +374,7 @@ def _write_analysis_row(
             "tenant_id": stmt.excluded.tenant_id,
             "model_name": stmt.excluded.model_name,
             "cost_usd": stmt.excluded.cost_usd,
+            "saved_pipeline_id": stmt.excluded.saved_pipeline_id,
         },
     )
     with get_engine().begin() as conn:
@@ -814,6 +841,58 @@ def record_pipeline_run(pipeline_id: str, task_id: str) -> None:
     )
     with get_engine().begin() as conn:
         conn.execute(stmt)
+
+
+def list_pipeline_run_history(pipeline_id: str, tenant_id: str) -> list[dict[str, Any]]:
+    """Sprint 17 (ADR-017) — every execution of one saved pipeline, oldest
+    first, with the Gold/Science KPIs the time-series view charts.
+
+    Scoped by `tenant_id` in addition to `saved_pipeline_id` — same
+    defense-in-depth pattern as `get_saved_pipeline`/`_run_belongs_to_tenant`:
+    a pipeline id alone should never be enough to read another tenant's run
+    history, even though in practice a saved pipeline's own `tenant_id` and
+    the runs it produced always agree (this function doesn't rely on that
+    invariant holding, only checks it explicitly).
+
+    `cost_usd`/`model_name`/`total_tokens`/`gold_subtasks`/`science_subtasks`
+    come from a `LEFT OUTER JOIN` against `analysis_runs`, same as
+    `load_history` — a scheduled fire with no `business_question` (Silver-only)
+    has no matching row and reads back as `None`/`NaN`, not zero.
+    """
+    stmt = (
+        select(
+            runs.c.run_id,
+            runs.c.status,
+            runs.c.rows_loaded,
+            runs.c.timestamp,
+            runs.c.error,
+            analysis_runs.c.cost_usd,
+            analysis_runs.c.model_name,
+            analysis_runs.c.total_tokens,
+            analysis_runs.c.gold_subtasks,
+            analysis_runs.c.science_subtasks,
+        )
+        .select_from(runs.outerjoin(analysis_runs, runs.c.run_id == analysis_runs.c.run_id))
+        .where(runs.c.saved_pipeline_id == pipeline_id, runs.c.tenant_id == tenant_id)
+        .order_by(runs.c.timestamp.asc())
+    )
+    with get_engine().connect() as conn:
+        rows_ = conn.execute(stmt).fetchall()
+    return [
+        {
+            "run_id": row.run_id,
+            "status": row.status,
+            "rows_loaded": row.rows_loaded,
+            "timestamp": row.timestamp,
+            "error": row.error,
+            "cost_usd": row.cost_usd,
+            "model_name": row.model_name,
+            "total_tokens": row.total_tokens,
+            "gold_subtasks": row.gold_subtasks,
+            "science_subtasks": row.science_subtasks,
+        }
+        for row in rows_
+    ]
 
 
 def _make_serializable(obj: Any) -> Any:

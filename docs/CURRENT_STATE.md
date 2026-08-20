@@ -31,6 +31,82 @@ Sprint 6 (ADR-011, real Next.js + Clerk + FastAPI frontend replacing Streamlit) 
 
 **Already de-risked ahead of time** (PR #43, merged 2026-08-17): `pyproject.toml`'s `plotly`/`scikit-learn`/`statsmodels` were misclassified under the Streamlit-only `app` extra — actually real pipeline runtime deps (`agents/analyst.py`/`science.py` use them inside the sandbox for charts/models). Fixed before it could cause a silent production regression during the cutover.
 
+## Sprint 17 — comparable run history (branch `feat/sprint17-comparable-run-history`, PR open, not merged, checkpoint required)
+
+Scope (Vault `artefact/product-roadmap-post-tcc.md`, Sprint 17): gives Sprint 14's drift
+detection (running in parallel this same session) real substance — a way to compare runs of
+the *same* saved pipeline over time, not just look at one run in isolation.
+
+**Investigated first, per this project's own standard**: confirmed `runs`/`analysis_runs`
+(Sprint 3/ADR-008) have no column linking a row back to the `saved_pipelines` (Sprint 13,
+ADR-016) that produced it — `saved_pipelines.last_task_id`/`last_run_at` only remember the
+single most recent fire, and nothing in `services/scheduler.py`'s call to `enqueue_analysis`
+threads a pipeline identity into the execution at all. Confirmed gap, not an oversight to
+route around — a real schema decision, formalized as **ADR-017**.
+
+**New migration `0007`** (tested locally against a real throwaway Postgres, not applied to
+production — same checkpoint discipline as migration `0006`): adds a nullable
+`saved_pipeline_id` FK column to both `runs` and `analysis_runs`
+(`ON DELETE SET NULL` — deleting a saved pipeline must never delete the runs it already
+produced), each with its own index. Threaded through as a new optional keyword argument
+(default `None`, every existing call site unaffected) across the whole chain:
+`services/scheduler.py::check_scheduled_pipelines_task` → `execution_queue.enqueue_analysis`
+→ `run_full_analysis_task` (Celery task kwarg) → `pipeline_service.run_full_analysis`/
+`run_silver_pipeline` → `audit/db.py::save_run`/`save_analysis` →
+`_write_run_row`/`_write_analysis_row`. Only the scheduler's own call site passes a real
+value (its own `pipeline_id`); every avulso (`POST /runs`) run still reads back `NULL`, same
+as every run created before this migration — no backfill is possible or attempted (see
+ADR-017 for why).
+
+**New**: `audit/db.py::list_pipeline_run_history(pipeline_id, tenant_id)` — tenant-scoped
+time series (oldest first) of one saved pipeline's executions, `LEFT OUTER JOIN`ed onto
+`analysis_runs` for cost/tokens/Gold-Science-subtask-count KPIs (same "no analysis, no cost"
+`None` semantics as the existing `load_history`). New endpoint `GET /pipelines/{id}/history`
+(404s the same way `GET /pipelines/{id}` already does for an unknown/unowned pipeline).
+Frontend: `frontend/src/app/pipelines/[id]/historico/page.tsx` (new route, server-fetches the
+pipeline for the header) + `frontend/src/components/pipeline-history.tsx` (new Client
+Component) — a Plotly time-series chart (rows loaded / total tokens / cost, reusing the
+existing `<PlotlyChart>` component, ADR-011/ADR-009's `{data, layout}` shape, built
+client-side from the plain KPI rows rather than a backend-serialized figure, since this view
+aggregates across runs rather than rendering one agent-generated chart) and a two-run diff
+picker: the user marks two runs A/B from the list, the component fetches both via the
+*existing* `GET /runs/{run_id}` (no new backend diff endpoint — deliberately, per ADR-017's
+own scope note) and computes the diff client-side — Silver row count, Gold sub-task result
+size (matched across runs by `task_question`), and Science `model_info` numeric fields
+(matched the same way), each shown as a value → value delta with a colored, directional
+(not good/bad — a metric moving isn't inherently positive or negative) indicator.
+`pipelines-manager.tsx` gets a new "Histórico" button per saved pipeline linking to the new
+route.
+
+**Coordination with Sprint 14 (parallel session)**: this migration does not touch any
+existing column, `load_history`'s signature/output shape, or `load_full_result` — only adds
+one new nullable column per table and one new read-only query function/endpoint. Sprint 14's
+own access pattern (whatever it queries for "most recent vs. previous run") is unaffected
+either way.
+
+Verified locally (no Docker daemon in this sandbox, same documented limitation as prior
+sessions): `ruff check`/`format --check` clean on every touched file; `mypy src/` clean, no
+hang this session; `pytest tests/unit tests/integration` — 459 passed, 14 skipped
+(pre-existing DB/network-unreachable skip pattern), 92.02% overall coverage; `bandit`/
+`pip-audit` — only the two pre-existing, documented `exec()` sites in `core/sandbox.py`, no
+new findings, no known CVEs. The Alembic migration was verified for real against a throwaway
+local Postgres (Homebrew `postgresql@17` binary, not Docker, same pattern as Sprint 13):
+`alembic upgrade head` (0001→0007) applied cleanly, `\d runs`/`\d analysis_runs` matched the
+column/index/FK definitions exactly, `alembic downgrade -1` cleanly dropped both columns/
+indexes/constraints, re-`upgrade head` reapplied cleanly. Also verified by direct SQL: a real
+insert with a `saved_pipeline_id` FK succeeds, and deleting the referenced `saved_pipelines`
+row correctly `SET NULL`s the linked `runs` row instead of blocking the delete or cascading.
+Frontend: `npm run lint` and `npm run build` both clean, including the new
+`/pipelines/[id]/historico` route and its type-checked Plotly figure construction.
+
+Full detail: `docs/adr/ADR-017-run-pipeline-linkage.md`.
+
+**Not done in this session, flagged for the merge-checkpoint conversation**: migration `0007`
+is not applied to production Supabase (checkpoint is explicitly pre-merge, same as `0006`);
+no retroactive linkage for scheduled runs that fired before this sprint (impossible — the
+data was never captured, see ADR-017); no dedicated backend diff endpoint (client-side diff
+over two existing `GET /runs/{id}` calls was judged sufficient for this scope).
+
 ## Sprint 22 — dirty-data robustness (branch `feat/sprint22-dirty-data-corpus`, PR open, not merged)
 
 Scope: the Sprint 12 benchmark (204k×300) is synthetic and clean; this sprint tests

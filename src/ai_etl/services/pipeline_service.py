@@ -58,6 +58,7 @@ def run_silver_pipeline(
     run_dir: str,
     progress_callback: ProgressCallback = _noop_progress,
     tenant_id: str | None = None,
+    saved_pipeline_id: str | None = None,
 ) -> PipelineState:
     """Run the Silver LangGraph (Orchestrator -> Extractor -> Transformer -> Quality
     -> Loader) to completion and persist the resulting state via `save_run`.
@@ -71,6 +72,10 @@ def run_silver_pipeline(
         tenant_id: Sprint A session-scoping stopgap forwarded to `save_run` — the
             browser session's UUID (see `app.py::_get_session_id`), not a real
             tenant/account. Defaults to `None` for backward compatibility.
+        saved_pipeline_id: Sprint 17 (ADR-017) — forwarded to `save_run` so a
+            scheduled fire (`services/scheduler.py`) can be grouped with the
+            rest of its saved pipeline's run history. `None` for every avulso
+            (one-off) run — the default, and the only value most callers pass.
     """
     run_id = str(uuid.uuid4())
     state = initial_state(spec=spec, run_id=run_id)
@@ -103,7 +108,12 @@ def run_silver_pipeline(
     final_state["_agent_timings"] = agent_timings
     final_state["_total_time"] = total_time
 
-    save_run(cast(PipelineState, final_state), log_dir=run_dir, tenant_id=tenant_id)
+    save_run(
+        cast(PipelineState, final_state),
+        log_dir=run_dir,
+        tenant_id=tenant_id,
+        saved_pipeline_id=saved_pipeline_id,
+    )
 
     # ADR-007: per-LangGraph-node wall-clock durations, captured by core/graph.py's
     # `_timed()` wrapper into state["stage_durations"]. A no-op if the graph didn't
@@ -377,6 +387,7 @@ def run_full_analysis(
     run_dir: str,
     progress_callback: ProgressCallback = _noop_progress,
     tenant_id: str | None = None,
+    saved_pipeline_id: str | None = None,
 ) -> AnalysisRunResult:
     """Run the full Silver -> Planner -> Gold/Science -> Advisor pipeline for one
     business question, persisting Silver + analysis results as a side effect.
@@ -391,8 +402,13 @@ def run_full_analysis(
         tenant_id: Sprint A session-scoping stopgap forwarded to `save_run`/
             `save_analysis` — the browser session's UUID. Defaults to `None` for
             backward compatibility; `app.py` should always pass a real value.
+        saved_pipeline_id: Sprint 17 (ADR-017) — forwarded to `save_run`/
+            `save_analysis` so a scheduled fire can be grouped with the rest of
+            its saved pipeline's run history. `None` for every avulso run.
     """
-    silver_state = run_silver_pipeline(spec, run_dir, progress_callback, tenant_id=tenant_id)
+    silver_state = run_silver_pipeline(
+        spec, run_dir, progress_callback, tenant_id=tenant_id, saved_pipeline_id=saved_pipeline_id
+    )
     silver_df = silver_state.get("transformed_data")
 
     gold_results: list[GoldResult] = []
@@ -423,6 +439,7 @@ def run_full_analysis(
             log_dir=run_dir,
             tenant_id=tenant_id,
             business_question=question,
+            saved_pipeline_id=saved_pipeline_id,
         )
         save_stage_latencies(
             silver_state["run_id"],

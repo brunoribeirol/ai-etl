@@ -78,6 +78,49 @@ def test_get_pipeline_returns_row(client: TestClient, mocker) -> None:
     assert response.json()["name"] == "Nightly sync"
 
 
+def test_get_pipeline_history_404_when_pipeline_unknown(client: TestClient, mocker) -> None:
+    """Sprint 17 (ADR-017) — 404s before ever calling `list_pipeline_run_history`,
+    so an unowned/unknown pipeline id can't be used to probe for run history."""
+    mocker.patch("ai_etl.api.routers.pipelines.get_saved_pipeline", return_value=None)
+    mock_history = mocker.patch("ai_etl.api.routers.pipelines.list_pipeline_run_history")
+
+    response = client.get("/pipelines/no-such-id/history")
+
+    assert response.status_code == 404
+    mock_history.assert_not_called()
+
+
+def test_get_pipeline_history_returns_time_series(client: TestClient, mocker) -> None:
+    mocker.patch(
+        "ai_etl.api.routers.pipelines.get_saved_pipeline",
+        return_value=_saved_pipeline_row(),
+    )
+    history_rows = [
+        {
+            "run_id": "run-1",
+            "status": "completed",
+            "rows_loaded": 100,
+            "timestamp": datetime.now(tz=timezone.utc).isoformat(),
+            "error": None,
+            "cost_usd": 0.001,
+            "model_name": "gpt-4o-mini",
+            "total_tokens": 500,
+            "gold_subtasks": 1,
+            "science_subtasks": 0,
+        }
+    ]
+    mock_history = mocker.patch(
+        "ai_etl.api.routers.pipelines.list_pipeline_run_history",
+        return_value=history_rows,
+    )
+
+    response = client.get("/pipelines/pl-1/history")
+
+    assert response.status_code == 200
+    assert response.json() == history_rows
+    mock_history.assert_called_once_with("pl-1", "tenant-a")
+
+
 def test_create_pipeline_rejects_non_live_source_type(client: TestClient, mocker) -> None:
     mock_create = mocker.patch("ai_etl.api.routers.pipelines.create_saved_pipeline")
 

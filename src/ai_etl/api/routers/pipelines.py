@@ -16,6 +16,7 @@ from ai_etl.api.deps import get_current_tenant_id
 from ai_etl.audit.db import (
     create_saved_pipeline,
     get_saved_pipeline,
+    list_pipeline_run_history,
     list_saved_pipelines,
     update_saved_pipeline,
 )
@@ -96,6 +97,23 @@ def create_pipeline(
         cron_schedule=body.cron_schedule,
         business_question=body.business_question,
     )
+
+
+@router.get("/{pipeline_id}/history")
+def get_pipeline_history(
+    pipeline_id: str,
+    tenant_id: Annotated[str, Depends(get_current_tenant_id)],
+) -> list[dict[str, Any]]:
+    """Sprint 17 (ADR-017) — time series of every execution of one saved
+    pipeline (oldest first), for the "Histórico comparável" view: KPI trend
+    charts and the two-run diff. 404s (rather than returning an empty list)
+    when the pipeline itself doesn't exist or isn't owned by this tenant —
+    same "unknown vs. empty" distinction `get_pipeline` already makes, so the
+    frontend can tell "no pipeline" from "pipeline with no runs yet" apart.
+    """
+    if get_saved_pipeline(pipeline_id, tenant_id) is None:
+        raise HTTPException(status_code=404, detail="Saved pipeline not found.")
+    return list_pipeline_run_history(pipeline_id, tenant_id)
 
 
 @router.patch("/{pipeline_id}")
