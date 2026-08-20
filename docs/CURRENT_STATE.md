@@ -2,11 +2,17 @@
 
 > Living doc. Updated at the end of meaningful work sessions, not per-commit. Source of truth for repo/code state; the Obsidian vault (`~/Documents/Obsidian Vault/tcc/`) is the source of truth for the academic TCC narrative and product/strategy context.
 
-**Last updated:** 2026-08-21 — **third parallel batch: Sprints 14, 17, and 29 merged to `main`** (Sprints 8, 9, 10, 11, 12, 22, 23, and 13 already merged the day before — see below). Sprint 13 is fully live in production (migration `0006` applied, `celery-beat` deployed and confirmed ticking on Railway). **Migrations `0007` (Sprint 17), `0008` (Sprint 14), and `0009` (Sprint 29) are in `main`'s code but NOT yet applied to production Supabase** — deliberately deferred, same checkpoint discipline as Sprint 13's `0006`, pending owner decision. See "Start here next session" below for the full orchestration writeup.
+**Last updated:** 2026-08-21, end of session — **all sprints from this multi-day batch (8, 9, 10, 11, 12, 13, 14, 17, 22, 23, 29) are merged to `main` AND fully applied to production.** Migrations `0007` (Sprint 17), `0008` (Sprint 14), and `0009` (Sprint 29) were applied to the live Supabase database this session (`alembic upgrade head`, 0006→0009, verified: RLS still enabled post-migration, a real read succeeded, production API stayed healthy throughout). No sprint from this batch has any pending production action left.
+
+**Post-merge audit performed this session** (full re-verification against real state, not memory — every sprint's PR merge status, production migration version, Railway service health, and Vercel domain alias were re-checked directly): confirmed everything above, plus found and fixed a **third recurrence of local Git object-store corruption** in the main repo (`~/Documents/ai-etl`) — same "pack file far too short" pattern as before, recovered by re-cloning fresh from GitHub (no data lost, everything already pushed). See the new Vault bug note (Related, below) — this is now a confirmed-recurring issue worth checking for at the start of any session that touches this repo with multiple worktrees.
+
+**Digest delivery channels (Sprint 14 + PR #69's Teams/Google Chat addendum) — real production test results**: Resend (email) and Slack **confirmed working live** — both tested for real via `railway run --service tranquil-appreciation` (injects the real service's env vars, no secrets pasted into the session) calling `send_email_digest`/`send_slack_digest` directly; both returned `True`, and the owner confirmed real delivery (email received, Slack message posted). **Teams and Google Chat remain unconfigured, blocked by a real platform constraint discovered this session**: Teams' "Workflows" webhook requires a Microsoft 365 (work/school) account, and Google Chat's "Manage webhooks" requires a Google Workspace (business) account — neither works on a free personal account, confirmed by the owner hitting an explicit "restricted" screen on Google Chat. Code for both is complete and untouched by this; only the env vars (`TEAMS_WEBHOOK_URL`, `GOOGLE_CHAT_WEBHOOK_URL`) are missing, pending the owner having a corporate account for either platform.
+
+**Real architectural gap surfaced while configuring the above, not yet scheduled to a sprint**: digest delivery channels are configured as global environment variables on the `tranquil-appreciation` worker service — **one Slack/email/Google Chat destination for the entire deployment, not one per tenant/customer**. `saved_pipelines` has no per-pipeline or per-tenant notification-destination column. Acceptable at this stage (single real user, the owner, validating the delivery mechanism), but this needs to become per-tenant configuration before any second customer's drift alerts would need to go somewhere other than the owner's own channels. Recorded in Claude's memory (`future_product_ideas.md` item 6) as a real product gap tied to Sprints 14/18/26 — not just a passing note.
 
 **This batch's real cross-sprint conflict**: Sprint 17 and Sprint 14 ran in parallel and each independently added `runs.saved_pipeline_id` (different `ondelete` behavior, different indexes) — not just an ADR/migration-number collision (which also happened, resolved by merge order: 17→ADR-017/`0007`, 14→ADR-018/`0008`, 29→ADR-019/`0009`), but a real schema/code duplication requiring the losing branch (Sprint 14) to rebase onto the winner and remove its own duplicate. **CI's Python 3.11 job caught a real bug** none of the subagents' local checks could (their environment only had Python 3.12 installed): `BudgetStatus` (Sprint 29) used as a FastAPI route return type needs `typing_extensions.TypedDict`, not stdlib `typing.TypedDict`, for Pydantic schema generation on Python < 3.12 — fixed, verified against a real Python 3.11 interpreter installed for the occasion.
 
-## Sprint 14 — drift detection + digest delivery (branch `feat/sprint14-drift-alerts-digest`, PR open, not merged, checkpoint required)
+## Sprint 14 — drift detection + digest delivery (PR #65 merged 2026-08-20; migration `0008` applied to production 2026-08-21; extended with Teams/Google Chat channels in PR #69)
 
 Reuses Gold/Science/Advisor's existing narrative/recommendations (no new
 agent). Uses `runs.saved_pipeline_id` to link a scheduled fire back to the
@@ -116,7 +122,7 @@ resolution once Sprint 17 actually merges (both branches declare the same
 column in the same file — expected, flagged, not silently overwritten by
 either side).
 
-## Sprint 29 — tenant budget cap (branch `feat/sprint29-tenant-budget-cap`, PR #63 open, not merged, checkpoint required)
+## Sprint 29 — tenant budget cap (PR #63 merged 2026-08-20; migration `0009` applied to production 2026-08-21)
 
 Per-tenant monthly LLM spend cap, enforced *before* enqueueing a new
 execution (previously cost was only visible after the fact — Sprint 3/ADR-008).
@@ -246,7 +252,7 @@ Sprint 6 (ADR-011, real Next.js + Clerk + FastAPI frontend replacing Streamlit) 
 
 **Already de-risked ahead of time** (PR #43, merged 2026-08-17): `pyproject.toml`'s `plotly`/`scikit-learn`/`statsmodels` were misclassified under the Streamlit-only `app` extra — actually real pipeline runtime deps (`agents/analyst.py`/`science.py` use them inside the sandbox for charts/models). Fixed before it could cause a silent production regression during the cutover.
 
-## Sprint 17 — comparable run history (branch `feat/sprint17-comparable-run-history`, PR open, not merged, checkpoint required)
+## Sprint 17 — comparable run history (PR #64 merged 2026-08-20; migration `0007` applied to production 2026-08-21)
 
 Scope (Vault `artefact/product-roadmap-post-tcc.md`, Sprint 17): gives Sprint 14's drift
 detection (running in parallel this same session) real substance — a way to compare runs of
@@ -322,7 +328,7 @@ no retroactive linkage for scheduled runs that fired before this sprint (impossi
 data was never captured, see ADR-017); no dedicated backend diff endpoint (client-side diff
 over two existing `GET /runs/{id}` calls was judged sufficient for this scope).
 
-## Sprint 22 — dirty-data robustness (branch `feat/sprint22-dirty-data-corpus`, PR open, not merged)
+## Sprint 22 — dirty-data robustness (PR #61 merged 2026-08-20)
 
 Scope: the Sprint 12 benchmark (204k×300) is synthetic and clean; this sprint tests
 `sources/csv_source.py` against the kind of dirt a synthetic generator never reproduces.
@@ -414,7 +420,7 @@ pre-existing `assert` in `api/deps.py`, no new findings, no known CVEs (includin
 `charset-normalizer` dependency). `tests/e2e` not run locally (same Postgres/Redis
 unavailability as every prior session) — CI is the real gate.
 
-## Sprint 13 — scheduled (recurring) pipelines (branch `feat/sprint13-scheduled-pipelines`, PR open, not merged, checkpoint required)
+## Sprint 13 — scheduled (recurring) pipelines (PR #62 merged 2026-08-20; migration `0006` applied and `celery-beat` deployed to production the same day)
 
 New `saved_pipelines` table (migration `0006`, ADR-016) — a persisted spec +
 cron schedule + tenant, distinct from `runs`/`analysis_runs` (still one row
@@ -519,7 +525,7 @@ end-to-end fire was observed against a live Redis/Celery worker (sandbox has
 no Docker daemon); Stripe/billing per saved pipeline is out of scope
 (ADR-016's own Consequences section).
 
-## Sprint 8 — model comparison + stability (branch `feat/sprint8-model-comparison`, PR open, not merged)
+## Sprint 8 — model comparison + stability (PR #57 merged 2026-08-20)
 
 CLI/headless only, per scope — no `api/` or `frontend/` touched. New:
 `case_study/scripts/model_comparison.py` (runs Scenario 1 N times per model
@@ -742,14 +748,19 @@ findings, no known CVEs. `tests/integration`/`tests/e2e` not run locally
 - **The Clerk pasted-session-token flow doesn't survive async execution's own polling window** — and, as of 2026-08-16, has escalated from an interim UX nit to a real blocker. Every Streamlit rerun (including the polling loop `app.py` uses while a task is running) re-validates the same static pasted token; if the pipeline takes longer than the token's short lifetime, the user gets bounced to the sign-in gate mid-run (task keeps running server-side regardless — confirmed). Pre-existing limitation since Sprint 1, made more visible by Sprint 3's async model — but it also failed live in production this same day (expired token, had to be regenerated by hand), which is exactly the kind of friction a non-technical Sprint 8 (Validação humana) participant can't be expected to work around. **Decision made 2026-08-16: Sprint 6 (new) — real frontend (Next.js + `@clerk/nextjs` middleware + a new FastAPI layer)**, inserted before the old Sprint 6 (now 7)/Sprint 7 (now 8), Streamlit retired once Next.js covers the same surface. Plan: `~/.claude/plans/adicionar-o-frontend-ir-silly-rabbit.md`. Roadmap renumbered accordingly (Vault: `artefact/sprint-roadmap.md`).
 - **Two unreconciled ICP framings** across the project's own docs (`artefact/saas-potential.md`: data engineers; `writing/drafts/draft-visao-produto.md` + owner's stated framing: SMB entrepreneurs) — not yet resolved, flagged for the owner to decide, not a code task.
 - **`.claude/specs/sr-standard.md` §8 SaaS Roadmap table** — the project's own pre-existing plan for exactly this transition; the current multi-sprint plan follows its sequencing logic but reorders items where the SaaS-readiness audit found reason to.
+- **Local Git object-store corruption in `~/Documents/ai-etl` has now recurred three times** (2026-08-20/21), same "pack file far too short" pattern each time — strongly correlated with running multiple `git worktree`-based subagents in parallel against the same repo's shared `.git/objects`. Recovered every time by deleting and re-cloning fresh from GitHub (never any data loss — everything was already pushed). Full pattern and mitigation: Vault `bugs-solved/git-object-store-corruption-parallel-worktrees.md`.
+- **Digest delivery (Sprint 14) is a single global channel per deployment, not per-tenant** — `SLACK_WEBHOOK_URL`/`GOOGLE_CHAT_WEBHOOK_URL`/`TEAMS_WEBHOOK_URL`/`RESEND_API_KEY` are environment variables on the `tranquil-appreciation` worker service, read via plain `os.getenv()`; `saved_pipelines` has no per-pipeline/per-tenant notification-destination column. Fine while the owner is the only real tenant validating the mechanism; needs real schema/API/frontend work before a second customer's alerts should go anywhere but the owner's own Slack/email. See Claude's memory `future_product_ideas.md` item 6.
+- **Teams and Google Chat digest channels (PR #69) are blocked by platform account requirements**, not code: Microsoft Teams' "Workflows" incoming webhook requires a Microsoft 365 (work/school) account; Google Chat's "Manage webhooks" requires a Google Workspace (business) account. Confirmed directly — the owner hit an explicit "restricted" screen trying Google Chat with a personal account. No code change needed when either account becomes available — just set the corresponding env var.
 
 ## Next steps
 
-11-sprint plan (Vault: `artefact/sprint-roadmap.md`): A [done] → 1 [done — auth/tenancy/deploy] → 2 [done — sandbox unification + latency instrumentation] → 3 [done, verified live — async execution + rate limiting + cost per run] → 4 [done, verified live — S3 storage] → 5 [done — PDF/DOCX source + e2e] → 6 [done, verified live — real frontend, Streamlit retired] → 7 [done, verified live — frontend redesign + Streamlit feature parity] → 8 [merged — model comparison harness, real numbers pending real OPENAI_API_KEY/Ollama] → 9 [merged — human validation study protocol] → **10 [multi-cloud AWS portability IaC drafted (ADR-015), PR open, not merged, not applied]** → 11 [merged — SQLite/authenticated REST + MySQL/MongoDB/OAuth2 extension]. Plus Sprint 23 (multi-provider LLM) pulled forward out of order. Migrations `0004`/`0005` both applied to the live Supabase database. Celery worker deployed and verified live on Railway.
+**Status as of 2026-08-21: 17 of 29 sprints in the unified roadmap are done** — A, 1-14, 17, 22, 23 (partial — see its section), 29. All are merged to `main`; every one that touches production schema/infra (13, 14, 17, 29) is fully applied and verified live, not just merged in code. Sprint 10 (multi-cloud AWS) is merged as IaC-only — Terraform validated, never `apply`'d, no AWS resources exist, by design (a portability proof, not a migration).
 
-**Sprint 7: complete.** PR #52 (shadcn/ui redesign + Streamlit feature parity — see the Sprint 7 section above) merged and verified live in production 2026-08-19.
+**Digest delivery (Sprint 14 + PR #69) is live for 2 of 4 channels**: Resend (email) and Slack are configured on the `tranquil-appreciation` Railway service and confirmed working with a real test send (`railway run` + a direct call to `send_email_digest`/`send_slack_digest`, both returned `True`, owner confirmed real delivery). Teams and Google Chat are blocked on the owner not having a Microsoft 365 / Google Workspace account respectively — code is complete, only the env vars are missing.
 
-**Sprint 9: merged.** **Sprint 8: merged** (harness + honestly-labeled dry run — no real API/Ollama access this session, see the Sprint 8 section above and `case_study/results/sprint8/README.md`; rerun with real credentials for real numbers, no code change needed). **Sprint 11: merged** (SQLite/authenticated REST + a same-session extension adding MySQL, MongoDB, OAuth2 client-credentials). **Sprint 12 (scale robustness, out-of-numeric-order per owner's explicit post-TCC roadmap request — see `docs/adr/ADR-013-scale-strategy.md`): merging now.** **Sprint 23 (multi-provider LLM, also pulled forward at owner's request) and Sprint 10 (multi-cloud AWS)** still have open PRs awaiting review before merge.
+**Next technically-unblocked sprints**: 15 (production reliability, depends only on 13) and 18 (executive UI, depends on 14) — both have no pending dependency now that 13/14 are live. See `product-roadmap-post-tcc.md`'s dependency graph before parallelizing further.
+
+**Real product gap surfaced, not yet a sprint**: digest delivery channels are global (one Slack/email/Google Chat per deployment), not per-tenant — see this file's top summary and Claude's memory (`future_product_ideas.md` item 6) for the real fix shape (new column(s) on `saved_pipelines`, a frontend field, `notifications.py` reading a parameter instead of `os.getenv()`).
 
 ## Deploy
 
