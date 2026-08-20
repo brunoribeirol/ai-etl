@@ -40,10 +40,11 @@ import logging
 import os
 import time
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import Any
 
 import redis
 from celery.result import AsyncResult
+from typing_extensions import TypedDict
 
 from ai_etl.audit.db import get_monthly_budget, get_monthly_spend_usd, get_saved_pipeline
 from ai_etl.core.analysis_types import AnalysisRunResult
