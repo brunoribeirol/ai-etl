@@ -295,12 +295,119 @@ def test_run_full_analysis_task_forwards_saved_pipeline_id(
         return {"state": {"run_id": "r1", "status": "completed", "error": None}, "tokens": {}}
 
     monkeypatch.setattr(eq_module, "run_full_analysis", _fake_run_full_analysis)
+    # Sprint 14 (ADR-018): the merged task now also runs a best-effort drift
+    # check whenever `saved_pipeline_id` is set and the run completed — mock
+    # `get_saved_pipeline` so that path doesn't hit a real DB connection in
+    # this unit test (its own behavior is covered by the dedicated drift
+    # tests below).
+    monkeypatch.setattr(eq_module, "get_saved_pipeline", lambda *a, **k: None)
 
     run_full_analysis_task(
         "spec", "question", "./runs", "tenant-a", saved_pipeline_id="pipeline-xyz"
     )
 
     assert captured["saved_pipeline_id"] == "pipeline-xyz"
+
+
+def test_run_full_analysis_task_runs_drift_check_when_scheduled_and_completed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _fake_run_full_analysis(
+        spec,
+        business_question,
+        run_dir,
+        progress_callback=None,
+        tenant_id=None,
+        saved_pipeline_id=None,
+    ):
+        return {
+            "state": {
+                "run_id": "r1",
+                "status": "completed",
+                "error": None,
+                "load_result": {"rows_loaded": 42},
+            },
+            "tokens": {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0},
+            "science": [],
+            "advisor": {},
+        }
+
+    monkeypatch.setattr(eq_module, "run_full_analysis", _fake_run_full_analysis)
+    monkeypatch.setattr(
+        eq_module,
+        "get_saved_pipeline",
+        lambda pid, tid: {"id": pid, "tenant_id": tid, "name": "P", "is_active": True},
+    )
+    called = {}
+
+    def _fake_check(**kwargs):
+        called.update(kwargs)
+        return {"triggered": False, "findings": [], "email_sent": False, "slack_sent": False}
+
+    monkeypatch.setattr(eq_module, "check_drift_and_notify", _fake_check)
+
+    run_full_analysis_task("spec", "question", "./runs", "tenant-a", saved_pipeline_id="pl-1")
+
+    assert called["run_id"] == "r1"
+    assert called["rows_loaded"] == 42
+
+
+def test_run_full_analysis_task_skips_drift_check_for_avulso_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _fake_run_full_analysis(
+        spec,
+        business_question,
+        run_dir,
+        progress_callback=None,
+        tenant_id=None,
+        saved_pipeline_id=None,
+    ):
+        return {"state": {"run_id": "r1", "status": "completed", "error": None}, "tokens": {}}
+
+    called = {"get_saved_pipeline": False}
+
+    def _tracked_get_saved_pipeline(*args: object, **kwargs: object) -> None:
+        called["get_saved_pipeline"] = True
+        return None
+
+    monkeypatch.setattr(eq_module, "run_full_analysis", _fake_run_full_analysis)
+    monkeypatch.setattr(eq_module, "get_saved_pipeline", _tracked_get_saved_pipeline)
+
+    # No saved_pipeline_id passed — must never touch get_saved_pipeline/drift check.
+    run_full_analysis_task("spec", "question", "./runs", "tenant-a")
+
+    assert called["get_saved_pipeline"] is False
+
+
+def test_run_full_analysis_task_swallows_drift_check_failures(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A broken drift check must never fail the run itself — the run already
+    completed and was persisted before this best-effort step runs."""
+
+    def _fake_run_full_analysis(
+        spec,
+        business_question,
+        run_dir,
+        progress_callback=None,
+        tenant_id=None,
+        saved_pipeline_id=None,
+    ):
+        return {"state": {"run_id": "r1", "status": "completed", "error": None}, "tokens": {}}
+
+    def _raise_get_saved_pipeline(*args, **kwargs):
+        raise RuntimeError("db unreachable")
+
+    monkeypatch.setattr(eq_module, "run_full_analysis", _fake_run_full_analysis)
+    monkeypatch.setattr(eq_module, "get_saved_pipeline", _raise_get_saved_pipeline)
+
+    result = run_full_analysis_task(
+        "spec", "question", "./runs", "tenant-a", saved_pipeline_id="pl-1"
+    )
+
+    assert result["run_id"] == "r1"
+    assert result["status"] == "completed"
 
 
 def test_get_task_status_maps_failure_result(monkeypatch: pytest.MonkeyPatch) -> None:

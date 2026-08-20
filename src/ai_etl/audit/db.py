@@ -71,6 +71,8 @@ def save_run(
             produced this execution, if it was a scheduled fire (`services/
             scheduler.py`). `None` for every avulso (one-off) run, which is the
             majority of callers — defaults to `None` for backward compatibility.
+            Sprint 14 (ADR-018) also reads this back via `get_previous_completed_run`
+            to find "the previous run of this same saved pipeline" for drift detection.
 
     Returns:
         The storage key of the JSON file (relative to `log_dir` for `local`, to the
@@ -615,6 +617,8 @@ def _saved_pipeline_row_to_dict(row: Any) -> dict[str, Any]:
         "next_run_at": row.next_run_at,
         "last_task_id": row.last_task_id,
         "last_run_at": row.last_run_at,
+        # Sprint 14 (ADR-018) — per-pipeline "% change worth alerting on".
+        "drift_threshold_pct": row.drift_threshold_pct,
         "created_at": row.created_at,
         "updated_at": row.updated_at,
     }
@@ -627,8 +631,10 @@ def create_saved_pipeline(
     spec: str,
     cron_schedule: str,
     business_question: str = "",
+    drift_threshold_pct: float = 20.0,
 ) -> dict[str, Any]:
-    """Persist a new saved pipeline (Sprint 13, ADR-016).
+    """Persist a new saved pipeline (Sprint 13, ADR-016; `drift_threshold_pct`
+    added Sprint 14, ADR-018).
 
     Caller (the `/pipelines` router) is responsible for validating
     `cron_schedule` (`core.scheduling.validate_cron_schedule`) and
@@ -652,6 +658,7 @@ def create_saved_pipeline(
         next_run_at=next_run_at,
         last_task_id=None,
         last_run_at=None,
+        drift_threshold_pct=drift_threshold_pct,
         created_at=now,
         updated_at=now,
     )
@@ -669,6 +676,7 @@ def create_saved_pipeline(
         "next_run_at": next_run_at,
         "last_task_id": None,
         "last_run_at": None,
+        "drift_threshold_pct": drift_threshold_pct,
         "created_at": now,
         "updated_at": now,
     }
@@ -707,6 +715,7 @@ def update_saved_pipeline(
     cron_schedule: Optional[str] = None,
     business_question: Optional[str] = None,
     is_active: Optional[bool] = None,
+    drift_threshold_pct: Optional[float] = None,
 ) -> Optional[dict[str, Any]]:
     """Partial update (PATCH semantics) — only fields passed as non-`None` change.
 
@@ -733,6 +742,8 @@ def update_saved_pipeline(
         values["spec"] = spec
     if business_question is not None:
         values["business_question"] = business_question
+    if drift_threshold_pct is not None:
+        values["drift_threshold_pct"] = drift_threshold_pct
 
     resolved_cron = cron_schedule if cron_schedule is not None else existing["cron_schedule"]
     became_active = is_active is True and existing["is_active"] is False
@@ -917,6 +928,62 @@ def list_pipeline_run_history(
         }
         for row in rows_
     ]
+
+
+def get_previous_completed_run(
+    saved_pipeline_id: str, exclude_run_id: str
+) -> Optional[dict[str, Any]]:
+    """Most recent `status = "completed"` run for `saved_pipeline_id`,
+    excluding `exclude_run_id` (the run currently being evaluated) — the
+    "second most recent fire" ADR-018 Decision 1 compares against. `None`
+    when there is no prior completed run (the pipeline's first fire, or every
+    prior fire failed) — the caller (`services/alerting.py`) treats that as
+    "nothing to compare," not an error.
+
+    A deliberately smaller, more targeted sibling of `list_pipeline_run_history`
+    above (Sprint 17, ADR-017): that function returns up to
+    `DEFAULT_PIPELINE_HISTORY_LIMIT` oldest-first rows for a time-series chart;
+    this one returns at most one row — the single most recent *completed* run
+    other than the one just evaluated — which is all Sprint 14's drift check
+    needs. Kept separate rather than built on top of
+    `list_pipeline_run_history` (e.g. `limit=2`, filter, take the older one)
+    since that function doesn't filter by `status`, and a failed intervening
+    fire would then silently become "the previous run" for comparison instead
+    of being skipped.
+
+    Left-outer-joins `analysis_runs` for `cost_usd`/`total_tokens`, same
+    pattern as `load_history` — a Silver-only scheduled run (no
+    `business_question`, so `save_analysis` never ran) reads those back as
+    `None`, not `0`, matching `load_history`'s "no analysis, no cost" signal.
+    """
+    stmt = (
+        select(
+            runs.c.run_id,
+            runs.c.rows_loaded,
+            runs.c.timestamp,
+            analysis_runs.c.cost_usd,
+            analysis_runs.c.total_tokens,
+        )
+        .select_from(runs.outerjoin(analysis_runs, runs.c.run_id == analysis_runs.c.run_id))
+        .where(
+            runs.c.saved_pipeline_id == saved_pipeline_id,
+            runs.c.run_id != exclude_run_id,
+            runs.c.status == "completed",
+        )
+        .order_by(runs.c.timestamp.desc())
+        .limit(1)
+    )
+    with get_engine().connect() as conn:
+        row = conn.execute(stmt).first()
+    if row is None:
+        return None
+    return {
+        "run_id": row.run_id,
+        "rows_loaded": row.rows_loaded,
+        "cost_usd": row.cost_usd,
+        "total_tokens": row.total_tokens,
+        "timestamp": row.timestamp,
+    }
 
 
 def _make_serializable(obj: Any) -> Any:

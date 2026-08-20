@@ -76,6 +76,8 @@ def run_silver_pipeline(
             scheduled fire (`services/scheduler.py`) can be grouped with the
             rest of its saved pipeline's run history. `None` for every avulso
             (one-off) run — the default, and the only value most callers pass.
+            Sprint 14 (ADR-018) also relies on this to later find this run's
+            predecessor for drift detection.
     """
     run_id = str(uuid.uuid4())
     state = initial_state(spec=spec, run_id=run_id)
@@ -405,6 +407,10 @@ def run_full_analysis(
         saved_pipeline_id: Sprint 17 (ADR-017) — forwarded to `save_run`/
             `save_analysis` so a scheduled fire can be grouped with the rest of
             its saved pipeline's run history. `None` for every avulso run.
+            Sprint 14 (ADR-018)'s drift check is not decided here — it's the
+            caller's job (`services/execution_queue.py`, once this function
+            returns with the full `gold`/`science`/`advisor` results) — this
+            function only needs to keep forwarding the id.
     """
     silver_state = run_silver_pipeline(
         spec, run_dir, progress_callback, tenant_id=tenant_id, saved_pipeline_id=saved_pipeline_id

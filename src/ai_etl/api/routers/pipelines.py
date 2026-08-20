@@ -48,6 +48,11 @@ class CreatePipelineRequest(BaseModel):
     spec: str = Field(min_length=1)
     cron_schedule: str
     business_question: str = ""
+    # Sprint 14 (ADR-018) — "% change on a tracked KPI worth alerting on"
+    # for this pipeline's own recurring drift check. Default matches
+    # audit/models.py's server_default, so a client that omits it gets the
+    # same behavior as a row written before this field existed.
+    drift_threshold_pct: float = Field(default=20.0, gt=0)
 
 
 class UpdatePipelineRequest(BaseModel):
@@ -59,6 +64,7 @@ class UpdatePipelineRequest(BaseModel):
     cron_schedule: Optional[str] = None
     business_question: Optional[str] = None
     is_active: Optional[bool] = None
+    drift_threshold_pct: Optional[float] = Field(default=None, gt=0)
 
 
 @router.get("")
@@ -97,6 +103,7 @@ def create_pipeline(
         spec=body.spec,
         cron_schedule=body.cron_schedule,
         business_question=body.business_question,
+        drift_threshold_pct=body.drift_threshold_pct,
     )
 
 
@@ -149,6 +156,7 @@ def patch_pipeline(
         cron_schedule=body.cron_schedule,
         business_question=body.business_question,
         is_active=body.is_active,
+        drift_threshold_pct=body.drift_threshold_pct,
     )
     if updated is None:
         raise HTTPException(status_code=404, detail="Saved pipeline not found.")

@@ -57,6 +57,14 @@ runs = Table(
         nullable=True,
     ),
     Index("ix_runs_saved_pipeline_id", "saved_pipeline_id"),
+    # Sprint 14 (ADR-018, migration 0008) — additional composite index on top
+    # of Sprint 17's single-column one above:
+    # `get_previous_completed_run`'s `WHERE saved_pipeline_id = :id ...
+    # ORDER BY timestamp DESC LIMIT 1` query (drift detection's "most recent
+    # fire of this pipeline" lookup) is satisfied by one index scan with this
+    # composite form instead of a single-column filter followed by a
+    # separate sort.
+    Index("ix_runs_saved_pipeline_timestamp", "saved_pipeline_id", "timestamp"),
 )
 
 stage_latencies = Table(
@@ -147,6 +155,12 @@ saved_pipelines = Table(
     Column("next_run_at", DateTime(timezone=True), nullable=False),
     Column("last_task_id", String, nullable=True),
     Column("last_run_at", DateTime(timezone=True), nullable=True),
+    # Sprint 14 (ADR-018, migration 0008) — "% change on a tracked KPI worth
+    # alerting on" for this pipeline's own recurring drift check (see
+    # core/drift.py). Server-side default backfills every pre-existing row;
+    # a customer with a naturally noisier pipeline can loosen it per pipeline
+    # without a code change.
+    Column("drift_threshold_pct", Float, nullable=False, server_default="20.0"),
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("updated_at", DateTime(timezone=True), nullable=False),
     Index("ix_saved_pipelines_active_next_run", "is_active", "next_run_at"),

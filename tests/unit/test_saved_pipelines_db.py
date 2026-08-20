@@ -14,7 +14,10 @@ import sqlalchemy
 from sqlalchemy import Engine
 
 from ai_etl.audit import db
+from ai_etl.audit.models import analysis_runs
 from ai_etl.audit.models import metadata as audit_metadata
+from ai_etl.audit.models import runs as runs_table
+from ai_etl.audit.models import users as users_table
 
 
 def _make_sqlite_engine() -> Engine:
@@ -193,6 +196,142 @@ def test_release_pipeline_claim_reverts_next_run_at(engine: Engine) -> None:
     reloaded = db.get_saved_pipeline(created["id"], "tenant-a")
     assert reloaded is not None
     assert reloaded["next_run_at"] == original
+
+
+def test_create_saved_pipeline_defaults_drift_threshold(engine: Engine) -> None:
+    created = db.create_saved_pipeline("tenant-a", "A", "postgres", "spec a", "0 3 * * *")
+    assert created["drift_threshold_pct"] == 20.0
+
+
+def test_create_saved_pipeline_accepts_custom_drift_threshold(engine: Engine) -> None:
+    created = db.create_saved_pipeline(
+        "tenant-a", "A", "postgres", "spec a", "0 3 * * *", drift_threshold_pct=5.0
+    )
+    assert created["drift_threshold_pct"] == 5.0
+
+
+def test_update_saved_pipeline_changes_drift_threshold(engine: Engine) -> None:
+    created = db.create_saved_pipeline("tenant-a", "A", "postgres", "spec a", "0 3 * * *")
+
+    updated = db.update_saved_pipeline(created["id"], "tenant-a", drift_threshold_pct=50.0)
+
+    assert updated is not None
+    assert updated["drift_threshold_pct"] == 50.0
+
+
+def _insert_completed_run(
+    engine: Engine,
+    run_id: str,
+    saved_pipeline_id: str,
+    tenant_id: str,
+    timestamp: datetime,
+    rows_loaded: int,
+    cost_usd: float | None = None,
+    total_tokens: int | None = None,
+) -> None:
+    with engine.begin() as conn:
+        conn.execute(
+            runs_table.insert().values(
+                run_id=run_id,
+                spec="spec",
+                status="completed",
+                error=None,
+                rows_loaded=rows_loaded,
+                timestamp=timestamp,
+                tenant_id=tenant_id,
+                saved_pipeline_id=saved_pipeline_id,
+            )
+        )
+        if cost_usd is not None or total_tokens is not None:
+            conn.execute(
+                analysis_runs.insert().values(
+                    run_id=run_id,
+                    gold_subtasks=0,
+                    science_subtasks=0,
+                    input_tokens=0,
+                    output_tokens=0,
+                    total_tokens=total_tokens or 0,
+                    timestamp=timestamp,
+                    tenant_id=tenant_id,
+                    model_name="gpt-4o-mini",
+                    cost_usd=cost_usd,
+                )
+            )
+
+
+def test_get_previous_completed_run_returns_most_recent_excluding_current(
+    engine: Engine,
+) -> None:
+    with engine.begin() as conn:
+        conn.execute(
+            users_table.insert().values(id="tenant-a", created_at=datetime.now(tz=timezone.utc))
+        )
+    pipeline = db.create_saved_pipeline("tenant-a", "A", "postgres", "spec a", "0 3 * * *")
+    now = datetime.now(tz=timezone.utc)
+    _insert_completed_run(
+        engine, "run-1", pipeline["id"], "tenant-a", now - timedelta(hours=2), 100, 0.01, 500
+    )
+    _insert_completed_run(
+        engine, "run-2", pipeline["id"], "tenant-a", now - timedelta(hours=1), 150, 0.02, 600
+    )
+    _insert_completed_run(engine, "run-3", pipeline["id"], "tenant-a", now, 200, 0.03, 700)
+
+    previous = db.get_previous_completed_run(pipeline["id"], exclude_run_id="run-3")
+
+    assert previous is not None
+    assert previous["run_id"] == "run-2"
+    assert previous["rows_loaded"] == 150
+    assert previous["cost_usd"] == 0.02
+    assert previous["total_tokens"] == 600
+
+
+def test_get_previous_completed_run_returns_none_for_first_fire(engine: Engine) -> None:
+    with engine.begin() as conn:
+        conn.execute(
+            users_table.insert().values(id="tenant-a", created_at=datetime.now(tz=timezone.utc))
+        )
+    pipeline = db.create_saved_pipeline("tenant-a", "A", "postgres", "spec a", "0 3 * * *")
+    now = datetime.now(tz=timezone.utc)
+    _insert_completed_run(engine, "run-1", pipeline["id"], "tenant-a", now, 100, 0.01, 500)
+
+    previous = db.get_previous_completed_run(pipeline["id"], exclude_run_id="run-1")
+
+    assert previous is None
+
+
+def test_get_previous_completed_run_ignores_other_pipelines(engine: Engine) -> None:
+    with engine.begin() as conn:
+        conn.execute(
+            users_table.insert().values(id="tenant-a", created_at=datetime.now(tz=timezone.utc))
+        )
+    pipeline_a = db.create_saved_pipeline("tenant-a", "A", "postgres", "spec a", "0 3 * * *")
+    pipeline_b = db.create_saved_pipeline("tenant-a", "B", "postgres", "spec b", "0 3 * * *")
+    now = datetime.now(tz=timezone.utc)
+    _insert_completed_run(engine, "run-a1", pipeline_a["id"], "tenant-a", now, 100)
+    _insert_completed_run(engine, "run-b1", pipeline_b["id"], "tenant-a", now, 999)
+
+    previous = db.get_previous_completed_run(pipeline_a["id"], exclude_run_id="run-does-not-exist")
+
+    assert previous is not None
+    assert previous["run_id"] == "run-a1"
+
+
+def test_get_previous_completed_run_ignores_null_cost_when_no_analysis(engine: Engine) -> None:
+    """A Silver-only scheduled run (no business_question) never wrote an
+    `analysis_runs` row — cost/tokens must read back as `None`, not `0`."""
+    with engine.begin() as conn:
+        conn.execute(
+            users_table.insert().values(id="tenant-a", created_at=datetime.now(tz=timezone.utc))
+        )
+    pipeline = db.create_saved_pipeline("tenant-a", "A", "postgres", "spec a", "0 3 * * *")
+    now = datetime.now(tz=timezone.utc)
+    _insert_completed_run(engine, "run-1", pipeline["id"], "tenant-a", now, 100)  # no analysis row
+
+    previous = db.get_previous_completed_run(pipeline["id"], exclude_run_id="run-does-not-exist")
+
+    assert previous is not None
+    assert previous["cost_usd"] is None
+    assert previous["total_tokens"] is None
 
 
 def test_record_pipeline_run_updates_task_and_leaves_next_run_at_untouched(
