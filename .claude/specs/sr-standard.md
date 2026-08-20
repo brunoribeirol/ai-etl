@@ -157,26 +157,31 @@ Template: `## [Unreleased]` → mover para `## [vX.Y.Z] - YYYY-MM-DD` ao taggear
 | Contexto do TCC | `~/Documents/Obsidian Vault/tcc/` |
 
 ### ADR Numbering
-Próximo ADR disponível: ADR-005
+Próximo ADR disponível: ADR-016 (atualizado 20/08/2026 — ADR-005 a ADR-015 já existem, ver `docs/adr/`).
 Verificar `docs/adr/` antes de criar.
 
 ---
 
 ## 8. SaaS Roadmap — pontos de atenção futuros
 
-Não implementar agora, mas NÃO criar dívida técnica invisível.
-Cada item abaixo deve ter um ADR quando for implementar.
+**Atualizado 20/08/2026** — a maioria dos itens originais desta tabela já foi implementada (Sprints 1-4, 6, 8, 9, 10, 11, 12, 23). Fonte de verdade agora é o roadmap unificado de 29 sprints no Vault: `~/Documents/Obsidian Vault/tcc/artefact/sprint-roadmap.md` (1-11) + `product-roadmap-post-tcc.md` (12-29). Esta seção fica só como referência histórica de quais decisões já viraram ADR.
 
-| Área | Estado atual | O que muda para SaaS |
+| Área | Estado atual (20/08/2026) | ADR |
 |---|---|---|
-| Multi-tenancy | POSTGRES_URL único | Connection pool por tenant; row-level security |
-| Armazenamento de runs | `./runs/` local | S3/GCS configurável; prefixado por tenant |
-| Sandbox | exec() com SAFE_GLOBALS | Docker/gVisor por execução |
-| Autenticação | Nenhuma | JWT/OAuth2 middleware antes dos agentes |
-| Rate limiting | Nenhum | Por tenant, por modelo de LLM |
-| Configuração | .env fixo | Config service (SSM, Vault) por ambiente |
-| Billing | N/A | Metering de tokens LLM + execuções por tenant |
-| Isolamento de dados | Nenhum | Tenant ID em todo audit log e storage |
+| Multi-tenancy | ✅ Feito — `tenant_id` real via Clerk, isolamento por tenant | ADR-006 |
+| Armazenamento de runs | ✅ Feito — `StorageBackend` local/S3, prefixado por tenant | ADR-009 |
+| Sandbox | ✅ Unificado (`multiprocessing.Process`, timeout real, timeout escalado por tamanho de dado) — Docker/gVisor não avaliado ainda | ADR-007, ADR-013 |
+| Autenticação | ✅ Feito — Clerk JWT via middleware | ADR-006, ADR-011 |
+| Rate limiting | ✅ Feito — fixed-window por tenant no Redis | ADR-008 |
+| Configuração | .env fixo — config service (SSM/Vault) ainda não avaliado | — (candidato: Sprint 19/24 do roadmap de produto) |
+| Billing | Custo por execução rastreado; billing real (Stripe) ainda não implementado | ADR-008 (custo) — billing é Sprint v1.0 do roadmap de produto |
+| Isolamento de dados | ✅ Feito — tenant_id em audit log e storage | ADR-006, ADR-009 |
+| Escala (datasets grandes) | ✅ Feito — perfilado e corrigido contra 204k linhas × 300 colunas (schema cap + timeout dinâmico) | ADR-013 |
+| Diversidade de fontes | ✅ Feito — CSV/Postgres/REST(+auth+OAuth2)/Document/SQLite/MySQL/MongoDB | ADR-010, ADR-012 |
+| Multi-cloud | IaC AWS drafted (Terraform, ECS Fargate), não aplicado — prova de portabilidade, não migração | ADR-015 |
+| Robustez a dado sujo do mundo real | Não testado além do estudo de caso sintético | Sprint 22 do roadmap de produto |
+| Fallback multi-provedor de LLM | ✅ Suporte a Anthropic/Google/Ollama além de OpenAI (seleção via config, sem failover automático ainda) | ADR-014 |
+| Compliance formal (SOC2/LGPD/GDPR) | Nenhum | Sprint 24 do roadmap de produto |
 
 ---
 
