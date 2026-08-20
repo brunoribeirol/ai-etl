@@ -2,7 +2,7 @@
 
 > Living doc. Updated at the end of meaningful work sessions, not per-commit. Source of truth for repo/code state; the Obsidian vault (`~/Documents/Obsidian Vault/tcc/`) is the source of truth for the academic TCC narrative and product/strategy context.
 
-**Last updated:** 2026-08-20, end of session — **parallel sprint batch complete: Sprints 8, 9, 10, 11, 12, and 23 all merged to `main`.** See "Start here next session" below for the full orchestration writeup and what's still open.
+**Last updated:** 2026-08-20 — **second parallel batch: Sprints 22 and 13 merged to `main`** (Sprints 8, 9, 10, 11, 12, 23 already merged earlier the same day — see below). Sprint 13's code (including migration `0006`) is in `main`, but the migration has **not** been applied to production Supabase and Celery beat has **not** been deployed as a new Railway service — both deliberately deferred, pending owner decision. See "Start here next session" below for the full orchestration writeup.
 
 ## Start here next session
 
@@ -122,6 +122,111 @@ coverage, `csv_source.py` at 99% (well above the 70% adapter floor); `bandit`/`p
 pre-existing `assert` in `api/deps.py`, no new findings, no known CVEs (including the new
 `charset-normalizer` dependency). `tests/e2e` not run locally (same Postgres/Redis
 unavailability as every prior session) — CI is the real gate.
+
+## Sprint 13 — scheduled (recurring) pipelines (branch `feat/sprint13-scheduled-pipelines`, PR open, not merged, checkpoint required)
+
+New `saved_pipelines` table (migration `0006`, ADR-016) — a persisted spec +
+cron schedule + tenant, distinct from `runs`/`analysis_runs` (still one row
+per *execution*, avulso or scheduled). Fired by a new Celery beat entry
+(`core/celery_app.py::beat_schedule`, `services/scheduler.py::
+check_scheduled_pipelines_task`, `AI_ETL_SCHEDULER_INTERVAL_SECONDS`, default
+60s) that reuses the existing `execution_queue.enqueue_analysis()` — the same
+function `POST /runs` calls — so a scheduled run is audited identically to
+an avulso one and still respects the per-tenant rate limit. **Requires a new
+Celery beat process in production** (same Docker image as the existing
+worker, different Custom Start Command: `celery -A ai_etl.core.celery_app
+beat`) — not yet deployed to Railway, since the PR isn't merged.
+
+**ADR-016 Decision 3 (data-model decision other sprints inherit)**: only
+"live" source types — `postgres`/`sqlite`/`mysql`/`mongodb`/`rest` — can be
+scheduled, never `csv`/`document` (browser uploads). Enforced by an explicit
+`source_type` field on `saved_pipelines`, validated against an allowlist at
+`POST /pipelines`/`PATCH /pipelines/{id}` time — deliberately **not** an LLM
+round-trip through the Orchestrator (would add cost/latency/an
+`OPENAI_API_KEY` dependency to a plain CRUD request for a check that should
+be deterministic).
+
+New: `docs/adr/ADR-016-scheduled-pipelines-data-model.md`,
+`alembic/versions/0006_saved_pipelines.py`, `src/ai_etl/core/scheduling.py`
+(cron validation/next-fire-time via `croniter`, new dependency),
+`src/ai_etl/core/paths.py` (shared `RUNS_DIR`, re-exported from
+`api/config.py`), `src/ai_etl/services/scheduler.py`,
+`src/ai_etl/api/routers/pipelines.py` (`GET/POST /pipelines`,
+`GET/PATCH /pipelines/{id}`), CRUD functions in `audit/db.py`
+(`create_saved_pipeline`/`list_saved_pipelines`/`get_saved_pipeline`/
+`update_saved_pipeline`/`list_due_pipelines`/`claim_due_pipeline`/
+`release_pipeline_claim`/`record_pipeline_run`). Frontend:
+`frontend/src/app/pipelines/page.tsx` + `frontend/src/components/
+pipelines-manager.tsx` — minimal create/pause/resume/edit UI, reuses
+existing shadcn `Card`/`Button`/`Input`/`Textarea` (no new shadcn component
+installed; `source_type` is a plain native `<select>`).
+
+**Post-PR code review (`/code-review` on PR #62) caught two real
+concurrency bugs, both fixed same-session, before merge — see ADR-016's
+"Addendum" section for full detail:**
+1. **Duplicate fires from overlapping Celery beat ticks.** The first cut
+   only advanced `next_run_at` *after* `enqueue_analysis` succeeded; an
+   overrunning tick (many due pipelines, a slow Redis check, worker
+   backlog) would let the next tick see the same pipeline as still due and
+   fire it twice. Fixed with `claim_due_pipeline` — a `next_run_at`
+   compare-and-swap `UPDATE`, executed *before* `enqueue_analysis`, so only
+   one overlapping tick can win a given due fire; the loser skips it,
+   no duplicate run. `release_pipeline_claim` reverts the claim if
+   `enqueue_analysis` then fails, so the pipeline retries next tick rather
+   than waiting a full cron period.
+2. **Schedule drift.** The replacement `next_run_at` was computed from
+   `datetime.now()` at tick time, not from the pipeline's own previous
+   `next_run_at` — a "every minute" cron under load would drift later on
+   every fire. Fixed by passing the pipeline's pre-claim `next_run_at` as
+   `compute_next_run_at`'s base.
+3. **Minor**: `services/scheduler.py` duplicated the `"./runs"` literal
+   instead of sharing `api/config.py`'s `RUNS_DIR` — fixed by extracting the
+   constant to `core/paths.py` (services/core sit below api/ in this
+   project's layering, so services/ imports from core/, not api/;
+   `api/config.py` now re-exports it unchanged for existing call sites).
+
+**Verified locally** (no Docker daemon in this sandbox, consistent with
+prior sessions' documented limitation): `make check`'s pieces run directly —
+`ruff check`/`format --check` clean, `mypy --strict` clean (no local hang
+this session), `pytest tests/unit` 422 passed, 92% coverage; `bandit`/
+`pip-audit` clean, no new findings. The Alembic migration was verified for
+real against a throwaway local Postgres (Homebrew `postgresql@17` binary,
+not Docker): `alembic upgrade head` (0001→0006) applied cleanly, `\d
+saved_pipelines` matched the table definition exactly, `alembic downgrade
+-1` cleanly dropped the table, and re-`upgrade head` reapplied cleanly. The
+sprint's "3 consecutive fires, no manual intervention" definition of done
+was re-exercised against that same real Postgres **after the concurrency
+fix** (3 sequential real fires each still advance `next_run_at` and record a
+new `last_task_id`, unchanged from before the fix), then extended with two
+scenarios targeting the review's findings directly:
+- **Overlapping-tick duplicate-fire guard**: forced a pipeline due, then
+  called `check_scheduled_pipelines_task` twice back-to-back with no
+  re-forcing in between (simulating a second tick starting before the first
+  finished) — `enqueue_analysis` was called exactly once, not twice. The
+  first call's claim atomically advanced `next_run_at` past "now" as part of
+  firing, so the second call's own `list_due_pipelines()` read no longer
+  saw the pipeline as due at all — the same guarantee a losing
+  `claim_due_pipeline` compare-and-swap gives if a second tick's read
+  happens to race in between (covered directly, without needing real
+  thread/process concurrency, by `test_claim_due_pipeline_is_a_compare_and_
+  swap_second_caller_loses` in `tests/unit/test_saved_pipelines_db.py`).
+- **Rate-limit release-and-retry**: forced a pipeline due, made
+  `enqueue_analysis` raise `RateLimitExceededError` — the tick reported it
+  skipped, and `next_run_at` was confirmed back at its original due time
+  (not advanced) via `release_pipeline_claim`; a following tick with
+  `enqueue_analysis` succeeding fired it normally, proving a rate-limited
+  scheduled pipeline is retried on the very next tick rather than silently
+  waiting a full cron period.
+
+Frontend: `npm run lint` and `npm run build` both clean with
+the new `/pipelines` route included.
+
+**Not done in this session, flagged for the merge-checkpoint conversation**:
+Celery beat isn't yet deployed as a Railway service (no new Railway
+provisioning was done — checkpoint is explicitly pre-merge); no real
+end-to-end fire was observed against a live Redis/Celery worker (sandbox has
+no Docker daemon); Stripe/billing per saved pipeline is out of scope
+(ADR-016's own Consequences section).
 
 ## Sprint 8 — model comparison + stability (branch `feat/sprint8-model-comparison`, PR open, not merged)
 

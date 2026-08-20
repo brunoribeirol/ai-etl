@@ -24,11 +24,21 @@ the point a task is actually enqueued or a worker actually starts.
 import os
 
 from celery import Celery
+from celery.schedules import schedule
 
 
 def _redis_url() -> str:
     return os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
+
+# Sprint 13 (ADR-016) — how often the beat process checks for due saved
+# pipelines. A plain interval (`schedule(seconds=...)`), not a crontab entry
+# itself: each *saved pipeline* has its own cron schedule, evaluated inside
+# `check_scheduled_pipelines_task`; this is just the polling cadence of that
+# check. Configurable so tests/local verification can use a short interval
+# (see the sprint's "3 consecutive fires" definition of done) without a
+# production redeploy needing a code change.
+SCHEDULER_INTERVAL_SECONDS = int(os.getenv("AI_ETL_SCHEDULER_INTERVAL_SECONDS", "60"))
 
 celery_app = Celery("ai_etl", broker=_redis_url(), backend=_redis_url())
 celery_app.conf.update(
@@ -39,7 +49,10 @@ celery_app.conf.update(
     # and the worker would reject every enqueued run as "unregistered task".
     # `include` makes the worker import it at startup too, independent of
     # whatever CLI flags the actual `celery worker` invocation happens to use.
-    include=["ai_etl.services.execution_queue"],
+    # `services.scheduler` (Sprint 13) is included the same way, for the
+    # same reason — the beat process only *schedules* the task by name; a
+    # worker still needs to have imported it to execute it.
+    include=["ai_etl.services.execution_queue", "ai_etl.services.scheduler"],
     task_serializer="json",
     result_serializer="json",
     accept_content=["json"],
@@ -51,4 +64,15 @@ celery_app.conf.update(
     # worker side.
     result_expires=3600,
     task_track_started=True,
+    # Sprint 13 (ADR-016) — requires a separate `celery -A
+    # ai_etl.core.celery_app beat` process running in production (same image
+    # as the existing worker, different Custom Start Command) to actually
+    # tick; the web/API process and the plain worker process don't run beat
+    # themselves. See ADR-016 Decision 2.
+    beat_schedule={
+        "check-scheduled-pipelines": {
+            "task": "ai_etl.check_scheduled_pipelines",
+            "schedule": schedule(run_every=SCHEDULER_INTERVAL_SECONDS),
+        },
+    },
 )
