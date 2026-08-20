@@ -120,3 +120,91 @@ def test_send_slack_digest_returns_false_on_http_error(monkeypatch: pytest.Monke
     monkeypatch.setattr(notifications.httpx, "post", _fake_post)
 
     assert notifications.send_slack_digest([], "fallback") is False
+
+
+def test_send_teams_digest_returns_false_when_not_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("TEAMS_WEBHOOK_URL", raising=False)
+    assert notifications.send_teams_digest("subject", "body") is False
+
+
+def test_send_teams_digest_posts_adaptive_card_and_returns_true(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("TEAMS_WEBHOOK_URL", "https://prod-00.eastus.logic.azure.com/workflows/abc")
+    captured: dict = {}
+
+    def _fake_post(url, json=None, timeout=None):  # noqa: ANN001
+        captured["url"] = url
+        captured["json"] = json
+        return _FakeResponse(200)
+
+    monkeypatch.setattr(notifications.httpx, "post", _fake_post)
+
+    result = notifications.send_teams_digest("Subject", "Body text")
+
+    assert result is True
+    assert captured["url"] == "https://prod-00.eastus.logic.azure.com/workflows/abc"
+    card = captured["json"]["attachments"][0]["content"]
+    assert card["type"] == "AdaptiveCard"
+    body_texts = [block["text"] for block in card["body"]]
+    assert "Subject" in body_texts
+    assert "Body text" in body_texts
+
+
+def test_send_teams_digest_returns_false_on_http_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TEAMS_WEBHOOK_URL", "https://prod-00.eastus.logic.azure.com/workflows/abc")
+
+    def _fake_post(*args, **kwargs):  # noqa: ANN001, ANN002, ANN003
+        return _FakeResponse(500)
+
+    monkeypatch.setattr(notifications.httpx, "post", _fake_post)
+
+    assert notifications.send_teams_digest("s", "b") is False
+
+
+def test_send_google_chat_digest_returns_false_when_not_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("GOOGLE_CHAT_WEBHOOK_URL", raising=False)
+    assert notifications.send_google_chat_digest("body") is False
+
+
+def test_send_google_chat_digest_posts_text_and_returns_true(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(
+        "GOOGLE_CHAT_WEBHOOK_URL",
+        "https://chat.googleapis.com/v1/spaces/AAA/messages?key=k&token=t",
+    )
+    captured: dict = {}
+
+    def _fake_post(url, json=None, timeout=None):  # noqa: ANN001
+        captured["url"] = url
+        captured["json"] = json
+        return _FakeResponse(200)
+
+    monkeypatch.setattr(notifications.httpx, "post", _fake_post)
+
+    result = notifications.send_google_chat_digest("Body text")
+
+    assert result is True
+    assert captured["url"] == "https://chat.googleapis.com/v1/spaces/AAA/messages?key=k&token=t"
+    assert captured["json"] == {"text": "Body text"}
+
+
+def test_send_google_chat_digest_returns_false_on_http_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(
+        "GOOGLE_CHAT_WEBHOOK_URL",
+        "https://chat.googleapis.com/v1/spaces/AAA/messages?key=k&token=t",
+    )
+
+    def _fake_post(*args, **kwargs):  # noqa: ANN001, ANN002, ANN003
+        return _FakeResponse(403)
+
+    monkeypatch.setattr(notifications.httpx, "post", _fake_post)
+
+    assert notifications.send_google_chat_digest("body") is False

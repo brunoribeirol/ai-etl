@@ -63,6 +63,8 @@ def test_no_drift_returns_triggered_false_and_sends_nothing(mocker) -> None:
     mocker.patch("ai_etl.services.alerting.compute_cost_usd", return_value=0.0102)
     mock_email = mocker.patch("ai_etl.services.alerting.send_email_digest")
     mock_slack = mocker.patch("ai_etl.services.alerting.send_slack_digest")
+    mock_teams = mocker.patch("ai_etl.services.alerting.send_teams_digest")
+    mock_google_chat = mocker.patch("ai_etl.services.alerting.send_google_chat_digest")
 
     result = alerting.check_drift_and_notify(
         pipeline=_pipeline(),
@@ -78,8 +80,12 @@ def test_no_drift_returns_triggered_false_and_sends_nothing(mocker) -> None:
     assert result["triggered"] is False
     assert result["email_sent"] is False
     assert result["slack_sent"] is False
+    assert result["teams_sent"] is False
+    assert result["google_chat_sent"] is False
     mock_email.assert_not_called()
     mock_slack.assert_not_called()
+    mock_teams.assert_not_called()
+    mock_google_chat.assert_not_called()
 
 
 def test_drift_over_threshold_triggers_digest_delivery(mocker) -> None:
@@ -98,6 +104,10 @@ def test_drift_over_threshold_triggers_digest_delivery(mocker) -> None:
     mocker.patch("ai_etl.services.alerting.compute_cost_usd", return_value=0.02)
     mock_email = mocker.patch("ai_etl.services.alerting.send_email_digest", return_value=True)
     mock_slack = mocker.patch("ai_etl.services.alerting.send_slack_digest", return_value=True)
+    mock_teams = mocker.patch("ai_etl.services.alerting.send_teams_digest", return_value=True)
+    mock_google_chat = mocker.patch(
+        "ai_etl.services.alerting.send_google_chat_digest", return_value=True
+    )
 
     result = alerting.check_drift_and_notify(
         pipeline=_pipeline(drift_threshold_pct=20.0),
@@ -113,9 +123,13 @@ def test_drift_over_threshold_triggers_digest_delivery(mocker) -> None:
     assert result["triggered"] is True
     assert result["email_sent"] is True
     assert result["slack_sent"] is True
+    assert result["teams_sent"] is True
+    assert result["google_chat_sent"] is True
     assert any(f["name"] == "rows_loaded" and f["triggered"] for f in result["findings"])
     mock_email.assert_called_once()
     mock_slack.assert_called_once()
+    mock_teams.assert_called_once()
+    mock_google_chat.assert_called_once()
 
 
 def test_uses_default_threshold_when_pipeline_value_missing(mocker) -> None:

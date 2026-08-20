@@ -258,3 +258,31 @@ HTTP), matching the `core/` vs `services/`/`audit/` layering
 - Once Sprint 17 lands a general comparable-run-history model, this sprint's
   direct `runs.saved_pipeline_id` query should be revisited to sit on top of
   it rather than duplicate its own notion of "previous run" indefinitely.
+
+## Addendum (2026-08-21) — Teams and Google Chat added as delivery channels
+
+At the owner's request, extended Decision 5 with two more channels, both
+following the exact opt-in/best-effort contract email and Slack already
+have: `send_teams_digest()` and `send_google_chat_digest()` in
+`services/notifications.py`, wired into `check_drift_and_notify`'s existing
+best-effort delivery block. `check_drift_and_notify`'s return dict gained
+`teams_sent`/`google_chat_sent` alongside the existing `email_sent`/
+`slack_sent` — additive, no existing key removed or renamed.
+
+- **Teams**: targets the current Power Automate "Workflows" incoming webhook
+  (an Adaptive Card payload) — Microsoft retired the legacy Office 365
+  Connector webhook format this project's earlier notes might otherwise
+  assume; the Workflows path is what a channel's own "Workflows" connector
+  setup produces today.
+- **Google Chat**: a space's Incoming Webhook, `{"text": ...}` — Google
+  Chat's `text` field renders a small Markdown-like subset natively, so the
+  same plain `text` digest field email/Slack/Teams already share is sent
+  as-is, no separate formatting needed.
+- Both reuse `services/digest.py`'s existing `subject`/`text` fields — no
+  new digest-formatting function, no new digest fields — Teams/Google Chat
+  get the same content Slack's `fallback_text` and email's plain-text body
+  already carry, just a different envelope per provider's API contract.
+- **Not verified against a real provider**, same limitation as Decision 5's
+  original two channels — no real Teams/Google Chat webhook URL available in
+  this environment. Request shape matches each provider's published API
+  contract; a real send needs zero code changes once real credentials exist.
