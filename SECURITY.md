@@ -70,6 +70,37 @@ You will receive an acknowledgement within 72 hours.
 - LLM prompts and generated code are never logged in full — only metadata
   (agent name, action, attempt count, output shape).
 
+### Database access control (Supabase)
+- **Row Level Security (RLS) must be enabled on every table in the
+  production database, even though this project never uses Supabase's
+  client SDK or its auto-generated PostgREST/GraphQL API.** Supabase
+  creates the `anon`/`authenticated` roles and grants them full CRUD on
+  every `public` schema table **by default on every new project** — those
+  grants exist whether or not the app ever uses them, and Supabase's
+  PostgREST API is reachable by default using the project's `anon` key
+  (which is not treated as a secret by Supabase's own design — safe to
+  embed client-side, which also means it circulates more freely than a
+  password). Leaving RLS off is a live, remotely exploitable hole: anyone
+  who obtains the anon key can read and write any table directly via the
+  REST API, completely bypassing Clerk auth and the FastAPI backend. A
+  real instance of this was found and fixed against production on
+  2026-08-21 — see `docs/CURRENT_STATE.md`'s "Security fix" entry from
+  that date and the Vault note `bugs-solved/supabase-rls-disabled-anon-authenticated-full-crud.md`.
+- **This app's own connection role (`postgres`, table owner) has
+  `rolbypassrls = true`**, so enabling RLS with zero policies is safe and
+  free for this project specifically — it does not break the
+  application, only blocks `anon`/`authenticated`. Confirm this is still
+  true (`SELECT rolbypassrls FROM pg_roles WHERE rolname = current_user`)
+  before assuming "just enable RLS" is a no-op fix on any other database.
+- **Every new migration that adds a table must enable RLS on it in the
+  same migration** (`op.execute("ALTER TABLE ... ENABLE ROW LEVEL
+  SECURITY")` or equivalent) — do not rely on a periodic audit to catch
+  a newly-added table with RLS off. As of 2026-08-21, none of this
+  project's existing `alembic/versions/*.py` migrations do this
+  automatically; RLS was enabled by hand, out of band, after the fact.
+  A future ADR/migration should retrofit `create_table` calls (or add a
+  dedicated migration) so this is enforced structurally, not by memory.
+
 ### Dependencies
 - `pip-audit` runs on every CI build and pre-commit hook to catch known CVEs.
 - `bandit` runs on every CI build and pre-commit hook to catch common

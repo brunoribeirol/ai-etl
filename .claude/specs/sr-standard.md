@@ -93,6 +93,7 @@ df: pd.DataFrame = state["transformed_data"]  # type: ignore[assignment]
 - API keys nunca em logs (logger redacta automaticamente)
 - SQL: `text("... WHERE id = :id", {"id": value})` — nunca f-string
 - `exec()`: apenas em `sandbox.py` com `SAFE_GLOBALS` restrito
+- **Toda migração que cria uma tabela nova (`op.create_table`) deve ligar Row Level Security nela na mesma migração** (`op.execute("ALTER TABLE ... ENABLE ROW LEVEL SECURITY")`) — o Supabase concede CRUD completo pros papéis `anon`/`authenticated` em toda tabela nova por padrão, mesmo esse projeto nunca usando o SDK/API REST do Supabase. Achado real e corrigido em produção em 20/08/2026 (ver `SECURITY.md` e vault `bugs-solved/supabase-rls-disabled-anon-authenticated-full-crud.md`) — não repita esse gap em migrações futuras.
 
 ### Limitações documentadas e aceitas para TCC
 - Sandbox `exec()` pode ser bypassed via introspection (`().__class__.__mro__[1].__subclasses__()`)
