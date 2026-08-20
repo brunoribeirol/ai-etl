@@ -212,3 +212,146 @@ def test_record_pipeline_run_updates_task_and_leaves_next_run_at_untouched(
     # next_run_at is exactly what claim_due_pipeline set — record_pipeline_run
     # must not touch it (the claim, not the record step, owns that field).
     assert reloaded["next_run_at"] == claimed_next
+
+
+# ---------------------------------------------------------------------------
+# list_pipeline_run_history (Sprint 17, ADR-017)
+# ---------------------------------------------------------------------------
+#
+# `save_run`/`save_analysis` use `postgresql.insert` (ON CONFLICT), which
+# doesn't translate to SQLite — so these tests insert directly into
+# `runs`/`analysis_runs` via plain, dialect-agnostic `sqlalchemy.insert`,
+# the same pattern `tests/unit/test_audit_db.py`'s `load_history` tests use.
+
+
+def _insert_user(engine: Engine, user_id: str) -> None:
+    from ai_etl.audit.models import users
+
+    with engine.begin() as conn:
+        conn.execute(
+            sqlalchemy.insert(users).values(id=user_id, created_at=datetime.now(timezone.utc))
+        )
+
+
+def _insert_run(
+    engine: Engine,
+    run_id: str,
+    tenant_id: str,
+    saved_pipeline_id: str | None,
+    timestamp: datetime,
+    rows_loaded: int | None = 10,
+    status: str = "completed",
+) -> None:
+    from ai_etl.audit.models import runs
+
+    with engine.begin() as conn:
+        conn.execute(
+            sqlalchemy.insert(runs).values(
+                run_id=run_id,
+                spec="spec",
+                status=status,
+                error=None,
+                rows_loaded=rows_loaded,
+                timestamp=timestamp,
+                tenant_id=tenant_id,
+                saved_pipeline_id=saved_pipeline_id,
+            )
+        )
+
+
+def _insert_analysis(
+    engine: Engine,
+    run_id: str,
+    tenant_id: str,
+    saved_pipeline_id: str | None,
+    cost_usd: float = 0.01,
+) -> None:
+    from ai_etl.audit.models import analysis_runs
+
+    with engine.begin() as conn:
+        conn.execute(
+            sqlalchemy.insert(analysis_runs).values(
+                run_id=run_id,
+                gold_subtasks=1,
+                science_subtasks=0,
+                input_tokens=10,
+                output_tokens=20,
+                total_tokens=30,
+                timestamp=datetime.now(timezone.utc),
+                tenant_id=tenant_id,
+                model_name="gpt-4o-mini",
+                cost_usd=cost_usd,
+                saved_pipeline_id=saved_pipeline_id,
+            )
+        )
+
+
+def test_list_pipeline_run_history_scopes_by_pipeline_and_tenant(engine: Engine) -> None:
+    _insert_user(engine, "tenant-a")
+    pipeline = db.create_saved_pipeline("tenant-a", "A", "postgres", "spec a", "0 3 * * *")
+    other_pipeline = db.create_saved_pipeline("tenant-a", "B", "postgres", "spec b", "0 4 * * *")
+
+    t0 = datetime(2026, 8, 1, tzinfo=timezone.utc)
+    _insert_run(engine, "run-1", "tenant-a", pipeline["id"], t0)
+    _insert_run(engine, "run-2", "tenant-a", pipeline["id"], t0 + timedelta(days=1))
+    # A different saved pipeline's run must never show up here.
+    _insert_run(engine, "run-other", "tenant-a", other_pipeline["id"], t0)
+    # An avulso (one-off) run — saved_pipeline_id is NULL — must never show up either.
+    _insert_run(engine, "run-avulso", "tenant-a", None, t0)
+
+    history = db.list_pipeline_run_history(pipeline["id"], "tenant-a")
+
+    assert [row["run_id"] for row in history] == ["run-1", "run-2"]  # oldest first
+
+
+def test_list_pipeline_run_history_returns_empty_for_other_tenant(engine: Engine) -> None:
+    _insert_user(engine, "tenant-a")
+    pipeline = db.create_saved_pipeline("tenant-a", "A", "postgres", "spec a", "0 3 * * *")
+    _insert_run(engine, "run-1", "tenant-a", pipeline["id"], datetime.now(timezone.utc))
+
+    # Same pipeline id, wrong tenant — must not leak another tenant's data.
+    assert db.list_pipeline_run_history(pipeline["id"], "tenant-b") == []
+
+
+def test_list_pipeline_run_history_joins_analysis_kpis(engine: Engine) -> None:
+    _insert_user(engine, "tenant-a")
+    pipeline = db.create_saved_pipeline("tenant-a", "A", "postgres", "spec a", "0 3 * * *")
+    now = datetime.now(timezone.utc)
+    _insert_run(engine, "run-1", "tenant-a", pipeline["id"], now, rows_loaded=250)
+    _insert_analysis(engine, "run-1", "tenant-a", pipeline["id"], cost_usd=0.0123)
+    # A Silver-only scheduled fire (no business_question) has no analysis_runs row.
+    _insert_run(engine, "run-2", "tenant-a", pipeline["id"], now + timedelta(hours=1))
+
+    history = db.list_pipeline_run_history(pipeline["id"], "tenant-a")
+
+    assert history[0]["run_id"] == "run-1"
+    assert history[0]["rows_loaded"] == 250
+    assert history[0]["cost_usd"] == 0.0123
+    assert history[0]["gold_subtasks"] == 1
+    assert history[1]["run_id"] == "run-2"
+    assert history[1]["cost_usd"] is None
+    assert history[1]["gold_subtasks"] is None
+
+
+def test_list_pipeline_run_history_limit_keeps_most_recent_runs_oldest_first(
+    engine: Engine,
+) -> None:
+    """Sprint 17 code review (PR #64) — a tight-cron pipeline can accumulate
+    thousands of runs; `limit` must bound the query to the *most recent* N
+    executions (not an arbitrary N from the start of history), while still
+    returning them oldest-first — the shape every other caller/the chart
+    expects."""
+    _insert_user(engine, "tenant-a")
+    pipeline = db.create_saved_pipeline("tenant-a", "A", "postgres", "spec a", "0 3 * * *")
+    t0 = datetime(2026, 8, 1, tzinfo=timezone.utc)
+    for i in range(5):
+        _insert_run(engine, f"run-{i}", "tenant-a", pipeline["id"], t0 + timedelta(days=i))
+
+    history = db.list_pipeline_run_history(pipeline["id"], "tenant-a", limit=2)
+
+    # The 2 most recent runs (run-3, run-4), still oldest-first.
+    assert [row["run_id"] for row in history] == ["run-3", "run-4"]
+
+
+def test_list_pipeline_run_history_default_limit_is_200(engine: Engine) -> None:
+    assert db.DEFAULT_PIPELINE_HISTORY_LIMIT == 200

@@ -44,6 +44,19 @@ runs = Table(
     Column("rows_loaded", Integer, nullable=True),
     Column("timestamp", DateTime(timezone=True), nullable=False),
     Column("tenant_id", String, ForeignKey("users.id"), nullable=False),
+    # Sprint 17 (ADR-017, migration 0007) — which saved pipeline (if any)
+    # produced this execution. Nullable: every avulso (one-off) run, and
+    # every run that predates this column, has none. No FK
+    # ON DELETE CASCADE — deleting a saved pipeline must not delete its run
+    # history (ADR-017); the column reads back NULL after such a delete
+    # instead (ON DELETE SET NULL, set explicitly in the migration).
+    Column(
+        "saved_pipeline_id",
+        String,
+        ForeignKey("saved_pipelines.id", ondelete="SET NULL"),
+        nullable=True,
+    ),
+    Index("ix_runs_saved_pipeline_id", "saved_pipeline_id"),
 )
 
 stage_latencies = Table(
@@ -84,6 +97,19 @@ analysis_runs = Table(
     # see compute_cost_usd's docstring.
     Column("model_name", String(50), nullable=True),
     Column("cost_usd", Float, nullable=True),
+    # Sprint 17 (ADR-017, migration 0007) — same linkage as runs.saved_pipeline_id
+    # above, kept on this table too since a saved pipeline's analysis-side KPIs
+    # (cost, tokens, gold/science subtask counts) are what Sprint 17's time-series
+    # view actually charts; joining back to `runs` for every query would work but
+    # duplicating the column here keeps `list_pipeline_run_history`'s query a
+    # single indexed lookup on this table instead of a join-then-filter.
+    Column(
+        "saved_pipeline_id",
+        String,
+        ForeignKey("saved_pipelines.id", ondelete="SET NULL"),
+        nullable=True,
+    ),
+    Index("ix_analysis_runs_saved_pipeline_id", "saved_pipeline_id"),
 )
 
 # Sprint 13 (ADR-016, migration 0006) — a "saved pipeline" is a persisted

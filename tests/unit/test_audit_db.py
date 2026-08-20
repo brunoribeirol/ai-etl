@@ -40,8 +40,10 @@ _ZERO_TOKENS = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
 
 @pytest.fixture(autouse=True)
 def _no_db(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(db, "_write_run_row", lambda state, tenant_id=None: None)
-    monkeypatch.setattr(db, "_write_analysis_row", lambda *args: None)
+    monkeypatch.setattr(
+        db, "_write_run_row", lambda state, tenant_id=None, saved_pipeline_id=None: None
+    )
+    monkeypatch.setattr(db, "_write_analysis_row", lambda *args, **kwargs: None)
 
 
 def _make_completed_state() -> dict:
@@ -78,7 +80,11 @@ def test_save_run_writes_row_with_correct_fields(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     captured: dict = {}
-    monkeypatch.setattr(db, "_write_run_row", lambda state, tenant_id=None: captured.update(state))
+    monkeypatch.setattr(
+        db,
+        "_write_run_row",
+        lambda state, tenant_id=None, saved_pipeline_id=None: captured.update(state),
+    )
 
     state = _make_completed_state()
     save_run(state, log_dir=str(tmp_path))
@@ -92,7 +98,11 @@ def test_save_run_failed_state_has_no_load_result(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     captured: dict = {}
-    monkeypatch.setattr(db, "_write_run_row", lambda state, tenant_id=None: captured.update(state))
+    monkeypatch.setattr(
+        db,
+        "_write_run_row",
+        lambda state, tenant_id=None, saved_pipeline_id=None: captured.update(state),
+    )
 
     state = _make_failed_state()
     save_run(state, log_dir=str(tmp_path))
@@ -235,10 +245,20 @@ def test_save_analysis_aggregates_tokens_before_writing_row(
     captured: dict = {}
 
     def fake_write(
-        run_id: str, n_gold: int, n_science: int, tokens: dict, tenant_id: str | None = None
+        run_id: str,
+        n_gold: int,
+        n_science: int,
+        tokens: dict,
+        tenant_id: str | None = None,
+        saved_pipeline_id: str | None = None,
     ) -> None:
         captured.update(
-            run_id=run_id, n_gold=n_gold, n_science=n_science, tokens=tokens, tenant_id=tenant_id
+            run_id=run_id,
+            n_gold=n_gold,
+            n_science=n_science,
+            tokens=tokens,
+            tenant_id=tenant_id,
+            saved_pipeline_id=saved_pipeline_id,
         )
 
     monkeypatch.setattr(db, "_write_analysis_row", fake_write)

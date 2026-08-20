@@ -164,9 +164,12 @@ def test_enqueue_analysis_base64_encodes_file_bytes(
         file_bytes=b"order_id,amt\n1,10.5\n",
     )
 
-    spec, question, run_dir, tenant_id, file_path, file_bytes_b64 = captured["args"]
+    spec, question, run_dir, tenant_id, file_path, file_bytes_b64, saved_pipeline_id = captured[
+        "args"
+    ]
     assert file_path == "runs/uploads/abc123.csv"
     assert base64.b64decode(file_bytes_b64) == b"order_id,amt\n1,10.5\n"
+    assert saved_pipeline_id is None
 
 
 def test_enqueue_analysis_omits_file_args_when_no_upload(
@@ -190,6 +193,31 @@ def test_enqueue_analysis_omits_file_args_when_no_upload(
 
     assert captured["args"][4] is None
     assert captured["args"][5] is None
+    assert captured["args"][6] is None
+
+
+def test_enqueue_analysis_threads_saved_pipeline_id_through_to_delay(
+    _fake_redis: _FakeRedis, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Sprint 17 (ADR-017) — a scheduled fire's `saved_pipeline_id` must reach
+    the Celery task payload, so `run_full_analysis_task` can forward it to
+    `save_run`/`save_analysis` and link the resulting run back to its
+    pipeline."""
+    captured: dict = {}
+
+    class _FakeAsyncResult:
+        id = "task-123"
+
+    class _FakeTask:
+        def delay(self, *args: object, **kwargs: object) -> _FakeAsyncResult:
+            captured["args"] = args
+            return _FakeAsyncResult()
+
+    monkeypatch.setattr(eq_module, "run_full_analysis_task", _FakeTask())
+
+    enqueue_analysis("spec", "question", "./runs", "tenant-a", saved_pipeline_id="pipeline-xyz")
+
+    assert captured["args"][6] == "pipeline-xyz"
 
 
 def test_run_full_analysis_task_rematerializes_file_before_running(
@@ -203,7 +231,12 @@ def test_run_full_analysis_task_rematerializes_file_before_running(
     file_existed_at_call_time = {}
 
     def _fake_run_full_analysis(
-        spec, business_question, run_dir, progress_callback=None, tenant_id=None
+        spec,
+        business_question,
+        run_dir,
+        progress_callback=None,
+        tenant_id=None,
+        saved_pipeline_id=None,
     ):
         file_existed_at_call_time["exists"] = dest.exists()
         file_existed_at_call_time["content"] = dest.read_bytes() if dest.exists() else None
@@ -228,7 +261,12 @@ def test_run_full_analysis_task_skips_write_when_no_file(monkeypatch: pytest.Mon
     """The manual-spec flow (no upload) must not require file_path/file_bytes_b64."""
 
     def _fake_run_full_analysis(
-        spec, business_question, run_dir, progress_callback=None, tenant_id=None
+        spec,
+        business_question,
+        run_dir,
+        progress_callback=None,
+        tenant_id=None,
+        saved_pipeline_id=None,
     ):
         return {"state": {"run_id": "r1", "status": "completed", "error": None}, "tokens": {}}
 
@@ -236,6 +274,33 @@ def test_run_full_analysis_task_skips_write_when_no_file(monkeypatch: pytest.Mon
 
     result = run_full_analysis_task("spec", "question", "./runs", "tenant-a")
     assert result["run_id"] == "r1"
+
+
+def test_run_full_analysis_task_forwards_saved_pipeline_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Sprint 17 (ADR-017) — the Celery task's own `saved_pipeline_id` kwarg
+    must reach `run_full_analysis`, not just sit unused on the task."""
+    captured: dict = {}
+
+    def _fake_run_full_analysis(
+        spec,
+        business_question,
+        run_dir,
+        progress_callback=None,
+        tenant_id=None,
+        saved_pipeline_id=None,
+    ):
+        captured["saved_pipeline_id"] = saved_pipeline_id
+        return {"state": {"run_id": "r1", "status": "completed", "error": None}, "tokens": {}}
+
+    monkeypatch.setattr(eq_module, "run_full_analysis", _fake_run_full_analysis)
+
+    run_full_analysis_task(
+        "spec", "question", "./runs", "tenant-a", saved_pipeline_id="pipeline-xyz"
+    )
+
+    assert captured["saved_pipeline_id"] == "pipeline-xyz"
 
 
 def test_get_task_status_maps_failure_result(monkeypatch: pytest.MonkeyPatch) -> None:

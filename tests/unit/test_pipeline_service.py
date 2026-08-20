@@ -96,7 +96,12 @@ def test_run_silver_pipeline_emits_progress_and_persists(monkeypatch) -> None:
 
     saved: dict[str, Any] = {}
 
-    def fake_save_run(state: Any, log_dir: str, tenant_id: str | None = None) -> pathlib.Path:
+    def fake_save_run(
+        state: Any,
+        log_dir: str,
+        tenant_id: str | None = None,
+        saved_pipeline_id: str | None = None,
+    ) -> pathlib.Path:
         saved["state"] = state
         saved["log_dir"] = log_dir
         saved["tenant_id"] = tenant_id
@@ -134,7 +139,9 @@ def test_run_silver_pipeline_reports_failure(monkeypatch) -> None:
     chunks = [{"orchestrator": {"status": "failed", "error": "Orchestrator failed: bad JSON"}}]
     monkeypatch.setattr(pipeline_service, "build_graph", lambda: _FakeGraph(chunks))
     monkeypatch.setattr(
-        pipeline_service, "save_run", lambda state, log_dir, tenant_id=None: pathlib.Path("x")
+        pipeline_service,
+        "save_run",
+        lambda state, log_dir, tenant_id=None, saved_pipeline_id=None: pathlib.Path("x"),
     )
     monkeypatch.setattr(pipeline_service, "save_stage_latencies", lambda *a, **k: None)
 
@@ -349,7 +356,7 @@ def test_run_full_analysis_calls_stages_in_order_and_persists_analysis(monkeypat
     monkeypatch.setattr(
         pipeline_service,
         "run_silver_pipeline",
-        lambda spec, run_dir, progress_callback, tenant_id=None: (
+        lambda spec, run_dir, progress_callback, tenant_id=None, saved_pipeline_id=None: (
             call_order.append("silver"),
             silver_state,
         )[1],
@@ -382,6 +389,7 @@ def test_run_full_analysis_calls_stages_in_order_and_persists_analysis(monkeypat
         log_dir: str,
         tenant_id: str | None = None,
         business_question: str = "",
+        saved_pipeline_id: str | None = None,
     ) -> pathlib.Path:
         call_order.append("save_analysis")
         saved_analysis["run_id"] = run_id
@@ -413,7 +421,9 @@ def test_run_full_analysis_short_circuits_when_silver_produces_no_data(monkeypat
     monkeypatch.setattr(
         pipeline_service,
         "run_silver_pipeline",
-        lambda spec, run_dir, progress_callback, tenant_id=None: failed_state,
+        lambda spec, run_dir, progress_callback, tenant_id=None, saved_pipeline_id=None: (
+            failed_state
+        ),
     )
 
     downstream_called = {"planner": False, "advisor": False, "save_analysis": False}
@@ -451,6 +461,7 @@ def test_run_full_analysis_forwards_progress_callback_to_every_stage(monkeypatch
         run_dir: str,
         progress_callback: pipeline_service.ProgressCallback,
         tenant_id: str | None = None,
+        saved_pipeline_id: str | None = None,
     ) -> dict[str, Any]:
         progress_callback("silver", "⚡ Executando pipeline Silver...")
         progress_callback("silver", "✅ Silver concluído em 1.0s")

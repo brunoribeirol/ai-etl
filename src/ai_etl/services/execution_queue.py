@@ -109,6 +109,7 @@ def run_full_analysis_task(
     tenant_id: str,
     file_path: str | None = None,
     file_bytes_b64: str | None = None,
+    saved_pipeline_id: str | None = None,
 ) -> dict[str, Any]:
     """Celery task wrapping `pipeline_service.run_full_analysis`.
 
@@ -137,6 +138,12 @@ def run_full_analysis_task(
     deliberate, scoped Sprint 3 fix — Sprint 4 (ADR-009, tenant-scoped S3
     storage) replaces it with a real shared store; base64-in-task-payload
     does not scale past small demo-sized files and isn't meant to.
+
+    `saved_pipeline_id` (Sprint 17, ADR-017): forwarded straight through to
+    `run_full_analysis`/`save_run`/`save_analysis` so this execution can be
+    grouped with the rest of its saved pipeline's run history. `None` for
+    every avulso (one-off) `POST /runs` call — only `services/scheduler.py`
+    passes a real value.
     """
     if file_path and file_bytes_b64:
         dest = Path(file_path)
@@ -152,7 +159,12 @@ def run_full_analysis_task(
             pass
 
     result = run_full_analysis(
-        spec, business_question, run_dir, progress_callback=_report_progress, tenant_id=tenant_id
+        spec,
+        business_question,
+        run_dir,
+        progress_callback=_report_progress,
+        tenant_id=tenant_id,
+        saved_pipeline_id=saved_pipeline_id,
     )
     state = result["state"]
     return {
@@ -170,6 +182,7 @@ def enqueue_analysis(
     tenant_id: str,
     file_path: str | None = None,
     file_bytes: bytes | None = None,
+    saved_pipeline_id: str | None = None,
 ) -> str:
     """Enforce the tenant's rate limit, then enqueue the run.
 
@@ -183,13 +196,24 @@ def enqueue_analysis(
     here, not by the caller, so callers just pass the raw bytes they already
     have (e.g. `UploadedFile.getvalue()`).
 
+    `saved_pipeline_id` (Sprint 17, ADR-017): pass the `saved_pipelines.id`
+    when this call is a scheduled fire (`services/scheduler.py`), so the
+    resulting `runs`/`analysis_runs` rows are linked back to it. `None` (the
+    default) for every avulso call, e.g. `POST /runs`.
+
     Returns the Celery task id `app.py` stores in `st.session_state` and
     polls via `get_task_status`.
     """
     check_and_increment_rate_limit(tenant_id)
     file_bytes_b64 = base64.b64encode(file_bytes).decode("ascii") if file_bytes else None
     task = run_full_analysis_task.delay(
-        spec, business_question, run_dir, tenant_id, file_path, file_bytes_b64
+        spec,
+        business_question,
+        run_dir,
+        tenant_id,
+        file_path,
+        file_bytes_b64,
+        saved_pipeline_id,
     )
     return str(task.id)
 

@@ -9,13 +9,15 @@ patch); it never itself enqueues a run.
 
 from typing import Annotated, Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from ai_etl.api.deps import get_current_tenant_id
 from ai_etl.audit.db import (
+    DEFAULT_PIPELINE_HISTORY_LIMIT,
     create_saved_pipeline,
     get_saved_pipeline,
+    list_pipeline_run_history,
     list_saved_pipelines,
     update_saved_pipeline,
 )
@@ -96,6 +98,32 @@ def create_pipeline(
         cron_schedule=body.cron_schedule,
         business_question=body.business_question,
     )
+
+
+@router.get("/{pipeline_id}/history")
+def get_pipeline_history(
+    pipeline_id: str,
+    tenant_id: Annotated[str, Depends(get_current_tenant_id)],
+    limit: int = Query(default=DEFAULT_PIPELINE_HISTORY_LIMIT, ge=1, le=1000),
+) -> list[dict[str, Any]]:
+    """Sprint 17 (ADR-017) — time series of the `limit` most recent
+    executions of one saved pipeline (oldest first), for the "Histórico
+    comparável" view: KPI trend charts and the two-run diff. 404s (rather
+    than returning an empty list) when the pipeline itself doesn't exist or
+    isn't owned by this tenant — same "unknown vs. empty" distinction
+    `get_pipeline` already makes, so the frontend can tell "no pipeline"
+    from "pipeline with no runs yet" apart.
+
+    `limit` (Sprint 17 code review, PR #64): a tight-cron pipeline can
+    accumulate thousands of runs — same unbounded-query risk `GET /runs`'s
+    own `limit` already guards against. Defaults to
+    `audit.db.DEFAULT_PIPELINE_HISTORY_LIMIT` (200); capped at 1000 so a
+    caller can widen the window without being able to request an unbounded
+    query.
+    """
+    if get_saved_pipeline(pipeline_id, tenant_id) is None:
+        raise HTTPException(status_code=404, detail="Saved pipeline not found.")
+    return list_pipeline_run_history(pipeline_id, tenant_id, limit=limit)
 
 
 @router.patch("/{pipeline_id}")

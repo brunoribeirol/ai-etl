@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 
 from ai_etl.api.deps import get_current_tenant_id
 from ai_etl.api.main import app
+from ai_etl.audit.db import DEFAULT_PIPELINE_HISTORY_LIMIT
 
 
 @pytest.fixture(autouse=True)
@@ -76,6 +77,80 @@ def test_get_pipeline_returns_row(client: TestClient, mocker) -> None:
 
     assert response.status_code == 200
     assert response.json()["name"] == "Nightly sync"
+
+
+def test_get_pipeline_history_404_when_pipeline_unknown(client: TestClient, mocker) -> None:
+    """Sprint 17 (ADR-017) — 404s before ever calling `list_pipeline_run_history`,
+    so an unowned/unknown pipeline id can't be used to probe for run history."""
+    mocker.patch("ai_etl.api.routers.pipelines.get_saved_pipeline", return_value=None)
+    mock_history = mocker.patch("ai_etl.api.routers.pipelines.list_pipeline_run_history")
+
+    response = client.get("/pipelines/no-such-id/history")
+
+    assert response.status_code == 404
+    mock_history.assert_not_called()
+
+
+def test_get_pipeline_history_returns_time_series(client: TestClient, mocker) -> None:
+    mocker.patch(
+        "ai_etl.api.routers.pipelines.get_saved_pipeline",
+        return_value=_saved_pipeline_row(),
+    )
+    history_rows = [
+        {
+            "run_id": "run-1",
+            "status": "completed",
+            "rows_loaded": 100,
+            "timestamp": datetime.now(tz=timezone.utc).isoformat(),
+            "error": None,
+            "cost_usd": 0.001,
+            "model_name": "gpt-4o-mini",
+            "total_tokens": 500,
+            "gold_subtasks": 1,
+            "science_subtasks": 0,
+        }
+    ]
+    mock_history = mocker.patch(
+        "ai_etl.api.routers.pipelines.list_pipeline_run_history",
+        return_value=history_rows,
+    )
+
+    response = client.get("/pipelines/pl-1/history")
+
+    assert response.status_code == 200
+    assert response.json() == history_rows
+    mock_history.assert_called_once_with("pl-1", "tenant-a", limit=DEFAULT_PIPELINE_HISTORY_LIMIT)
+
+
+def test_get_pipeline_history_forwards_explicit_limit(client: TestClient, mocker) -> None:
+    """Sprint 17 code review (PR #64) — `?limit=` must reach
+    `list_pipeline_run_history`, not just sit unused on the endpoint."""
+    mocker.patch(
+        "ai_etl.api.routers.pipelines.get_saved_pipeline",
+        return_value=_saved_pipeline_row(),
+    )
+    mock_history = mocker.patch(
+        "ai_etl.api.routers.pipelines.list_pipeline_run_history", return_value=[]
+    )
+
+    response = client.get("/pipelines/pl-1/history?limit=50")
+
+    assert response.status_code == 200
+    mock_history.assert_called_once_with("pl-1", "tenant-a", limit=50)
+
+
+def test_get_pipeline_history_rejects_limit_above_cap(client: TestClient, mocker) -> None:
+    """1000 is the hard ceiling (FastAPI's `Query(..., le=1000)`) — a caller
+    can widen the window but not request an unbounded query."""
+    mocker.patch(
+        "ai_etl.api.routers.pipelines.get_saved_pipeline",
+        return_value=_saved_pipeline_row(),
+    )
+    mocker.patch("ai_etl.api.routers.pipelines.list_pipeline_run_history", return_value=[])
+
+    response = client.get("/pipelines/pl-1/history?limit=5000")
+
+    assert response.status_code == 422
 
 
 def test_create_pipeline_rejects_non_live_source_type(client: TestClient, mocker) -> None:
