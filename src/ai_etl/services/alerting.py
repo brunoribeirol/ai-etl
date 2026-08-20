@@ -20,7 +20,12 @@ from ai_etl.core.drift import DriftMetric, detect_kpi_drift
 from ai_etl.core.llm import get_model_name
 from ai_etl.core.pricing import compute_cost_usd
 from ai_etl.services.digest import build_digest
-from ai_etl.services.notifications import send_email_digest, send_slack_digest
+from ai_etl.services.notifications import (
+    send_email_digest,
+    send_google_chat_digest,
+    send_slack_digest,
+    send_teams_digest,
+)
 
 DEFAULT_DRIFT_THRESHOLD_PCT = 20.0
 
@@ -94,8 +99,9 @@ def check_drift_and_notify(
     Returns `None` when there is no previous completed run to compare
     against (the pipeline's first fire) — not an error. Otherwise returns a
     small summary dict: `{"triggered": bool, "findings": list[DriftMetric],
-    "email_sent": bool, "slack_sent": bool}`. `email_sent`/`slack_sent` are
-    always `False` when `triggered` is `False` (nothing was built to send).
+    "email_sent": bool, "slack_sent": bool, "teams_sent": bool,
+    "google_chat_sent": bool}`. All four `*_sent` keys are always `False`
+    when `triggered` is `False` (nothing was built to send).
 
     Callers (`services/execution_queue.py`) are expected to wrap this in a
     try/except — see that module's docstring — since a failure here (a DB
@@ -118,7 +124,14 @@ def check_drift_and_notify(
     triggered = [f for f in findings if f["triggered"]]
 
     if not triggered:
-        return {"triggered": False, "findings": findings, "email_sent": False, "slack_sent": False}
+        return {
+            "triggered": False,
+            "findings": findings,
+            "email_sent": False,
+            "slack_sent": False,
+            "teams_sent": False,
+            "google_chat_sent": False,
+        }
 
     digest = build_digest(
         pipeline_name=pipeline["name"],
@@ -129,10 +142,14 @@ def check_drift_and_notify(
     )
     email_sent = send_email_digest(digest["subject"], digest["html"], digest["text"])
     slack_sent = send_slack_digest(digest["slack_blocks"], digest["text"])
+    teams_sent = send_teams_digest(digest["subject"], digest["text"])
+    google_chat_sent = send_google_chat_digest(digest["text"])
 
     return {
         "triggered": True,
         "findings": findings,
         "email_sent": email_sent,
         "slack_sent": slack_sent,
+        "teams_sent": teams_sent,
+        "google_chat_sent": google_chat_sent,
     }
