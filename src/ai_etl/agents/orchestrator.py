@@ -15,10 +15,22 @@ The user provided this pipeline specification:
 Extract a structured pipeline plan as JSON with these fields:
 - sources: list of data sources, each with:
     - name (string identifier)
-    - type: "csv" | "postgres" | "rest" | "document"
+    - type: "csv" | "postgres" | "sqlite" | "mysql" | "mongodb" | "rest" | "document"
     - For csv: path (file path)
     - For postgres: table (schema.table)
-    - For rest: url (endpoint URL), params (optional query params dict)
+    - For sqlite: path (SQLite .db/.sqlite file path), table (table name, no schema prefix)
+    - For mysql: table (database.table) — MySQL and MariaDB both use this type
+    - For mongodb: database (database name), collection (collection name), query (optional \
+MongoDB filter dict), limit (optional max documents to fetch)
+    - For rest: url (endpoint URL), params (optional query params dict), auth (optional; \
+only include if the spec names an environment variable or token endpoint holding a \
+credential — never invent a literal secret value): \
+{{"type": "api_key", "header": "X-API-Key", "env_var": "ENV_VAR_NAME"}} or \
+{{"type": "bearer", "env_var": "ENV_VAR_NAME"}} or \
+{{"type": "basic", "username_env_var": "ENV_VAR_NAME", "password_env_var": "ENV_VAR_NAME"}} or \
+{{"type": "oauth2_client_credentials", "token_url": "https://...", \
+"client_id_env_var": "ENV_VAR_NAME", "client_secret_env_var": "ENV_VAR_NAME", \
+"scope": "optional scope string"}}
     - For document: path (PDF or DOCX file path)
 - destination: target output, with:
     - type: "csv" | "postgres"
@@ -27,7 +39,7 @@ Extract a structured pipeline plan as JSON with these fields:
 - transformations: list of transformation descriptions in plain English
 - quality_checks: list of quality checks to apply (infer from spec, default to: null_check, duplicate_check)
 
-Available source types: csv, postgres, rest, document
+Available source types: csv, postgres, sqlite, mysql, mongodb, rest, document
 Available destination types: csv, postgres
 
 Respond ONLY with valid JSON. No explanation, no markdown code fences.

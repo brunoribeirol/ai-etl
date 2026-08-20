@@ -1,4 +1,4 @@
-.PHONY: install test test-e2e lint format format-check type-check security check db-up db-down db-test-up app-db-up app-db-down app-db-test-up db-migrate run-scenario1 run-scenario2 run-scenario3 api redis-up celery-worker clean unhide-pth
+.PHONY: install test test-e2e lint format format-check type-check security check db-up db-down db-test-up app-db-up app-db-down app-db-test-up db-migrate run-scenario1 run-scenario2 run-scenario3 api redis-up celery-worker clean unhide-pth mysql-test-up mysql-test-down mongodb-test-up mongodb-test-down
 
 install:
 	uv sync --all-extras
@@ -62,6 +62,22 @@ app-db-down:
 
 app-db-test-up:
 	docker-compose up -d app-postgres-test
+
+# Sprint 11 (ADR-012) — real MySQL/MongoDB for the mysql_source.py/
+# mongodb_source.py integration tests (tests/integration/test_mysql_source_real.py,
+# test_mongodb_source_real.py). Both self-skip if unreachable, same
+# convention as postgres-test/db-test-up.
+mysql-test-up:
+	docker-compose up -d mysql-test
+
+mysql-test-down:
+	docker-compose stop mysql-test
+
+mongodb-test-up:
+	docker-compose up -d mongodb-test
+
+mongodb-test-down:
+	docker-compose stop mongodb-test
 
 db-migrate:
 	uv run alembic upgrade head

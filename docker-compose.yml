@@ -48,6 +48,32 @@ services:
     tmpfs:
       - /var/lib/postgresql/data
 
+  # MySQL/MariaDB source connector (Sprint 11, ADR-012) — test-only service,
+  # same tmpfs/ephemeral-data convention as postgres-test. No non-test
+  # `mysql` service exists yet (no local-dev pipeline currently targets one),
+  # mirroring `postgres`/`postgres-test` being added together only because
+  # scenario 2/3 needed a real Postgres to develop against.
+  mysql-test:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: test
+      MYSQL_USER: test
+      MYSQL_PASSWORD: test
+      MYSQL_DATABASE: testdb
+    ports:
+      - "3307:3306"
+    tmpfs:
+      - /var/lib/mysql
+
+  # MongoDB source connector (Sprint 11, ADR-012) — test-only service, same
+  # ephemeral-data convention as mysql-test/postgres-test.
+  mongodb-test:
+    image: mongo:7
+    ports:
+      - "27018:27017"
+    tmpfs:
+      - /data/db
+
   # FastAPI app, for local dev parity with the Railway deploy — builds from
   # the same Dockerfile used in production (Sprint 6/ADR-011; replaced the
   # Streamlit `app` service in the PR 6 cutover). Reads its env from `.env`

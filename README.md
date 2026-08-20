@@ -25,7 +25,7 @@ ai-etl/
 │   ├── agents/          #   Orchestrator/Extractor/Transformer/Quality/Loader +
 │   │                    #   Planner/Analyst/Science/Advisor (LangGraph nodes)
 │   ├── core/            #   PipelineState, LangGraph wiring, sandboxed code exec, LLM client
-│   ├── sources/          #   csv/postgres/rest/document connectors
+│   ├── sources/          #   csv/postgres/sqlite/mysql/mongodb/rest(+auth)/document connectors
 │   ├── destinations/    #   csv/postgres writers
 │   ├── audit/            #   Postgres audit trail (runs/analysis_runs) + storage.py (local/S3)
 │   ├── services/          #   pipeline orchestration, Celery async queue, auth, spec builder
