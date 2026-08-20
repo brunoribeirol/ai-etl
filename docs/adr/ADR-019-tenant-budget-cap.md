@@ -1,8 +1,14 @@
-# ADR-017: Tenant Budget Cap — Pre-Enqueue Enforcement
+# ADR-019: Tenant Budget Cap — Pre-Enqueue Enforcement
 
 **Status:** Proposed (code complete, migration verified locally, not applied to production)
 **Date:** 2026-08-20
 **Sprint:** 29 (post-TCC product roadmap)
+**Note:** Originally drafted as ADR-017 / migration `0007`. Renumbered to
+ADR-019 / migration `0009` after a three-way ADR-number and migration-number
+collision with Sprint 17 (kept ADR-017) and Sprint 14 (ADR-018, its own
+migration `0008`, `down_revision` on Sprint 17's `0007`) — all three sprints
+were built in parallel. Merge order was set to 17 → 14 → 29; see the
+Addendum's "Renumbering" subsection for the full verification of this move.
 
 ## Context
 
@@ -35,7 +41,7 @@ project's scale.
 
 ## Decision 2 — Data model: one nullable column on `users`
 
-`users.monthly_budget_usd` (`Float`, nullable), migration `0007`. `NULL`
+`users.monthly_budget_usd` (`Float`, nullable), migration `0009`. `NULL`
 (the default for every existing and new tenant) means "no cap configured" —
 opt-in, zero behavior change for every tenant until they (or, in a future
 session with a real admin role, an operator) set one.
@@ -183,10 +189,12 @@ computes `ratio = spent / cap` whenever a cap is configured. If
   introduced by this sprint). Budget enforcement therefore only sees and
   caps the Agentic-BI-layer cost, not Silver-only LLM cost. Flagged for a
   future sprint, not fixed here — out of this sprint's stated scope.
-- Migration `0007` verified locally (Homebrew Postgres, not Docker, same
-  pattern as Sprint 13's migration `0006`): `alembic upgrade head` (0001→0007)
+- Migration `0009` verified locally (Homebrew Postgres, not Docker, same
+  pattern as Sprint 13's migration `0006`): `alembic upgrade head` (0001→0009)
   applied cleanly, `\d users` matched the new column exactly, `alembic
   downgrade -1` cleanly dropped it, re-`upgrade head` reapplied cleanly.
+  Re-verified after the merge-order renumbering (see the Addendum below) with
+  Sprint 17's and Sprint 14's real migrations staged ahead of it.
   **Not applied to the live Supabase database** — pending explicit owner
   confirmation, same checkpoint discipline as Sprint 13's `0006`.
 
@@ -261,7 +269,7 @@ real customer's workload needs concurrent capped executions.
 **Verified for real** against a throwaway local Redis (`brew install redis`,
 no Docker daemon in this environment — same substitution pattern prior
 sprints used for Postgres) plus the same throwaway Homebrew Postgres used
-for migration `0007`: two `enqueue_analysis` calls issued back-to-back for a
+for migration `0009`: two `enqueue_analysis` calls issued back-to-back for a
 tenant near its cap — first passes and is enqueued, second (before the
 first's cost is written) is rejected with `BudgetExceededError`, confirming
 only one passes; a tenant already over its cap making repeated calls never
@@ -272,6 +280,45 @@ for the equivalent fake-Redis unit coverage (`test_concurrent_enqueue_for_a_capp
 `test_inflight_lock_is_released_after_the_task_finishes`,
 `test_inflight_lock_is_released_when_enqueueing_itself_fails`,
 `test_uncapped_tenant_never_touches_the_inflight_lock`).
+
+## Addendum — renumbering (ADR-017 → ADR-019, migration `0007` → `0009`)
+
+Sprints 17, 14, and 29 (this one) were all built in parallel, each starting
+from `main` before any of the other two had merged. All three independently
+claimed `ADR-017` and migration `0007` — the "next available" numbers per
+`.claude/specs/sr-standard.md` at the time each sprint started. Sprint 17
+(`saved_pipeline_id` linkage on `runs`/`analysis_runs`) kept `ADR-017`/`0007`
+as the merge-order winner; Sprint 14 (drift alerts) became `ADR-018`,
+rewriting its own migration to `0008` with `down_revision = "0007"` pointed
+at Sprint 17's file. This sprint (29) is last in the agreed merge order
+(**17 → 14 → 29**), so it renumbers to **`ADR-019`** / migration **`0009`**,
+`down_revision = "0008"` (Sprint 14's final migration, which itself chains
+onto Sprint 17's `0007`).
+
+**Confirmed this is pure renumbering, not schema reconciliation** (unlike
+Sprint 14, which had to rewrite its migration's actual content because both
+it and Sprint 17 independently added the *same* `runs.saved_pipeline_id`
+column): this migration only ever adds `users.monthly_budget_usd`. Sprint 17
+only touches `runs`/`analysis_runs`; Sprint 14 only touches `saved_pipelines`
+and adds an index on `runs` — neither touches `users` at all, so there is no
+column-name or table-content overlap to resolve. Confirmed by re-reading
+this migration's own `upgrade()`/`downgrade()` before renumbering: two lines,
+`op.add_column("users", ...)` / `op.drop_column("users", ...)`, untouched by
+the rename.
+
+**Verified locally, full chain**: Sprint 17's `0007_run_pipeline_linkage.py`
+and Sprint 14's `0008_drift_threshold_pct.py` were temporarily copied from
+their respective branches (`feat/sprint17-comparable-run-history`,
+`feat/sprint14-drift-alerts-digest`) into this branch's `alembic/versions/`
+(not committed — same throwaway-staging trick Sprint 14's own migration
+docstring describes using against Sprint 17), then, against a fresh
+throwaway Homebrew Postgres: `alembic upgrade head` applied all nine
+migrations in order (0001→0009) cleanly; `\d users` showed
+`monthly_budget_usd` alongside Sprint 17/14's changes on `runs`/
+`saved_pipelines`, confirming no conflict; `alembic downgrade -1` cleanly
+dropped only this migration's column, leaving Sprint 17/14's schema intact;
+re-`upgrade head` reapplied cleanly. The two staged files were removed
+afterward — this branch commits only its own `0009_tenant_budget_cap.py`.
 
 ## Related
 

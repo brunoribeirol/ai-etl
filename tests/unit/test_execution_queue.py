@@ -67,7 +67,7 @@ def _fake_redis(monkeypatch: pytest.MonkeyPatch) -> _FakeRedis:
     monkeypatch.setattr(eq_module, "_redis_client", lambda: fake)
     monkeypatch.setattr(eq_module, "RATE_LIMIT_MAX_RUNS", 3)
     monkeypatch.setattr(eq_module, "RATE_LIMIT_WINDOW_SECONDS", 3600)
-    # Sprint 29 (ADR-017): default every test to "no budget cap configured"
+    # Sprint 29 (ADR-019): default every test to "no budget cap configured"
     # (a real Postgres call otherwise) — tests below that actually exercise
     # budget enforcement override this via monkeypatch themselves.
     monkeypatch.setattr(eq_module, "get_monthly_budget", lambda tenant_id: None)
@@ -456,7 +456,7 @@ def test_get_task_status_maps_failure_result(monkeypatch: pytest.MonkeyPatch) ->
     assert status["error"] == "boom"
 
 
-# --- Sprint 29 (ADR-017): tenant budget cap -------------------------------
+# --- Sprint 29 (ADR-019): tenant budget cap -------------------------------
 
 
 def test_budget_status_reports_no_cap_when_unconfigured(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -579,7 +579,7 @@ def test_enqueue_analysis_over_budget_does_not_consume_a_rate_limit_slot(
 def test_concurrent_enqueue_for_a_capped_tenant_only_one_passes(
     _fake_redis: _FakeRedis, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """ADR-017 addendum (code review fix): two concurrent `enqueue_analysis`
+    """ADR-019 addendum (code review fix): two concurrent `enqueue_analysis`
     calls for the same capped tenant, both reading `spent < cap` before
     either's cost lands in Postgres, must not both be enqueued — the second
     must be rejected by the in-flight lock, not silently allowed through."""

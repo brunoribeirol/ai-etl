@@ -818,7 +818,7 @@ def test_load_full_result_degrades_gracefully_when_csv_missing(
 
 
 # ---------------------------------------------------------------------------
-# Sprint 29 (ADR-017): tenant budget cap — get/set_monthly_budget,
+# Sprint 29 (ADR-019): tenant budget cap — get/set_monthly_budget,
 # get_monthly_spend_usd. All against the real in-memory SQLite schema, same
 # pattern as the load_history tests above.
 # ---------------------------------------------------------------------------

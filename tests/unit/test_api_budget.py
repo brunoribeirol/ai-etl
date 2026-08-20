@@ -1,4 +1,4 @@
-"""Tests for `/budget` endpoints (Sprint 29, ADR-017).
+"""Tests for `/budget` endpoints (Sprint 29, ADR-019).
 
 Same convention as `test_api_runs.py`/`test_api_pipelines.py`: mocks at the
 import site inside `api/routers/budget.py`, auth overridden via

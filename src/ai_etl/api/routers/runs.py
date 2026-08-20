@@ -129,7 +129,7 @@ async def create_run(
         # 402 Payment Required — semantically distinct from 429 (rate limit):
         # this rejection is about accumulated spend, not request cadence, and
         # doesn't self-resolve after a window; it needs the cap raised or the
-        # next billing period, not just "wait and retry" (ADR-017).
+        # next billing period, not just "wait and retry" (ADR-019).
         raise HTTPException(status_code=402, detail=str(e)) from e
 
     return {"task_id": task_id}

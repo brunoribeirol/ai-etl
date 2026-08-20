@@ -123,7 +123,7 @@ def test_create_run_rate_limited(client: TestClient, mocker) -> None:
 
 
 def test_create_run_over_budget(client: TestClient, mocker) -> None:
-    """Sprint 29 (ADR-017): a tenant over their monthly budget cap gets a 402,
+    """Sprint 29 (ADR-019): a tenant over their monthly budget cap gets a 402,
     distinct from the 429 rate-limit case above."""
     mocker.patch(
         "ai_etl.api.routers.runs.enqueue_analysis",

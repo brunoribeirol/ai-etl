@@ -1,8 +1,8 @@
-"""`/budget` endpoints — per-tenant monthly budget cap (Sprint 29, ADR-017).
+"""`/budget` endpoints — per-tenant monthly budget cap (Sprint 29, ADR-019).
 
 Self-service, same trust model as `/pipelines`: a tenant can only read or
 set their own cap (`get_current_tenant_id`), since this codebase has no
-separate admin/billing role yet (ADR-017 flags this as a known limitation).
+separate admin/billing role yet (ADR-019 flags this as a known limitation).
 
 `GET /budget` is also how a frontend would surface the "near the cap" alert
 `services/execution_queue.py::check_budget_cap` computes on every enqueue —

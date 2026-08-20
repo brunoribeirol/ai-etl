@@ -98,7 +98,7 @@ def test_rate_limited_pipeline_releases_its_claim(mocker) -> None:
 
 
 def test_budget_exceeded_pipeline_releases_its_claim(mocker) -> None:
-    """Sprint 29 (ADR-017): a tenant over their monthly budget cap must not
+    """Sprint 29 (ADR-019): a tenant over their monthly budget cap must not
     stop the tick, and the claim it won must be released so the pipeline is
     retried next tick — same treatment as a rate-limited pipeline above."""
     mocker.patch(

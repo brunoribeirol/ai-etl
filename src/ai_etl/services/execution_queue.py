@@ -60,11 +60,11 @@ logger = logging.getLogger(__name__)
 RATE_LIMIT_MAX_RUNS = int(os.getenv("AI_ETL_RATE_LIMIT_MAX_RUNS", "10"))
 RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("AI_ETL_RATE_LIMIT_WINDOW_SECONDS", "3600"))
 
-# Sprint 29 (ADR-017) — fraction of a tenant's monthly_budget_usd at which
+# Sprint 29 (ADR-019) — fraction of a tenant's monthly_budget_usd at which
 # check_budget_cap starts warning, before the cap is actually reached.
 BUDGET_WARNING_THRESHOLD_RATIO = float(os.getenv("AI_ETL_BUDGET_WARNING_THRESHOLD_RATIO", "0.8"))
 
-# Sprint 29 (ADR-017 addendum) — safety-net TTL on the per-tenant in-flight
+# Sprint 29 (ADR-019 addendum) — safety-net TTL on the per-tenant in-flight
 # budget lock (see check_budget_cap's docstring). Only matters if a worker
 # crashes/is killed after acquiring the lock and before releasing it in
 # run_full_analysis_task's `finally` — bounds how long a capped tenant could
@@ -83,7 +83,7 @@ class RateLimitExceededError(Exception):
 class BudgetExceededError(Exception):
     """Raised by `enqueue_analysis` when a tenant has a `monthly_budget_usd`
     cap configured and has already spent at or above it this calendar month
-    (ADR-017). Never raised for a tenant with no cap configured (`None`)."""
+    (ADR-019). Never raised for a tenant with no cap configured (`None`)."""
 
 
 class BudgetStatus(TypedDict):
@@ -185,13 +185,13 @@ def get_budget_status(tenant_id: str) -> BudgetStatus:
 
 
 def check_budget_cap(tenant_id: str) -> BudgetStatus:
-    """Pre-enqueue budget gate (ADR-017, Sprint 29) — mirrors
+    """Pre-enqueue budget gate (ADR-019, Sprint 29) — mirrors
     `check_and_increment_rate_limit`'s shape (a cheap, synchronous check
     ahead of `.delay()`, its own exception the API layer maps to an HTTP
     error) but the "count" being checked is real accumulated USD spend for
     the current calendar month, not a request counter.
 
-    **Approach (a), not (b)** (see ADR-017's "Decisão real" section for the
+    **Approach (a), not (b)** (see ADR-019's "Decisão real" section for the
     full trade-off): this checks spend *already accumulated* from completed
     runs (`get_budget_status`, itself `SUM(analysis_runs.cost_usd)` for the
     tenant this month via `audit.db.get_monthly_spend_usd`) against the cap,
@@ -208,9 +208,9 @@ def check_budget_cap(tenant_id: str) -> BudgetStatus:
     it (e.g. a task that dies after being enqueued but before `save_analysis`
     runs), for no correctness benefit at this project's scale.
 
-    **Concurrency (ADR-017 addendum, post-PR-#63 code review fix)**: reading
+    **Concurrency (ADR-019 addendum, post-PR-#63 code review fix)**: reading
     `spent` from Postgres and comparing it to the cap is not, by itself,
-    enough to bound the overshoot to "at most one run" the way ADR-017's
+    enough to bound the overshoot to "at most one run" the way ADR-019's
     Decision 3 originally promised. Two `enqueue_analysis` calls arriving
     close together both read the same pre-execution `spent` (neither run has
     completed yet, so neither's cost has landed in `analysis_runs`), both see
@@ -226,7 +226,7 @@ def check_budget_cap(tenant_id: str) -> BudgetStatus:
     real cost is persisted and the lock is released (`run_full_analysis_task`'s
     `finally`) or the safety-net TTL expires. This trades some concurrency
     for capped tenants (at most one execution in flight while unreconciled)
-    for the overshoot guarantee ADR-017 actually promises; uncapped tenants
+    for the overshoot guarantee ADR-019 actually promises; uncapped tenants
     (the default) are entirely unaffected — the lock is only acquired when
     `monthly_budget_usd` is set.
 
@@ -415,7 +415,7 @@ def enqueue_analysis(
 ) -> str:
     """Enforce the tenant's budget cap and rate limit, then enqueue the run.
 
-    Raises `BudgetExceededError` (ADR-017, Sprint 29) before touching Celery
+    Raises `BudgetExceededError` (ADR-019, Sprint 29) before touching Celery
     or the rate limiter at all if the tenant has a `monthly_budget_usd` cap
     configured and has already spent at or above it this calendar month, or
     if another of the tenant's executions is still in flight and

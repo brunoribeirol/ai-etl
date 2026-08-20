@@ -100,7 +100,7 @@ def check_scheduled_pipelines_task() -> dict[str, Any]:
                 saved_pipeline_id=pipeline_id,
             )
         except (RateLimitExceededError, BudgetExceededError):
-            # Sprint 29 (ADR-017): a scheduled pipeline whose tenant is over
+            # Sprint 29 (ADR-019): a scheduled pipeline whose tenant is over
             # their monthly budget cap is skipped exactly like a rate-limited
             # one — released to retry next tick, never silently charged.
             release_pipeline_claim(pipeline_id, new_next_run_at, expected_next_run_at)
