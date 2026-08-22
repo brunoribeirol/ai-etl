@@ -119,7 +119,11 @@ def _level_b_retry_countdown(retries_so_far: int) -> int:
     retry (60s, 120s, ... at the defaults), capped implicitly by
     `SCHEDULED_PIPELINE_MAX_RETRIES` itself (there's no attempt past the
     max to need a longer countdown for)."""
-    return SCHEDULED_PIPELINE_RETRY_BACKOFF_SECONDS * (2**retries_so_far)
+    # `int(...)`: typeshed types `int.__pow__` as returning `Any` (a negative
+    # exponent would yield a float) -- `retries_so_far` is never negative
+    # here, but mypy can't know that, so the explicit cast keeps this
+    # function's own `-> int` contract honest instead of silently widening.
+    return int(SCHEDULED_PIPELINE_RETRY_BACKOFF_SECONDS * (2**retries_so_far))
 
 
 class RateLimitExceededError(Exception):
