@@ -9,14 +9,17 @@ from datetime import datetime, timezone
 import pytest
 from fastapi.testclient import TestClient
 
-from ai_etl.api.deps import get_current_tenant_id
+from ai_etl.api.deps import get_current_auth_context
 from ai_etl.api.main import app
 from ai_etl.audit.db import DEFAULT_PIPELINE_HISTORY_LIMIT
 
 
 @pytest.fixture(autouse=True)
 def _override_auth() -> None:
-    app.dependency_overrides[get_current_tenant_id] = lambda: "tenant-a"
+    app.dependency_overrides[get_current_auth_context] = lambda: {
+        "tenant_id": "tenant-a",
+        "role": "editor",
+    }
     yield
     app.dependency_overrides.clear()
 
@@ -358,3 +361,39 @@ def test_patch_pipeline_rejects_non_live_source_type(client: TestClient, mocker)
 
     assert response.status_code == 400
     mock_update.assert_not_called()
+
+
+def test_viewer_role_cannot_create_pipeline(client: TestClient, mocker) -> None:
+    """RBAC (Sprint 19, ADR-021): a `viewer` cannot configure a pipeline —
+    only `editor` can, even though both roles share the same tenant_id."""
+    app.dependency_overrides[get_current_auth_context] = lambda: {
+        "tenant_id": "tenant-a",
+        "role": "viewer",
+    }
+    mock_create = mocker.patch("ai_etl.api.routers.pipelines.create_saved_pipeline")
+
+    response = client.post(
+        "/pipelines",
+        json={
+            "name": "Nightly sync",
+            "source_type": "postgres",
+            "spec": "Read schema.orders from postgres",
+            "cron_schedule": "0 3 * * *",
+        },
+    )
+
+    assert response.status_code == 403
+    mock_create.assert_not_called()
+
+
+def test_viewer_role_can_still_list_pipelines(client: TestClient, mocker) -> None:
+    """Read access stays available to a `viewer` — only mutation is gated."""
+    app.dependency_overrides[get_current_auth_context] = lambda: {
+        "tenant_id": "tenant-a",
+        "role": "viewer",
+    }
+    mocker.patch("ai_etl.api.routers.pipelines.list_saved_pipelines", return_value=[])
+
+    response = client.get("/pipelines")
+
+    assert response.status_code == 200

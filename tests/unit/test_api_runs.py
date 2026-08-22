@@ -10,14 +10,17 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
-from ai_etl.api.deps import get_current_tenant_id
+from ai_etl.api.deps import get_current_auth_context
 from ai_etl.api.main import app
 from ai_etl.services.execution_queue import BudgetExceededError, RateLimitExceededError
 
 
 @pytest.fixture(autouse=True)
 def _override_auth() -> None:
-    app.dependency_overrides[get_current_tenant_id] = lambda: "tenant-a"
+    app.dependency_overrides[get_current_auth_context] = lambda: {
+        "tenant_id": "tenant-a",
+        "role": "editor",
+    }
     yield
     app.dependency_overrides.clear()
 

@@ -8,13 +8,16 @@ import site inside `api/routers/budget.py`, auth overridden via
 import pytest
 from fastapi.testclient import TestClient
 
-from ai_etl.api.deps import get_current_tenant_id
+from ai_etl.api.deps import get_current_auth_context
 from ai_etl.api.main import app
 
 
 @pytest.fixture(autouse=True)
 def _override_auth() -> None:
-    app.dependency_overrides[get_current_tenant_id] = lambda: "tenant-a"
+    app.dependency_overrides[get_current_auth_context] = lambda: {
+        "tenant_id": "tenant-a",
+        "role": "editor",
+    }
     yield
     app.dependency_overrides.clear()
 

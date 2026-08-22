@@ -11,7 +11,7 @@ import pandas as pd
 from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile
 
 from ai_etl.api.config import RUNS_DIR, UPLOADS_DIR
-from ai_etl.api.deps import get_current_tenant_id
+from ai_etl.api.deps import get_current_tenant_id, require_role
 from ai_etl.api.serialization import nan_to_none_records, serialize_full_result
 from ai_etl.audit.db import load_full_result, load_history
 from ai_etl.services.execution_queue import (
@@ -85,7 +85,7 @@ def get_status(
 
 @router.post("")
 async def create_run(
-    tenant_id: Annotated[str, Depends(get_current_tenant_id)],
+    tenant_id: Annotated[str, Depends(require_role("editor"))],
     business_question: Annotated[str, Form()] = "",
     manual_spec: Annotated[str, Form()] = "",
     file: Optional[UploadFile] = None,
