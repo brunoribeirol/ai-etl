@@ -55,6 +55,9 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
                 AI-ETL
               </Link>
               <nav className="flex gap-6 text-sm text-muted-foreground">
+                <Link href="/comecar" className="hover:text-foreground transition-colors">
+                  Começar
+                </Link>
                 <Link href="/" className="hover:text-foreground transition-colors">
                   Executar
                 </Link>

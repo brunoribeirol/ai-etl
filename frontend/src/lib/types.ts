@@ -214,3 +214,16 @@ export type PipelineRunHistoryEntry = {
   gold_subtasks: number | null;
   science_subtasks: number | null;
 };
+
+/**
+ * Sprint 26 (ADR-027) — `GET /onboarding/status` response. Mirrors
+ * `audit/db.py::get_onboarding_status`, derived on read from
+ * `runs`/`saved_pipelines`, no dedicated table.
+ */
+export type OnboardingStatus = {
+  run_count: number;
+  completed_run_count: number;
+  has_completed_run: boolean;
+  saved_pipeline_count: number;
+  has_saved_pipeline: boolean;
+};
