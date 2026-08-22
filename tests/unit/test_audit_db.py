@@ -247,6 +247,31 @@ def test_save_analysis_includes_data_preview(tmp_path: Path) -> None:
     assert len(data["gold"][0]["data_preview"]) == 2
 
 
+def test_save_analysis_persists_sanity_check_when_present(tmp_path: Path) -> None:
+    """Sprint 21 (ADR-026): `sanity_check` is additive on the manifest when the
+    caller (`pipeline_service.py`) set it; absent otherwise (a result saved before
+    this field existed, or one this test's own `_make_gold_result` doesn't set)."""
+    gold = _make_gold_result()
+    gold["sanity_check"] = {
+        "checks": [{"check": "sum_conservation", "severity": "warning", "detail": "..."}],
+        "severity": "warning",
+        "summary": "1 sanity check(s): 1 warning(s)",
+    }
+
+    json_key = save_analysis(
+        "run-analysis-3",
+        [gold],
+        [_make_science_result()],
+        _make_advisor_result(),
+        _ZERO_TOKENS,
+        log_dir=str(tmp_path),
+    )
+
+    data = json.loads((tmp_path / json_key).read_text())
+    assert data["gold"][0]["sanity_check"]["severity"] == "warning"
+    assert "sanity_check" not in data["science"][0]
+
+
 def test_save_analysis_aggregates_tokens_before_writing_row(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

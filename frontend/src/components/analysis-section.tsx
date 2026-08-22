@@ -17,6 +17,8 @@ export function AnalysisSection({
   dataKey: "gold_df" | "predictions_df";
 }) {
   const rows = entry[dataKey];
+  const sanityCheck = entry.sanity_check;
+  const hasCaveat = sanityCheck && sanityCheck.severity !== "ok";
 
   return (
     <Card>
@@ -29,10 +31,31 @@ export function AnalysisSection({
               reparado
             </Badge>
           )}
+          {hasCaveat && (
+            <Badge
+              variant="outline"
+              className="text-amber-400 border-amber-500/30 bg-amber-500/10"
+              title={sanityCheck.summary}
+            >
+              ressalva
+            </Badge>
+          )}
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         {entry.narrative && <p className="text-sm text-muted-foreground">{entry.narrative}</p>}
+        {hasCaveat && (
+          <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-sm text-amber-400">
+            <p className="font-medium">Resultado com ressalva de sanity-check</p>
+            <ul className="mt-1 list-disc pl-4">
+              {sanityCheck.checks
+                .filter((c) => c.severity !== "ok")
+                .map((c, i) => (
+                  <li key={`${c.check}-${i}`}>{c.detail}</li>
+                ))}
+            </ul>
+          </div>
+        )}
         {entry.fig && <PlotlyChart figure={entry.fig} />}
         {rows && <DataTable rows={rows} />}
         {entry.error && <p className="text-destructive text-sm">{entry.error}</p>}

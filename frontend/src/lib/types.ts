@@ -44,6 +44,20 @@ export type AnalysisEntry = {
    * `science.py`), now persisted by `_serialize_analysis_result`. Optional:
    * absent on any run saved before this field existed. */
   code?: string | null;
+  /** Sprint 21 (ADR-026) — deterministic sanity-check of this sub-task's own
+   * result (`gold_df`/`predictions_df`) against the Silver data it was derived
+   * from. Absent on any run saved before this field existed, or on a failed
+   * sub-task (nothing to sanity-check). `"error"` is kept for shape-parity with
+   * `QualityCheck` even though `core/output_validation.py` never emits it. */
+  sanity_check?: {
+    checks: {
+      check: string;
+      severity: "ok" | "warning" | "error";
+      detail: string;
+    }[];
+    severity: "ok" | "warning" | "error";
+    summary: string;
+  };
 };
 
 /** Sprint 7 — per-check entry inside `state.quality_report.checks`

@@ -267,6 +267,66 @@ def test_run_science_analysis_emits_progress_events(monkeypatch) -> None:
     assert events[-1][1].startswith("✅ LinearRegression treinado")
 
 
+def test_run_gold_analysis_attaches_sanity_check_on_success(monkeypatch) -> None:
+    """Sprint 21 (ADR-026): a successful Gold sub-task gets a `sanity_check` key;
+    a failed one does not (nothing to sanity-check)."""
+    monkeypatch.setattr(pipeline_service, "run_analyst", lambda df, q: _gold_result(error=None))
+
+    result = pipeline_service.run_gold_analysis(pd.DataFrame({"a": [1]}), "pergunta")
+
+    assert "sanity_check" in result
+    assert result["sanity_check"]["severity"] in ("ok", "warning")
+
+
+def test_run_gold_analysis_omits_sanity_check_on_failure(monkeypatch) -> None:
+    monkeypatch.setattr(pipeline_service, "run_analyst", lambda df, q: _gold_result(error="boom"))
+
+    result = pipeline_service.run_gold_analysis(pd.DataFrame({"a": [1]}), "pergunta")
+
+    assert "sanity_check" not in result
+
+
+def test_run_gold_analysis_surfaces_ressalva_for_a_fabricated_result(monkeypatch) -> None:
+    """Definition of done: a deliberately wrong result (injected here) is flagged
+    with a visible caveat, never silently accepted as trustworthy."""
+    silver_df = pd.DataFrame({"amount": [10, 20, 30]})  # real total = 60
+    fabricated = {
+        "task_question": "",
+        "gold_df": pd.DataFrame({"amount": [10_000]}),  # fabricated, way over the real total
+        "fig": object(),
+        "narrative": "Total de 10000",
+        "code": "code",
+        "attempts": 1,
+        "error": None,
+        "tokens": dict(_ZERO_TOKENS),
+    }
+    monkeypatch.setattr(pipeline_service, "run_analyst", lambda df, q: fabricated)
+
+    events, _cb = _recorder()
+    result = pipeline_service.run_gold_analysis(silver_df, "pergunta", _cb, stage="gold:0")
+
+    assert result["sanity_check"]["severity"] == "warning"
+    assert any("ressalva" in msg for _, msg in events)
+
+
+def test_run_science_analysis_attaches_sanity_check_on_success(monkeypatch) -> None:
+    monkeypatch.setattr(pipeline_service, "run_science", lambda df, q: _science_result(error=None))
+
+    result = pipeline_service.run_science_analysis(pd.DataFrame({"a": [1]}), "pergunta")
+
+    assert "sanity_check" in result
+
+
+def test_run_science_analysis_omits_sanity_check_on_failure(monkeypatch) -> None:
+    monkeypatch.setattr(
+        pipeline_service, "run_science", lambda df, q: _science_result(error="boom")
+    )
+
+    result = pipeline_service.run_science_analysis(pd.DataFrame({"a": [1]}), "pergunta")
+
+    assert "sanity_check" not in result
+
+
 # ---------------------------------------------------------------------------
 # run_gold_with_repair / run_science_with_repair — auto-repair fallback
 # ---------------------------------------------------------------------------
