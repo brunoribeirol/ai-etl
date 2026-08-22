@@ -6,6 +6,21 @@ on:
   pull_request:
     branches: [main]
 
+# Least-privilege default (SR hardening): this workflow only reads the repo
+# and reports check results, it never pushes/writes anything — no job below
+# needs more than this. A job that genuinely needs to write (none do today)
+# would declare its own `permissions:` override, not widen this default.
+permissions:
+  contents: read
+
+# Cancel a stale run on the same branch/PR the moment a newer push
+# supersedes it — without this, 3-4 quick fix-up pushes to the same PR (a
+# real pattern this session hit) queue up and burn CI minutes running
+# checks against commits nobody cares about anymore.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   check:
     name: "Python ${{ matrix.python-version }} — Lint, Format, Type, Test, Security"
@@ -51,6 +66,8 @@ jobs:
       - uses: astral-sh/setup-uv@v7
         with:
           version: "latest"
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
 
       - name: Set up Python ${{ matrix.python-version }}
         run: uv python install ${{ matrix.python-version }}
@@ -143,6 +160,8 @@ jobs:
       - uses: astral-sh/setup-uv@v7
         with:
           version: "latest"
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
 
       - name: Set up Python
         run: uv python install 3.12

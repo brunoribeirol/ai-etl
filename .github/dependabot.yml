@@ -17,3 +17,16 @@ updates:
     labels:
       - dependencies
       - github-actions
+
+  # Sprint 6 (ADR-011) added frontend/ (Next.js) -- it was never added here,
+  # so npm dependencies had zero automated update coverage until now, unlike
+  # pip (above) and github-actions.
+  - package-ecosystem: npm
+    directory: "/frontend"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - frontend

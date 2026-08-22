@@ -1,0 +1,74 @@
+name: Docker
+
+# Builds the production Dockerfile in CI (no push) so a broken build is
+# caught on a PR, not first discovered at Railway deploy time -- this
+# project's own docs/CURRENT_STATE.md documents at least one real prior
+# session losing time to a Dockerfile issue only surfacing at deploy.
+# Path-filtered: this image only depends on these inputs (see Dockerfile's
+# own COPY list), unrelated changes (frontend/, docs/, tests/) shouldn't
+# trigger a rebuild.
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - "Dockerfile"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "src/**"
+      - "case_study/**"
+      - ".env.example"
+      - ".github/workflows/docker.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "Dockerfile"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "src/**"
+      - "case_study/**"
+      - ".env.example"
+      - ".github/workflows/docker.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: "Build image + Trivy vulnerability scan"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v3
+
+      # `load: true`, no `push` -- builds into the local Docker daemon only,
+      # so Trivy below can scan it. Nothing is published anywhere from CI;
+      # the real production image is built by Railway itself at deploy time
+      # from this same Dockerfile.
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: ai-etl:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Free, open-source (no GitHub Advanced Security / private-repo cost
+      # gate, unlike CodeQL) -- scans OS packages + Python deps baked into
+      # the image for known CVEs. `exit-code: 0`: reports findings without
+      # failing the build for now (this image is new to CI scanning, so a
+      # first run establishing a real baseline before anything is
+      # enforced as a hard gate) -- revisit once the baseline is reviewed.
+      - name: Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ai-etl:ci
+          format: table
+          severity: CRITICAL,HIGH
+          exit-code: "0"

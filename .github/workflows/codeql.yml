@@ -1,0 +1,56 @@
+name: CodeQL
+
+# GitHub's native SAST for both languages in this repo (Python backend,
+# TypeScript frontend). NOTE: code scanning on a *private* repository
+# normally requires GitHub Advanced Security, which isn't included on every
+# plan -- if this repo doesn't have it enabled, this workflow will fail at
+# the `analyze`/upload step with a clear "Advanced Security must be enabled"
+# error rather than silently doing nothing. That failure is expected and
+# informative in that case, not a bug in this workflow -- it's a real
+# decision (enable GHAS on this repo, or drop this workflow) for whoever
+# owns the GitHub plan, not something CI config can route around.
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly, not on every push -- CodeQL's own analysis is heavier than
+    # this project's other CI jobs; a push/PR trigger already covers real
+    # code changes, this catches anything a new query pack starts flagging
+    # in code that hasn't changed.
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+concurrency:
+  group: codeql-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: "CodeQL — ${{ matrix.language }}"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: python
+            build-mode: none
+          - language: javascript-typescript
+            build-mode: none
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
