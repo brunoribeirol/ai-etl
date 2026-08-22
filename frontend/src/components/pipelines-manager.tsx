@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/status-badge";
-import { SCHEDULABLE_SOURCE_TYPES, type SavedPipeline } from "@/lib/types";
+import { SCHEDULABLE_SOURCE_TYPES, type QualityRule, type SavedPipeline } from "@/lib/types";
 
 /**
  * Sprint 13 (ADR-016) — minimal CRUD UI for saved (recurring) pipelines,
@@ -39,6 +39,10 @@ export function PipelinesManager() {
   const [spec, setSpec] = useState("");
   const [businessQuestion, setBusinessQuestion] = useState("");
   const [cronSchedule, setCronSchedule] = useState("0 3 * * *");
+  // Sprint 16 (ADR-023) — operator-defined quality rules, edited as raw JSON: a
+  // plain textarea rather than a per-field rule builder, matching this manager's
+  // own Sprint 13 precedent ("não precisa ser bonita, precisa funcionar").
+  const [qualityRulesText, setQualityRulesText] = useState("[]");
   const [submitting, setSubmitting] = useState(false);
 
   const authedFetch = useCallback(
@@ -86,6 +90,7 @@ export function PipelinesManager() {
     setSpec("");
     setBusinessQuestion("");
     setCronSchedule("0 3 * * *");
+    setQualityRulesText("[]");
   }
 
   function startEdit(pipeline: SavedPipeline) {
@@ -95,12 +100,32 @@ export function PipelinesManager() {
     setSpec(pipeline.spec);
     setBusinessQuestion(pipeline.business_question);
     setCronSchedule(pipeline.cron_schedule);
+    setQualityRulesText(JSON.stringify(pipeline.quality_rules ?? [], null, 2));
+  }
+
+  /** Sprint 16 (ADR-023) — parses the raw JSON textarea into `QualityRule[]`,
+   * throwing a Portuguese, actionable message on invalid JSON or a non-array
+   * shape (caught by `handleSubmit`, surfaced via `toast.error`, submit aborted
+   * *before* any request reaches the API — same "fail loud before the network
+   * call" posture `validate_cron_schedule` already has server-side). */
+  function parseQualityRules(): QualityRule[] {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(qualityRulesText);
+    } catch {
+      throw new Error("Regras de qualidade: JSON inválido.");
+    }
+    if (!Array.isArray(parsed)) {
+      throw new Error("Regras de qualidade: deve ser uma lista (array JSON), ex: [].");
+    }
+    return parsed as QualityRule[];
   }
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     setSubmitting(true);
     try {
+      const qualityRules = parseQualityRules();
       if (editingId) {
         await authedFetch(`/pipelines/${editingId}`, {
           method: "PATCH",
@@ -110,6 +135,7 @@ export function PipelinesManager() {
             spec,
             business_question: businessQuestion,
             cron_schedule: cronSchedule,
+            quality_rules: qualityRules,
           }),
         });
         toast.success("Pipeline atualizado.");
@@ -122,6 +148,7 @@ export function PipelinesManager() {
             spec,
             business_question: businessQuestion,
             cron_schedule: cronSchedule,
+            quality_rules: qualityRules,
           }),
         });
         toast.success("Pipeline agendado.");
@@ -129,7 +156,7 @@ export function PipelinesManager() {
       resetForm();
       await loadPipelines();
     } catch (err) {
-      toast.error(String(err));
+      toast.error(String(err instanceof Error ? err.message : err));
     } finally {
       setSubmitting(false);
     }
@@ -235,6 +262,28 @@ export function PipelinesManager() {
               />
             </div>
 
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="qualityRules">
+                Regras de qualidade (opcional){" "}
+                <span className="text-muted-foreground font-normal font-mono">
+                  {'JSON, ex: [{"column": "amount", "operator": "gte", "value": 0}]'}
+                </span>
+              </Label>
+              <Textarea
+                id="qualityRules"
+                value={qualityRulesText}
+                onChange={(e) => setQualityRulesText(e.target.value)}
+                disabled={submitting}
+                rows={4}
+                className="font-mono text-xs"
+                placeholder='[{"column": "customer_id", "operator": "not_null"}]'
+              />
+              <p className="text-xs text-muted-foreground">
+                Operadores: not_null, gte, lte, gt, lt, eq, ne. Severidade padrão: error
+                (bloqueia o pipeline quando violada).
+              </p>
+            </div>
+
             <div className="flex gap-2">
               <Button type="submit" disabled={submitting} className="flex-1">
                 {editingId ? "Salvar alterações" : (
@@ -278,6 +327,14 @@ export function PipelinesManager() {
                 <StatusBadge status={pipeline.is_active ? "running" : "pending"} />
               </div>
               <p className="text-xs text-muted-foreground truncate">{pipeline.spec}</p>
+              {pipeline.quality_rules?.length > 0 && (
+                <span className="text-xs text-muted-foreground">
+                  {pipeline.quality_rules.length}{" "}
+                  {pipeline.quality_rules.length === 1
+                    ? "regra de qualidade customizada"
+                    : "regras de qualidade customizadas"}
+                </span>
+              )}
               <div className="flex justify-between items-center text-xs text-muted-foreground">
                 <span>Próxima execução: {new Date(pipeline.next_run_at).toLocaleString()}</span>
                 {pipeline.last_run_at && (

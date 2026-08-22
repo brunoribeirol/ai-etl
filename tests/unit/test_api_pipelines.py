@@ -47,6 +47,8 @@ def _saved_pipeline_row(**overrides: object) -> dict:
         "consecutive_failures": 0,
         "last_status": None,
         "last_error": None,
+        # Sprint 16 (ADR-023) — operator-defined quality rules.
+        "quality_rules": [],
         "created_at": datetime.now(tz=timezone.utc).isoformat(),
         "updated_at": datetime.now(tz=timezone.utc).isoformat(),
     }
@@ -240,6 +242,7 @@ def test_create_pipeline_happy_path(client: TestClient, mocker) -> None:
         cron_schedule="0 3 * * *",
         business_question="",
         drift_threshold_pct=20.0,
+        quality_rules=[],
     )
 
 
@@ -270,6 +273,7 @@ def test_create_pipeline_accepts_custom_drift_threshold(client: TestClient, mock
         cron_schedule="0 3 * * *",
         business_question="",
         drift_threshold_pct=5.0,
+        quality_rules=[],
     )
 
 
@@ -311,6 +315,7 @@ def test_patch_pipeline_pause(client: TestClient, mocker) -> None:
         business_question=None,
         is_active=False,
         drift_threshold_pct=None,
+        quality_rules=None,
     )
 
 
@@ -334,6 +339,159 @@ def test_patch_pipeline_updates_drift_threshold(client: TestClient, mocker) -> N
         business_question=None,
         is_active=None,
         drift_threshold_pct=50.0,
+        quality_rules=None,
+    )
+
+
+def test_create_pipeline_accepts_quality_rules(client: TestClient, mocker) -> None:
+    rules = [{"column": "amount", "operator": "gte", "value": 0, "severity": "error"}]
+    mock_create = mocker.patch(
+        "ai_etl.api.routers.pipelines.create_saved_pipeline",
+        return_value=_saved_pipeline_row(quality_rules=rules),
+    )
+
+    response = client.post(
+        "/pipelines",
+        json={
+            "name": "Nightly sync",
+            "source_type": "postgres",
+            "spec": "Read schema.orders from postgres",
+            "cron_schedule": "0 3 * * *",
+            "quality_rules": rules,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["quality_rules"] == rules
+    mock_create.assert_called_once_with(
+        tenant_id="tenant-a",
+        name="Nightly sync",
+        source_type="postgres",
+        spec="Read schema.orders from postgres",
+        cron_schedule="0 3 * * *",
+        business_question="",
+        drift_threshold_pct=20.0,
+        quality_rules=[
+            {"column": "amount", "operator": "gte", "value": 0, "severity": "error", "name": None}
+        ],
+    )
+
+
+def test_create_pipeline_rejects_unknown_operator(client: TestClient, mocker) -> None:
+    mock_create = mocker.patch("ai_etl.api.routers.pipelines.create_saved_pipeline")
+
+    response = client.post(
+        "/pipelines",
+        json={
+            "name": "Bad rule",
+            "source_type": "postgres",
+            "spec": "Read schema.orders from postgres",
+            "cron_schedule": "0 3 * * *",
+            "quality_rules": [{"column": "amount", "operator": "not_a_real_operator", "value": 0}],
+        },
+    )
+
+    assert response.status_code == 422
+    mock_create.assert_not_called()
+
+
+def test_create_pipeline_rejects_missing_value_for_comparison_operator(
+    client: TestClient, mocker
+) -> None:
+    """Sprint 16 (ADR-023) — every operator except `not_null` requires `value`."""
+    mock_create = mocker.patch("ai_etl.api.routers.pipelines.create_saved_pipeline")
+
+    response = client.post(
+        "/pipelines",
+        json={
+            "name": "Bad rule",
+            "source_type": "postgres",
+            "spec": "Read schema.orders from postgres",
+            "cron_schedule": "0 3 * * *",
+            "quality_rules": [{"column": "amount", "operator": "gte"}],
+        },
+    )
+
+    assert response.status_code == 422
+    mock_create.assert_not_called()
+
+
+def test_create_pipeline_not_null_rule_does_not_require_value(client: TestClient, mocker) -> None:
+    mock_create = mocker.patch(
+        "ai_etl.api.routers.pipelines.create_saved_pipeline",
+        return_value=_saved_pipeline_row(),
+    )
+
+    response = client.post(
+        "/pipelines",
+        json={
+            "name": "OK rule",
+            "source_type": "postgres",
+            "spec": "Read schema.orders from postgres",
+            "cron_schedule": "0 3 * * *",
+            "quality_rules": [{"column": "customer_id", "operator": "not_null"}],
+        },
+    )
+
+    assert response.status_code == 200
+    mock_create.assert_called_once()
+
+
+def test_patch_pipeline_updates_quality_rules(client: TestClient, mocker) -> None:
+    rules = [{"column": "customer_id", "operator": "not_null", "severity": "error"}]
+    mock_update = mocker.patch(
+        "ai_etl.api.routers.pipelines.update_saved_pipeline",
+        return_value=_saved_pipeline_row(quality_rules=rules),
+    )
+
+    response = client.patch("/pipelines/pl-1", json={"quality_rules": rules})
+
+    assert response.status_code == 200
+    assert response.json()["quality_rules"] == rules
+    mock_update.assert_called_once_with(
+        "pl-1",
+        "tenant-a",
+        name=None,
+        source_type=None,
+        spec=None,
+        cron_schedule=None,
+        business_question=None,
+        is_active=None,
+        drift_threshold_pct=None,
+        quality_rules=[
+            {
+                "column": "customer_id",
+                "operator": "not_null",
+                "value": None,
+                "severity": "error",
+                "name": None,
+            }
+        ],
+    )
+
+
+def test_patch_pipeline_omitting_quality_rules_leaves_them_untouched(
+    client: TestClient, mocker
+) -> None:
+    mock_update = mocker.patch(
+        "ai_etl.api.routers.pipelines.update_saved_pipeline",
+        return_value=_saved_pipeline_row(),
+    )
+
+    response = client.patch("/pipelines/pl-1", json={"is_active": False})
+
+    assert response.status_code == 200
+    mock_update.assert_called_once_with(
+        "pl-1",
+        "tenant-a",
+        name=None,
+        source_type=None,
+        spec=None,
+        cron_schedule=None,
+        business_question=None,
+        is_active=False,
+        drift_threshold_pct=None,
+        quality_rules=None,
     )
 
 

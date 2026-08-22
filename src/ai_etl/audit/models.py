@@ -12,6 +12,7 @@ Core (not the ORM) matches the style already used in
 """
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     Column,
     DateTime,
@@ -188,6 +189,13 @@ saved_pipelines = Table(
     Column("last_status", String(20), nullable=True),
     # The most recent failure's error message; cleared (NULL) on success.
     Column("last_error", Text, nullable=True),
+    # Sprint 16 (ADR-023) — operator-defined data quality rules for this pipeline,
+    # a plain JSON array of rule dicts (`{"column", "operator", "value", "severity",
+    # "name"}` — see `agents/quality.py::_CUSTOM_RULE_OPERATORS`). Folded into every
+    # subsequent scheduled run's `quality_report` alongside the fixed checks; not a
+    # derived cache of another table (unlike `consecutive_failures` above) — this is
+    # the rule definitions' only source of truth.
+    Column("quality_rules", JSON, nullable=False, server_default="[]"),
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("updated_at", DateTime(timezone=True), nullable=False),
     Index("ix_saved_pipelines_active_next_run", "is_active", "next_run_at"),

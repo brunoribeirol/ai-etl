@@ -55,7 +55,26 @@ export type QualityCheck = {
   null_ratio?: number;
   count?: number;
   outlier_count?: number;
+  // Sprint 16 (ADR-023) — present only on `check === "custom_rule"` entries
+  // (operator-defined quality rules, `agents/quality.py::_check_custom_rules`).
+  rule_name?: string;
+  operator?: string;
+  value?: unknown;
+  violation_count?: number;
+  error?: string;
   [key: string]: unknown;
+};
+
+/** Sprint 16 (ADR-023) — one operator-defined quality rule, mirrors
+ * `api/routers/pipelines.py::QualityRule`. */
+export type QualityRuleOperator = "not_null" | "gte" | "lte" | "gt" | "lt" | "eq" | "ne";
+
+export type QualityRule = {
+  column: string;
+  operator: QualityRuleOperator;
+  value?: number | string | boolean | null;
+  severity?: "ok" | "warning" | "error";
+  name?: string | null;
 };
 
 export type AdvisorRecommendation = {
@@ -154,6 +173,9 @@ export type SavedPipeline = {
   success_rate: number | null;
   avg_latency_seconds: number | null;
   health_sample_size: number;
+  // Sprint 16 (ADR-023) — operator-defined quality rules, run on every subsequent
+  // execution of this pipeline alongside the fixed checks.
+  quality_rules: QualityRule[];
   created_at: string;
   updated_at: string;
 };

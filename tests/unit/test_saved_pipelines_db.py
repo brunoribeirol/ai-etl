@@ -219,6 +219,67 @@ def test_update_saved_pipeline_changes_drift_threshold(engine: Engine) -> None:
     assert updated["drift_threshold_pct"] == 50.0
 
 
+# ---------------------------------------------------------------------------
+# quality_rules (Sprint 16, ADR-023)
+# ---------------------------------------------------------------------------
+
+
+def test_create_saved_pipeline_defaults_quality_rules_to_empty_list(engine: Engine) -> None:
+    created = db.create_saved_pipeline("tenant-a", "A", "postgres", "spec a", "0 3 * * *")
+    assert created["quality_rules"] == []
+
+
+def test_create_saved_pipeline_accepts_quality_rules(engine: Engine) -> None:
+    rules = [{"column": "amount", "operator": "gte", "value": 0, "severity": "error"}]
+    created = db.create_saved_pipeline(
+        "tenant-a", "A", "postgres", "spec a", "0 3 * * *", quality_rules=rules
+    )
+    assert created["quality_rules"] == rules
+
+    reloaded = db.get_saved_pipeline(created["id"], "tenant-a")
+    assert reloaded is not None
+    assert reloaded["quality_rules"] == rules
+
+
+def test_update_saved_pipeline_replaces_quality_rules(engine: Engine) -> None:
+    original_rules = [{"column": "amount", "operator": "gte", "value": 0, "severity": "error"}]
+    created = db.create_saved_pipeline(
+        "tenant-a", "A", "postgres", "spec a", "0 3 * * *", quality_rules=original_rules
+    )
+    new_rules = [{"column": "customer_id", "operator": "not_null", "severity": "warning"}]
+
+    updated = db.update_saved_pipeline(created["id"], "tenant-a", quality_rules=new_rules)
+
+    assert updated is not None
+    assert updated["quality_rules"] == new_rules
+
+
+def test_update_saved_pipeline_omitting_quality_rules_leaves_them_untouched(
+    engine: Engine,
+) -> None:
+    rules = [{"column": "amount", "operator": "gte", "value": 0}]
+    created = db.create_saved_pipeline(
+        "tenant-a", "A", "postgres", "spec a", "0 3 * * *", quality_rules=rules
+    )
+
+    updated = db.update_saved_pipeline(created["id"], "tenant-a", name="Renamed")
+
+    assert updated is not None
+    assert updated["quality_rules"] == rules
+
+
+def test_update_saved_pipeline_can_clear_quality_rules_with_empty_list(engine: Engine) -> None:
+    rules = [{"column": "amount", "operator": "gte", "value": 0}]
+    created = db.create_saved_pipeline(
+        "tenant-a", "A", "postgres", "spec a", "0 3 * * *", quality_rules=rules
+    )
+
+    updated = db.update_saved_pipeline(created["id"], "tenant-a", quality_rules=[])
+
+    assert updated is not None
+    assert updated["quality_rules"] == []
+
+
 def _insert_completed_run(
     engine: Engine,
     run_id: str,

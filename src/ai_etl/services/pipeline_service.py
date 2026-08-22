@@ -24,7 +24,7 @@ from ai_etl.agents.advisor import run_advisor
 from ai_etl.agents.analyst import run_analyst
 from ai_etl.agents.planner import plan_analysis_tasks
 from ai_etl.agents.science import run_science
-from ai_etl.audit.db import save_analysis, save_run, save_stage_latencies
+from ai_etl.audit.db import get_saved_pipeline, save_analysis, save_run, save_stage_latencies
 from ai_etl.core.analysis_types import (
     AdvisorResult,
     AnalysisRunResult,
@@ -77,10 +77,22 @@ def run_silver_pipeline(
             rest of its saved pipeline's run history. `None` for every avulso
             (one-off) run — the default, and the only value most callers pass.
             Sprint 14 (ADR-018) also relies on this to later find this run's
-            predecessor for drift detection.
+            predecessor for drift detection. Sprint 16 (ADR-023) also uses it
+            here to look up that saved pipeline's `quality_rules`.
     """
     run_id = str(uuid.uuid4())
-    state = initial_state(spec=spec, run_id=run_id)
+    # Sprint 16 (ADR-023) — a saved pipeline's own operator-defined quality rules,
+    # resolved here (not inside `quality_node`, which stays a pure function of
+    # `PipelineState`) and carried into the graph via `initial_state`. Only a
+    # scheduled fire has both a `saved_pipeline_id` and the real owning `tenant_id`
+    # (confirmed in `services/scheduler.py` — see ADR-023) — an avulso run always
+    # gets `[]`, unchanged fixed-checks-only behavior.
+    custom_quality_rules: list[dict[str, Any]] = []
+    if saved_pipeline_id is not None and tenant_id is not None:
+        pipeline = get_saved_pipeline(saved_pipeline_id, tenant_id)
+        if pipeline is not None:
+            custom_quality_rules = pipeline.get("quality_rules", [])
+    state = initial_state(spec=spec, run_id=run_id, custom_quality_rules=custom_quality_rules)
     graph = build_graph()
 
     final_state: dict[str, Any] = dict(state)

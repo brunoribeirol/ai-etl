@@ -623,6 +623,8 @@ def _saved_pipeline_row_to_dict(row: Any) -> dict[str, Any]:
         "consecutive_failures": row.consecutive_failures,
         "last_status": row.last_status,
         "last_error": row.last_error,
+        # Sprint 16 (ADR-023) — operator-defined quality rules, see models.py.
+        "quality_rules": row.quality_rules or [],
         "created_at": row.created_at,
         "updated_at": row.updated_at,
     }
@@ -636,20 +638,23 @@ def create_saved_pipeline(
     cron_schedule: str,
     business_question: str = "",
     drift_threshold_pct: float = 20.0,
+    quality_rules: Optional[list[dict[str, Any]]] = None,
 ) -> dict[str, Any]:
     """Persist a new saved pipeline (Sprint 13, ADR-016; `drift_threshold_pct`
-    added Sprint 14, ADR-018).
+    added Sprint 14, ADR-018; `quality_rules` added Sprint 16, ADR-023).
 
     Caller (the `/pipelines` router) is responsible for validating
-    `cron_schedule` (`core.scheduling.validate_cron_schedule`) and
+    `cron_schedule` (`core.scheduling.validate_cron_schedule`),
     `source_type` (`core.scheduling.SCHEDULABLE_SOURCE_TYPES`, ADR-016
-    Decision 3) before calling this — this function trusts its inputs,
-    matching `save_run`/`save_analysis`'s existing "no revalidation at the
-    persistence layer" pattern.
+    Decision 3), and each `quality_rules` entry's `operator`/`value` shape
+    (Pydantic, ADR-023) before calling this — this function trusts its
+    inputs, matching `save_run`/`save_analysis`'s existing "no revalidation
+    at the persistence layer" pattern.
     """
     now = datetime.now(tz=timezone.utc)
     pipeline_id = str(uuid.uuid4())
     next_run_at = compute_next_run_at(cron_schedule, now)
+    rules = quality_rules or []
     stmt = insert(saved_pipelines).values(
         id=pipeline_id,
         tenant_id=tenant_id,
@@ -666,6 +671,7 @@ def create_saved_pipeline(
         consecutive_failures=0,
         last_status=None,
         last_error=None,
+        quality_rules=rules,
         created_at=now,
         updated_at=now,
     )
@@ -687,6 +693,7 @@ def create_saved_pipeline(
         "consecutive_failures": 0,
         "last_status": None,
         "last_error": None,
+        "quality_rules": rules,
         "created_at": now,
         "updated_at": now,
     }
@@ -726,6 +733,7 @@ def update_saved_pipeline(
     business_question: Optional[str] = None,
     is_active: Optional[bool] = None,
     drift_threshold_pct: Optional[float] = None,
+    quality_rules: Optional[list[dict[str, Any]]] = None,
 ) -> Optional[dict[str, Any]]:
     """Partial update (PATCH semantics) — only fields passed as non-`None` change.
 
@@ -754,6 +762,10 @@ def update_saved_pipeline(
         values["business_question"] = business_question
     if drift_threshold_pct is not None:
         values["drift_threshold_pct"] = drift_threshold_pct
+    if quality_rules is not None:
+        # `is not None` (not truthiness) — an explicit `quality_rules=[]` is a valid
+        # "clear all my rules" update, distinct from "field omitted, leave as-is".
+        values["quality_rules"] = quality_rules
 
     resolved_cron = cron_schedule if cron_schedule is not None else existing["cron_schedule"]
     became_active = is_active is True and existing["is_active"] is False

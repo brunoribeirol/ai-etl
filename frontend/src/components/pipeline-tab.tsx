@@ -82,7 +82,9 @@ export function PipelineTab({
                 <li key={i} className="flex items-start gap-2 text-sm">
                   {SEVERITY_ICON[check.severity] ?? SEVERITY_ICON.ok}
                   <span>
-                    <span className="font-medium">{check.check}</span>
+                    <span className="font-medium">
+                      {check.check === "custom_rule" ? check.rule_name ?? "regra customizada" : check.check}
+                    </span>
                     {check.column && (
                       <>
                         {" "}
@@ -102,6 +104,20 @@ export function PipelineTab({
                       <span className="text-muted-foreground">
                         {" "}
                         — {check.outlier_count} outliers
+                      </span>
+                    )}
+                    {/* Sprint 16 (ADR-023) — custom rule detail: either an evaluation
+                        error (unknown column / incompatible type) or the violation count. */}
+                    {check.check === "custom_rule" && check.error && (
+                      <span className="text-muted-foreground"> — {check.error}</span>
+                    )}
+                    {check.check === "custom_rule" && check.error == null && (
+                      <span className="text-muted-foreground">
+                        {" "}
+                        — {check.operator} {String(check.value ?? "")} —{" "}
+                        {check.violation_count === 0
+                          ? "sem violações"
+                          : `${check.violation_count} violação(ões)`}
                       </span>
                     )}
                   </span>

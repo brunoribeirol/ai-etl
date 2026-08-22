@@ -7,10 +7,10 @@ here — this router only manages the `saved_pipelines` row (create/list/get/
 patch); it never itself enqueues a run.
 """
 
-from typing import Annotated, Any, Optional
+from typing import Annotated, Any, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from ai_etl.api.deps import get_current_tenant_id, require_role
 from ai_etl.audit.db import (
@@ -29,6 +29,30 @@ from ai_etl.core.scheduling import (
 )
 
 router = APIRouter(prefix="/pipelines", tags=["pipelines"])
+
+# Sprint 16 (ADR-023) — mirrors `agents/quality.py::_CUSTOM_RULE_OPERATORS`'s keys
+# exactly; kept as a literal here (not imported) so the API's request-validation
+# error message names them without importing an `agents/` module into `api/`.
+QualityRuleOperator = Literal["not_null", "gte", "lte", "gt", "lt", "eq", "ne"]
+
+
+class QualityRule(BaseModel):
+    """One operator-defined data quality rule (Sprint 16, ADR-023) — a whitelisted
+    declarative check, never an arbitrary expression or code (see the ADR's Decision 1
+    for why: a rule is persisted and re-run unattended on every future scheduled fire).
+    """
+
+    column: str = Field(min_length=1)
+    operator: QualityRuleOperator
+    value: Optional[Any] = None
+    severity: Literal["ok", "warning", "error"] = "error"
+    name: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _value_required_unless_not_null(self) -> "QualityRule":
+        if self.operator != "not_null" and self.value is None:
+            raise ValueError(f"operator {self.operator!r} requires a non-null 'value'.")
+        return self
 
 
 def _validate_source_type(source_type: str) -> None:
@@ -54,10 +78,20 @@ class CreatePipelineRequest(BaseModel):
     # audit/models.py's server_default, so a client that omits it gets the
     # same behavior as a row written before this field existed.
     drift_threshold_pct: float = Field(default=20.0, gt=0)
+    # Sprint 16 (ADR-023) — operator-defined quality rules, run on every subsequent
+    # execution of this saved pipeline alongside the fixed checks. Defaults to no
+    # custom rules, same behavior as every pipeline created before this sprint.
+    quality_rules: list[QualityRule] = Field(default_factory=list)
 
 
 class UpdatePipelineRequest(BaseModel):
-    """All fields optional — PATCH semantics, only provided fields change."""
+    """All fields optional — PATCH semantics, only provided fields change.
+
+    `quality_rules`, if provided, REPLACES the pipeline's whole rule set (not a
+    per-rule merge) — the same "provide the field, it wins whole" PATCH semantics
+    every other field here already has; `None` (the default, field omitted) leaves
+    the existing rules untouched.
+    """
 
     name: Optional[str] = Field(default=None, min_length=1, max_length=200)
     source_type: Optional[str] = None
@@ -66,6 +100,7 @@ class UpdatePipelineRequest(BaseModel):
     business_question: Optional[str] = None
     is_active: Optional[bool] = None
     drift_threshold_pct: Optional[float] = Field(default=None, gt=0)
+    quality_rules: Optional[list[QualityRule]] = None
 
 
 def _with_health(pipeline: dict[str, Any]) -> dict[str, Any]:
@@ -124,6 +159,7 @@ def create_pipeline(
         cron_schedule=body.cron_schedule,
         business_question=body.business_question,
         drift_threshold_pct=body.drift_threshold_pct,
+        quality_rules=[r.model_dump() for r in body.quality_rules],
     )
 
 
@@ -177,6 +213,9 @@ def patch_pipeline(
         business_question=body.business_question,
         is_active=body.is_active,
         drift_threshold_pct=body.drift_threshold_pct,
+        quality_rules=(
+            [r.model_dump() for r in body.quality_rules] if body.quality_rules is not None else None
+        ),
     )
     if updated is None:
         raise HTTPException(status_code=404, detail="Saved pipeline not found.")
