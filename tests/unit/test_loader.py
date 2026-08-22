@@ -9,11 +9,12 @@ from ai_etl.core.state import initial_state
 def _make_state(dest_type: str = "csv", dest_path: str = "output.csv") -> dict:
     state = initial_state(spec="test", run_id="test-run")
     df = pd.DataFrame({"a": [1, 2, 3], "b": ["x", "y", "z"]})
-    destination = (
-        {"type": dest_type, "path": dest_path}
-        if dest_type == "csv"
-        else {"type": dest_type, "table": "public.output"}
-    )
+    if dest_type == "csv":
+        destination = {"type": dest_type, "path": dest_path}
+    elif dest_type == "s3_parquet":
+        destination = {"type": dest_type, "bucket": "my-bucket", "key": "warehouse/out.parquet"}
+    else:
+        destination = {"type": dest_type, "table": "public.output"}
     return {
         **state,
         "pipeline_plan": {"destination": destination},
@@ -54,6 +55,21 @@ def test_destination_failure_sets_error(mocker) -> None:
     assert result["error"] is not None
     assert "disk full" in result["error"]
     assert result["status"] == "failed"
+
+
+def test_s3_parquet_load_succeeds(mocker) -> None:
+    mock_save = mocker.patch(
+        "ai_etl.agents.loader.save_s3_parquet",
+        return_value={"rows_loaded": 3, "destination": "s3://my-bucket/warehouse/out.parquet"},
+    )
+    result = loader_node(_make_state(dest_type="s3_parquet"))
+
+    mock_save.assert_called_once_with(mocker.ANY, "my-bucket", "warehouse/out.parquet")
+    assert result["load_result"]["rows_loaded"] == 3
+    assert result["load_result"]["destination"] == "s3://my-bucket/warehouse/out.parquet"
+    assert "timestamp" in result["load_result"]
+    assert result["status"] == "completed"
+    assert result["error"] is None
 
 
 def test_unsupported_destination_type_sets_error() -> None:

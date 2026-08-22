@@ -26,7 +26,7 @@ ai-etl/
 │   │                    #   Planner/Analyst/Science/Advisor (LangGraph nodes)
 │   ├── core/            #   PipelineState, LangGraph wiring, sandboxed code exec, LLM client
 │   ├── sources/          #   csv/postgres/sqlite/mysql/mongodb/rest(+auth)/document connectors
-│   ├── destinations/    #   csv/postgres writers
+│   ├── destinations/    #   csv/postgres/s3_parquet writers
 │   ├── audit/            #   Postgres audit trail (runs/analysis_runs) + storage.py (local/S3)
 │   ├── services/          #   pipeline orchestration, Celery async queue, auth, spec builder
 │   └── api/               #   FastAPI HTTP layer for the frontend (ADR-011)
