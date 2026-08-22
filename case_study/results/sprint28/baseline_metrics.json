@@ -1,0 +1,88 @@
+{
+  "generated_at": "2026-08-22T04:40:43.688692+00:00",
+  "data_source": "mock",
+  "n_scenarios": 7,
+  "mean_quality_score": 94.0,
+  "min_quality_score": 88.0,
+  "total_sanity_warnings": 1,
+  "scenarios_failing_expectation": [],
+  "per_scenario": [
+    {
+      "scenario_id": "dirty_latin1_city_totals",
+      "category": "adversarial_dirty_data",
+      "data_source": "mock",
+      "status": "completed",
+      "expect_failure": false,
+      "status_matches_expectation": true,
+      "quality_score": 100.0,
+      "sanity_warnings": 0,
+      "elapsed_ms": 1803.9
+    },
+    {
+      "scenario_id": "dirty_semicolon_city_totals",
+      "category": "adversarial_dirty_data",
+      "data_source": "mock",
+      "status": "completed",
+      "expect_failure": false,
+      "status_matches_expectation": true,
+      "quality_score": 100.0,
+      "sanity_warnings": 0,
+      "elapsed_ms": 1808.9
+    },
+    {
+      "scenario_id": "dirty_tab_city_totals",
+      "category": "adversarial_dirty_data",
+      "data_source": "mock",
+      "status": "completed",
+      "expect_failure": false,
+      "status_matches_expectation": true,
+      "quality_score": 100.0,
+      "sanity_warnings": 0,
+      "elapsed_ms": 1837.5
+    },
+    {
+      "scenario_id": "malformed_quoting_expected_failure",
+      "category": "adversarial_expected_failure",
+      "data_source": "mock",
+      "status": "failed",
+      "expect_failure": true,
+      "status_matches_expectation": true,
+      "quality_score": null,
+      "sanity_warnings": 0,
+      "elapsed_ms": 5.3
+    },
+    {
+      "scenario_id": "sales_daily_forecast",
+      "category": "nominal_predictive",
+      "data_source": "mock",
+      "status": "completed",
+      "expect_failure": false,
+      "status_matches_expectation": true,
+      "quality_score": 88.0,
+      "sanity_warnings": 0,
+      "elapsed_ms": 5330.9
+    },
+    {
+      "scenario_id": "sales_empty_result_narrative",
+      "category": "adversarial_edge_case",
+      "data_source": "mock",
+      "status": "completed",
+      "expect_failure": false,
+      "status_matches_expectation": true,
+      "quality_score": 88.0,
+      "sanity_warnings": 1,
+      "elapsed_ms": 1863.2
+    },
+    {
+      "scenario_id": "sales_revenue_by_region",
+      "category": "nominal_descriptive",
+      "data_source": "mock",
+      "status": "completed",
+      "expect_failure": false,
+      "status_matches_expectation": true,
+      "quality_score": 88.0,
+      "sanity_warnings": 0,
+      "elapsed_ms": 1681.4
+    }
+  ]
+}

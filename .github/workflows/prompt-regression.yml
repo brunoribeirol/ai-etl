@@ -1,0 +1,70 @@
+name: Prompt/Agent Regression Harness
+
+# Sprint 28 (ADR-029, Decision 1) — manual trigger ONLY, deliberately not on
+# push/pull_request. Real value requires a real OPENAI_API_KEY (catching an
+# actual prompt-wording/model regression); running that automatically on every
+# push to every PR would spend real LLM money on every trivial commit. A
+# developer changing a prompt, an agent's code, or AI_ETL_LLM_MODEL runs this
+# by hand before merging — same "run this before merging" discipline this
+# project already applies to `make check`, just for this one narrow class of
+# change. See ADR-029 for the full trade-off analysis and the path-filtered-
+# automatic alternative considered and deferred.
+on:
+  workflow_dispatch:
+    inputs:
+      update_baseline:
+        description: "Overwrite the committed baseline with this run's metrics (only after reviewing the diff)"
+        type: boolean
+        default: false
+      scenarios:
+        description: "Comma-separated scenario ids to run (default: all)"
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    name: "Prompt/agent regression corpus vs. committed baseline"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Run regression harness
+        # No `if: secrets.OPENAI_API_KEY` guard — the script itself degrades
+        # gracefully to mocked mode (data_source="mock", clearly logged) when
+        # the secret isn't configured, same "flagged, not faked" convention
+        # Sprint 8's model_comparison.py already established. A missing key
+        # never fails this job by itself; a real regression does.
+        run: |
+          uv run python case_study/scripts/regression_harness.py \
+            ${{ inputs.scenarios != '' && format('--scenarios {0}', inputs.scenarios) || '' }} \
+            ${{ inputs.update_baseline && '--update-baseline' || '' }}
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+      - name: Note on --update-baseline
+        if: inputs.update_baseline
+        run: |
+          echo "::notice::--update-baseline only rewrote the baseline file inside this ephemeral runner — it is NOT committed back to the repo. Download the 'prompt-regression-report' artifact below, review it, and commit case_study/results/sprint28/baseline_metrics.json locally if it looks right."
+
+      - name: Upload run report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prompt-regression-report
+          path: case_study/results/sprint28/latest_run.json
+          if-no-files-found: warn
