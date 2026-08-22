@@ -11,7 +11,19 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_ollama import ChatOllama
 from langchain_openai import ChatOpenAI
 
-from ai_etl.core.llm import get_llm, get_model_name, get_provider
+from ai_etl.core.llm import (
+    ALLOWED_MODELS_BY_PROVIDER,
+    UnsupportedProviderOrModelError,
+    get_llm,
+    get_model_name,
+    get_provider,
+    validate_provider_and_model,
+)
+
+# Aliased on import: a bare `test_provider_connectivity` import would be a
+# module-level `test_*` callable pytest tries to collect and call with no args —
+# see ADR-031's own note on this in the PR description.
+from ai_etl.core.llm import test_provider_connectivity as check_provider_connectivity
 
 
 @pytest.fixture(autouse=True)
@@ -126,3 +138,76 @@ class TestGetLlmFailFast:
         monkeypatch.setenv("AI_ETL_LLM_PROVIDER", "not-a-real-provider")
         with pytest.raises(RuntimeError, match="Unsupported AI_ETL_LLM_PROVIDER"):
             get_llm()
+
+
+class TestValidateProviderAndModel:
+    """Sprint 30 (ADR-031) — the allowlist backing `PUT /pipelines/{id}/llm-config`."""
+
+    def test_every_provider_has_an_allowed_models_entry(self) -> None:
+        assert set(ALLOWED_MODELS_BY_PROVIDER) == {"openai", "anthropic", "google", "ollama"}
+
+    def test_accepts_allowed_pair(self) -> None:
+        validate_provider_and_model("openai", "gpt-4o-mini")  # must not raise
+
+    def test_rejects_unsupported_provider(self) -> None:
+        with pytest.raises(UnsupportedProviderOrModelError, match="Unsupported provider"):
+            validate_provider_and_model("not-a-provider", "gpt-4o-mini")
+
+    def test_rejects_model_outside_providers_allowlist(self) -> None:
+        with pytest.raises(UnsupportedProviderOrModelError, match="not allowed for provider"):
+            validate_provider_and_model("anthropic", "gpt-4o-mini")
+
+
+class TestProviderConnectivity:
+    """Sprint 30 (ADR-031) — closes the gap ADR-014 left open: a real `.invoke()`
+    call, never mocked at the LangChain-class level (only the underlying HTTP/SDK
+    call itself is faked here, same as the rest of this test module does for
+    credential presence).
+    """
+
+    def test_success_reports_ok_with_latency(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-fake")
+
+        class _FakeResponse:
+            content = "ok"
+
+        monkeypatch.setattr(ChatOpenAI, "invoke", lambda self, *_a, **_kw: _FakeResponse())
+
+        result = check_provider_connectivity("openai", "gpt-4o-mini")
+
+        assert result["ok"] is True
+        assert result["provider"] == "openai"
+        assert result["model"] == "gpt-4o-mini"
+        assert result["error"] is None
+        assert result["latency_ms"] >= 0
+
+    def test_missing_credential_reports_ok_false_not_a_raise(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # No ANTHROPIC_API_KEY set — _build_anthropic's _require_env raises
+        # RuntimeError, which test_provider_connectivity must catch and report,
+        # never propagate.
+        result = check_provider_connectivity("anthropic", "claude-sonnet-5")
+
+        assert result["ok"] is False
+        assert result["error"] is not None
+        assert "ANTHROPIC_API_KEY" in result["error"]
+
+    def test_invoke_failure_reports_ok_false(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-fake")
+
+        def _raise(*_a: object, **_kw: object) -> None:
+            raise ConnectionError("network unreachable")
+
+        monkeypatch.setattr(ChatOpenAI, "invoke", _raise)
+
+        result = check_provider_connectivity("openai", "gpt-4o-mini")
+
+        assert result["ok"] is False
+        assert "network unreachable" in result["error"]
+
+    def test_unsupported_provider_reports_ok_false_not_a_raise(self) -> None:
+        result = check_provider_connectivity("not-a-provider", "some-model")
+
+        assert result["ok"] is False
+        assert result["error"] is not None

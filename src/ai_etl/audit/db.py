@@ -1306,3 +1306,71 @@ def _make_serializable(obj: Any) -> Any:
     if isinstance(obj, list):
         return [_make_serializable(item) for item in obj]
     return obj
+
+
+# Sprint 30 (ADR-031) — per-`saved_pipeline` LLM provider/model override
+# (migration 0016). Deliberately two small standalone functions rather than new
+# parameters bolted onto `create_saved_pipeline`/`update_saved_pipeline`/
+# `get_saved_pipeline`/`_saved_pipeline_row_to_dict` above: this sprint runs in a
+# worktree parallel to Sprints 31/32, both of which may also touch this file, and
+# the isolation rule for this batch is "append-only, never edit an existing
+# function" to keep the 3 PRs' diffs merge-safe. `api/routers/pipelines.py`
+# composes these with `get_saved_pipeline`'s existing dict the same way
+# `_with_health` already composes `get_pipeline_health` onto it.
+
+
+def get_saved_pipeline_llm_config(pipeline_id: str, tenant_id: str) -> Optional[dict[str, Any]]:
+    """Return `{"llm_provider": str | None, "llm_model": str | None}` for one saved
+    pipeline, scoped to `tenant_id` — `None` (the whole return value) covers both
+    "unknown id" and "belongs to another tenant", same soft-fail shape as
+    `get_saved_pipeline`. Both dict values `None` means "no override configured,
+    this pipeline uses the deployment's global `AI_ETL_LLM_PROVIDER`/
+    `AI_ETL_LLM_MODEL`" (`core/llm.py`).
+    """
+    stmt = select(saved_pipelines.c.llm_provider, saved_pipelines.c.llm_model).where(
+        saved_pipelines.c.id == pipeline_id, saved_pipelines.c.tenant_id == tenant_id
+    )
+    with get_engine().connect() as conn:
+        row = conn.execute(stmt).first()
+    if row is None:
+        return None
+    return {"llm_provider": row.llm_provider, "llm_model": row.llm_model}
+
+
+def set_saved_pipeline_llm_config(
+    pipeline_id: str,
+    tenant_id: str,
+    llm_provider: Optional[str],
+    llm_model: Optional[str],
+) -> Optional[dict[str, Any]]:
+    """Set (or clear) one saved pipeline's LLM provider/model override.
+
+    `llm_provider`/`llm_model` are always written together — pass both as `None` to
+    clear the override back to "use this deployment's global default" (matching
+    `models.py`'s "always set or cleared together" column comment); the caller
+    (`api/routers/pipelines.py`) is responsible for validating a non-`None` pair
+    against `core.llm.ALLOWED_MODELS_BY_PROVIDER`
+    (`core.llm.validate_provider_and_model`) before calling this — this function
+    trusts its inputs, matching every other `audit/db.py` writer's "no revalidation
+    at the persistence layer" pattern (see `create_saved_pipeline`'s docstring).
+
+    Returns the updated `{"llm_provider", "llm_model"}` dict, or `None` if
+    `pipeline_id` doesn't exist or doesn't belong to `tenant_id` (ownership check
+    happens first, before any write — same pattern as `update_saved_pipeline`).
+    """
+    existing = get_saved_pipeline(pipeline_id, tenant_id)
+    if existing is None:
+        return None
+
+    stmt = (
+        update(saved_pipelines)
+        .where(saved_pipelines.c.id == pipeline_id, saved_pipelines.c.tenant_id == tenant_id)
+        .values(
+            llm_provider=llm_provider,
+            llm_model=llm_model,
+            updated_at=datetime.now(tz=timezone.utc),
+        )
+    )
+    with get_engine().begin() as conn:
+        conn.execute(stmt)
+    return {"llm_provider": llm_provider, "llm_model": llm_model}

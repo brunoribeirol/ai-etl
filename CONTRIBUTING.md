@@ -49,6 +49,22 @@ Before opening a PR:
 3. Changes to agent behavior must be reflected in the vault: `artefact/architecture.md`.
 4. Changes to environment variables must be reflected in `.env.example`.
 
+## Code review policy
+
+This is currently a single-maintainer project — GitHub's required-reviewer branch
+protection can't be satisfied by the PR author's own approval, so `main` does **not**
+require a second human review to merge (`required_approving_review_count: 0`). CI
+(lint/format/type-check/tests/security, both Python 3.11 and 3.12) is the real merge
+gate instead: every PR is blocked from merging until all required checks pass.
+
+Review still happens, just not as a GitHub-native gate: every non-trivial PR goes
+through `/code-review` (Claude Code's review skill) before merge, and its findings are
+addressed or explicitly deferred with rationale in the PR description — same standard
+a second human reviewer would apply. If this project ever gains a second real
+contributor, `required_approving_review_count` should be raised back to `1` (and
+`require_code_owner_reviews` considered) — this policy exists because of team size, not
+because review doesn't matter.
+
 ## Adding a new agent
 
 All LangGraph nodes must follow the contract in `src/ai_etl/core/state.py`:

@@ -19,17 +19,15 @@ application behavior and only closes the anon/authenticated-default-CRUD
 hole Supabase opens on every new table by default.
 
 Revision ID: 0017
-Revises: 0015
+Revises: 0016
 
-Chain-reconciliation note (same pattern as Sprints 14/17/29): `0016` was
-pre-assigned to Sprint 30, running in parallel in a different worktree at
-the time this migration was authored, and did not exist on this branch yet.
-This migration therefore chains onto `0015` (the actual tip at authoring
-time) rather than `0016`. Whichever of the two sprints' PRs merges second
-must rebase its migration's `down_revision` onto the other's revision id
-before merge, restoring a single linear chain — flagged here explicitly
-rather than left as a silent gap, matching how the same situation was
-resolved in Sprints 14/17/29.
+Chain-reconciliation, applied at merge time (same pattern as Sprints
+14/17/29): `0016` (Sprint 30) was pre-assigned and running in parallel in a
+different worktree at authoring time, and did not exist on this branch yet
+— this migration originally chained onto `0015`. Sprint 30's PR (#96) merged
+first; this migration's `down_revision` was rebased onto `0016` immediately
+before this PR's own merge, restoring a single linear chain, exactly as
+flagged as the expected outcome when this file was authored.
 
 Create Date: 2026-08-22
 """
@@ -41,7 +39,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "0017"
-down_revision: Union[str, None] = "0015"
+down_revision: Union[str, None] = "0016"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
