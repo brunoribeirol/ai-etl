@@ -66,6 +66,14 @@ def _health(**overrides: object) -> dict:
     return health
 
 
+def _llm_config(**overrides: object) -> dict:
+    # Sprint 30 (ADR-031) — `_with_health` merges this onto every saved-pipeline
+    # response; `None`/`None` (the default here) means "no override configured".
+    config = {"llm_provider": None, "llm_model": None}
+    config.update(overrides)
+    return config
+
+
 def test_list_pipelines_scoped_to_tenant(client: TestClient, mocker) -> None:
     mock_list = mocker.patch(
         "ai_etl.api.routers.pipelines.list_saved_pipelines",
@@ -75,6 +83,10 @@ def test_list_pipelines_scoped_to_tenant(client: TestClient, mocker) -> None:
         "ai_etl.api.routers.pipelines.get_pipeline_health",
         return_value=_health(success_rate=1.0, sample_size=5),
     )
+    mocker.patch(
+        "ai_etl.api.routers.pipelines.get_saved_pipeline_llm_config",
+        return_value=_llm_config(),
+    )
 
     response = client.get("/pipelines")
 
@@ -83,6 +95,8 @@ def test_list_pipelines_scoped_to_tenant(client: TestClient, mocker) -> None:
     assert body["id"] == "pl-1"
     assert body["success_rate"] == 1.0
     assert body["health_sample_size"] == 5
+    assert body["llm_provider"] is None
+    assert body["llm_model"] is None
     mock_list.assert_called_once_with("tenant-a")
 
 
@@ -100,6 +114,10 @@ def test_get_pipeline_returns_row(client: TestClient, mocker) -> None:
         return_value=_saved_pipeline_row(),
     )
     mocker.patch("ai_etl.api.routers.pipelines.get_pipeline_health", return_value=_health())
+    mocker.patch(
+        "ai_etl.api.routers.pipelines.get_saved_pipeline_llm_config",
+        return_value=_llm_config(llm_provider="anthropic", llm_model="claude-sonnet-5"),
+    )
 
     response = client.get("/pipelines/pl-1")
 
@@ -108,6 +126,8 @@ def test_get_pipeline_returns_row(client: TestClient, mocker) -> None:
     assert body["name"] == "Nightly sync"
     assert body["success_rate"] is None
     assert body["health_sample_size"] == 0
+    assert body["llm_provider"] == "anthropic"
+    assert body["llm_model"] == "claude-sonnet-5"
 
 
 def test_get_pipeline_history_404_when_pipeline_unknown(client: TestClient, mocker) -> None:
@@ -573,3 +593,138 @@ def test_viewer_role_can_still_list_pipelines(client: TestClient, mocker) -> Non
     response = client.get("/pipelines")
 
     assert response.status_code == 200
+
+
+# Sprint 30 (ADR-031) — `/pipelines/{id}/llm-config` (per-pipeline LLM provider/
+# model override) and `/pipelines/llm/allowed-models` (the allowlist it validates
+# against).
+
+
+def test_get_pipeline_llm_config_404_when_unknown(client: TestClient, mocker) -> None:
+    mocker.patch("ai_etl.api.routers.pipelines.get_saved_pipeline_llm_config", return_value=None)
+
+    response = client.get("/pipelines/no-such-id/llm-config")
+
+    assert response.status_code == 404
+
+
+def test_get_pipeline_llm_config_returns_current_override(client: TestClient, mocker) -> None:
+    mocker.patch(
+        "ai_etl.api.routers.pipelines.get_saved_pipeline_llm_config",
+        return_value=_llm_config(llm_provider="google", llm_model="gemini-2.0-flash"),
+    )
+
+    response = client.get("/pipelines/pl-1/llm-config")
+
+    assert response.status_code == 200
+    assert response.json() == {"llm_provider": "google", "llm_model": "gemini-2.0-flash"}
+
+
+def test_set_pipeline_llm_config_happy_path(client: TestClient, mocker) -> None:
+    mock_set = mocker.patch(
+        "ai_etl.api.routers.pipelines.set_saved_pipeline_llm_config",
+        return_value=_llm_config(llm_provider="anthropic", llm_model="claude-sonnet-5"),
+    )
+
+    response = client.put(
+        "/pipelines/pl-1/llm-config",
+        json={"llm_provider": "anthropic", "llm_model": "claude-sonnet-5"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"llm_provider": "anthropic", "llm_model": "claude-sonnet-5"}
+    mock_set.assert_called_once_with(
+        "pl-1", "tenant-a", llm_provider="anthropic", llm_model="claude-sonnet-5"
+    )
+
+
+def test_set_pipeline_llm_config_rejects_model_outside_allowlist(
+    client: TestClient, mocker
+) -> None:
+    mock_set = mocker.patch("ai_etl.api.routers.pipelines.set_saved_pipeline_llm_config")
+
+    response = client.put(
+        "/pipelines/pl-1/llm-config",
+        json={"llm_provider": "anthropic", "llm_model": "gpt-4o"},
+    )
+
+    assert response.status_code == 400
+    mock_set.assert_not_called()
+
+
+def test_set_pipeline_llm_config_rejects_unsupported_provider(client: TestClient, mocker) -> None:
+    mock_set = mocker.patch("ai_etl.api.routers.pipelines.set_saved_pipeline_llm_config")
+
+    response = client.put(
+        "/pipelines/pl-1/llm-config",
+        json={"llm_provider": "not-a-provider", "llm_model": "gpt-4o"},
+    )
+
+    assert response.status_code == 400
+    mock_set.assert_not_called()
+
+
+def test_set_pipeline_llm_config_rejects_partial_pair(client: TestClient, mocker) -> None:
+    """`llm_provider` without `llm_model` (or vice versa) is rejected by request
+    validation before ever reaching the DB layer — see
+    `SetPipelineLlmConfigRequest._both_or_neither`."""
+    mock_set = mocker.patch("ai_etl.api.routers.pipelines.set_saved_pipeline_llm_config")
+
+    response = client.put("/pipelines/pl-1/llm-config", json={"llm_provider": "anthropic"})
+
+    assert response.status_code == 422
+    mock_set.assert_not_called()
+
+
+def test_set_pipeline_llm_config_clears_override_with_both_null(client: TestClient, mocker) -> None:
+    mock_set = mocker.patch(
+        "ai_etl.api.routers.pipelines.set_saved_pipeline_llm_config",
+        return_value=_llm_config(),
+    )
+
+    response = client.put(
+        "/pipelines/pl-1/llm-config",
+        json={"llm_provider": None, "llm_model": None},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"llm_provider": None, "llm_model": None}
+    mock_set.assert_called_once_with("pl-1", "tenant-a", llm_provider=None, llm_model=None)
+
+
+def test_set_pipeline_llm_config_404_when_unknown_pipeline(client: TestClient, mocker) -> None:
+    mocker.patch("ai_etl.api.routers.pipelines.set_saved_pipeline_llm_config", return_value=None)
+
+    response = client.put(
+        "/pipelines/no-such-id/llm-config",
+        json={"llm_provider": "openai", "llm_model": "gpt-4o"},
+    )
+
+    assert response.status_code == 404
+
+
+def test_viewer_role_cannot_set_pipeline_llm_config(client: TestClient, mocker) -> None:
+    app.dependency_overrides[get_current_auth_context] = lambda: {
+        "tenant_id": "tenant-a",
+        "role": "viewer",
+    }
+    mock_set = mocker.patch("ai_etl.api.routers.pipelines.set_saved_pipeline_llm_config")
+
+    response = client.put(
+        "/pipelines/pl-1/llm-config",
+        json={"llm_provider": "openai", "llm_model": "gpt-4o"},
+    )
+
+    assert response.status_code == 403
+    mock_set.assert_not_called()
+
+
+def test_get_allowed_llm_models(client: TestClient) -> None:
+    response = client.get("/pipelines/llm/allowed-models")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "gpt-4o-mini" in body["openai"]
+    assert "claude-sonnet-5" in body["anthropic"]
+    assert "gemini-2.0-flash" in body["google"]
+    assert "llama3.1" in body["ollama"]
