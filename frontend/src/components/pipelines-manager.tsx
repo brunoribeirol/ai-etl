@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import { LineChart, PauseCircle, PlayCircle, Plus } from "lucide-react";
+import { FileText, LineChart, PauseCircle, PlayCircle, Plus } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -296,6 +296,18 @@ export function PipelinesManager() {
                 </div>
               )}
               <div className="flex gap-2 pt-1">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  render={
+                    // Sprint 18 (ADR-024) — plain-language view for a
+                    // non-technical stakeholder, separate from "Histórico"
+                    // (run-by-run technical detail, Pipeline/Código tabs).
+                    <Link href={`/resumo/${pipeline.id}`}>
+                      <FileText className="h-4 w-4" /> Resumo
+                    </Link>
+                  }
+                />
                 <Button
                   size="sm"
                   variant="outline"
