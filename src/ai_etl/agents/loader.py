@@ -8,6 +8,7 @@ from ai_etl.audit.logger import log_action
 from ai_etl.core.state import PipelineState
 from ai_etl.destinations.csv_dest import save_csv
 from ai_etl.destinations.postgres_dest import save_postgres
+from ai_etl.destinations.s3_parquet_dest import save_s3_parquet
 
 
 def loader_node(state: PipelineState) -> PipelineState:
@@ -28,6 +29,8 @@ def loader_node(state: PipelineState) -> PipelineState:
             load_result = save_csv(df, destination["path"])
         elif dest_type == "postgres":
             load_result = save_postgres(df, destination["table"])
+        elif dest_type == "s3_parquet":
+            load_result = save_s3_parquet(df, destination["bucket"], destination["key"])
         else:
             raise ValueError(f"Unsupported destination type: {dest_type}")
 

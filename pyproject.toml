@@ -63,6 +63,12 @@ dependencies = [
     "plotly>=6.8.0",
     "scikit-learn>=1.4.0",
     "statsmodels>=0.14.0",
+    # Sprint 20 (ADR-021) — S3-Parquet warehouse destination. Used only as
+    # pandas' `to_parquet`/`read_parquet` serialization engine (in-memory
+    # buffer) — never `pyarrow.fs.S3FileSystem`, which ADR-009 already found
+    # hangs indefinitely in this kind of sandboxed environment; S3 I/O itself
+    # stays on the already-proven `boto3` path.
+    "pyarrow>=15.0.0",
 ]
 
 [project.optional-dependencies]
