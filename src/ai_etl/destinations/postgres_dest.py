@@ -1,20 +1,12 @@
 """PostgreSQL destination connector."""
 
 import os
-import re
 from typing import Any, Literal
 
 import pandas as pd
 from sqlalchemy import create_engine, text
 
-_SAFE_TABLE_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_.]*$")
-
-
-def _validate_table_name(table: str) -> None:
-    if not _SAFE_TABLE_RE.match(table):
-        raise ValueError(
-            f"Invalid table name '{table}': only alphanumeric, underscores, and dots allowed."
-        )
+from ai_etl.core.sql_safety import validate_table_name
 
 
 def save_postgres(
@@ -31,7 +23,7 @@ def save_postgres(
     if not url:
         raise EnvironmentError("POSTGRES_URL environment variable is not set.")
 
-    _validate_table_name(table)
+    validate_table_name(table, allow_dots=True)
     engine = create_engine(url)
     df.to_sql(table.split(".")[-1], engine, schema=_schema(table), if_exists=if_exists, index=False)
 
@@ -54,7 +46,7 @@ def preview_postgres(df: pd.DataFrame, table: str) -> dict[str, Any]:
     anything. Never calls `to_sql` — reads the table's current row count (if
     it already exists) for the diff, same read-only `SELECT COUNT(*)` shape
     `save_postgres` itself uses to verify a write after the fact, guarded by
-    the same `_validate_table_name` check.
+    the same `core.sql_safety.validate_table_name` check.
 
     `existing_rows` is `None` if the table doesn't exist yet (a fresh table,
     or a real connection error surfacing as "can't tell") — distinguished
@@ -65,7 +57,7 @@ def preview_postgres(df: pd.DataFrame, table: str) -> dict[str, Any]:
     if not url:
         raise EnvironmentError("POSTGRES_URL environment variable is not set.")
 
-    _validate_table_name(table)
+    validate_table_name(table, allow_dots=True)
     engine = create_engine(url)
     existing_rows: int | None = None
     try:

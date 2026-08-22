@@ -12,7 +12,12 @@ import pandas as pd
 import pytest
 from sqlalchemy.exc import OperationalError
 
-from ai_etl.sources.sqlite_source import _validate_table_name, load_sqlite
+from ai_etl.core.sql_safety import validate_table_name
+from ai_etl.sources.sqlite_source import load_sqlite
+
+
+def _validate_table_name(name: str) -> None:
+    validate_table_name(name, allow_dots=False)
 
 
 def _seed_db(path: Path) -> None:

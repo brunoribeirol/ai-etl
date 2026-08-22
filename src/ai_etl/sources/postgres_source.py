@@ -1,19 +1,11 @@
 """PostgreSQL source connector."""
 
 import os
-import re
 
 import pandas as pd
 from sqlalchemy import create_engine, text
 
-_SAFE_TABLE_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_.]*$")
-
-
-def _validate_table_name(table: str) -> None:
-    if not _SAFE_TABLE_RE.match(table):
-        raise ValueError(
-            f"Invalid table name '{table}': only alphanumeric, underscores, and dots allowed."
-        )
+from ai_etl.core.sql_safety import validate_table_name
 
 
 def load_postgres(table: str, query: str | None = None) -> pd.DataFrame:
@@ -25,7 +17,7 @@ def load_postgres(table: str, query: str | None = None) -> pd.DataFrame:
     if not url:
         raise EnvironmentError("POSTGRES_URL environment variable is not set.")
 
-    _validate_table_name(table)
+    validate_table_name(table, allow_dots=True)
     engine = create_engine(url)
     sql = query or f"SELECT * FROM {table}"  # nosec B608 — table name validated above
     with engine.connect() as conn:

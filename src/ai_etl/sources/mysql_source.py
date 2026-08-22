@@ -5,7 +5,7 @@ Same shape and conventions as `postgres_source.py`: module-level
 from an env var (MySQL/MariaDB are server processes, like Postgres — unlike
 SQLite's per-source file path), table name validated against a safe-
 identifier allowlist, SQL only through SQLAlchemy `text()`, no source-level
-`try/except` (errors propagate to `agents/extractor.py`'s single catch
+`try/except` (errors propagate to `agents/pipeline/extractor.py`'s single catch
 point).
 
 Driver: `pymysql` (pure Python, SQLAlchemy dialect `mysql+pymysql`) — no
@@ -17,21 +17,14 @@ would need to for an engine with a different wire protocol.
 """
 
 import os
-import re
 
 import pandas as pd
 from sqlalchemy import create_engine, text
 
-# Unlike sqlite_source.py, MySQL supports `database.table` — same allowlist
-# shape as postgres_source.py's `_SAFE_TABLE_RE`.
-_SAFE_TABLE_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_.]*$")
+from ai_etl.core.sql_safety import validate_table_name
 
-
-def _validate_table_name(table: str) -> None:
-    if not _SAFE_TABLE_RE.match(table):
-        raise ValueError(
-            f"Invalid table name '{table}': only alphanumeric, underscores, and dots allowed."
-        )
+# Unlike sqlite_source.py, MySQL supports `database.table` — pass
+# allow_dots=True to core.sql_safety.validate_table_name below.
 
 
 def load_mysql(table: str, query: str | None = None) -> pd.DataFrame:
@@ -45,7 +38,7 @@ def load_mysql(table: str, query: str | None = None) -> pd.DataFrame:
     if not url:
         raise EnvironmentError("MYSQL_URL environment variable is not set.")
 
-    _validate_table_name(table)
+    validate_table_name(table, allow_dots=True)
     engine = create_engine(url)
     sql = query or f"SELECT * FROM {table}"  # nosec B608 — table name validated above
     with engine.connect() as conn:
