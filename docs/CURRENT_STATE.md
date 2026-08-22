@@ -2,7 +2,66 @@
 
 > Living doc. Updated at the end of meaningful work sessions, not per-commit. Source of truth for repo/code state; the Obsidian vault (`~/Documents/Obsidian Vault/tcc/`) is the source of truth for the academic TCC narrative and product/strategy context.
 
-**Last updated:** 2026-08-21 (later same day) — **Sprint 15 (scheduled-pipeline reliability) merged to `main`** (PR #71). Migration `0010` (`saved_pipelines.consecutive_failures`/`last_status`/`last_error`) is in the code, **not yet applied to production Supabase** — same checkpoint discipline as every prior migration, pending explicit confirmation.
+**Last updated:** 2026-08-21 (later same day) — **Sprint 24 (compliance enterprise) opened as PR, not yet merged, checkpoint pending** — see below. Sprint 15 (scheduled-pipeline reliability) merged to `main` (PR #71); migration `0010` still not applied to production Supabase.
+
+## Sprint 24 — compliance enterprise: SOC2 readiness self-assessment, LGPD/GDPR data-processing record, tenant data deletion (PR open, not merged — migration `0014` not applied to production; checkpoint required before merge per this sprint's own instructions, tenant deletion is irreversible)
+
+Scope (Vault `artefact/product-roadmap-post-tcc.md`, Sprint 24): a SOC2
+Type I readiness self-assessment, a formal LGPD/GDPR personal-data
+processing record, and — confirmed as a real gap by investigation, not
+assumed going in — a tenant data deletion feature. See
+`docs/compliance/soc2-readiness-assessment.md`,
+`docs/compliance/lgpd-gdpr-data-processing.md`, and
+`docs/adr/ADR-025-tenant-data-deletion.md` for the full detail.
+
+**Real finding from reading the code before designing anything**: this app
+is a data **processor** for a tenant's own uploaded/connected dataset
+content, not just a controller for its own account data — `users` stores
+only an opaque Clerk id (no email/name/IP locally), but
+`{run_id}_silver.csv`/`{run_id}_gold_{i}.csv`/`{run_id}_analysis.json`
+(`audit/storage.py`) hold the tenant's actual dataset, which can contain
+third-party personal data. No existing endpoint erased any of this —
+`DELETE /secrets/{name}` (ADR-022) only ever deleted one named credential.
+Confirmed gap, closed this sprint.
+
+**`DELETE /tenant`** (new router, `editor`-only, self-service — a tenant
+can only ever erase its own data, no cross-tenant admin deletion exists,
+same ADR-022 role-model limitation this ADR deliberately doesn't resolve):
+requires an explicit `{"confirm": "DELETE"}` body, then hard-deletes
+storage artifacts first (derived from `runs`/`analysis_runs` rows before
+they're gone — `StorageBackend` gained `delete_bytes()`, ADR-009 extended),
+then one DB transaction in FK-safe order (`stage_latencies` →
+`analysis_runs` → `runs` → `saved_pipelines` → `tenant_secrets` → `users`)
+— no existing FK `ondelete` behavior changed. A new `tenant_deletion_log`
+table (migration `0014`, `down_revision="0011"` per this sprint's reserved
+number — Sprints 16/18 hold `0012`/`0013`, not yet merged as of this
+writing) survives the deletion it describes: not personal data, just
+evidence (counts, timestamps, outcome) the request was fulfilled, for the
+SOC2 self-assessment's own "erasure requests are fulfilled and recorded"
+control. RLS enabled on the new table in the same migration, per
+`SECURITY.md`'s standing rule.
+
+**Known limitation, explicit in ADR-025**: `LocalStorageBackend` (dev
+default) has no tenant-prefixed directory — only `S3StorageBackend`
+(production) does — so local-backend artifact cleanup depends on
+enumerating exact keys from DB rows via the existing `save_run`/
+`save_analysis` naming convention, not on removing a tenant directory.
+Flagged, not silently assumed complete.
+
+**SOC2 self-assessment's own top finding, not a code fix**: no admin/
+support access model exists for staff to access customer data for support
+scenarios (today: direct DB access by Bruno, unmediated by the application,
+unlogged) — inherits ADR-022's already-flagged missing-admin-role
+limitation. Full prioritized gap list in
+`docs/compliance/soc2-readiness-assessment.md`'s summary table.
+
+**Not done this sprint, flagged explicitly**: no automatic data-retention/
+expiry policy (deletion is on-request only, per the roadmap's own scope —
+LGPD Art. 6 III / GDPR Art. 5(1)(e) "storage limitation" remains an open,
+larger gap than the on-request erasure this sprint closes); no data-
+portability "export everything" endpoint; no verification that LLM
+sub-processors (OpenAI/Anthropic/Google) delete data already sent to them
+as part of a completed request — outside this application's control layer.
 
 ## Sprint 15 — scheduled-pipeline retry and failure alerting (PR #71 merged 2026-08-21; migration `0010` not yet applied to production)
 

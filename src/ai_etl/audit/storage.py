@@ -28,6 +28,16 @@ class StorageBackend(Protocol):
 
     def exists(self, key: str) -> bool: ...
 
+    def delete_bytes(self, key: str) -> None:
+        """Delete `key` if it exists; a no-op if it doesn't (ADR-025).
+
+        Used by `services/tenant_deletion_service.py` to erase a tenant's
+        artifacts on request. Never raises for a missing key — callers derive
+        candidate keys from DB rows and some (e.g. `{run_id}_transform.py`)
+        legitimately don't exist for every run.
+        """
+        ...
+
 
 class LocalStorageBackend:
     """Wraps `Path(log_dir) / key` — today's exact behavior, unchanged."""
@@ -46,6 +56,10 @@ class LocalStorageBackend:
 
     def exists(self, key: str) -> bool:
         return (self.base_dir / key).exists()
+
+    def delete_bytes(self, key: str) -> None:
+        path = self.base_dir / key
+        path.unlink(missing_ok=True)
 
 
 class S3StorageBackend:
@@ -87,6 +101,11 @@ class S3StorageBackend:
             if exc.response.get("Error", {}).get("Code") in ("404", "NoSuchKey"):
                 return False
             raise
+
+    def delete_bytes(self, key: str) -> None:
+        # S3's delete_object is already idempotent — deleting a missing key
+        # returns 204, not an error, so no existence check is needed first.
+        self._client.delete_object(Bucket=self.bucket, Key=self._full_key(key))
 
 
 def get_storage_backend(log_dir: str, tenant_id: str | None) -> StorageBackend:

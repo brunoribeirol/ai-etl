@@ -48,6 +48,23 @@ def test_local_backend_writes_under_nested_key(tmp_path: Path) -> None:
     assert (tmp_path / "sub" / "dir" / "file.csv").exists()
 
 
+def test_local_backend_delete_bytes_removes_the_key(tmp_path: Path) -> None:
+    backend = LocalStorageBackend(str(tmp_path))
+    backend.write_bytes("run-1.json", b"{}")
+
+    backend.delete_bytes("run-1.json")
+
+    assert backend.exists("run-1.json") is False
+
+
+def test_local_backend_delete_bytes_is_a_noop_for_missing_key(tmp_path: Path) -> None:
+    """ADR-025: candidate keys derived from DB rows may legitimately not
+    exist for every run (e.g. no transform code) — deletion must not raise."""
+    backend = LocalStorageBackend(str(tmp_path))
+
+    backend.delete_bytes("no-such-key.json")  # must not raise
+
+
 # ---------------------------------------------------------------------------
 # S3StorageBackend — mocked boto3 client
 # ---------------------------------------------------------------------------
@@ -113,6 +130,16 @@ def test_s3_backend_exists_reraises_non_404_errors() -> None:
 
     with pytest.raises(ClientError):
         backend.exists("run-1.json")
+
+
+def test_s3_backend_delete_bytes_deletes_object_under_prefixed_key() -> None:
+    backend, mock_client = _make_backend_with_mock_client()
+
+    backend.delete_bytes("run-1.json")
+
+    mock_client.delete_object.assert_called_once_with(
+        Bucket="ai-etl-artifacts-brlla", Key="prod/tenant-a/run-1.json"
+    )
 
 
 def test_s3_backend_scopes_keys_by_environment_and_tenant_prefix() -> None:
