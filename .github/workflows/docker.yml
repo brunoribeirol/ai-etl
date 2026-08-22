@@ -50,7 +50,7 @@ jobs:
       # the real production image is built by Railway itself at deploy time
       # from this same Dockerfile.
       - name: Build image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           push: false
