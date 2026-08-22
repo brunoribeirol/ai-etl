@@ -45,6 +45,37 @@ class AuthResult(TypedDict):
     ok: bool
     user_id: Optional[str]  # Clerk user id (JWT `sub` claim) -> becomes tenant_id
     error: Optional[str]
+    # Sprint 19 (ADR-022) — Clerk Organizations. Present only when the
+    # session has an *active* organization; `None` for a personal session
+    # (every account that predates this sprint, and any account that never
+    # joins an org). `org_role` is the raw Clerk role claim, unmapped —
+    # `api/deps.py` maps it to this app's editor/viewer roles.
+    org_id: Optional[str]
+    org_role: Optional[str]
+
+
+def _extract_org_claims(payload: dict[str, object]) -> tuple[Optional[str], Optional[str]]:
+    """Pull `(org_id, org_role)` out of a decoded Clerk JWT payload.
+
+    Clerk session token v2 nests organization claims under `"o"`
+    (`o.id`/`o.rol`) to keep tokens small; legacy v1 templates use flat
+    `org_id`/`org_role` claims instead. Both shapes are handled — a token
+    with neither (a personal session, or a JWT template that omits
+    organization claims entirely) yields `(None, None)`, the same as today.
+    """
+    org_claim = payload.get("o")
+    if isinstance(org_claim, dict):
+        org_id = org_claim.get("id")
+        org_role = org_claim.get("rol")
+        if isinstance(org_id, str):
+            return org_id, org_role if isinstance(org_role, str) else None
+
+    org_id = payload.get("org_id")
+    org_role = payload.get("org_role")
+    if isinstance(org_id, str):
+        return org_id, org_role if isinstance(org_role, str) else None
+
+    return None, None
 
 
 def _get_jwks_client() -> Optional[PyJWKClient]:
@@ -81,11 +112,17 @@ def verify_session_token(token: str) -> AuthResult:
     an unreachable JWKS endpoint) results in `ok=False`, never `ok=True`.
     """
     if not token or not token.strip():
-        return AuthResult(ok=False, user_id=None, error="Token vazio.")
+        return AuthResult(ok=False, user_id=None, error="Token vazio.", org_id=None, org_role=None)
 
     jwks_client = _get_jwks_client()
     if jwks_client is None:
-        return AuthResult(ok=False, user_id=None, error="CLERK_JWKS_URL não configurada.")
+        return AuthResult(
+            ok=False,
+            user_id=None,
+            error="CLERK_JWKS_URL não configurada.",
+            org_id=None,
+            org_role=None,
+        )
 
     # Fail closed the same way as a missing CLERK_JWKS_URL: without an expected
     # issuer to compare against, `iss` can't be validated at all, and a JWT
@@ -93,7 +130,13 @@ def verify_session_token(token: str) -> AuthResult:
     # accepted regardless of which Clerk instance/application issued it.
     issuer = os.getenv("CLERK_ISSUER")
     if not issuer:
-        return AuthResult(ok=False, user_id=None, error="CLERK_ISSUER não configurada.")
+        return AuthResult(
+            ok=False,
+            user_id=None,
+            error="CLERK_ISSUER não configurada.",
+            org_id=None,
+            org_role=None,
+        )
 
     try:
         signing_key = jwks_client.get_signing_key_from_jwt(token)
@@ -105,12 +148,23 @@ def verify_session_token(token: str) -> AuthResult:
             options={"require": ["exp", "sub", "iss"]},
         )
     except jwt.PyJWTError as exc:
-        return AuthResult(ok=False, user_id=None, error=f"Token inválido: {exc}")
+        return AuthResult(
+            ok=False, user_id=None, error=f"Token inválido: {exc}", org_id=None, org_role=None
+        )
     except Exception as exc:  # JWKS endpoint unreachable, network errors, etc.
-        return AuthResult(ok=False, user_id=None, error=f"Falha ao verificar token: {exc}")
+        return AuthResult(
+            ok=False,
+            user_id=None,
+            error=f"Falha ao verificar token: {exc}",
+            org_id=None,
+            org_role=None,
+        )
 
     user_id = payload.get("sub")
     if not user_id:
-        return AuthResult(ok=False, user_id=None, error="Token sem claim 'sub'.")
+        return AuthResult(
+            ok=False, user_id=None, error="Token sem claim 'sub'.", org_id=None, org_role=None
+        )
 
-    return AuthResult(ok=True, user_id=str(user_id), error=None)
+    org_id, org_role = _extract_org_claims(payload)
+    return AuthResult(ok=True, user_id=str(user_id), error=None, org_id=org_id, org_role=org_role)

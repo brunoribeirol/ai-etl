@@ -74,11 +74,15 @@ def _make_token(
     exp_offset_seconds: int = 3600,
     kid: str = _KID,
     iss: str | None = _ISSUER,
+    org_id: str | None = None,
+    org_role: str | None = None,
 ) -> str:
     now = int(time.time())
     payload: dict[str, Any] = {"sub": sub, "exp": now + exp_offset_seconds, "iat": now}
     if iss is not None:
         payload["iss"] = iss
+    if org_id is not None:
+        payload["o"] = {"id": org_id, "rol": org_role}
     return jwt.encode(payload, private_key, algorithm="RS256", headers={"kid": kid})
 
 
@@ -152,6 +156,46 @@ def test_accepts_valid_well_formed_token(
     assert result["ok"] is True
     assert result["user_id"] == "user_xyz789"
     assert result["error"] is None
+    assert result["org_id"] is None
+    assert result["org_role"] is None
+
+
+# ---------------------------------------------------------------------------
+# Organization claims (Sprint 19, ADR-022)
+# ---------------------------------------------------------------------------
+
+
+def test_extracts_org_claims_when_session_has_active_organization(
+    monkeypatch: pytest.MonkeyPatch, rsa_keypair: tuple[RSAPrivateKey, RSAPublicKey]
+) -> None:
+    private_key, public_key = rsa_keypair
+    _mock_jwks_client(monkeypatch, public_key)
+    token = _make_token(private_key, sub="user_1", org_id="org_acme", org_role="org:admin")
+
+    result = auth_service.verify_session_token(token)
+
+    assert result["ok"] is True
+    assert result["user_id"] == "user_1"
+    assert result["org_id"] == "org_acme"
+    assert result["org_role"] == "org:admin"
+
+
+def test_extract_org_claims_falls_back_to_legacy_flat_claims() -> None:
+    """Legacy v1 Clerk JWT templates use flat org_id/org_role instead of the
+    nested `o` claim v2 uses."""
+    org_id, org_role = auth_service._extract_org_claims(
+        {"org_id": "org_legacy", "org_role": "admin"}
+    )
+
+    assert org_id == "org_legacy"
+    assert org_role == "admin"
+
+
+def test_extract_org_claims_returns_none_for_personal_session() -> None:
+    org_id, org_role = auth_service._extract_org_claims({"sub": "user_1"})
+
+    assert org_id is None
+    assert org_role is None
 
 
 # ---------------------------------------------------------------------------

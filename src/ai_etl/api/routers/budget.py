@@ -1,8 +1,10 @@
 """`/budget` endpoints — per-tenant monthly budget cap (Sprint 29, ADR-019).
 
 Self-service, same trust model as `/pipelines`: a tenant can only read or
-set their own cap (`get_current_tenant_id`), since this codebase has no
-separate admin/billing role yet (ADR-019 flags this as a known limitation).
+set their own cap. `PATCH` requires the `editor` role (Sprint 19, ADR-022)
+— partially closes the "no separate admin/billing role" limitation ADR-019
+flagged; a dedicated billing role distinct from `editor` remains future
+work, this sprint only stops a `viewer` from changing the cap.
 
 `GET /budget` is also how a frontend would surface the "near the cap" alert
 `services/execution_queue.py::check_budget_cap` computes on every enqueue —
@@ -16,7 +18,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
-from ai_etl.api.deps import get_current_tenant_id
+from ai_etl.api.deps import get_current_tenant_id, require_role
 from ai_etl.audit.db import set_monthly_budget
 from ai_etl.services.execution_queue import BudgetStatus, get_budget_status
 
@@ -41,7 +43,7 @@ def get_budget(tenant_id: Annotated[str, Depends(get_current_tenant_id)]) -> Bud
 @router.patch("")
 def patch_budget(
     body: SetBudgetRequest,
-    tenant_id: Annotated[str, Depends(get_current_tenant_id)],
+    tenant_id: Annotated[str, Depends(require_role("editor"))],
 ) -> BudgetStatus:
     set_monthly_budget(tenant_id, body.monthly_budget_usd)
     return get_budget_status(tenant_id)

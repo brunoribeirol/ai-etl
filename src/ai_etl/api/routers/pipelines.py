@@ -12,7 +12,7 @@ from typing import Annotated, Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from ai_etl.api.deps import get_current_tenant_id
+from ai_etl.api.deps import get_current_tenant_id, require_role
 from ai_etl.audit.db import (
     DEFAULT_PIPELINE_HISTORY_LIMIT,
     create_saved_pipeline,
@@ -108,7 +108,7 @@ def get_pipeline(
 @router.post("")
 def create_pipeline(
     body: CreatePipelineRequest,
-    tenant_id: Annotated[str, Depends(get_current_tenant_id)],
+    tenant_id: Annotated[str, Depends(require_role("editor"))],
 ) -> dict[str, Any]:
     _validate_source_type(body.source_type)
     try:
@@ -157,7 +157,7 @@ def get_pipeline_history(
 def patch_pipeline(
     pipeline_id: str,
     body: UpdatePipelineRequest,
-    tenant_id: Annotated[str, Depends(get_current_tenant_id)],
+    tenant_id: Annotated[str, Depends(require_role("editor"))],
 ) -> dict[str, Any]:
     if body.source_type is not None:
         _validate_source_type(body.source_type)

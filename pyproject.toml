@@ -24,6 +24,11 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "numpy>=1.26.0",
     "pyjwt[crypto]>=2.13.0",
+    # Sprint 19 (ADR-021) — Fernet symmetric encryption for tenant_secrets
+    # (services/secrets_service.py). Not a new install: pyjwt[crypto] above
+    # already pulls in `cryptography` transitively; declared explicitly here
+    # now that application code imports it directly.
+    "cryptography>=44.0.0",
     "celery>=5.4.0",
     "redis>=5.0.0",
     "boto3>=1.34.0",

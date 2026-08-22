@@ -23,6 +23,7 @@ from sqlalchemy import (
     String,
     Table,
     Text,
+    UniqueConstraint,
 )
 
 metadata = MetaData()
@@ -191,4 +192,23 @@ saved_pipelines = Table(
     Column("updated_at", DateTime(timezone=True), nullable=False),
     Index("ix_saved_pipelines_active_next_run", "is_active", "next_run_at"),
     Index("ix_saved_pipelines_tenant", "tenant_id"),
+)
+
+# Sprint 19 (ADR-022, migration 0011) — per-tenant encrypted credentials for
+# external source connectors (e.g. a REST API key), replacing the
+# process-wide shared env var every connector reads today. `ciphertext` is
+# a Fernet token (see services/secrets_service.py) — the decrypted value
+# never lives in this table, is never logged, and is only ever returned by
+# `secrets_service.get_secret`, which no read-only API endpoint calls.
+tenant_secrets = Table(
+    "tenant_secrets",
+    metadata,
+    Column("id", String, primary_key=True),
+    Column("tenant_id", String, ForeignKey("users.id"), nullable=False),
+    Column("name", String(200), nullable=False),
+    Column("ciphertext", Text, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+    UniqueConstraint("tenant_id", "name", name="uq_tenant_secrets_tenant_name"),
+    Index("ix_tenant_secrets_tenant", "tenant_id"),
 )

@@ -10,7 +10,7 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from ai_etl.api.deps import get_current_tenant_id
-from ai_etl.api.routers import budget, pipelines, runs
+from ai_etl.api.routers import budget, pipelines, runs, secrets
 from ai_etl.core.llm import get_model_name
 
 app = FastAPI(title="AI-ETL API", version="1.0.0")
@@ -35,6 +35,7 @@ app.add_middleware(
 app.include_router(runs.router)
 app.include_router(pipelines.router)
 app.include_router(budget.router)
+app.include_router(secrets.router)
 
 
 @app.get("/health")
