@@ -194,7 +194,7 @@ saved_pipelines = Table(
     Index("ix_saved_pipelines_tenant", "tenant_id"),
 )
 
-# Sprint 19 (ADR-021, migration 0011) — per-tenant encrypted credentials for
+# Sprint 19 (ADR-022, migration 0011) — per-tenant encrypted credentials for
 # external source connectors (e.g. a REST API key), replacing the
 # process-wide shared env var every connector reads today. `ciphertext` is
 # a Fernet token (see services/secrets_service.py) — the decrypted value

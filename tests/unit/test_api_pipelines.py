@@ -364,7 +364,7 @@ def test_patch_pipeline_rejects_non_live_source_type(client: TestClient, mocker)
 
 
 def test_viewer_role_cannot_create_pipeline(client: TestClient, mocker) -> None:
-    """RBAC (Sprint 19, ADR-021): a `viewer` cannot configure a pipeline —
+    """RBAC (Sprint 19, ADR-022): a `viewer` cannot configure a pipeline —
     only `editor` can, even though both roles share the same tenant_id."""
     app.dependency_overrides[get_current_auth_context] = lambda: {
         "tenant_id": "tenant-a",

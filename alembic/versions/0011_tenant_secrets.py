@@ -1,4 +1,4 @@
-"""tenant_secrets table (ADR-021, Sprint 19)
+"""tenant_secrets table (ADR-022, Sprint 19)
 
 New, standalone table — no changes to any existing table. Stores
 Fernet-encrypted external-source credentials scoped by tenant, one row per

@@ -1,4 +1,4 @@
-"""Unit tests for `services/secrets_service.py` (Sprint 19, ADR-021).
+"""Unit tests for `services/secrets_service.py` (Sprint 19, ADR-022).
 
 Same convention as `test_saved_pipelines_db.py`: a real in-memory SQLite
 engine (not a mocked `get_engine`) so the actual insert/select/delete

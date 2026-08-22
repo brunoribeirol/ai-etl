@@ -1,7 +1,7 @@
 """`/budget` endpoints — per-tenant monthly budget cap (Sprint 29, ADR-019).
 
 Self-service, same trust model as `/pipelines`: a tenant can only read or
-set their own cap. `PATCH` requires the `editor` role (Sprint 19, ADR-021)
+set their own cap. `PATCH` requires the `editor` role (Sprint 19, ADR-022)
 — partially closes the "no separate admin/billing role" limitation ADR-019
 flagged; a dedicated billing role distinct from `editor` remains future
 work, this sprint only stops a `viewer` from changing the cap.

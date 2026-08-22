@@ -1,4 +1,4 @@
-"""Tests for `api/deps.py` — auth (ADR-011) and RBAC (ADR-021).
+"""Tests for `api/deps.py` — auth (ADR-011) and RBAC (ADR-022).
 
 Reuses the fake-JWKS-via-local-RSA-keypair pattern already established in
 `tests/unit/test_auth_service.py` — no network call to Clerk, tokens signed

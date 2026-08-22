@@ -45,7 +45,7 @@ class AuthResult(TypedDict):
     ok: bool
     user_id: Optional[str]  # Clerk user id (JWT `sub` claim) -> becomes tenant_id
     error: Optional[str]
-    # Sprint 19 (ADR-021) — Clerk Organizations. Present only when the
+    # Sprint 19 (ADR-022) — Clerk Organizations. Present only when the
     # session has an *active* organization; `None` for a personal session
     # (every account that predates this sprint, and any account that never
     # joins an org). `org_role` is the raw Clerk role claim, unmapped —

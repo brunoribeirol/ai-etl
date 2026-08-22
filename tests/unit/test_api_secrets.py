@@ -1,4 +1,4 @@
-"""Tests for `/secrets` endpoints (Sprint 19, ADR-021).
+"""Tests for `/secrets` endpoints (Sprint 19, ADR-022).
 
 Same convention as `test_api_pipelines.py`: mocks at the import site inside
 `api/routers/secrets.py`, auth overridden via `dependency_overrides`.
@@ -80,7 +80,7 @@ def test_delete_secret_happy_path(client: TestClient, mocker) -> None:
 
 
 def test_viewer_role_cannot_list_secrets(client: TestClient, mocker) -> None:
-    """RBAC (ADR-021): secrets management is editor-only end to end — a
+    """RBAC (ADR-022): secrets management is editor-only end to end — a
     viewer cannot even list secret *names*."""
     app.dependency_overrides[get_current_auth_context] = lambda: {
         "tenant_id": "tenant-a",

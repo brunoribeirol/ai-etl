@@ -1,4 +1,4 @@
-"""FastAPI dependencies — auth (ADR-011, reuses ADR-006) and RBAC (ADR-021)."""
+"""FastAPI dependencies — auth (ADR-011, reuses ADR-006) and RBAC (ADR-022)."""
 
 from collections.abc import Callable
 from typing import Annotated, Optional, TypedDict
@@ -8,14 +8,14 @@ from fastapi import Depends, Header, HTTPException
 from ai_etl.audit.db import ensure_user
 from ai_etl.services.auth_service import verify_session_token
 
-# Sprint 19 (ADR-021) — the two app-level roles. `editor` can configure/mutate
+# Sprint 19 (ADR-022) — the two app-level roles. `editor` can configure/mutate
 # (create/patch pipelines, submit runs, manage secrets, set budget); `viewer`
 # can only read. Ordering matters for `_role_satisfies`.
 _ROLE_RANK = {"viewer": 0, "editor": 1}
 
 # Clerk role-key substring that means "full access" within an organization —
 # covers both the legacy `"admin"` role key and the current `"org:admin"`
-# convention. See ADR-021 Decision 1 for why this is a heuristic, not an
+# convention. See ADR-022 Decision 1 for why this is a heuristic, not an
 # exhaustive mapping of arbitrary custom Clerk roles.
 _EDITOR_ROLE_MARKER = "admin"
 
@@ -29,7 +29,7 @@ def _resolve_role(org_id: Optional[str], org_role: Optional[str]) -> str:
     """Map a Clerk org role claim to this app's editor/viewer role.
 
     No active organization (`org_id` is `None`) -> `editor`: a solo tenant
-    is its own sole owner, matching every pre-ADR-021 account's unrestricted
+    is its own sole owner, matching every pre-ADR-022 account's unrestricted
     behavior unchanged. Within an organization, only a role whose Clerk key
     looks like an admin role gets `editor`; every other org member is a
     `viewer` by default (fail toward less access, not more).
@@ -43,7 +43,7 @@ def _resolve_role(org_id: Optional[str], org_role: Optional[str]) -> str:
 
 def get_current_auth_context(authorization: str | None = Header(default=None)) -> AuthContext:
     """Verify the `Authorization: Bearer <token>` header once and resolve
-    both `tenant_id` and `role` from it (ADR-021).
+    both `tenant_id` and `role` from it (ADR-022).
 
     Calls the same `verify_session_token()` as before — no new verification
     logic, no trusting anything Clerk's frontend SDK claims client-side
@@ -52,7 +52,7 @@ def get_current_auth_context(authorization: str | None = Header(default=None)) -
     `verify_session_token`'s fail-closed contract.
 
     `ensure_user()` runs on every call (ADR-006) — cheap, idempotent
-    (`ON CONFLICT DO NOTHING`); unchanged from the pre-ADR-021 behavior.
+    (`ON CONFLICT DO NOTHING`); unchanged from the pre-ADR-022 behavior.
     """
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing or malformed Authorization header.")
@@ -65,7 +65,7 @@ def get_current_auth_context(authorization: str | None = Header(default=None)) -
     user_id = result["user_id"]
     assert user_id is not None  # verify_session_token guarantees this when ok=True
 
-    # ADR-021: an active Clerk Organization becomes the tenant; otherwise the
+    # ADR-022: an active Clerk Organization becomes the tenant; otherwise the
     # individual user id stays the tenant, unchanged from ADR-006.
     tenant_id = result["org_id"] or user_id
     role = _resolve_role(result["org_id"], result["org_role"])
@@ -77,7 +77,7 @@ def get_current_auth_context(authorization: str | None = Header(default=None)) -
 def get_current_tenant_id(
     auth: Annotated[AuthContext, Depends(get_current_auth_context)],
 ) -> str:
-    """Backward-compatible wrapper — every pre-ADR-021 call site keeps
+    """Backward-compatible wrapper — every pre-ADR-022 call site keeps
     working unchanged, now backed by the shared auth-context resolution."""
     return auth["tenant_id"]
 

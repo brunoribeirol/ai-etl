@@ -1,4 +1,4 @@
-"""Tenant-scoped secrets management for external source credentials (Sprint 19, ADR-021).
+"""Tenant-scoped secrets management for external source credentials (Sprint 19, ADR-022).
 
 Replaces the process-wide-shared-env-var pattern every source connector uses
 today (`POSTGRES_URL`, REST `auth.env_var`) with per-tenant, encrypted-at-rest
@@ -12,7 +12,7 @@ value — only `name` and outcome are ever passed to `logger` calls, matching
 the "API keys em logs" non-negotiable rule the same way the logger's
 automatic redaction already covers everything else.
 
-ADR-021 Decision 4 scopes this sprint to storage/API only — no source
+ADR-022 Decision 4 scopes this sprint to storage/API only — no source
 connector consumes a stored secret yet (see the ADR for why: `tenant_id` is
 not available inside a LangGraph node without breaking the node-signature
 contract or widening `PipelineState`, both deliberately avoided here).

@@ -33,7 +33,7 @@ process-wide env vars).
    `org_role`. A personal (non-org) session omits `o` entirely. Verified via
    Clerk docs (2026-08-21).
 
-## Decisions (→ ADR-021)
+## Decisions (→ ADR-022)
 - Tenant resolution: prefer `o.id`/`org_id` when present (org-scoped
   session) else fall back to `sub` (solo tenant, zero behavior change for
   every existing account).

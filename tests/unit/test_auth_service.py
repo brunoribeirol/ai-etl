@@ -161,7 +161,7 @@ def test_accepts_valid_well_formed_token(
 
 
 # ---------------------------------------------------------------------------
-# Organization claims (Sprint 19, ADR-021)
+# Organization claims (Sprint 19, ADR-022)
 # ---------------------------------------------------------------------------
 
 

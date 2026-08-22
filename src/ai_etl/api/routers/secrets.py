@@ -1,12 +1,12 @@
 """`/secrets` endpoints — tenant-scoped external-source credential storage
-(Sprint 19, ADR-021). Editor-only end to end: a `viewer` cannot read, list,
+(Sprint 19, ADR-022). Editor-only end to end: a `viewer` cannot read, list,
 or write another member's credentials, including the names alone — closing
 the RBAC DoD's isolation requirement for the secrets management surface.
 
 No endpoint here ever returns a decrypted value. `GET` returns names only
 (`services/secrets_service.list_secret_names`); nothing in this router calls
 `secrets_service.get_secret`, which is reserved for a future pipeline
-connector to call server-side (see ADR-021 Decision 4 for why that wiring is
+connector to call server-side (see ADR-022 Decision 4 for why that wiring is
 explicitly deferred).
 """
 

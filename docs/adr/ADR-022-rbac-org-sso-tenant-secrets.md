@@ -1,4 +1,4 @@
-# ADR-021: RBAC via Clerk Organizations, Org-Level SSO, and Tenant-Scoped Secrets Management
+# ADR-022: RBAC via Clerk Organizations, Org-Level SSO, and Tenant-Scoped Secrets Management
 
 **Status:** Proposed (code complete, `make check` green locally; migration `0011` is syntax-checked and mirrors migration `0006`'s additive-table shape but was **not** run against a live Postgres this session — no Docker daemon available in this sandbox — and is not applied to production)
 **Date:** 2026-08-21
