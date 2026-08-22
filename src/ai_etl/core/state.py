@@ -49,7 +49,7 @@ class PipelineState(TypedDict):
     # {"column": str, "operator": "not_null"|"gte"|"lte"|"gt"|"lt"|"eq"|"ne",
     #  "value": Any (omitted for "not_null"), "severity": "ok"|"warning"|"error"
     #  (default "error"), "name": str (optional, defaults to "{operator} {column}")}.
-    # See `agents/quality.py::_CUSTOM_RULE_OPERATORS` for the whitelisted dispatch.
+    # See `agents/pipeline/quality.py::_CUSTOM_RULE_OPERATORS` for the whitelisted dispatch.
 
     # --- Quality output ---
     quality_report: dict[str, Any]
@@ -73,7 +73,7 @@ class PipelineState(TypedDict):
     # resolved by `services/pipeline_service.py::run_silver_pipeline` from the
     # saved pipeline this run belongs to (mirrors `custom_quality_rules`'
     # resolution above). `None` for every avulso run — an avulso execution is
-    # never gated, see ADR-028 Decision 2. Read by `agents/loader.py::loader_node`
+    # never gated, see ADR-028 Decision 2. Read by `agents/pipeline/loader.py::loader_node`
     # only; never queried from the DB inside the node itself.
     approval_granted: bool  # Sprint 27 (ADR-028) — set `True` only by
     # `pipeline_service.resume_pending_load` on the second, direct `loader_node`

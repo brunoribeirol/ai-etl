@@ -8,7 +8,7 @@ consistent (right dtypes, right shape) but numerically implausible.
 
 Pure functions, no I/O — mirrors `core/drift.py`'s own shape. Every check emits one
 entry per rule it evaluates whenever the rule is applicable (`severity: "ok"` on pass),
-mirroring `agents/quality.py::_check_custom_rules` (ADR-023) — so a run's manifest
+mirroring `agents/pipeline/quality.py::_check_custom_rules` (ADR-023) — so a run's manifest
 shows every check that ran, not just the ones that fired. A non-applicable check (e.g.
 no shared numeric column between `gold_df` and `silver_df`) is skipped entirely rather
 than emitted as a false "ok".

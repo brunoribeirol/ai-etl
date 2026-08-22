@@ -2,7 +2,7 @@
 
 import pandas as pd
 
-from ai_etl.agents.loader import _is_write_gated, loader_node
+from ai_etl.agents.pipeline.loader import _is_write_gated, loader_node
 from ai_etl.core.state import initial_state
 
 
@@ -27,7 +27,7 @@ def _make_state(
 
 def test_csv_load_succeeds(mocker) -> None:
     mock_save = mocker.patch(
-        "ai_etl.agents.loader.save_csv",
+        "ai_etl.agents.pipeline.loader.save_csv",
         return_value={"rows_loaded": 3, "destination": "output.csv"},
     )
     result = loader_node(_make_state())
@@ -42,7 +42,7 @@ def test_csv_load_succeeds(mocker) -> None:
 
 def test_audit_log_added_on_success(mocker) -> None:
     mocker.patch(
-        "ai_etl.agents.loader.save_csv",
+        "ai_etl.agents.pipeline.loader.save_csv",
         return_value={"rows_loaded": 3, "destination": "output.csv"},
     )
     result = loader_node(_make_state())
@@ -51,7 +51,7 @@ def test_audit_log_added_on_success(mocker) -> None:
 
 
 def test_destination_failure_sets_error(mocker) -> None:
-    mocker.patch("ai_etl.agents.loader.save_csv", side_effect=OSError("disk full"))
+    mocker.patch("ai_etl.agents.pipeline.loader.save_csv", side_effect=OSError("disk full"))
     result = loader_node(_make_state())
 
     assert result["error"] is not None
@@ -61,7 +61,7 @@ def test_destination_failure_sets_error(mocker) -> None:
 
 def test_s3_parquet_load_succeeds(mocker) -> None:
     mock_save = mocker.patch(
-        "ai_etl.agents.loader.save_s3_parquet",
+        "ai_etl.agents.pipeline.loader.save_s3_parquet",
         return_value={"rows_loaded": 3, "destination": "s3://my-bucket/warehouse/out.parquet"},
     )
     result = loader_node(_make_state(dest_type="s3_parquet"))
@@ -84,7 +84,7 @@ def test_unsupported_destination_type_sets_error() -> None:
 
 
 def test_upstream_error_short_circuits(mocker) -> None:
-    mock_save = mocker.patch("ai_etl.agents.loader.save_csv")
+    mock_save = mocker.patch("ai_etl.agents.pipeline.loader.save_csv")
     state = _make_state()
     state["error"] = "upstream failure"
 
@@ -137,9 +137,9 @@ class TestIsWriteGated:
 
 
 def test_gated_write_computes_preview_and_never_writes(mocker) -> None:
-    mock_save = mocker.patch("ai_etl.agents.loader.save_csv")
+    mock_save = mocker.patch("ai_etl.agents.pipeline.loader.save_csv")
     mock_preview = mocker.patch(
-        "ai_etl.agents.loader.preview_csv",
+        "ai_etl.agents.pipeline.loader.preview_csv",
         return_value={"destination_type": "csv", "would_write_rows": 3, "existing": None},
     )
     policy = {"require_approval": True, "threshold_rows": None, "last_approved_at": None}
@@ -156,10 +156,10 @@ def test_gated_write_computes_preview_and_never_writes(mocker) -> None:
 
 def test_approval_granted_bypasses_gate_and_writes(mocker) -> None:
     mock_save = mocker.patch(
-        "ai_etl.agents.loader.save_csv",
+        "ai_etl.agents.pipeline.loader.save_csv",
         return_value={"rows_loaded": 3, "destination": "output.csv"},
     )
-    mock_preview = mocker.patch("ai_etl.agents.loader.preview_csv")
+    mock_preview = mocker.patch("ai_etl.agents.pipeline.loader.preview_csv")
     policy = {"require_approval": True, "threshold_rows": None, "last_approved_at": None}
     state = _make_state(approval_policy=policy)
     state["approval_granted"] = True
@@ -173,8 +173,10 @@ def test_approval_granted_bypasses_gate_and_writes(mocker) -> None:
 
 
 def test_preview_failure_sets_error_without_writing(mocker) -> None:
-    mock_save = mocker.patch("ai_etl.agents.loader.save_csv")
-    mocker.patch("ai_etl.agents.loader.preview_csv", side_effect=OSError("cannot stat path"))
+    mock_save = mocker.patch("ai_etl.agents.pipeline.loader.save_csv")
+    mocker.patch(
+        "ai_etl.agents.pipeline.loader.preview_csv", side_effect=OSError("cannot stat path")
+    )
     policy = {"require_approval": True, "threshold_rows": None, "last_approved_at": None}
 
     result = loader_node(_make_state(approval_policy=policy))

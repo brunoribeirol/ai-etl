@@ -2,7 +2,7 @@
 
 import pandas as pd
 
-from ai_etl.agents.extractor import MAX_SAMPLE_COLUMNS, _extract_schema, extractor_node
+from ai_etl.agents.pipeline.extractor import MAX_SAMPLE_COLUMNS, _extract_schema, extractor_node
 from ai_etl.core.state import initial_state
 
 
@@ -13,7 +13,7 @@ def _make_state(sources: list[dict]) -> dict:
 
 def test_csv_source_extracted(mocker) -> None:
     df = pd.DataFrame({"a": [1, 2], "b": ["x", "y"]})
-    mocker.patch("ai_etl.agents.extractor.load_csv", return_value=df)
+    mocker.patch("ai_etl.agents.pipeline.extractor.load_csv", return_value=df)
 
     sources = [{"name": "orders", "type": "csv", "path": "data/orders.csv"}]
     result = extractor_node(_make_state(sources))
@@ -27,7 +27,7 @@ def test_csv_source_extracted(mocker) -> None:
 def test_csv_source_passes_sheet_name_and_header_row(mocker) -> None:
     """Sprint 22: optional Excel disambiguation fields reach load_csv unchanged."""
     df = pd.DataFrame({"a": [1, 2], "b": ["x", "y"]})
-    mock_load = mocker.patch("ai_etl.agents.extractor.load_csv", return_value=df)
+    mock_load = mocker.patch("ai_etl.agents.pipeline.extractor.load_csv", return_value=df)
 
     sources = [
         {
@@ -45,7 +45,7 @@ def test_csv_source_passes_sheet_name_and_header_row(mocker) -> None:
 
 def test_csv_source_omits_sheet_name_and_header_row_by_default(mocker) -> None:
     df = pd.DataFrame({"a": [1, 2], "b": ["x", "y"]})
-    mock_load = mocker.patch("ai_etl.agents.extractor.load_csv", return_value=df)
+    mock_load = mocker.patch("ai_etl.agents.pipeline.extractor.load_csv", return_value=df)
 
     sources = [{"name": "orders", "type": "csv", "path": "data/orders.csv"}]
     extractor_node(_make_state(sources))
@@ -55,7 +55,7 @@ def test_csv_source_omits_sheet_name_and_header_row_by_default(mocker) -> None:
 
 def test_document_source_extracted(mocker) -> None:
     df = pd.DataFrame({"product": ["A", "B"], "revenue": [100, 200]})
-    mocker.patch("ai_etl.agents.extractor.load_document", return_value=df)
+    mocker.patch("ai_etl.agents.pipeline.extractor.load_document", return_value=df)
 
     sources = [{"name": "report", "type": "document", "path": "report.pdf"}]
     result = extractor_node(_make_state(sources))
@@ -67,7 +67,7 @@ def test_document_source_extracted(mocker) -> None:
 
 def test_sqlite_source_extracted(mocker) -> None:
     df = pd.DataFrame({"id": [1, 2], "product": ["A", "B"]})
-    mock_load = mocker.patch("ai_etl.agents.extractor.load_sqlite", return_value=df)
+    mock_load = mocker.patch("ai_etl.agents.pipeline.extractor.load_sqlite", return_value=df)
 
     sources = [{"name": "orders", "type": "sqlite", "path": "shop.db", "table": "orders"}]
     result = extractor_node(_make_state(sources))
@@ -80,7 +80,7 @@ def test_sqlite_source_extracted(mocker) -> None:
 
 def test_sqlite_source_passes_optional_query(mocker) -> None:
     df = pd.DataFrame({"product": ["A"]})
-    mock_load = mocker.patch("ai_etl.agents.extractor.load_sqlite", return_value=df)
+    mock_load = mocker.patch("ai_etl.agents.pipeline.extractor.load_sqlite", return_value=df)
 
     sources = [
         {
@@ -98,7 +98,7 @@ def test_sqlite_source_passes_optional_query(mocker) -> None:
 
 def test_rest_source_passes_optional_auth(mocker) -> None:
     df = pd.DataFrame({"id": [1]})
-    mock_load = mocker.patch("ai_etl.agents.extractor.load_rest", return_value=df)
+    mock_load = mocker.patch("ai_etl.agents.pipeline.extractor.load_rest", return_value=df)
 
     auth = {"type": "bearer", "env_var": "MY_API_TOKEN"}
     sources = [{"name": "api", "type": "rest", "url": "http://example.com/api", "auth": auth}]
@@ -109,7 +109,7 @@ def test_rest_source_passes_optional_auth(mocker) -> None:
 
 def test_mysql_source_extracted(mocker) -> None:
     df = pd.DataFrame({"id": [1, 2], "product": ["A", "B"]})
-    mock_load = mocker.patch("ai_etl.agents.extractor.load_mysql", return_value=df)
+    mock_load = mocker.patch("ai_etl.agents.pipeline.extractor.load_mysql", return_value=df)
 
     sources = [{"name": "orders", "type": "mysql", "table": "shop.orders"}]
     result = extractor_node(_make_state(sources))
@@ -122,7 +122,7 @@ def test_mysql_source_extracted(mocker) -> None:
 
 def test_mysql_source_passes_optional_query(mocker) -> None:
     df = pd.DataFrame({"product": ["A"]})
-    mock_load = mocker.patch("ai_etl.agents.extractor.load_mysql", return_value=df)
+    mock_load = mocker.patch("ai_etl.agents.pipeline.extractor.load_mysql", return_value=df)
 
     sources = [
         {
@@ -139,7 +139,7 @@ def test_mysql_source_passes_optional_query(mocker) -> None:
 
 def test_mongodb_source_extracted(mocker) -> None:
     df = pd.DataFrame({"_id": ["1", "2"], "product": ["A", "B"]})
-    mock_load = mocker.patch("ai_etl.agents.extractor.load_mongodb", return_value=df)
+    mock_load = mocker.patch("ai_etl.agents.pipeline.extractor.load_mongodb", return_value=df)
 
     sources = [{"name": "orders", "type": "mongodb", "database": "shop", "collection": "orders"}]
     result = extractor_node(_make_state(sources))
@@ -152,7 +152,7 @@ def test_mongodb_source_extracted(mocker) -> None:
 
 def test_mongodb_source_passes_optional_query_and_limit(mocker) -> None:
     df = pd.DataFrame({"product": ["A"]})
-    mock_load = mocker.patch("ai_etl.agents.extractor.load_mongodb", return_value=df)
+    mock_load = mocker.patch("ai_etl.agents.pipeline.extractor.load_mongodb", return_value=df)
 
     sources = [
         {
@@ -171,7 +171,7 @@ def test_mongodb_source_passes_optional_query_and_limit(mocker) -> None:
 
 def test_source_schema_has_required_fields(mocker) -> None:
     df = pd.DataFrame({"price": [10.0, None], "qty": [2, 3]})
-    mocker.patch("ai_etl.agents.extractor.load_csv", return_value=df)
+    mocker.patch("ai_etl.agents.pipeline.extractor.load_csv", return_value=df)
 
     sources = [{"name": "sales", "type": "csv", "path": "sales.csv"}]
     result = extractor_node(_make_state(sources))
@@ -189,7 +189,9 @@ def test_source_schema_has_required_fields(mocker) -> None:
 
 
 def test_connector_failure_sets_error(mocker) -> None:
-    mocker.patch("ai_etl.agents.extractor.load_csv", side_effect=FileNotFoundError("not found"))
+    mocker.patch(
+        "ai_etl.agents.pipeline.extractor.load_csv", side_effect=FileNotFoundError("not found")
+    )
 
     sources = [{"name": "missing", "type": "csv", "path": "missing.csv"}]
     result = extractor_node(_make_state(sources))
@@ -200,7 +202,7 @@ def test_connector_failure_sets_error(mocker) -> None:
 
 
 def test_upstream_error_short_circuits(mocker) -> None:
-    mock_load = mocker.patch("ai_etl.agents.extractor.load_csv")
+    mock_load = mocker.patch("ai_etl.agents.pipeline.extractor.load_csv")
     state = _make_state([{"name": "x", "type": "csv", "path": "x.csv"}])
     state["error"] = "upstream failure"
 
@@ -220,7 +222,7 @@ def test_unsupported_source_type_sets_error() -> None:
 
 def test_audit_log_added_on_success(mocker) -> None:
     df = pd.DataFrame({"col": [1]})
-    mocker.patch("ai_etl.agents.extractor.load_csv", return_value=df)
+    mocker.patch("ai_etl.agents.pipeline.extractor.load_csv", return_value=df)
 
     sources = [{"name": "s", "type": "csv", "path": "s.csv"}]
     result = extractor_node(_make_state(sources))

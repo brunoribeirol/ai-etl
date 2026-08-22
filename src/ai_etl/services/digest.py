@@ -2,7 +2,7 @@
 executive briefing (Sprint 14, ADR-018).
 
 No new agent, no new LLM call — this is pure formatting over what
-`agents/advisor.py` (via `services/pipeline_service.run_advisor_analysis`)
+`agents/analysis/advisor.py` (via `services/pipeline_service.run_advisor_analysis`)
 already produced for the run. `services/alerting.py` calls `build_digest`
 once drift has been detected, then hands the result to
 `services/notifications.py` for delivery.

@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 import pandas as pd
 import pytest
 
-from ai_etl.agents.planner import plan_analysis_tasks
+from ai_etl.agents.analysis.planner import plan_analysis_tasks
 
 
 @pytest.fixture
@@ -18,7 +18,7 @@ def sample_df() -> pd.DataFrame:
 
 @pytest.fixture
 def mock_get_llm(mocker):
-    return mocker.patch("ai_etl.agents.planner.get_llm")
+    return mocker.patch("ai_etl.agents.analysis.planner.get_llm")
 
 
 def _mock_llm(response: str, usage: dict | None = None) -> MagicMock:

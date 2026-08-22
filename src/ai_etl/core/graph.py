@@ -5,11 +5,11 @@ from typing import Any, Callable
 
 from langgraph.graph import END, StateGraph
 
-from ai_etl.agents.extractor import extractor_node
-from ai_etl.agents.loader import loader_node
-from ai_etl.agents.orchestrator import orchestrator_node
-from ai_etl.agents.quality import quality_node
-from ai_etl.agents.transformer import transformer_node
+from ai_etl.agents.pipeline.extractor import extractor_node
+from ai_etl.agents.pipeline.loader import loader_node
+from ai_etl.agents.pipeline.orchestrator import orchestrator_node
+from ai_etl.agents.pipeline.quality import quality_node
+from ai_etl.agents.pipeline.transformer import transformer_node
 from ai_etl.core.state import PipelineState
 
 NodeFn = Callable[[PipelineState], PipelineState]

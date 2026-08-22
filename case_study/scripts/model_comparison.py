@@ -229,27 +229,27 @@ def _patch_mocked_pipeline(stack: ExitStack, plan: dict[str, Any], transform_cod
     `run_full_analysis` touches with deterministic, fixed responses."""
     orchestrator_llm = MagicMock()
     orchestrator_llm.invoke.return_value = _mock_response(json.dumps(plan))
-    stack.enter_context(patch("ai_etl.agents.orchestrator.get_llm", return_value=orchestrator_llm))
+    stack.enter_context(patch("ai_etl.agents.pipeline.orchestrator.get_llm", return_value=orchestrator_llm))
 
     transformer_llm = MagicMock()
     transformer_llm.invoke.return_value = _mock_response(transform_code)
-    stack.enter_context(patch("ai_etl.agents.transformer.get_llm", return_value=transformer_llm))
+    stack.enter_context(patch("ai_etl.agents.pipeline.transformer.get_llm", return_value=transformer_llm))
 
     planner_llm = MagicMock()
     planner_llm.invoke.return_value = _mock_response("[]")
-    stack.enter_context(patch("ai_etl.agents.planner.get_llm", return_value=planner_llm))
+    stack.enter_context(patch("ai_etl.agents.analysis.planner.get_llm", return_value=planner_llm))
 
     analyst_llm = MagicMock()
     analyst_llm.invoke.return_value = _mock_response(
         'gold_df = df.head(1)\nfig = go.Figure()\nnarrative = "No business question was asked."'
     )
-    stack.enter_context(patch("ai_etl.agents.analyst.get_llm", return_value=analyst_llm))
+    stack.enter_context(patch("ai_etl.agents.analysis.analyst.get_llm", return_value=analyst_llm))
 
     advisor_llm = MagicMock()
     advisor_llm.invoke.return_value = _mock_response(
         json.dumps({"recommendations": [], "summary": "No sub-tasks were run."})
     )
-    stack.enter_context(patch("ai_etl.agents.advisor.get_llm", return_value=advisor_llm))
+    stack.enter_context(patch("ai_etl.agents.analysis.advisor.get_llm", return_value=advisor_llm))
 
 
 def _patch_no_audit_persistence(stack: ExitStack) -> None:

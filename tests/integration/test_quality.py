@@ -2,7 +2,7 @@
 
 import pandas as pd
 
-from ai_etl.agents.quality import quality_node
+from ai_etl.agents.pipeline.quality import quality_node
 from ai_etl.core.state import initial_state
 
 

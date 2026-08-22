@@ -3,7 +3,7 @@
 Same shape as `postgres_source.py`: module-level `load_<type>(...) ->
 pd.DataFrame`, table name validated against a safe-identifier allowlist, SQL
 only through SQLAlchemy `text()`, no source-level `try/except` (errors
-propagate to `agents/extractor.py`'s single catch point).
+propagate to `agents/pipeline/extractor.py`'s single catch point).
 
 One deliberate difference from `postgres_source.py`: SQLite is file-based,
 not a server a single `POSTGRES_URL` env var can point at — each source in
@@ -13,31 +13,23 @@ SQLite also has no `schema.table` notion the way Postgres does, so the table
 name regex is stricter (no dots allowed).
 """
 
-import re
-
 import pandas as pd
 from sqlalchemy import create_engine, text
 
-_SAFE_TABLE_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
-
-
-def _validate_table_name(table: str) -> None:
-    if not _SAFE_TABLE_RE.match(table):
-        raise ValueError(
-            f"Invalid table name '{table}': only alphanumeric and underscores allowed."
-        )
+from ai_etl.core.sql_safety import validate_table_name
 
 
 def load_sqlite(path: str, table: str, query: str | None = None) -> pd.DataFrame:
     """Load a SQLite table (or custom query) into a DataFrame.
 
     `path` is the `.db`/`.sqlite` file path. Always uses parameterized
-    queries; `table` is validated against `_SAFE_TABLE_RE` before being
+    queries; `table` is validated via `core.sql_safety.validate_table_name`
+    (dots disallowed — SQLite has no `schema.table` notion) before being
     interpolated into the default `SELECT *` (matching `postgres_source.py`'s
     validated-identifier pattern — SQLAlchemy has no bind-parameter syntax
     for identifiers, only values).
     """
-    _validate_table_name(table)
+    validate_table_name(table, allow_dots=False)
     engine = create_engine(f"sqlite:///{path}")
     sql = query or f"SELECT * FROM {table}"  # nosec B608 — table name validated above
     with engine.connect() as conn:

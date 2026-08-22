@@ -2,7 +2,7 @@
 
 import pandas as pd
 
-from ai_etl.agents.quality import (
+from ai_etl.agents.pipeline.quality import (
     _check_custom_rules,
     _check_duplicates,
     _check_logical_duplicates,

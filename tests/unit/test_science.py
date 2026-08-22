@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 import pandas as pd
 import pytest
 
-from ai_etl.agents.science import (
+from ai_etl.agents.analysis.science import (
     _build_column_stats,
     _strip_fences,
     _validate_narrative_consistency,
@@ -30,7 +30,7 @@ def sample_df() -> pd.DataFrame:
 
 @pytest.fixture
 def mock_get_llm(mocker):
-    return mocker.patch("ai_etl.agents.science.get_llm")
+    return mocker.patch("ai_etl.agents.analysis.science.get_llm")
 
 
 def _mock_llm(responses: list[str]) -> MagicMock:
@@ -129,7 +129,7 @@ def test_run_science_scales_timeout_for_large_df(
         ignore_index=True,
     )
     spy = mocker.patch(
-        "ai_etl.agents.science.execute_in_sandbox", wraps=sandbox_module.execute_in_sandbox
+        "ai_etl.agents.analysis.science.execute_in_sandbox", wraps=sandbox_module.execute_in_sandbox
     )
 
     run_science(big_df, "Qual será a receita nos próximos meses?")

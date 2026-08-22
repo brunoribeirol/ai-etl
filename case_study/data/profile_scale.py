@@ -31,8 +31,8 @@ from typing import Any
 
 import pandas as pd
 
-from ai_etl.agents.extractor import _extract_schema
-from ai_etl.agents.quality import quality_node
+from ai_etl.agents.pipeline.extractor import _extract_schema
+from ai_etl.agents.pipeline.quality import quality_node
 from ai_etl.core.sandbox import execute_in_sandbox
 from ai_etl.sources.csv_source import load_csv
 

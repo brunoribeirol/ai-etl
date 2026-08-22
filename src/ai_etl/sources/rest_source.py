@@ -5,7 +5,7 @@ no-auth, public-endpoint-only connector (e.g. the Open-Meteo call in
 scenario 3). `auth` never carries a literal secret — it references an
 *environment variable name* the secret is read from at call time (same
 convention as `postgres_source.py`'s `POSTGRES_URL` lookup), so a
-`pipeline_plan` — whether LLM-produced by `agents/orchestrator.py` or
+`pipeline_plan` — whether LLM-produced by `agents/pipeline/orchestrator.py` or
 supplied directly — never embeds credentials.
 
 `oauth2_client_credentials` (added in this same sprint, on top of the
