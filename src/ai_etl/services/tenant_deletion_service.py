@@ -62,16 +62,21 @@ class TenantDeletionSummary(TypedDict):
     error: str | None
 
 
-def _candidate_storage_keys(
+def candidate_storage_keys_for_run(
     run_id: str, gold_subtasks: int, science_subtasks: int, has_analysis: bool
 ) -> list[str]:
     """Every key `save_run`/`save_analysis` (`audit/db.py`) might have written
     for one run, per their documented naming convention. A key that was never
     written for a particular run (e.g. no `_transform.py` because the spec had
     no LLM-generated transform) is simply not found and skipped —
-    `delete_bytes` never raises for a missing key, but we still check
-    `exists()` first here so `storage_keys_deleted` counts only keys that
+    `delete_bytes` never raises for a missing key, but callers still check
+    `exists()` first so a "deleted"/"exported" count only reflects keys that
     really existed, not every candidate attempted.
+
+    Public (Sprint 36, ADR-035): shared by `tenant_run_storage_candidates`
+    below, `services/tenant_export_service.py` (list, without deleting), and
+    `services/retention_service.py` (delete, scoped to expired runs only) —
+    one naming-convention derivation, never three copies that could drift.
     """
     keys = [f"{run_id}.json", f"{run_id}_transform.py", f"{run_id}_silver.csv"]
     if has_analysis:
@@ -85,15 +90,15 @@ def _candidate_storage_keys(
     return keys
 
 
-def _delete_tenant_storage(
-    engine: Engine, tenant_id: str, storage: StorageBackend
-) -> tuple[int, list[str]]:
-    """Best-effort deletion of every storage artifact a tenant's runs produced.
+def tenant_run_storage_candidates(engine: Engine, tenant_id: str) -> dict[str, list[str]]:
+    """`{run_id: [candidate storage keys]}` for every run/analysis run a
+    tenant owns — regardless of whether each key actually exists in the
+    configured `StorageBackend` (callers check `exists()`/attempt
+    `delete_bytes()` themselves).
 
-    Returns `(keys_deleted, errors)`. Never raises — a storage failure (e.g.
-    a transient S3 error) is recorded in `errors` and does not block the
-    DB-side erasure that follows (ADR-025 Decision 3: the DB rows are the
-    higher-confidence compliance signal).
+    Public (Sprint 36, ADR-035) so `services/tenant_export_service.py`'s
+    "what artifacts does this tenant have" listing can never drift from what
+    `_delete_tenant_storage` below actually deletes.
     """
     with engine.connect() as conn:
         run_ids = {
@@ -112,16 +117,33 @@ def _delete_tenant_storage(
     analysis_by_run = {row.run_id: row for row in analysis_rows}
     run_ids |= set(analysis_by_run)
 
-    deleted = 0
-    errors: list[str] = []
+    result: dict[str, list[str]] = {}
     for run_id in sorted(run_ids):
         analysis_row = analysis_by_run.get(run_id)
-        candidates = _candidate_storage_keys(
+        result[run_id] = candidate_storage_keys_for_run(
             run_id,
             gold_subtasks=analysis_row.gold_subtasks if analysis_row else 0,
             science_subtasks=analysis_row.science_subtasks if analysis_row else 0,
             has_analysis=analysis_row is not None,
         )
+    return result
+
+
+def _delete_tenant_storage(
+    engine: Engine, tenant_id: str, storage: StorageBackend
+) -> tuple[int, list[str]]:
+    """Best-effort deletion of every storage artifact a tenant's runs produced.
+
+    Returns `(keys_deleted, errors)`. Never raises — a storage failure (e.g.
+    a transient S3 error) is recorded in `errors` and does not block the
+    DB-side erasure that follows (ADR-025 Decision 3: the DB rows are the
+    higher-confidence compliance signal).
+    """
+    candidates_by_run = tenant_run_storage_candidates(engine, tenant_id)
+
+    deleted = 0
+    errors: list[str] = []
+    for run_id, candidates in candidates_by_run.items():
         for key in candidates:
             try:
                 if storage.exists(key):
@@ -131,7 +153,7 @@ def _delete_tenant_storage(
                 errors.append(f"{key}: {exc}")
                 logger.warning(
                     "tenant_deletion_storage_error",
-                    extra={"tenant_id": tenant_id, "key": key, "error": str(exc)},
+                    extra={"tenant_id": tenant_id, "run_id": run_id, "key": key, "error": str(exc)},
                 )
     return deleted, errors
 

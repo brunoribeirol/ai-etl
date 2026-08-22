@@ -19,6 +19,8 @@ unchanged:
 - `budget.py` — tenant monthly budget cap (Sprint 29, ADR-019); pre-run cost
   estimation's historical-average helpers (Sprint 35).
 - `onboarding.py` — self-serve activation checklist (Sprint 26, ADR-027).
+- `retention.py` — per-tenant automatic run-retention policy config
+  (Sprint 36, ADR-035), same shape as `budget.py`'s spend cap.
 
 Pure reorganization — no behavior change. Internal call sites within
 `audit/` should import directly from the specific submodule; everything
@@ -59,6 +61,12 @@ from ai_etl.audit.db.pipelines import (
     set_saved_pipeline_notification_config,
     update_saved_pipeline,
 )
+from ai_etl.audit.db.retention import (
+    RetentionPolicy,
+    get_retention_days,
+    list_tenants_with_retention,
+    set_retention_days,
+)
 from ai_etl.audit.db.runs import (
     ensure_user,
     load_full_result,
@@ -71,6 +79,7 @@ from ai_etl.audit.db.runs import (
 __all__ = [
     "DEFAULT_PIPELINE_HEALTH_WINDOW",
     "DEFAULT_PIPELINE_HISTORY_LIMIT",
+    "RetentionPolicy",
     "claim_due_pipeline",
     "create_saved_pipeline",
     "ensure_user",
@@ -81,6 +90,7 @@ __all__ = [
     "get_onboarding_status",
     "get_pipeline_health",
     "get_previous_completed_run",
+    "get_retention_days",
     "get_run_status_and_pipeline",
     "get_saved_pipeline",
     "get_saved_pipeline_llm_config",
@@ -90,6 +100,7 @@ __all__ = [
     "list_pending_approvals",
     "list_pipeline_run_history",
     "list_saved_pipelines",
+    "list_tenants_with_retention",
     "load_full_result",
     "load_history",
     "mark_pipeline_approved",
@@ -100,6 +111,7 @@ __all__ = [
     "save_run",
     "save_stage_latencies",
     "set_monthly_budget",
+    "set_retention_days",
     "set_saved_pipeline_llm_config",
     "set_saved_pipeline_notification_config",
     "update_saved_pipeline",

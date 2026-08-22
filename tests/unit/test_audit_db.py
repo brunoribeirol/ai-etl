@@ -29,12 +29,16 @@ from ai_etl.audit.db import budget as budget_db
 from ai_etl.audit.db import (
     get_monthly_budget,
     get_monthly_spend_usd,
+    get_retention_days,
+    list_tenants_with_retention,
     load_full_result,
     save_analysis,
     save_run,
     save_stage_latencies,
     set_monthly_budget,
+    set_retention_days,
 )
+from ai_etl.audit.db import retention as retention_db
 from ai_etl.audit.db import runs as db
 from ai_etl.audit.db.runs import _write_run_row as _real_write_run_row
 from ai_etl.audit.models import analysis_runs as analysis_runs_table
@@ -980,3 +984,76 @@ def test_get_monthly_spend_usd_is_zero_with_no_runs(monkeypatch: pytest.MonkeyPa
     _insert_user_row(engine, "tenant-a")
 
     assert get_monthly_spend_usd("tenant-a") == 0.0
+
+
+# ---------------------------------------------------------------------------
+# Sprint 36 (ADR-035): per-tenant retention policy — get/set_retention_days,
+# list_tenants_with_retention. Same pattern as the budget-cap tests above.
+# ---------------------------------------------------------------------------
+
+
+def test_get_retention_days_returns_none_when_unset(monkeypatch: pytest.MonkeyPatch) -> None:
+    engine = _make_sqlite_engine()
+    monkeypatch.setattr(retention_db, "get_engine", lambda: engine)
+    _insert_user_row(engine, "tenant-a")
+
+    assert get_retention_days("tenant-a") is None
+
+
+def test_get_retention_days_returns_none_for_unknown_tenant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = _make_sqlite_engine()
+    monkeypatch.setattr(retention_db, "get_engine", lambda: engine)
+
+    assert get_retention_days("no-such-tenant") is None
+
+
+def test_set_retention_days_then_get_round_trips(monkeypatch: pytest.MonkeyPatch) -> None:
+    engine = _make_sqlite_engine()
+    monkeypatch.setattr(retention_db, "get_engine", lambda: engine)
+    _insert_user_row(engine, "tenant-a")
+
+    set_retention_days("tenant-a", 30)
+
+    assert get_retention_days("tenant-a") == 30
+
+
+def test_set_retention_days_none_clears_a_previously_set_window(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = _make_sqlite_engine()
+    monkeypatch.setattr(retention_db, "get_engine", lambda: engine)
+    _insert_user_row(engine, "tenant-a")
+
+    set_retention_days("tenant-a", 30)
+    set_retention_days("tenant-a", None)
+
+    assert get_retention_days("tenant-a") is None
+
+
+def test_list_tenants_with_retention_returns_only_tenants_with_a_policy_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = _make_sqlite_engine()
+    monkeypatch.setattr(retention_db, "get_engine", lambda: engine)
+    _insert_user_row(engine, "tenant-a")
+    _insert_user_row(engine, "tenant-b")
+
+    set_retention_days("tenant-a", 30)
+
+    policies = list_tenants_with_retention()
+
+    assert len(policies) == 1
+    assert policies[0]["tenant_id"] == "tenant-a"
+    assert policies[0]["retention_days"] == 30
+
+
+def test_list_tenants_with_retention_is_empty_when_no_tenant_has_a_policy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = _make_sqlite_engine()
+    monkeypatch.setattr(retention_db, "get_engine", lambda: engine)
+    _insert_user_row(engine, "tenant-a")
+
+    assert list_tenants_with_retention() == []

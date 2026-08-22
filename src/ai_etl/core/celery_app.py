@@ -52,6 +52,14 @@ def _redis_url() -> str:
 # production redeploy needing a code change.
 SCHEDULER_INTERVAL_SECONDS = int(os.getenv("AI_ETL_SCHEDULER_INTERVAL_SECONDS", "60"))
 
+# Sprint 36 (ADR-035) — how often the beat process sweeps every tenant with a
+# configured retention window for expired storage artifacts. A compliance
+# sweep, not a latency-sensitive job like `SCHEDULER_INTERVAL_SECONDS` above
+# — daily by default. Configurable for the same reason: tests/local
+# verification need a short interval without a production redeploy needing a
+# code change.
+RETENTION_INTERVAL_SECONDS = int(os.getenv("AI_ETL_RETENTION_INTERVAL_SECONDS", str(24 * 60 * 60)))
+
 celery_app = Celery("ai_etl", broker=_redis_url(), backend=_redis_url())
 celery_app.conf.update(
     # `run_full_analysis_task` lives in `services/execution_queue.py`, not
@@ -64,7 +72,14 @@ celery_app.conf.update(
     # `services.scheduler` (Sprint 13) is included the same way, for the
     # same reason — the beat process only *schedules* the task by name; a
     # worker still needs to have imported it to execute it.
-    include=["ai_etl.services.execution_queue", "ai_etl.services.scheduler"],
+    # `services.retention_service` (Sprint 36) is included the same way, for
+    # the same reason: a plain worker only executes a task it has imported;
+    # beat only schedules it by name.
+    include=[
+        "ai_etl.services.execution_queue",
+        "ai_etl.services.scheduler",
+        "ai_etl.services.retention_service",
+    ],
     task_serializer="json",
     result_serializer="json",
     accept_content=["json"],
@@ -85,6 +100,12 @@ celery_app.conf.update(
         "check-scheduled-pipelines": {
             "task": "ai_etl.check_scheduled_pipelines",
             "schedule": schedule(run_every=SCHEDULER_INTERVAL_SECONDS),
+        },
+        # Sprint 36 (ADR-035) — same "requires a separate `celery beat`
+        # process" caveat as `check-scheduled-pipelines` above.
+        "cleanup-expired-retention": {
+            "task": "ai_etl.cleanup_expired_retention",
+            "schedule": schedule(run_every=RETENTION_INTERVAL_SECONDS),
         },
     },
 )

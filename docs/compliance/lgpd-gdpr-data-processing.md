@@ -79,18 +79,30 @@ depends entirely on what a tenant chooses to upload/connect.
 
 ## 4. Retention period
 
-**No retention/deletion policy existed before this sprint** — `runs`,
+**Before Sprint 36**: no retention/expiry policy existed — `runs`,
 `analysis_runs`, `saved_pipelines`, and their storage artifacts persisted
-indefinitely, with no automatic expiry. This sprint does not add automatic
-retention limits (out of scope — the roadmap's own DoD is "exclusão sob
-pedido," not "retenção automática"), but does add the erasure mechanism a
-retention policy would eventually call. **Flagged as a real follow-up**:
-LGPD Art. 6 III / GDPR Art. 5(1)(e) ("storage limitation") expect data to be
-kept only as long as necessary for its purpose — indefinite retention with
-no policy is a genuine, not-yet-closed gap, distinct from (and larger than)
-the on-request erasure this sprint closes. Recommended for a future sprint:
-a configurable retention window with automatic purge, reusing this sprint's
-same deletion primitives per-run rather than per-tenant.
+indefinitely, with no automatic expiry, only the on-request erasure Sprint
+24 added.
+
+**As of Sprint 36 (ADR-035)**: a tenant can opt into a per-tenant automatic
+retention window (`PATCH /tenant/retention`, `retention_days`, `NULL` by
+default — "keep forever," zero behavior change unless a tenant opts in). A
+daily Celery beat sweep (`services/retention_service.py`) deletes every
+storage artifact belonging to a run older than the configured window, for
+every tenant that has one set — reusing the exact same candidate-storage-key
+derivation `DELETE /tenant` (ADR-025) uses, so the two never drift apart on
+what counts as "this run's artifacts." Retention purges storage artifacts
+only, never the `runs`/`analysis_runs` DB rows or the `users` row itself
+(see ADR-035 Decision 2 for why) — a tenant wanting full erasure of run
+metadata too still uses `DELETE /tenant`. A `retention_cleanup_log` entry
+survives each sweep per tenant, same evidence shape as
+`tenant_deletion_log`.
+
+LGPD Art. 6 III / GDPR Art. 5(1)(e) ("storage limitation") is now
+addressable per-tenant, not just closed on request — this remains opt-in
+rather than a mandatory default, since retention needs genuinely differ by
+tenant/contract (see ADR-035 for the full trade-off discussion, including
+the rejected "one global window" alternative).
 
 ## 5. How data is erased on request (the data subject's right to erasure)
 
@@ -126,24 +138,34 @@ an explicit limitation, not silently assumed handled.
 | Access (Art. 18 II / GDPR Art. 15) | `GET /pipelines`, `GET /runs/{id}` and history endpoints — a tenant can already read back everything stored about its own account |
 | Correction (Art. 18 III / GDPR Art. 16) | A tenant can `PATCH /pipelines`, `PATCH /budget`, rotate/delete secrets — covers configurable fields; historical run records are immutable by design (an audit trail should not be editable after the fact — same reasoning `SECURITY.md`/ADR-004 already apply to `audit_log`) |
 | **Erasure (Art. 18 VI / GDPR Art. 17)** | **`DELETE /tenant`, new this sprint (ADR-025)** |
-| Portability (Art. 18 V / GDPR Art. 20) | Partial — CSV/JSON downloads exist per-run today; no single "export everything" endpoint. Flagged as a future, lower-priority follow-up (not blocking, no roadmap item requests it yet) |
+| Portability (Art. 18 V / GDPR Art. 20) | **`GET /tenant/export`, new Sprint 36 (ADR-035)** — full self-service export (`runs`, `analysis_runs`, `stage_latencies`, `saved_pipelines`, `tenant_secrets` metadata only, storage artifact keys); see ADR-035 Decision 1 for why artifact bytes are not inlined |
 | Objection to automated decision-making (Art. 20 / GDPR Art. 22) | Not directly applicable — this product's pipelines execute on the tenant's own explicit request, not as an automated decision made *about* the tenant without their involvement |
 
 ## 7. Known limitations (explicit, not silently assumed closed)
 
-- No automatic retention/expiry policy (§4) — deletion is on-request only.
+- Automatic retention (§4) is opt-in per tenant, not a mandatory default —
+  a tenant that never sets `retention_days` keeps today's "keep forever"
+  behavior; there is no organization-wide or platform-default window.
+- Retention purges storage artifacts only, never `runs`/`analysis_runs` DB
+  rows or the `users` row (ADR-035 Decision 2) — not a substitute for
+  `DELETE /tenant` (ADR-025) for a tenant wanting full erasure.
 - Local storage backend has no tenant-prefixed directory (ADR-025's
   investigation finding) — production runs on S3, where this doesn't apply,
   but a local/dev deployment's isolation depends on DB-derived key
-  enumeration being complete.
+  enumeration being complete. Applies equally to retention cleanup, which
+  reuses the same key derivation.
 - No verification of erasure at LLM sub-processors (§5).
-- No data portability "export everything" endpoint (§6).
+- Data portability (§6) ships artifact keys/metadata, not inline artifact
+  bytes (ADR-035 Decision 1) — a deliberate, documented scope choice, not an
+  oversight.
 - No sub-processor register with each vendor's own compliance posture
   (tracked as a SOC2 gap too — see `soc2-readiness-assessment.md` CC9).
 
 ## Related
 
 - [ADR-025](../adr/ADR-025-tenant-data-deletion.md) — the erasure mechanism.
+- [ADR-035](../adr/ADR-035-tenant-data-export-retention.md) — data export
+  and automatic retention (Sprint 36).
 - [ADR-006](../adr/ADR-006-clerk-auth-supabase-postgres-tenancy.md),
   [ADR-009](../adr/ADR-009-tenant-scoped-storage-and-config.md),
   [ADR-022](../adr/ADR-022-rbac-org-sso-tenant-secrets.md) — the tenancy,
