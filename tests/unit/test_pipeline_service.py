@@ -73,10 +73,15 @@ def _advisor_result(error: str | None = None) -> dict[str, Any]:
 
 
 class _FakeGraph:
-    def __init__(self, chunks: list[dict[str, Any]]) -> None:
+    def __init__(
+        self, chunks: list[dict[str, Any]], captured_states: list[Any] | None = None
+    ) -> None:
         self._chunks = chunks
+        self._captured_states = captured_states
 
     def stream(self, state: dict[str, Any]) -> Any:
+        if self._captured_states is not None:
+            self._captured_states.append(state)
         yield from self._chunks
 
 
@@ -159,6 +164,53 @@ def test_run_silver_pipeline_forwards_saved_pipeline_id_to_save_run(monkeypatch)
     pipeline_service.run_silver_pipeline("read file.csv", run_dir="runs", saved_pipeline_id="pl-1")
 
     assert saved["saved_pipeline_id"] == "pl-1"
+
+
+def test_run_silver_pipeline_threads_quality_rules_for_scheduled_fire(monkeypatch) -> None:
+    """Sprint 16 (ADR-023): a scheduled fire (both `saved_pipeline_id` and `tenant_id`
+    set) resolves that pipeline's `quality_rules` and carries them into the initial
+    `PipelineState`."""
+    chunks = [{"loader": {"status": "completed"}}]
+    captured_states: list[Any] = []
+    monkeypatch.setattr(
+        pipeline_service, "build_graph", lambda: _FakeGraph(chunks, captured_states)
+    )
+    monkeypatch.setattr(pipeline_service, "save_run", lambda *a, **k: pathlib.Path("x"))
+    monkeypatch.setattr(pipeline_service, "save_stage_latencies", lambda *a, **k: None)
+
+    rules = [{"column": "amount", "operator": "gte", "value": 0, "severity": "error"}]
+    monkeypatch.setattr(
+        pipeline_service,
+        "get_saved_pipeline",
+        lambda pipeline_id, tenant_id: {"id": pipeline_id, "quality_rules": rules},
+    )
+
+    pipeline_service.run_silver_pipeline(
+        "read file.csv", run_dir="runs", tenant_id="tenant-a", saved_pipeline_id="pl-1"
+    )
+
+    assert captured_states[0]["custom_quality_rules"] == rules
+
+
+def test_run_silver_pipeline_avulso_run_gets_empty_quality_rules(monkeypatch) -> None:
+    """An avulso run (no `saved_pipeline_id`) must never look up quality rules —
+    `get_saved_pipeline` is not even called."""
+    chunks = [{"loader": {"status": "completed"}}]
+    captured_states: list[Any] = []
+    monkeypatch.setattr(
+        pipeline_service, "build_graph", lambda: _FakeGraph(chunks, captured_states)
+    )
+    monkeypatch.setattr(pipeline_service, "save_run", lambda *a, **k: pathlib.Path("x"))
+    monkeypatch.setattr(pipeline_service, "save_stage_latencies", lambda *a, **k: None)
+
+    def _fail_if_called(pipeline_id: str, tenant_id: str) -> Any:
+        raise AssertionError("get_saved_pipeline must not be called for an avulso run")
+
+    monkeypatch.setattr(pipeline_service, "get_saved_pipeline", _fail_if_called)
+
+    pipeline_service.run_silver_pipeline("read file.csv", run_dir="runs", tenant_id="tenant-a")
+
+    assert captured_states[0]["custom_quality_rules"] == []
 
 
 def test_run_silver_pipeline_reports_failure(monkeypatch) -> None:

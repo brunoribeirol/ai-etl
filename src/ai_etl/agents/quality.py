@@ -1,6 +1,6 @@
 """Quality Agent — deterministic data quality checks on the transformed DataFrame."""
 
-from typing import Any
+from typing import Any, Callable
 
 import pandas as pd
 
@@ -12,12 +12,30 @@ NULL_WARNING_THRESHOLD = 0.05  # 5% nulls → warning
 NULL_ERROR_THRESHOLD = 0.20  # 20% nulls → error
 IDENTIFIER_UNIQUENESS_THRESHOLD = 0.8  # column looks like a name/identifier, not a category
 
+# Sprint 16 (ADR-023) — whitelisted comparison operators for operator-defined quality
+# rules. Deliberately NOT an eval()/exec() of an arbitrary expression: a rule is
+# operator-authored, persisted, and re-run unattended on every future scheduled fire —
+# CLAUDE.md bars exec() outside core/sandbox.py, and even that sandbox exists for
+# LLM-generated code reviewed once per pipeline, not for input silently re-executed
+# forever with no re-review step. Each operator maps to one vectorized pandas
+# comparison; "not_null" needs no `value`, every other operator requires one.
+_CUSTOM_RULE_OPERATORS: dict[str, Callable[["pd.Series[Any]", Any], "pd.Series[Any]"]] = {
+    "not_null": lambda s, _v: s.isnull(),
+    "gte": lambda s, v: s < v,
+    "lte": lambda s, v: s > v,
+    "gt": lambda s, v: s <= v,
+    "lt": lambda s, v: s >= v,
+    "eq": lambda s, v: s != v,
+    "ne": lambda s, v: s == v,
+}
+
 
 def quality_node(state: PipelineState) -> PipelineState:
     """Run quality checks on transformed_data and produce a quality_report.
 
     Checks: null values, exact duplicates, logical (by-name) duplicates,
-    type inconsistency, outliers (IQR).
+    type inconsistency, outliers (IQR), plus any operator-defined custom rules
+    (Sprint 16, ADR-023) carried in `state["custom_quality_rules"]`.
     Severity levels: "ok" | "warning" | "error"
     If severity == "error", the graph routes to END (pipeline blocked).
     """
@@ -32,6 +50,7 @@ def quality_node(state: PipelineState) -> PipelineState:
     checks.extend(_check_logical_duplicates(df))
     checks.extend(_check_types(df, state["source_schemas"]))
     checks.extend(_check_outliers_iqr(df))
+    checks.extend(_check_custom_rules(df, state.get("custom_quality_rules", [])))
 
     overall_severity = max(
         (c["severity"] for c in checks),
@@ -189,4 +208,76 @@ def _check_outliers_iqr(df: pd.DataFrame) -> list[dict[str, Any]]:
                     "severity": "warning",
                 }
             )
+    return results
+
+
+def _check_custom_rules(df: pd.DataFrame, rules: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Evaluate operator-defined quality rules (Sprint 16, ADR-023) against `df`.
+
+    `rules` is trusted, whitelist-validated data (`api/routers/pipelines.py` rejects an
+    unknown `operator` or a missing `value` at rule-definition time via Pydantic) — this
+    function does not re-validate, matching every other `_check_*` here's own
+    "caller already shaped the input" posture. A rule referencing a column the current
+    run's transformed data doesn't have (e.g. the Transformer renamed/dropped it) is
+    surfaced as its own explicit `"error"`-severity check entry rather than silently
+    skipped, so a broken rule is visible instead of quietly doing nothing.
+
+    Emits one entry per rule, always (even when it passes, `severity: "ok"`) — unlike
+    the null/outlier checks above, which only emit on a nonzero finding — so the
+    operator can see every rule they defined actually ran, matching this sprint's own
+    definition of done ("a regra aparece no relatório... e falha visivelmente quando
+    violada").
+    """
+    results = []
+    for rule in rules:
+        column = rule["column"]
+        operator = rule["operator"]
+        value = rule.get("value")
+        name = rule.get("name") or f"{operator} {column}"
+        configured_severity = rule.get("severity", "error")
+
+        if column not in df.columns:
+            results.append(
+                {
+                    "check": "custom_rule",
+                    "rule_name": name,
+                    "column": column,
+                    "operator": operator,
+                    "value": value,
+                    "severity": "error",
+                    "error": f"Column {column!r} not present in the transformed data.",
+                }
+            )
+            continue
+
+        try:
+            violation_mask = _CUSTOM_RULE_OPERATORS[operator](df[column], value)
+            violation_count = int(violation_mask.sum())
+        except (TypeError, ValueError) as exc:
+            # e.g. a "gte"/numeric rule against a string column — surfaced as its own
+            # error entry (same "visible, not silently skipped" posture as the
+            # unknown-column branch above) rather than crashing the whole quality gate.
+            results.append(
+                {
+                    "check": "custom_rule",
+                    "rule_name": name,
+                    "column": column,
+                    "operator": operator,
+                    "value": value,
+                    "severity": "error",
+                    "error": f"Could not evaluate rule against column {column!r}: {exc}",
+                }
+            )
+            continue
+        results.append(
+            {
+                "check": "custom_rule",
+                "rule_name": name,
+                "column": column,
+                "operator": operator,
+                "value": value,
+                "violation_count": violation_count,
+                "severity": configured_severity if violation_count > 0 else "ok",
+            }
+        )
     return results

@@ -40,6 +40,17 @@ class PipelineState(TypedDict):
     transformation_attempts: int  # retry counter, max 3
     transformation_error: Optional[str]  # last sandbox execution error
 
+    # --- Quality input (Sprint 16, ADR-023) ---
+    custom_quality_rules: list[dict[str, Any]]  # operator-defined rules for the saved
+    # pipeline this run belongs to (empty for every avulso run). Fetched by
+    # `services/pipeline_service.py::run_silver_pipeline` from
+    # `saved_pipelines.quality_rules` — never read from the DB by `quality_node`
+    # itself, keeping the node a pure function of `PipelineState`. Each entry:
+    # {"column": str, "operator": "not_null"|"gte"|"lte"|"gt"|"lt"|"eq"|"ne",
+    #  "value": Any (omitted for "not_null"), "severity": "ok"|"warning"|"error"
+    #  (default "error"), "name": str (optional, defaults to "{operator} {column}")}.
+    # See `agents/quality.py::_CUSTOM_RULE_OPERATORS` for the whitelisted dispatch.
+
     # --- Quality output ---
     quality_report: dict[str, Any]
     # quality_report structure:
@@ -47,7 +58,10 @@ class PipelineState(TypedDict):
     #   "checks": [
     #     {"check": "null", "column": "customer_id", "null_ratio": 0.1, "severity": "warning"},
     #     {"check": "duplicate", "count": 0, "severity": "ok"},
-    #     {"check": "outlier", "column": "amount", "outlier_count": 3, "severity": "warning"}
+    #     {"check": "outlier", "column": "amount", "outlier_count": 3, "severity": "warning"},
+    #     {"check": "custom_rule", "rule_name": "amount não pode ser negativo",
+    #      "column": "amount", "operator": "gte", "value": 0, "violation_count": 2,
+    #      "severity": "error"}   # Sprint 16 (ADR-023) — one entry per custom rule
     #   ],
     #   "severity": "ok" | "warning" | "error",   # max severity across all checks
     #   "summary": "3 checks: 2 warnings, 0 errors"
@@ -70,8 +84,19 @@ class PipelineState(TypedDict):
     status: str  # "running" | "completed" | "failed"
 
 
-def initial_state(spec: str, run_id: str) -> PipelineState:
-    """Create a fresh PipelineState for a new pipeline run."""
+def initial_state(
+    spec: str,
+    run_id: str,
+    custom_quality_rules: Optional[list[dict[str, Any]]] = None,
+) -> PipelineState:
+    """Create a fresh PipelineState for a new pipeline run.
+
+    Args:
+        custom_quality_rules: Sprint 16 (ADR-023) — operator-defined quality rules for
+            the saved pipeline this run belongs to, already resolved by the caller
+            (`services/pipeline_service.py::run_silver_pipeline`). Defaults to `[]` for
+            every avulso run and every existing caller that doesn't pass it.
+    """
     return PipelineState(
         spec=spec,
         run_id=run_id,
@@ -82,6 +107,7 @@ def initial_state(spec: str, run_id: str) -> PipelineState:
         transformed_data=None,
         transformation_attempts=0,
         transformation_error=None,
+        custom_quality_rules=custom_quality_rules or [],
         quality_report={},
         load_result=None,
         audit_log=[],
