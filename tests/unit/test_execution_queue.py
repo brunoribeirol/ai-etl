@@ -15,6 +15,7 @@ import base64
 from pathlib import Path
 
 import pytest
+from celery.exceptions import Retry
 
 from ai_etl.services import execution_queue as eq_module
 from ai_etl.services.execution_queue import (
@@ -732,18 +733,23 @@ def test_run_full_analysis_task_retries_on_logical_failure_for_scheduled_pipelin
 
     monkeypatch.setattr(eq_module, "run_full_analysis", _fake_run_full_analysis)
 
-    class _RetryRaisedError(Exception):
-        pass
-
     retry_calls: list[int | None] = []
 
     def _fake_retry(countdown: int | None = None, **kwargs: object) -> None:
         retry_calls.append(countdown)
-        raise _RetryRaisedError()
+        # Raise the *real* `celery.exceptions.Retry`, not a plain custom
+        # exception: the task decorator's own `autoretry_for=(Exception,)`
+        # (Level A) wraps this call, and Celery's real machinery explicitly
+        # excludes `Retry` from being re-caught there -- a plain `Exception`
+        # subclass would instead get caught by that wrapper and fed back
+        # into this same (patched) `.retry()` a second time, double-calling
+        # it with a *different*, Celery-computed backoff. Raising the real
+        # `Retry` type reproduces production's actual exclusion behavior.
+        raise Retry()
 
     monkeypatch.setattr(run_full_analysis_task, "retry", _fake_retry)
 
-    with pytest.raises(_RetryRaisedError):
+    with pytest.raises(Retry):
         run_full_analysis_task("spec", "question", "./runs", "tenant-a", saved_pipeline_id="pl-1")
 
     assert retry_calls == [60]  # attempt 1 (retries=0 by default) -> 60s countdown
