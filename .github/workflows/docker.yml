@@ -66,7 +66,7 @@ jobs:
       # first run establishing a real baseline before anything is
       # enforced as a hard gate) -- revisit once the baseline is reviewed.
       - name: Trivy vulnerability scan
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ai-etl:ci
           format: table
