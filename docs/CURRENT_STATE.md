@@ -2,9 +2,39 @@
 
 > Living doc. Updated at the end of meaningful work sessions, not per-commit. Source of truth for repo/code state; the Obsidian vault (`~/Documents/Obsidian Vault/tcc/`) is the source of truth for the academic TCC narrative and product/strategy context.
 
-**Last updated:** 2026-08-22 — **Sprint 28 (prompt/agent regression harness) opened as PR, not yet merged** — see below. Sprint 24 (compliance enterprise) opened as PR, not yet merged, checkpoint pending — see below. Sprint 15 (scheduled-pipeline reliability) merged to `main` (PR #71); migration `0010` still not applied to production Supabase.
+**Last updated:** 2026-08-22 — **28 of 29 roadmap sprints merged to `main`.** Only Sprint 25 (i18n) remains, gated on the owner's confirmed real signal of demand outside Brazil (received this session) — not yet started. A public landing page (no sprint number) also shipped and is live in production. **Migrations `0010`-`0015` (Sprints 15/16/19/20/24/27) are in the code, not yet applied to production Supabase** — same checkpoint discipline as every prior migration, each pending explicit owner confirmation. `AI_ETL_SECRETS_ENCRYPTION_KEY` (Sprint 19) is also not yet generated/set in Railway — tenant secrets storage doesn't work for real in production until it is.
 
-## Sprint 28 — prompt/agent regression harness (PR open, not merged; ADR-029)
+## Landing page — public marketing home at `/` (PR #92 merged 2026-08-22, ADR-030) — not a numbered sprint
+
+Every route was previously Clerk-protected — a visitor with no session hit sign-in immediately, nothing public explained the product. `/` is now a real landing page (hero, an honest "why not just ChatGPT" section sourced from `artefact/saas-potential.md`'s real differentiators — no fabricated metrics/customer logos/testimonials, the product has no paying customers yet), the former `/` (the "Executar" form) moved to `/app`; every other route (`/pipelines`, `/historico`, `/resumo`, `/comecar`) kept its URL. Next.js route groups (`(marketing)`/`(app)`) do the split; root `layout.tsx` shrank to what every route shares.
+
+**Real near-miss caught before merging, not after**: attempted the Next 16-suggested rename `middleware.ts` → `proxy.ts` (silences a deprecation warning), then found `frontend/README.md`'s own "Why Next.js 15, not 16" section documenting that this exact rename already broke Vercel routing in production once before (silent 404, zero runtime logs) — the reason the project stayed on Next 15 until this session's own Dependabot merge bumped back to 16 (keeping `middleware.ts`). Reverted the rename before committing; verified live against `ai-etl.vercel.app` that current production (Next 16 + `middleware.ts`) serves `/` correctly — no incident, just a cosmetic warning not worth re-risking a repeat for.
+
+**Deployed and manually re-verified live**: `ai-etl.vercel.app`'s alias does **not** auto-follow new production deployments (documented known risk, below) — needed `vercel alias set <latest-prod-deployment> ai-etl.vercel.app` after this merge before the live site actually showed the new landing page. Confirmed via real browser afterward: `/` renders the landing page, `/app` still redirects to Clerk sign-in (auth untouched).
+
+## Dependabot cleanup + CI/CD hardening (2026-08-22) — not tied to a sprint
+
+**CI/CD hardening (PR #73)**, prompted by this session's own experience (4 back-to-back fix-up pushes to one PR each running the full CI matrix to completion, no cancellation): concurrency groups with cancel-in-progress on every workflow, least-privilege `permissions: contents: read`, `uv` dependency caching, `npm audit` (parity with the backend's `pip-audit`), `npm` added to `dependabot.yml` (had zero coverage since Sprint 6), new `docker.yml` (builds the production Dockerfile in CI + Trivy scan — previously only ever built for real at Railway deploy time) and `terraform.yml` (fmt/validate for Sprint 10's `infra/aws/terraform/`, zero CI coverage since it merged), new `codeql.yml`.
+
+**CodeQL disabled again the same day (PR #84)**: confirmed via 3 real PRs (#73/#82/#83) failing with `Code scanning is not enabled for this repository` — this repo is private and the account's GitHub plan doesn't include Advanced Security, which private-repo code scanning requires. Every PR was showing an unfixable red X. Disabled the automatic trigger (`workflow_dispatch` only kept) rather than deleting the workflow — reactivates with zero code changes if the plan ever changes.
+
+**8 Dependabot PRs reviewed individually, not batch-approved**: 5 merged clean (`docker/setup-buildx-action`, `next` 15→16, `@types/node`, `hashicorp/setup-terraform`, `docker/build-push-action`). 3 real, investigated blockers, not silently skipped: `typescript` 5.9→7.0 closed (`typescript-eslint` doesn't support TS 7.0 yet, confirmed in the failing CI log, an upstream limitation); `eslint` 9→10 and `eslint-config-next` 15→16 closed individually (each breaks alone — the two are a coupled pair) and a combined manual bump attempted separately — also failed on a real upstream incompatibility (`@typescript-eslint/scope-manager@8.67.0` declares Eslint-10 peer support but doesn't actually work with it yet, `scopeManager.addGlobals is not a function`) — reverted, left for a future Dependabot pass once the ecosystem catches up.
+
+## Sprint 27 — human approval / dry-run gate before production writes (PR #91 merged 2026-08-22, ADR-028)
+
+**The real architectural decision**: a scheduled fire runs synchronously inside one Celery task with no human present, and holding a worker thread open to wait for one would starve this project's small worker pool. Solved without a new LangGraph node/edge/checkpointer — `agents/loader.py::loader_node` gains a third terminal outcome: for a gated write, it computes a write-free preview and ends the run with `status="awaiting_approval"` (a legitimate `loader → END` state, not new graph topology). Approval, whenever it arrives (an API call, seconds or days later), does **not** re-run the graph — `pipeline_service.resume_pending_load` reloads state via the *already-existing* `load_full_result` (built in Sprint 3/4 for the History tab) and calls `loader_node` directly a second time with `approval_granted=True`.
+
+Migration `0015`: `saved_pipelines.require_approval`/`approval_threshold_rows`/`last_approved_at`, additive, `require_approval` defaults `false`. New `preview_*` functions in every `destinations/*.py` module — structurally incapable of writing (no write call in the function body). `GET /runs/pending-approval`, `POST /runs/{run_id}/approve`, `POST /runs/{run_id}/reject` (all `editor`-only, tenant-scoped — verified `_reload_awaiting_state` rejects a run not owned by the caller before any approval logic runs). `"awaiting_approval"` explicitly excluded from Sprint 15's retry/health-failure recording (ADR-020) — a gated write is a pause, not a failure. **No frontend UI yet** for any of this sprint's contracts — backend contract first, same posture as Sprint 29's `GET/PATCH /budget`.
+
+## Sprint 26 — onboarding/activation self-serve (PR #89 merged 2026-08-22, ADR-027)
+
+New `/comecar` route: pick a preloaded example dataset or upload your own, hands off to the *existing* `ExecutarForm` (extended with optional `initialFile`/`initialBusinessQuestion` props, no upload/poll logic duplicated). Activation checklist derived from new `GET /onboarding/status`, itself pure `COUNT(...)` aggregates over the **existing** `runs`/`saved_pipelines` tables — investigated first, confirmed no new column/table/migration was needed (same "derive from existing tables" pattern as `get_pipeline_health`, Sprint 15, and `get_monthly_spend_usd`, Sprint 29).
+
+## Sprint 21 — output sanity-check, not just input validation (PR #88 merged 2026-08-22, ADR-026)
+
+**Chose deterministic/statistical checks only, no second LLM pass** — same declarative, never-`exec()`/`eval()` pattern Sprint 16's `_check_custom_rules` already established, applied to the output side. New `core/output_validation.py`: `check_gold_output` (`sum_conservation`, `row_count_bound`, `empty_result`) and `check_science_output` (`metric_range`, `prediction_range`), pure functions, no I/O. Wired into `services/pipeline_service.py`'s `run_gold_analysis`/`run_science_analysis`; a flagged result is never withheld, only marked with a visible caveat in the frontend (`analysis-section.tsx`) — never silently accepted or silently rejected, per the roadmap's own definition of done. **No migration** — `sanity_check` is an additive key in the existing per-run JSON manifest, not a new column. A second-LLM-pass option was considered and explicitly deferred (documented in ADR-026), not dismissed — flagged as the natural next increment if genuinely-wrong-but-internally-consistent results turn out to matter in practice.
+
+## Sprint 28 — prompt/agent regression harness (PR #90 merged 2026-08-22; ADR-029)
 
 Scope (Vault `artefact/product-roadmap-post-tcc.md`, Sprint 28): protects Sprint 21's output
 sanity-check (ADR-026) over time — a Transformer/Analyst/Science prompt edit or a model swap
@@ -70,7 +100,7 @@ its surrounding deterministic logic is); the `workflow_dispatch` trigger is a pr
 not a GitHub-enforced required check (this repo has no branch protection to attach one to) — a
 developer who forgets to run it before merging a prompt change is not stopped by CI.
 
-## Sprint 24 — compliance enterprise: SOC2 readiness self-assessment, LGPD/GDPR data-processing record, tenant data deletion (PR open, not merged — migration `0014` not applied to production; checkpoint required before merge per this sprint's own instructions, tenant deletion is irreversible)
+## Sprint 24 — compliance enterprise: SOC2 readiness self-assessment, LGPD/GDPR data-processing record, tenant data deletion (PR #86 merged 2026-08-22, ADR-025 — migration `0014` not applied to production)
 
 Scope (Vault `artefact/product-roadmap-post-tcc.md`, Sprint 24): a SOC2
 Type I readiness self-assessment, a formal LGPD/GDPR personal-data
@@ -128,6 +158,28 @@ larger gap than the on-request erasure this sprint closes); no data-
 portability "export everything" endpoint; no verification that LLM
 sub-processors (OpenAI/Anthropic/Google) delete data already sent to them
 as part of a completed request — outside this application's control layer.
+
+## Sprint 18 — executive summary UI (PR #85 merged 2026-08-22, ADR-024)
+
+New `/resumo` (index) and `/resumo/[id]` (one saved pipeline's latest result) — plain-language, business-question-first, no code/pipeline tabs. **No backend changes**: `GET /pipelines/{id}`, `GET /pipelines/{id}/history` (Sprint 17), and `GET /runs/{run_id}` already exposed everything needed, investigated and confirmed before writing any code (ADR-024 documents *why* there's no architecture decision this sprint, following the Sprint 22 precedent for when the standard still wants an ADR on file even with no real trade-off). Drift findings (Sprint 14) aren't persisted server-side, so "what changed" is a client-side KPI-delta approximation — flagged explicitly in the ADR, not the same triggered/not-triggered threshold `services/alerting.py` actually uses.
+
+## Sprint 19 — RBAC via Clerk Organizations, org-level SSO prerequisite, tenant secrets (PR #83 merged 2026-08-22, ADR-022)
+
+**Real finding from investigating before coding**: `tenant_id` was an individual Clerk user id (ADR-006) — one tenant = one human, so the roadmap's own definition of done ("two users, same tenant, different roles") was structurally inexpressible until this sprint. Clerk Organizations turned out to be the shared prerequisite for *both* SSO and RBAC, not just SSO as the roadmap's own framing implied.
+
+`tenant_id` now prefers the active Clerk Organization over the individual `sub` claim (additive — every existing solo account keeps today's unrestricted behavior). Role resolved live from the org role claim in the JWT (no new DB column) via a new `require_role()` FastAPI dependency on every mutating endpoint. SSO/SAML itself is Clerk-dashboard configuration (Enterprise Connections per Organization), no SAML code needed.
+
+New `tenant_secrets` table (migration `0011`) + `services/secrets_service.py` — Fernet (AEAD) encryption at rest, key via `AI_ETL_SECRETS_ENCRYPTION_KEY` (**not yet generated/set in Railway**), never logs a value, scoped by tenant. Deliberately storage/API only this sprint — no source connector consumes a stored secret yet (would require breaking the LangGraph node-signature contract or widening `PipelineState`, both vetoed, ADR-022 Decision 4).
+
+**Real collision caught in manual review, not by CI**: Sprint 19 and Sprint 20 (parallel worktrees) both independently claimed `ADR-021` — caught after Sprint 20 merged first, Sprint 19 renumbered to `ADR-022` (file rename + 14 cross-references fixed) before merging.
+
+## Sprint 20 — S3-Parquet warehouse destination (PR #82 merged 2026-08-22, ADR-021)
+
+First data-warehouse-oriented destination in `destinations/` (previously CSV/Postgres only). Chose **S3-Parquet** over Snowflake/BigQuery — reuses the AWS credentials already live for S3 storage (Sprint 4, ADR-009) with zero new provisioning, and parquet-on-S3 is a de facto lake-house interchange format most real warehouses (Snowflake external tables, BigQuery, Athena, Redshift Spectrum, Databricks) can already query directly — lands data at the doorstep of a warehouse the customer runs, without competing with it. `save_s3_parquet` serializes via `pandas.to_parquet(engine="pyarrow")` into an in-memory buffer then a plain `boto3.put_object` — deliberately **not** `pyarrow.fs.S3FileSystem`, which ADR-009 already found hangs indefinitely in this kind of sandboxed environment. Snowflake/BigQuery remain explicit, documented follow-ups (ADR-021), not silently dropped — no live-testable account was available to implement either for real. No DB migration (destination config lives in the LLM-parsed `pipeline_plan`, same as every other destination type). No frontend UI yet for configuring an `s3_parquet` destination.
+
+## Sprint 16 — operator-configurable data quality rules (PR #87 merged 2026-08-22, ADR-023)
+
+**Key decision**: a rule is a whitelisted declarative dict (`{"column", "operator", "value", "severity", "name"}`), never `exec()`/`eval()` of user-authored input — deliberately, since a quality rule is operator-authored and re-run *unattended* on every future scheduled fire, exactly the input shape this project's `exec()` non-negotiable rule exists to keep away from `exec()` entirely (even `core/sandbox.py`'s own restricted sandbox is for LLM code reviewed once per pipeline, not silently-repeated operator input). 6 operators (`not_null`/`gte`/`lte`/`gt`/`lt`/`eq`/`ne`), each one vectorized pandas comparison, folded into the existing `quality_report` shape (no frontend data-shape change). Migration `0012`: `saved_pipelines.quality_rules` (JSON, additive) — **verified for real against a throwaway local Postgres**, including a full create→reload→clear round trip through `audit/db.py`, not just SQLite.
 
 ## Sprint 15 — scheduled-pipeline retry and failure alerting (PR #71 merged 2026-08-21; migration `0010` not yet applied to production)
 
