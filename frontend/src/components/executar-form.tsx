@@ -29,13 +29,29 @@ import type { TaskStatus } from "@/lib/types";
 
 const POLL_INTERVAL_MS = 2000;
 
-export function ExecutarForm() {
+type ExecutarFormProps = {
+  /**
+   * Sprint 26 (ADR-027) — the `/comecar` guided onboarding flow reuses this
+   * form instead of reimplementing upload/poll/result logic. Both props are
+   * optional and default to the original empty state, so `/` (`page.tsx`)
+   * renders `<ExecutarForm />` unchanged. Only meant to be set once, at
+   * mount — the onboarding page only renders this component after its
+   * example file (if any) has finished loading.
+   */
+  initialFile?: File | null;
+  initialBusinessQuestion?: string;
+};
+
+export function ExecutarForm({
+  initialFile = null,
+  initialBusinessQuestion = "",
+}: ExecutarFormProps = {}) {
   const { getToken } = useAuth();
   const apiUrl = process.env.NEXT_PUBLIC_API_URL;
 
-  const [file, setFile] = useState<File | null>(null);
+  const [file, setFile] = useState<File | null>(initialFile);
   const [manualSpec, setManualSpec] = useState("");
-  const [businessQuestion, setBusinessQuestion] = useState("");
+  const [businessQuestion, setBusinessQuestion] = useState(initialBusinessQuestion);
   const [taskId, setTaskId] = useState<string | null>(null);
   const [status, setStatus] = useState<TaskStatus | null>(null);
   const [submitting, setSubmitting] = useState(false);
