@@ -1,12 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
-import Link from "next/link";
-import { AgentsInfo } from "@/components/agents-info";
-import { AuthHeader } from "@/components/auth-header";
 import { Toaster } from "@/components/ui/sonner";
-import { apiFetch } from "@/lib/api";
-import type { ApiConfig } from "@/lib/types";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -20,64 +15,32 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AI-ETL",
-  description: "Agentic ETL — upload messy data, ask a business question.",
+  title: "AI-ETL — Pipelines de dados que se explicam",
+  description:
+    "Descreva o pipeline em linguagem natural. Agentes de IA extraem, limpam e carregam seus dados heterogêneos gerando código Python auditável — não uma resposta de chat que some quando você fecha a aba.",
 };
 
 /**
- * Sprint 7 redesign (ADR-011 surface, no route/auth contract change) — dark
- * mode by default (shadcn's recommendation for dashboard/AI product surfaces:
- * see vercel:shadcn skill, "Default aesthetic for product UI"), shadcn Card
- * header nav instead of plain links, Toaster mounted once at the root for
- * error/success notifications the old plain-text `<p>` errors didn't have.
+ * Root layout, deliberately thin (landing-page addition, no sprint number —
+ * see docs/CURRENT_STATE.md). Previously this file *was* the whole app shell
+ * (header, nav, the authenticated "Como funciona" panel) — that only makes
+ * sense once a visitor is inside the product. Now `/` is a public marketing
+ * page with its own layout (`(marketing)/layout.tsx`) and everything
+ * previously at `/` lives at `/app` under `(app)/layout.tsx`, which owns the
+ * header/nav/auth chrome this file used to render directly. This file keeps
+ * only what every route — marketing and app alike — genuinely needs:
+ * `ClerkProvider` (so `(marketing)`'s sign-in button and `(app)`'s
+ * `auth.protect()` share one session), fonts, and the dark theme class.
  */
-export default async function RootLayout({ children }: LayoutProps<"/">) {
-  // Best-effort: the model badge / "Como funciona" panel is informational,
-  // not load-bearing — a config-fetch failure shouldn't break every page's
-  // layout the way a failed page-level fetch would.
-  let modelName: string | null = null;
-  try {
-    modelName = (await apiFetch<ApiConfig>("/config")).model_name;
-  } catch {
-    modelName = null;
-  }
-
+export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <ClerkProvider>
       <html
-        lang="en"
+        lang="pt-BR"
         className={`dark ${geistSans.variable} ${geistMono.variable} h-full antialiased`}
       >
         <body className="min-h-full flex flex-col bg-background text-foreground">
-          <header className="sticky top-0 z-10 flex justify-between items-center px-6 h-16 border-b border-border/60 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-            <div className="flex items-center gap-8">
-              <Link href="/" className="font-semibold tracking-tight text-sm">
-                AI-ETL
-              </Link>
-              <nav className="flex gap-6 text-sm text-muted-foreground">
-                <Link href="/comecar" className="hover:text-foreground transition-colors">
-                  Começar
-                </Link>
-                <Link href="/" className="hover:text-foreground transition-colors">
-                  Executar
-                </Link>
-                <Link href="/historico" className="hover:text-foreground transition-colors">
-                  Histórico
-                </Link>
-                <Link href="/pipelines" className="hover:text-foreground transition-colors">
-                  Pipelines
-                </Link>
-                <Link href="/resumo" className="hover:text-foreground transition-colors">
-                  Resumo
-                </Link>
-              </nav>
-            </div>
-            <div className="flex items-center gap-1">
-              <AgentsInfo modelName={modelName} />
-              <AuthHeader />
-            </div>
-          </header>
-          <div className="flex-1 flex flex-col">{children}</div>
+          {children}
           <Toaster richColors position="top-right" />
         </body>
       </html>
