@@ -196,6 +196,22 @@ saved_pipelines = Table(
     # derived cache of another table (unlike `consecutive_failures` above) — this is
     # the rule definitions' only source of truth.
     Column("quality_rules", JSON, nullable=False, server_default="[]"),
+    # Sprint 27 (ADR-028, migration 0015) — opt-in write-approval gate. `False`
+    # (the default) for every existing and new pipeline: zero behavior change
+    # unless an operator explicitly turns this on. See
+    # `agents/loader.py::_is_write_gated` for the full gate decision.
+    Column("require_approval", Boolean, nullable=False, server_default="false"),
+    # `NULL` = "every write requires approval" (once `require_approval` is on).
+    # A set value = "only a write whose row count is at or above this needs
+    # approval" *after* the pipeline's first approved write (`last_approved_at`
+    # below) — reuses `rows_loaded`'s existing definition (`len(transformed_data)`).
+    Column("approval_threshold_rows", Integer, nullable=True),
+    # `NULL` = this pipeline has never had an operator-approved write — the
+    # roadmap's "before the first real write" clause is unconditional while
+    # this is `NULL`, regardless of `approval_threshold_rows`. Set once, on
+    # the first successful approval, by
+    # `services/pipeline_service.py::resume_pending_load`.
+    Column("last_approved_at", DateTime(timezone=True), nullable=True),
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("updated_at", DateTime(timezone=True), nullable=False),
     Index("ix_saved_pipelines_active_next_run", "is_active", "next_run_at"),

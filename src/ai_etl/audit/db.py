@@ -629,6 +629,10 @@ def _saved_pipeline_row_to_dict(row: Any) -> dict[str, Any]:
         "last_error": row.last_error,
         # Sprint 16 (ADR-023) — operator-defined quality rules, see models.py.
         "quality_rules": row.quality_rules or [],
+        # Sprint 27 (ADR-028) — write-approval gate, see models.py.
+        "require_approval": row.require_approval,
+        "approval_threshold_rows": row.approval_threshold_rows,
+        "last_approved_at": row.last_approved_at,
         "created_at": row.created_at,
         "updated_at": row.updated_at,
     }
@@ -643,9 +647,12 @@ def create_saved_pipeline(
     business_question: str = "",
     drift_threshold_pct: float = 20.0,
     quality_rules: Optional[list[dict[str, Any]]] = None,
+    require_approval: bool = False,
+    approval_threshold_rows: Optional[int] = None,
 ) -> dict[str, Any]:
     """Persist a new saved pipeline (Sprint 13, ADR-016; `drift_threshold_pct`
-    added Sprint 14, ADR-018; `quality_rules` added Sprint 16, ADR-023).
+    added Sprint 14, ADR-018; `quality_rules` added Sprint 16, ADR-023;
+    `require_approval`/`approval_threshold_rows` added Sprint 27, ADR-028).
 
     Caller (the `/pipelines` router) is responsible for validating
     `cron_schedule` (`core.scheduling.validate_cron_schedule`),
@@ -676,6 +683,9 @@ def create_saved_pipeline(
         last_status=None,
         last_error=None,
         quality_rules=rules,
+        require_approval=require_approval,
+        approval_threshold_rows=approval_threshold_rows,
+        last_approved_at=None,
         created_at=now,
         updated_at=now,
     )
@@ -698,6 +708,9 @@ def create_saved_pipeline(
         "last_status": None,
         "last_error": None,
         "quality_rules": rules,
+        "require_approval": require_approval,
+        "approval_threshold_rows": approval_threshold_rows,
+        "last_approved_at": None,
         "created_at": now,
         "updated_at": now,
     }
@@ -738,8 +751,18 @@ def update_saved_pipeline(
     is_active: Optional[bool] = None,
     drift_threshold_pct: Optional[float] = None,
     quality_rules: Optional[list[dict[str, Any]]] = None,
+    require_approval: Optional[bool] = None,
+    approval_threshold_rows: Optional[int] = None,
 ) -> Optional[dict[str, Any]]:
     """Partial update (PATCH semantics) — only fields passed as non-`None` change.
+
+    `approval_threshold_rows` follows the same "explicit value wins, `None`
+    means omitted" PATCH convention as every other optional field here — a
+    caller cannot use this function alone to *clear* an existing threshold
+    back to `NULL` ("always require approval"); the router only ever forwards
+    a Pydantic-validated value, never a sentinel-vs-omitted distinction for
+    this particular field (Sprint 27, ADR-028; same accepted limitation
+    `drift_threshold_pct` already has).
 
     Recomputes `next_run_at` whenever `cron_schedule` changes, or whenever a
     paused pipeline (`is_active=False -> True`) is resumed — a schedule that
@@ -770,6 +793,10 @@ def update_saved_pipeline(
         # `is not None` (not truthiness) — an explicit `quality_rules=[]` is a valid
         # "clear all my rules" update, distinct from "field omitted, leave as-is".
         values["quality_rules"] = quality_rules
+    if require_approval is not None:
+        values["require_approval"] = require_approval
+    if approval_threshold_rows is not None:
+        values["approval_threshold_rows"] = approval_threshold_rows
 
     resolved_cron = cron_schedule if cron_schedule is not None else existing["cron_schedule"]
     became_active = is_active is True and existing["is_active"] is False
@@ -918,6 +945,80 @@ def record_pipeline_health(pipeline_id: str, status: str, error: Optional[str] =
     stmt = update(saved_pipelines).where(saved_pipelines.c.id == pipeline_id).values(**values)
     with get_engine().begin() as conn:
         conn.execute(stmt)
+
+
+def mark_pipeline_approved(pipeline_id: str, tenant_id: str) -> None:
+    """Sprint 27 (ADR-028) — record that a saved pipeline just had an
+    operator-approved write. Called once, by
+    `services/pipeline_service.py::resume_pending_load`, on the first
+    approval that actually completes a write. Scoped by `tenant_id` (same
+    ownership-check pattern as `update_saved_pipeline`) — a no-op if the
+    pipeline doesn't exist or isn't owned by this tenant, rather than
+    raising, matching this module's soft-fail style for post-hoc bookkeeping.
+    """
+    now = datetime.now(tz=timezone.utc)
+    stmt = (
+        update(saved_pipelines)
+        .where(saved_pipelines.c.id == pipeline_id, saved_pipelines.c.tenant_id == tenant_id)
+        .values(last_approved_at=now, updated_at=now)
+    )
+    with get_engine().begin() as conn:
+        conn.execute(stmt)
+
+
+def get_run_status_and_pipeline(run_id: str, tenant_id: str) -> Optional[dict[str, Any]]:
+    """Sprint 27 (ADR-028) — the small slice of a `runs` row
+    `resume_pending_load`/`reject_pending_load` need before touching any
+    storage artifact: current `status` and which `saved_pipeline_id` (if
+    any) produced it. Tenant-scoped, `None` for "unknown or not owned" —
+    same soft-fail shape as `get_saved_pipeline`.
+    """
+    stmt = select(runs.c.status, runs.c.saved_pipeline_id).where(
+        runs.c.run_id == run_id, runs.c.tenant_id == tenant_id
+    )
+    with get_engine().connect() as conn:
+        row = conn.execute(stmt).first()
+    if row is None:
+        return None
+    return {"status": row.status, "saved_pipeline_id": row.saved_pipeline_id}
+
+
+def list_pending_approvals(tenant_id: str) -> list[dict[str, Any]]:
+    """Sprint 27 (ADR-028) — every run of this tenant currently
+    `awaiting_approval`, most recently created first. Backs
+    `GET /runs/pending-approval` — the queue an operator works through.
+    `LEFT OUTER JOIN`ed against `saved_pipelines` for the pipeline's `name`
+    (an avulso run is never gated, per the ADR, so this list is expected to
+    be scheduled-fire-only in practice, but the join tolerates a `NULL`
+    `saved_pipeline_id` the same way `list_pipeline_run_history` tolerates a
+    missing `analysis_runs` row).
+    """
+    stmt = (
+        select(
+            runs.c.run_id,
+            runs.c.spec,
+            runs.c.timestamp,
+            runs.c.saved_pipeline_id,
+            saved_pipelines.c.name.label("pipeline_name"),
+        )
+        .select_from(
+            runs.outerjoin(saved_pipelines, runs.c.saved_pipeline_id == saved_pipelines.c.id)
+        )
+        .where(runs.c.tenant_id == tenant_id, runs.c.status == "awaiting_approval")
+        .order_by(runs.c.timestamp.desc())
+    )
+    with get_engine().connect() as conn:
+        rows_ = conn.execute(stmt).fetchall()
+    return [
+        {
+            "run_id": row.run_id,
+            "spec": row.spec,
+            "timestamp": row.timestamp,
+            "saved_pipeline_id": row.saved_pipeline_id,
+            "pipeline_name": row.pipeline_name,
+        }
+        for row in rows_
+    ]
 
 
 DEFAULT_PIPELINE_HEALTH_WINDOW = 20

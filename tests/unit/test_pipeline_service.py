@@ -12,6 +12,7 @@ import pathlib
 from typing import Any
 
 import pandas as pd
+import pytest
 
 from ai_etl.core.state import initial_state
 from ai_etl.services import pipeline_service
@@ -621,6 +622,196 @@ def test_run_full_analysis_forwards_progress_callback_to_every_stage(monkeypatch
 
     stages = {stage for stage, _ in events}
     assert stages == {"silver", "planner", "gold:0", "advisor"}
+
+
+def test_run_silver_pipeline_resolves_approval_policy_for_scheduled_fire(monkeypatch) -> None:
+    """Sprint 27 (ADR-028): a scheduled fire resolves its saved pipeline's
+    write-approval policy and carries it into the initial `PipelineState`."""
+    chunks = [{"loader": {"status": "completed"}}]
+    captured_states: list[Any] = []
+    monkeypatch.setattr(
+        pipeline_service, "build_graph", lambda: _FakeGraph(chunks, captured_states)
+    )
+    monkeypatch.setattr(pipeline_service, "save_run", lambda *a, **k: pathlib.Path("x"))
+    monkeypatch.setattr(pipeline_service, "save_stage_latencies", lambda *a, **k: None)
+    monkeypatch.setattr(
+        pipeline_service,
+        "get_saved_pipeline",
+        lambda pipeline_id, tenant_id: {
+            "id": pipeline_id,
+            "quality_rules": [],
+            "require_approval": True,
+            "approval_threshold_rows": 500,
+            "last_approved_at": None,
+        },
+    )
+
+    pipeline_service.run_silver_pipeline(
+        "read file.csv", run_dir="runs", tenant_id="tenant-a", saved_pipeline_id="pl-1"
+    )
+
+    assert captured_states[0]["approval_policy"] == {
+        "require_approval": True,
+        "threshold_rows": 500,
+        "last_approved_at": None,
+    }
+
+
+def test_run_silver_pipeline_avulso_run_gets_no_approval_policy(monkeypatch) -> None:
+    chunks = [{"loader": {"status": "completed"}}]
+    captured_states: list[Any] = []
+    monkeypatch.setattr(
+        pipeline_service, "build_graph", lambda: _FakeGraph(chunks, captured_states)
+    )
+    monkeypatch.setattr(pipeline_service, "save_run", lambda *a, **k: pathlib.Path("x"))
+    monkeypatch.setattr(pipeline_service, "save_stage_latencies", lambda *a, **k: None)
+
+    pipeline_service.run_silver_pipeline("read file.csv", run_dir="runs", tenant_id="tenant-a")
+
+    assert captured_states[0]["approval_policy"] is None
+
+
+# ---------------------------------------------------------------------------
+# resume_pending_load / reject_pending_load (Sprint 27, ADR-028)
+# ---------------------------------------------------------------------------
+
+
+def _awaiting_state() -> dict[str, Any]:
+    state = initial_state(spec="test", run_id="run-1")
+    return {
+        **state,
+        "pipeline_plan": {"destination": {"type": "csv", "path": "out.csv"}},
+        "transformed_data": pd.DataFrame({"a": [1, 2, 3]}),
+        "status": "awaiting_approval",
+        "load_preview": {"would_write_rows": 3},
+    }
+
+
+def _patch_reload(monkeypatch, saved_pipeline_id: str | None = "pl-1") -> dict[str, Any]:
+    state = _awaiting_state()
+    monkeypatch.setattr(
+        pipeline_service,
+        "get_run_status_and_pipeline",
+        lambda run_id, tenant_id: {
+            "status": "awaiting_approval",
+            "saved_pipeline_id": saved_pipeline_id,
+        },
+    )
+    monkeypatch.setattr(
+        pipeline_service, "load_full_result", lambda run_id, log_dir, tenant_id: {"state": state}
+    )
+    return state
+
+
+def test_resume_pending_load_writes_and_marks_approved(monkeypatch) -> None:
+    _patch_reload(monkeypatch)
+    captured_loader_state: dict[str, Any] = {}
+
+    def fake_loader_node(state: dict[str, Any]) -> dict[str, Any]:
+        captured_loader_state.update(state)
+        return {**state, "status": "completed", "load_result": {"rows_loaded": 3}, "error": None}
+
+    monkeypatch.setattr(pipeline_service, "loader_node", fake_loader_node)
+
+    saved: dict[str, Any] = {}
+    monkeypatch.setattr(
+        pipeline_service,
+        "save_run",
+        lambda state, log_dir, tenant_id=None, saved_pipeline_id=None: saved.update(
+            state=state, saved_pipeline_id=saved_pipeline_id
+        ),
+    )
+    health_calls: list[Any] = []
+    monkeypatch.setattr(
+        pipeline_service,
+        "record_pipeline_health",
+        lambda pid, status, error=None: health_calls.append((pid, status, error)),
+    )
+    approved_calls: list[Any] = []
+    monkeypatch.setattr(
+        pipeline_service,
+        "mark_pipeline_approved",
+        lambda pid, tenant_id: approved_calls.append((pid, tenant_id)),
+    )
+
+    result = pipeline_service.resume_pending_load("run-1", "tenant-a", run_dir="runs")
+
+    assert captured_loader_state["approval_granted"] is True
+    assert result["status"] == "completed"
+    assert saved["saved_pipeline_id"] == "pl-1"
+    assert health_calls == [("pl-1", "completed", None)]
+    assert approved_calls == [("pl-1", "tenant-a")]
+
+
+def test_resume_pending_load_write_failure_does_not_mark_approved(monkeypatch) -> None:
+    _patch_reload(monkeypatch)
+    monkeypatch.setattr(
+        pipeline_service,
+        "loader_node",
+        lambda state: {**state, "status": "failed", "error": "disk full"},
+    )
+    monkeypatch.setattr(pipeline_service, "save_run", lambda *a, **k: None)
+    health_calls: list[Any] = []
+    monkeypatch.setattr(
+        pipeline_service,
+        "record_pipeline_health",
+        lambda pid, status, error=None: health_calls.append((pid, status, error)),
+    )
+    approved_calls: list[Any] = []
+    monkeypatch.setattr(
+        pipeline_service,
+        "mark_pipeline_approved",
+        lambda pid, tenant_id: approved_calls.append((pid, tenant_id)),
+    )
+
+    result = pipeline_service.resume_pending_load("run-1", "tenant-a", run_dir="runs")
+
+    assert result["status"] == "failed"
+    assert health_calls == [("pl-1", "failed", "disk full")]
+    assert approved_calls == []
+
+
+def test_resume_pending_load_unknown_run_raises(monkeypatch) -> None:
+    monkeypatch.setattr(
+        pipeline_service, "get_run_status_and_pipeline", lambda run_id, tenant_id: None
+    )
+    with pytest.raises(ValueError, match="not found"):
+        pipeline_service.resume_pending_load("missing", "tenant-a", run_dir="runs")
+
+
+def test_resume_pending_load_wrong_status_raises(monkeypatch) -> None:
+    monkeypatch.setattr(
+        pipeline_service,
+        "get_run_status_and_pipeline",
+        lambda run_id, tenant_id: {"status": "completed", "saved_pipeline_id": None},
+    )
+    with pytest.raises(ValueError, match="not awaiting approval"):
+        pipeline_service.resume_pending_load("run-1", "tenant-a", run_dir="runs")
+
+
+def test_reject_pending_load_never_calls_loader_node(monkeypatch) -> None:
+    _patch_reload(monkeypatch)
+    monkeypatch.setattr(
+        pipeline_service,
+        "loader_node",
+        lambda state: (_ for _ in ()).throw(AssertionError("must not be called")),
+    )
+    saved: dict[str, Any] = {}
+    monkeypatch.setattr(
+        pipeline_service,
+        "save_run",
+        lambda state, log_dir, tenant_id=None, saved_pipeline_id=None: saved.update(state=state),
+    )
+    monkeypatch.setattr(pipeline_service, "record_pipeline_health", lambda *a, **k: None)
+
+    result = pipeline_service.reject_pending_load(
+        "run-1", "tenant-a", run_dir="runs", reason="looks wrong"
+    )
+
+    assert result["status"] == "failed"
+    assert "looks wrong" in result["error"]
+    assert result["load_preview"] is None
+    assert saved["state"]["status"] == "failed"
 
 
 # ---------------------------------------------------------------------------

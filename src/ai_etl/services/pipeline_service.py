@@ -16,15 +16,26 @@ from __future__ import annotations
 
 import time
 import uuid
-from typing import Any, Callable, cast
+from typing import Any, Callable, Optional, cast
 
 import pandas as pd
 
 from ai_etl.agents.advisor import run_advisor
 from ai_etl.agents.analyst import run_analyst
+from ai_etl.agents.loader import loader_node
 from ai_etl.agents.planner import plan_analysis_tasks
 from ai_etl.agents.science import run_science
-from ai_etl.audit.db import get_saved_pipeline, save_analysis, save_run, save_stage_latencies
+from ai_etl.audit.db import (
+    get_run_status_and_pipeline,
+    get_saved_pipeline,
+    load_full_result,
+    mark_pipeline_approved,
+    record_pipeline_health,
+    save_analysis,
+    save_run,
+    save_stage_latencies,
+)
+from ai_etl.audit.logger import log_action
 from ai_etl.core.analysis_types import (
     AdvisorResult,
     AnalysisRunResult,
@@ -52,6 +63,23 @@ AGENT_STEPS: dict[str, tuple[str, str, str]] = {
 
 def _noop_progress(stage: str, message: str) -> None:
     return None
+
+
+def _build_approval_policy(pipeline: dict[str, Any]) -> dict[str, Any]:
+    """Sprint 27 (ADR-028) — `saved_pipelines` row -> `PipelineState["approval_policy"]`.
+
+    `last_approved_at` is carried as an ISO string (not the raw `datetime`) since
+    this dict crosses into `PipelineState`, which is JSON-serialized wholesale by
+    `audit.db._make_serializable`/`save_run` — keeping it JSON-safe from the start
+    avoids a silent `str(datetime)` fallback there. `agents/loader.py::_is_write_gated`
+    only ever checks it for `None`-ness, never parses it back into a `datetime`.
+    """
+    last_approved_at = pipeline.get("last_approved_at")
+    return {
+        "require_approval": bool(pipeline.get("require_approval")),
+        "threshold_rows": pipeline.get("approval_threshold_rows"),
+        "last_approved_at": last_approved_at.isoformat() if last_approved_at else None,
+    }
 
 
 def run_silver_pipeline(
@@ -88,12 +116,24 @@ def run_silver_pipeline(
     # scheduled fire has both a `saved_pipeline_id` and the real owning `tenant_id`
     # (confirmed in `services/scheduler.py` — see ADR-023) — an avulso run always
     # gets `[]`, unchanged fixed-checks-only behavior.
+    # Sprint 27 (ADR-028) — same lookup, same "only a scheduled fire has both a
+    # saved_pipeline_id and the real tenant_id" gate: this saved pipeline's own
+    # write-approval policy, resolved here (not inside `loader_node`, which stays
+    # a pure function of `PipelineState`) and carried into the graph via
+    # `initial_state`. An avulso run always gets `None` — never gated.
     custom_quality_rules: list[dict[str, Any]] = []
+    approval_policy: Optional[dict[str, Any]] = None
     if saved_pipeline_id is not None and tenant_id is not None:
         pipeline = get_saved_pipeline(saved_pipeline_id, tenant_id)
         if pipeline is not None:
             custom_quality_rules = pipeline.get("quality_rules", [])
-    state = initial_state(spec=spec, run_id=run_id, custom_quality_rules=custom_quality_rules)
+            approval_policy = _build_approval_policy(pipeline)
+    state = initial_state(
+        spec=spec,
+        run_id=run_id,
+        custom_quality_rules=custom_quality_rules,
+        approval_policy=approval_policy,
+    )
     graph = build_graph()
 
     final_state: dict[str, Any] = dict(state)
@@ -496,3 +536,117 @@ def run_full_analysis(
         "question": question,
         "tokens": total_tokens,
     }
+
+
+def _reload_awaiting_state(
+    run_id: str, tenant_id: str, run_dir: str
+) -> tuple[PipelineState, Optional[str]]:
+    """Shared reload step for `resume_pending_load`/`reject_pending_load`
+    (Sprint 27, ADR-028): validate the run exists, belongs to this tenant,
+    and is actually `awaiting_approval`, then reconstruct its
+    `PipelineState` via the already-existing `load_full_result` (see the
+    ADR's Decision 1 for why this — not a LangGraph checkpointer — is the
+    resume mechanism). Raises `ValueError` with an actionable message on any
+    of those checks failing; callers (the `/runs` router) map that to a
+    4xx HTTP response.
+
+    Returns `(state, saved_pipeline_id)` — `saved_pipeline_id` is returned
+    alongside `state`, not folded into it: `PipelineState` has no such field
+    (it's a `runs`-table column, threaded as a parameter into
+    `save_run`/`save_analysis`, never part of the graph state itself), and
+    every node contract in this project builds a *new* state dict rather
+    than smuggling extra keys onto an existing one.
+    """
+    meta = get_run_status_and_pipeline(run_id, tenant_id)
+    if meta is None:
+        raise ValueError(f"Run {run_id!r} not found.")
+    if meta["status"] != "awaiting_approval":
+        raise ValueError(
+            f"Run {run_id!r} is not awaiting approval (current status: {meta['status']!r})."
+        )
+
+    reloaded = load_full_result(run_id, log_dir=run_dir, tenant_id=tenant_id)
+    if reloaded is None:
+        raise ValueError(f"Run {run_id!r} could not be reloaded from storage.")
+    state = cast(PipelineState, reloaded["state"])
+    if not isinstance(state.get("transformed_data"), pd.DataFrame):
+        raise ValueError(f"Run {run_id!r} has no reloadable Silver data to act on.")
+    return state, cast(Optional[str], meta["saved_pipeline_id"])
+
+
+def resume_pending_load(run_id: str, tenant_id: str, run_dir: str) -> PipelineState:
+    """Sprint 27 (ADR-028) — an operator approved a gated write: perform the
+    real write now, by calling `loader_node` directly a second time (never
+    the full graph — Orchestrator/Extractor/Transformer already ran and
+    their LLM cost is sunk; re-running them could also regenerate a
+    *different* transformation than the one just previewed and approved).
+
+    Persists the result via `save_run`'s existing upsert (the `runs` row
+    moves from `awaiting_approval` to `completed`/`failed` in place), keeps
+    Sprint 15's health-snapshot cache in sync via a direct
+    `record_pipeline_health` call, and — only once the write actually
+    succeeds — marks the pipeline as having had its first approved write
+    (`mark_pipeline_approved`), which is what lets a future write clear the
+    approval gate via `approval_threshold_rows` instead of being gated every
+    time (ADR-028 Decision 2).
+
+    Raises `ValueError` if `run_id` doesn't exist, isn't owned by
+    `tenant_id`, isn't currently `awaiting_approval`, or its Silver data
+    can't be reloaded — the caller (the `/runs` router) maps each case to a
+    4xx response.
+    """
+    state, saved_pipeline_id = _reload_awaiting_state(run_id, tenant_id, run_dir)
+
+    granted_state: PipelineState = {**state, "approval_granted": True}
+    result_state = loader_node(granted_state)
+
+    save_run(
+        result_state, log_dir=run_dir, tenant_id=tenant_id, saved_pipeline_id=saved_pipeline_id
+    )
+
+    if saved_pipeline_id is not None:
+        final_status = result_state.get("status") or "failed"
+        try:
+            record_pipeline_health(saved_pipeline_id, final_status, result_state.get("error"))
+            if final_status == "completed":
+                mark_pipeline_approved(saved_pipeline_id, tenant_id)
+        except Exception:  # nosec B110 — best-effort bookkeeping, never fails an
+            pass  # already-persisted, already-written approval outcome.
+
+    return result_state
+
+
+def reject_pending_load(
+    run_id: str, tenant_id: str, run_dir: str, reason: str = ""
+) -> PipelineState:
+    """Sprint 27 (ADR-028) — an operator declined a gated write: never calls
+    the real write path at all. Marks the run `failed` with an explicit
+    "rejected by operator" error (distinct from a real Loader error) and
+    persists that via the same `save_run` upsert `resume_pending_load` uses.
+
+    Raises `ValueError` under the same conditions as `resume_pending_load`
+    (see `_reload_awaiting_state`).
+    """
+    state, saved_pipeline_id = _reload_awaiting_state(run_id, tenant_id, run_dir)
+
+    error_message = f"Rejected by operator: {reason}" if reason else "Rejected by operator."
+    new_log = log_action(state, "loader", "load_rejected", {"reason": reason})
+    result_state: PipelineState = {
+        **state,
+        "status": "failed",
+        "error": error_message,
+        "load_preview": None,
+        "audit_log": new_log,
+    }
+
+    save_run(
+        result_state, log_dir=run_dir, tenant_id=tenant_id, saved_pipeline_id=saved_pipeline_id
+    )
+
+    if saved_pipeline_id is not None:
+        try:
+            record_pipeline_health(saved_pipeline_id, "failed", error_message)
+        except Exception:  # nosec B110 — best-effort bookkeeping, never fails an
+            pass  # already-persisted rejection.
+
+    return result_state

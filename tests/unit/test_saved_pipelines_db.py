@@ -744,3 +744,123 @@ def test_get_pipeline_health_latency_is_none_without_stage_latencies(engine: Eng
     health = db.get_pipeline_health(pipeline["id"], "tenant-a")
 
     assert health["avg_latency_seconds"] is None
+
+
+# ---------------------------------------------------------------------------
+# Sprint 27 (ADR-028) — write-approval gate
+# ---------------------------------------------------------------------------
+
+
+def test_create_saved_pipeline_defaults_approval_gate_off(engine: Engine) -> None:
+    created = db.create_saved_pipeline("tenant-a", "A", "postgres", "spec a", "0 3 * * *")
+
+    assert created["require_approval"] is False
+    assert created["approval_threshold_rows"] is None
+    assert created["last_approved_at"] is None
+
+
+def test_create_saved_pipeline_with_approval_gate(engine: Engine) -> None:
+    created = db.create_saved_pipeline(
+        "tenant-a",
+        "A",
+        "postgres",
+        "spec a",
+        "0 3 * * *",
+        require_approval=True,
+        approval_threshold_rows=500,
+    )
+
+    assert created["require_approval"] is True
+    assert created["approval_threshold_rows"] == 500
+
+    reloaded = db.get_saved_pipeline(created["id"], "tenant-a")
+    assert reloaded is not None
+    assert reloaded["require_approval"] is True
+    assert reloaded["approval_threshold_rows"] == 500
+
+
+def test_update_saved_pipeline_can_turn_on_approval_gate(engine: Engine) -> None:
+    created = db.create_saved_pipeline("tenant-a", "A", "postgres", "spec a", "0 3 * * *")
+
+    updated = db.update_saved_pipeline(
+        created["id"], "tenant-a", require_approval=True, approval_threshold_rows=100
+    )
+
+    assert updated is not None
+    assert updated["require_approval"] is True
+    assert updated["approval_threshold_rows"] == 100
+
+
+def test_mark_pipeline_approved_sets_last_approved_at(engine: Engine) -> None:
+    created = db.create_saved_pipeline(
+        "tenant-a", "A", "postgres", "spec a", "0 3 * * *", require_approval=True
+    )
+    assert created["last_approved_at"] is None
+
+    db.mark_pipeline_approved(created["id"], "tenant-a")
+
+    reloaded = db.get_saved_pipeline(created["id"], "tenant-a")
+    assert reloaded is not None
+    assert reloaded["last_approved_at"] is not None
+
+
+def test_mark_pipeline_approved_scoped_by_tenant_is_a_noop_for_wrong_tenant(engine: Engine) -> None:
+    created = db.create_saved_pipeline(
+        "tenant-a", "A", "postgres", "spec a", "0 3 * * *", require_approval=True
+    )
+
+    db.mark_pipeline_approved(created["id"], "tenant-b")
+
+    reloaded = db.get_saved_pipeline(created["id"], "tenant-a")
+    assert reloaded is not None
+    assert reloaded["last_approved_at"] is None
+
+
+def test_get_run_status_and_pipeline_returns_status_and_link(engine: Engine) -> None:
+    _insert_user(engine, "tenant-a")
+    pipeline = db.create_saved_pipeline("tenant-a", "A", "postgres", "spec a", "0 3 * * *")
+    _insert_run(
+        engine,
+        "run-1",
+        "tenant-a",
+        pipeline["id"],
+        datetime.now(timezone.utc),
+        status="awaiting_approval",
+    )
+
+    result = db.get_run_status_and_pipeline("run-1", "tenant-a")
+
+    assert result == {"status": "awaiting_approval", "saved_pipeline_id": pipeline["id"]}
+
+
+def test_get_run_status_and_pipeline_none_for_wrong_tenant(engine: Engine) -> None:
+    _insert_user(engine, "tenant-a")
+    _insert_run(engine, "run-1", "tenant-a", None, datetime.now(timezone.utc))
+
+    assert db.get_run_status_and_pipeline("run-1", "tenant-b") is None
+
+
+def test_list_pending_approvals_scoped_by_tenant_and_status(engine: Engine) -> None:
+    _insert_user(engine, "tenant-a")
+    _insert_user(engine, "tenant-b")
+    pipeline = db.create_saved_pipeline("tenant-a", "A", "postgres", "spec a", "0 3 * * *")
+    _insert_run(
+        engine,
+        "run-1",
+        "tenant-a",
+        pipeline["id"],
+        datetime.now(timezone.utc),
+        status="awaiting_approval",
+    )
+    _insert_run(
+        engine, "run-2", "tenant-a", pipeline["id"], datetime.now(timezone.utc), status="completed"
+    )
+    _insert_run(
+        engine, "run-3", "tenant-b", None, datetime.now(timezone.utc), status="awaiting_approval"
+    )
+
+    pending = db.list_pending_approvals("tenant-a")
+
+    assert len(pending) == 1
+    assert pending[0]["run_id"] == "run-1"
+    assert pending[0]["pipeline_name"] == "A"

@@ -82,6 +82,10 @@ class CreatePipelineRequest(BaseModel):
     # execution of this saved pipeline alongside the fixed checks. Defaults to no
     # custom rules, same behavior as every pipeline created before this sprint.
     quality_rules: list[QualityRule] = Field(default_factory=list)
+    # Sprint 27 (ADR-028) — opt-in write-approval gate. `False` by default: zero
+    # behavior change unless explicitly turned on. See `agents/loader.py`.
+    require_approval: bool = False
+    approval_threshold_rows: Optional[int] = Field(default=None, ge=0)
 
 
 class UpdatePipelineRequest(BaseModel):
@@ -101,6 +105,8 @@ class UpdatePipelineRequest(BaseModel):
     is_active: Optional[bool] = None
     drift_threshold_pct: Optional[float] = Field(default=None, gt=0)
     quality_rules: Optional[list[QualityRule]] = None
+    require_approval: Optional[bool] = None
+    approval_threshold_rows: Optional[int] = Field(default=None, ge=0)
 
 
 def _with_health(pipeline: dict[str, Any]) -> dict[str, Any]:
@@ -160,6 +166,8 @@ def create_pipeline(
         business_question=body.business_question,
         drift_threshold_pct=body.drift_threshold_pct,
         quality_rules=[r.model_dump() for r in body.quality_rules],
+        require_approval=body.require_approval,
+        approval_threshold_rows=body.approval_threshold_rows,
     )
 
 
@@ -216,6 +224,8 @@ def patch_pipeline(
         quality_rules=(
             [r.model_dump() for r in body.quality_rules] if body.quality_rules is not None else None
         ),
+        require_approval=body.require_approval,
+        approval_threshold_rows=body.approval_threshold_rows,
     )
     if updated is None:
         raise HTTPException(status_code=404, detail="Saved pipeline not found.")

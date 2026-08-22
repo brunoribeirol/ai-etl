@@ -783,6 +783,46 @@ def test_run_full_analysis_task_never_retries_a_failed_avulso_run(
     assert result["status"] == "failed"
 
 
+def test_run_full_analysis_task_never_retries_or_alerts_on_awaiting_approval(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Sprint 27 (ADR-028 Decision 3): a gated write (`status="awaiting_approval"`)
+    on a scheduled fire is a legitimate pause, not a failure — must never trigger
+    Level-B retry nor `record_pipeline_health` (which would otherwise increment
+    `consecutive_failures` and eventually mis-fire Sprint 15's health alert)."""
+
+    def _fake_run_full_analysis(
+        spec,
+        business_question,
+        run_dir,
+        progress_callback=None,
+        tenant_id=None,
+        saved_pipeline_id=None,
+    ):
+        return {
+            "state": {"run_id": "r1", "status": "awaiting_approval", "error": None},
+            "tokens": {},
+        }
+
+    monkeypatch.setattr(eq_module, "run_full_analysis", _fake_run_full_analysis)
+
+    def _fail_if_called(*args: object, **kwargs: object) -> None:
+        raise AssertionError("retry() must not be called for an awaiting_approval fire")
+
+    monkeypatch.setattr(run_full_analysis_task, "retry", _fail_if_called)
+
+    def _fail_if_recorded(*args: object, **kwargs: object) -> None:
+        raise AssertionError("record_pipeline_health must not be called for awaiting_approval")
+
+    monkeypatch.setattr(eq_module, "record_pipeline_health", _fail_if_recorded)
+
+    result = run_full_analysis_task(
+        "spec", "question", "./runs", "tenant-a", saved_pipeline_id="pl-1"
+    )
+
+    assert result["status"] == "awaiting_approval"
+
+
 def test_run_full_analysis_task_stops_retrying_once_max_retries_reached(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
