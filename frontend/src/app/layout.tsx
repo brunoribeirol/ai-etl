@@ -64,6 +64,9 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
                 <Link href="/pipelines" className="hover:text-foreground transition-colors">
                   Pipelines
                 </Link>
+                <Link href="/resumo" className="hover:text-foreground transition-colors">
+                  Resumo
+                </Link>
               </nav>
             </div>
             <div className="flex items-center gap-1">
