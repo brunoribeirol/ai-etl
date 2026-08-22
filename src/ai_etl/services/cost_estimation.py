@@ -28,7 +28,9 @@ an additive read-only heuristic, not a change to how anything is stored or
 enforced).
 """
 
-from typing import Literal, TypedDict
+from typing import Literal
+
+from typing_extensions import TypedDict
 
 from ai_etl.audit.db.budget import get_avg_run_cost_usd, get_global_avg_run_cost_usd
 from ai_etl.core.cost_estimation import estimate_token_usage
