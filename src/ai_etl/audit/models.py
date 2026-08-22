@@ -42,6 +42,14 @@ users = Table(
     # than a new table (no history/versioning of the cap value is needed —
     # actual spend history already lives in analysis_runs.cost_usd).
     Column("monthly_budget_usd", Float, nullable=True),
+    # Sprint 36 (ADR-035) — optional per-tenant automatic run-artifact
+    # retention window, in days. NULL (the default for every existing and
+    # new tenant) means "keep forever" — opt-in, zero behavior change unless
+    # a tenant sets one. See `services/retention_service.py` for the Celery
+    # beat job that actually purges storage artifacts past this window, and
+    # `audit/db/retention.py` for the get/set accessors (same shape as
+    # `monthly_budget_usd` above).
+    Column("retention_days", Integer, nullable=True),
 )
 
 runs = Table(
@@ -299,4 +307,31 @@ admin_action_log = Table(
     Index("ix_admin_action_log_actor", "actor_user_id"),
     Index("ix_admin_action_log_target", "target_tenant_id"),
     Index("ix_admin_action_log_created", "created_at"),
+)
+
+# Sprint 36 (ADR-035) — evidence that an automatic retention cleanup pass ran
+# for a tenant, same "survives the thing it describes" shape as
+# `tenant_deletion_log` above, but per cleanup pass rather than per
+# irreversible account event: unlike `DELETE /tenant`, retention cleanup only
+# purges storage artifacts past the tenant's configured window, never the
+# `users` row itself, so a FK to `users.id` would be safe here — kept as a
+# plain string anyway for the same reason `tenant_deletion_log` does: a
+# tenant that deletes its account (ADR-025) after a cleanup ran must not
+# cascade-delete this compliance evidence too.
+retention_cleanup_log = Table(
+    "retention_cleanup_log",
+    metadata,
+    Column("id", String, primary_key=True),
+    Column("tenant_id", String, nullable=False),
+    Column("retention_days", Integer, nullable=False),
+    Column("started_at", DateTime(timezone=True), nullable=False),
+    Column("completed_at", DateTime(timezone=True), nullable=True),
+    Column("runs_scanned", Integer, nullable=False, server_default="0"),
+    Column("storage_keys_deleted", Integer, nullable=False, server_default="0"),
+    # "completed" | "failed" — same contract as `tenant_deletion_log.status`:
+    # a partial storage error still leaves status "completed" with `error`
+    # set (best-effort, never blocks the next tenant in the same pass).
+    Column("status", String(20), nullable=False),
+    Column("error", Text, nullable=True),
+    Index("ix_retention_cleanup_log_tenant", "tenant_id"),
 )
