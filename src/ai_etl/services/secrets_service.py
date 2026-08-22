@@ -82,9 +82,9 @@ def set_secret(tenant_id: str, name: str, value: str) -> None:
     )
     with get_engine().begin() as conn:
         conn.execute(stmt)
-    logger.info(
+    logger.info(  # nosemgrep: python.lang.security.audit.logging.logger-credential-leak.python-logger-credential-disclosure -- `name` is the secret's label, never `value`; false positive on the literal word "Secret" in the message
         "Secret '%s' stored for tenant.", name
-    )  # nosemgrep: python.lang.security.audit.logging.logger-credential-leak.python-logger-credential-disclosure -- `name` is the secret's label, never `value`; false positive on the literal word "Secret" in the message
+    )
 
 
 def get_secret(tenant_id: str, name: str) -> str:
@@ -129,9 +129,9 @@ def delete_secret(tenant_id: str, name: str) -> bool:
         result = conn.execute(stmt)
     deleted = result.rowcount > 0
     if deleted:
-        logger.info(
+        logger.info(  # nosemgrep: python.lang.security.audit.logging.logger-credential-leak.python-logger-credential-disclosure -- `name` is the secret's label, never `value`
             "Secret '%s' deleted for tenant.", name
-        )  # nosemgrep: python.lang.security.audit.logging.logger-credential-leak.python-logger-credential-disclosure -- `name` is the secret's label, never `value`
+        )
     return deleted
 
 
