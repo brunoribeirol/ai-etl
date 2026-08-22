@@ -264,3 +264,26 @@ tenant_deletion_log = Table(
     Column("error", Text, nullable=True),
     Index("ix_tenant_deletion_log_tenant", "tenant_id"),
 )
+
+# Sprint 31 (ADR-032, migration 0017) — every platform-admin action that
+# reads or writes another tenant's data. Deliberately its own table, not
+# `PipelineState.audit_log` (per-run, transient) and not `tenant_deletion_log`
+# above (a different, narrower event). Written by `audit/admin_log.py`, never
+# by `audit/db.py` (Sprint 31 isolation: avoid touching that file while other
+# sprints run in parallel against it). No FK to `users.id` on either side —
+# `actor_user_id` is a platform admin (may not even be a tenant themselves)
+# and `target_tenant_id` may reference a tenant that no longer exists by the
+# time this row is read back, same reasoning as `tenant_deletion_log`.
+admin_action_log = Table(
+    "admin_action_log",
+    metadata,
+    Column("id", String, primary_key=True),
+    Column("actor_user_id", String, nullable=False),
+    Column("action", String(100), nullable=False),
+    Column("target_tenant_id", String, nullable=True),
+    Column("detail", Text, nullable=True),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Index("ix_admin_action_log_actor", "actor_user_id"),
+    Index("ix_admin_action_log_target", "target_tenant_id"),
+    Index("ix_admin_action_log_created", "created_at"),
+)
