@@ -60,6 +60,6 @@ def test_every_llm_allowed_model_has_a_pricing_entry() -> None:
 
     for models in ALLOWED_MODELS_BY_PROVIDER.values():
         for model in models:
-            assert (
-                model in MODEL_PRICING_USD_PER_MILLION_TOKENS
-            ), f"{model!r} is allowed but has no pricing entry"
+            assert model in MODEL_PRICING_USD_PER_MILLION_TOKENS, (
+                f"{model!r} is allowed but has no pricing entry"
+            )
