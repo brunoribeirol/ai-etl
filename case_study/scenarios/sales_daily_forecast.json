@@ -1,0 +1,40 @@
+{
+  "id": "sales_daily_forecast",
+  "category": "nominal_predictive",
+  "description": "Baseline predictive question over the same sales dataset - exercises Science's forecast path + ADR-026 prediction_range check.",
+  "data": {
+    "kind": "generated",
+    "generator": "case_study/data/generate_sales.py",
+    "path": "case_study/data/sales.csv"
+  },
+  "spec_template": "Read the file {csv_path}. Rename the column \"dt\" to \"date\" and the column \"amt\" to \"amount\". Filter rows where status is \"active\". Remove duplicate rows. Save the result to {output_path}.",
+  "business_question": "Qual a previsão de faturamento diário (amount) para os próximos períodos?",
+  "expect_failure": false,
+  "mock": {
+    "transformations": [
+      "rename dt to date",
+      "rename amt to amount",
+      "filter status == \"active\"",
+      "drop duplicate rows"
+    ],
+    "transform_code": "def transform(dfs: dict) -> pd.DataFrame:\n    df = dfs[\"data\"].rename(columns={\"dt\": \"date\", \"amt\": \"amount\"})\n    df = df[df[\"status\"] == \"active\"]\n    df = df.drop_duplicates()\n    return df\n",
+    "planner_response": [
+      {"question": "Qual a previsão de faturamento diário?", "type": "diagnostic_or_predictive"}
+    ],
+    "gold_codes": [],
+    "science_codes": [
+      "predictions_df = df.groupby(\"date\")[\"amount\"].sum().reset_index().rename(columns={\"amount\": \"actual\"})\npredictions_df[\"forecast\"] = predictions_df[\"actual\"] * 1.05\nfig = go.Figure()\nnarrative = \"A previsão de faturamento diário foi gerada por suavização exponencial (ExponentialSmoothing) a partir do histórico de vendas ativas.\"\nmodel_info = {\"model_type\": \"ExponentialSmoothing\", \"task\": \"forecast\", \"metrics\": {\"r2\": 0.82}, \"features\": [\"date\"], \"target\": \"amount\"}"
+    ],
+    "advisor_response": {
+      "recommendations": [
+        {
+          "action": "Monitorar a previsão de faturamento diário no próximo ciclo.",
+          "rationale": "Previsão gerada por suavização exponencial sobre o histórico de vendas ativas.",
+          "priority": "medium",
+          "expected_impact": "Planejamento operacional orientado pela previsão."
+        }
+      ],
+      "summary": "Previsão de faturamento diário disponível para o próximo ciclo."
+    }
+  }
+}

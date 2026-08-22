@@ -1,0 +1,20 @@
+{
+  "id": "malformed_quoting_expected_failure",
+  "category": "adversarial_expected_failure",
+  "description": "Sprint 22's worst real finding: a stray unquoted delimiter shifting every column with no exception at all, before the fix. Fixed by _validate_row_lengths() raising a specific ValueError. expect_failure=true - a regression here (someone loosens that validation) is a quality regression exactly like a worse prompt, and belongs in this harness, not only in test_csv_source.py.",
+  "data": {
+    "kind": "fixture",
+    "path": "tests/fixtures/dirty_data/csv_ambiguous_delimiter.csv"
+  },
+  "spec_template": "Read the file {csv_path}. Save the result to {output_path}.",
+  "business_question": "",
+  "expect_failure": true,
+  "mock": {
+    "transformations": [],
+    "transform_code": "def transform(dfs: dict) -> pd.DataFrame:\n    return dfs[\"data\"]\n",
+    "planner_response": [],
+    "gold_codes": [],
+    "science_codes": [],
+    "advisor_response": {"recommendations": [], "summary": ""}
+  }
+}

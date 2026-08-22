@@ -1,0 +1,33 @@
+{
+  "id": "sales_empty_result_narrative",
+  "category": "adversarial_edge_case",
+  "description": "Known edge case (ADR-026 empty_result): a Gold sub-task whose result is empty but whose narrative still cites a number - the exact shape output_validation.check_gold_output's empty_result rule exists to catch, exercised as a corpus scenario rather than only in test_output_validation.py.",
+  "data": {
+    "kind": "generated",
+    "generator": "case_study/data/generate_sales.py",
+    "path": "case_study/data/sales.csv"
+  },
+  "spec_template": "Read the file {csv_path}. Rename the column \"dt\" to \"date\" and the column \"amt\" to \"amount\". Filter rows where status is \"active\". Remove duplicate rows. Save the result to {output_path}.",
+  "business_question": "Qual o faturamento da região inexistente 'Polo Norte' nos últimos 12 meses?",
+  "expect_failure": false,
+  "mock": {
+    "transformations": [
+      "rename dt to date",
+      "rename amt to amount",
+      "filter status == \"active\"",
+      "drop duplicate rows"
+    ],
+    "transform_code": "def transform(dfs: dict) -> pd.DataFrame:\n    df = dfs[\"data\"].rename(columns={\"dt\": \"date\", \"amt\": \"amount\"})\n    df = df[df[\"status\"] == \"active\"]\n    df = df.drop_duplicates()\n    return df\n",
+    "planner_response": [
+      {"question": "Qual o faturamento da região 'Polo Norte' nos últimos 12 meses?", "type": "descriptive"}
+    ],
+    "gold_codes": [
+      "gold_df = df[df[\"region\"] == \"Polo Norte\"]\nfig = go.Figure()\nnarrative = \"O faturamento da região Polo Norte foi de R$ 0,00 nos últimos 12 meses.\""
+    ],
+    "science_codes": [],
+    "advisor_response": {
+      "recommendations": [],
+      "summary": "Nenhum dado disponível para a região consultada."
+    }
+  }
+}

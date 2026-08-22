@@ -1,0 +1,27 @@
+{
+  "id": "dirty_tab_city_totals",
+  "category": "adversarial_dirty_data",
+  "description": "Sprint 22 fixture (tab-delimited) - same shape as dirty_semicolon_city_totals, a third real delimiter-ambiguity bug Sprint 22 confirmed and fixed via csv.Sniffer.",
+  "data": {
+    "kind": "fixture",
+    "path": "tests/fixtures/dirty_data/csv_tab_delimiter.csv"
+  },
+  "spec_template": "Read the file {csv_path}. Save the result to {output_path}.",
+  "business_question": "Qual a soma de valor por cidade?",
+  "expect_failure": false,
+  "mock": {
+    "transformations": [],
+    "transform_code": "def transform(dfs: dict) -> pd.DataFrame:\n    return dfs[\"data\"]\n",
+    "planner_response": [
+      {"question": "Qual a soma de valor por cidade?", "type": "descriptive"}
+    ],
+    "gold_codes": [
+      "valor_num = pd.to_numeric(df[\"valor\"].astype(str).str.replace(\",\", \".\", regex=False), errors=\"coerce\")\ngold_df = df.assign(valor_num=valor_num).groupby(\"cidade\")[\"valor_num\"].sum().reset_index()\nfig = go.Figure()\nnarrative = \"Soma de valor por cidade calculada a partir dos dados extraídos.\""
+    ],
+    "science_codes": [],
+    "advisor_response": {
+      "recommendations": [],
+      "summary": "Totais por cidade calculados a partir de um arquivo delimitado por tabulação."
+    }
+  }
+}

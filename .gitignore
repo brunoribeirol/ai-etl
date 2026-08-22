@@ -33,6 +33,11 @@ case_study/data/*.json
 case_study/results/**/*.csv
 case_study/results/**/*.parquet
 
+# Sprint 28 regression harness — per-run output, not the committed baseline
+# (case_study/results/sprint28/baseline_metrics.json IS committed, deliberately)
+case_study/results/sprint28/latest_run.json
+case_study/results/sprint28/_runs/
+
 # Audit runs (gerados localmente, não versionar)
 runs/*.json
 runs/*.db

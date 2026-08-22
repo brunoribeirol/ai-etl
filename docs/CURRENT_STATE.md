@@ -2,7 +2,73 @@
 
 > Living doc. Updated at the end of meaningful work sessions, not per-commit. Source of truth for repo/code state; the Obsidian vault (`~/Documents/Obsidian Vault/tcc/`) is the source of truth for the academic TCC narrative and product/strategy context.
 
-**Last updated:** 2026-08-21 (later same day) — **Sprint 24 (compliance enterprise) opened as PR, not yet merged, checkpoint pending** — see below. Sprint 15 (scheduled-pipeline reliability) merged to `main` (PR #71); migration `0010` still not applied to production Supabase.
+**Last updated:** 2026-08-22 — **Sprint 28 (prompt/agent regression harness) opened as PR, not yet merged** — see below. Sprint 24 (compliance enterprise) opened as PR, not yet merged, checkpoint pending — see below. Sprint 15 (scheduled-pipeline reliability) merged to `main` (PR #71); migration `0010` still not applied to production Supabase.
+
+## Sprint 28 — prompt/agent regression harness (PR open, not merged; ADR-029)
+
+Scope (Vault `artefact/product-roadmap-post-tcc.md`, Sprint 28): protects Sprint 21's output
+sanity-check (ADR-026) over time — a Transformer/Analyst/Science prompt edit or a model swap
+(`AI_ETL_LLM_MODEL`) can silently make result quality worse with no existing test catching it,
+since `tests/e2e/`'s 4 scenarios (Sprint 5) are fixed and run with mocked, deterministic LLM
+responses (they test plumbing, not prompt quality).
+
+**Investigated first, per this project's own standard**: `case_study/scripts/model_comparison.py`
+(Sprint 8) is the real precedent — reused directly (same `run_full_analysis` call shape, same
+`score_quality`, same `data_source: real|mock` honesty convention), not reinvented.
+`core/output_validation.py` (Sprint 21, ADR-026) is already wired into
+`pipeline_service.run_gold_analysis`/`run_science_analysis` and attached to every successful
+`GoldResult`/`ScienceResult` as `sanity_check` — the harness reads it off `run_full_analysis`'s
+own return value, no new wiring needed.
+
+**Key decision (ADR-029): manual `workflow_dispatch` trigger only, not automatic on every
+push/PR.** Real LLM calls cost real money, and this project's own sandboxed dev sessions
+frequently have no `OPENAI_API_KEY` at all (confirmed absent again this session). New, isolated
+`.github/workflows/prompt-regression.yml` — never blocks `check`/`e2e`, run by hand before
+merging a prompt/agent/model change (same "run this before merging" discipline as `make check`).
+A path-filtered automatic trigger (on `agents/**` changes) was considered and explicitly deferred
+until a few manual runs establish real per-run LLM cost to budget against (ADR-013's own
+"measure before optimizing" posture).
+
+**New corpus** (`case_study/scenarios/*.json`, 7 scenarios, larger and more adversarial than the
+4 fixed e2e scenarios): nominal descriptive + predictive questions over the real 5000-row sales
+dataset; an adversarial empty-result-with-a-cited-number scenario (exercises ADR-026's
+`empty_result` check directly); three of Sprint 22's real dirty-data fixtures
+(semicolon/Latin-1/tab-delimited) paired with business questions; one `expect_failure: true`
+scenario reusing Sprint 22's row-length-mismatch fixture (`_validate_row_lengths`) — a regression
+here (someone loosens that validation) is exactly as real a quality regression as a worse prompt.
+
+**New `case_study/scripts/regression_harness.py`**: runs the corpus through
+`run_full_analysis`, computes `score_quality` (Sprint 8) + a sanity-warning count (ADR-026) per
+scenario, and compares against a committed baseline
+(`case_study/results/sprint28/baseline_metrics.json`) via a pure function
+`compare_against_baseline()` — flags a corpus-wide or per-scenario `score_quality` drop beyond
+tolerance, an increase in sanity-check warnings, or a scenario flipping its expected pass/fail
+status. This comparator is the literal target of the sprint's own definition of done and is
+unit-tested directly (`tests/unit/test_regression_harness.py`, 13 tests) with a deliberately
+corrupted `gold_df` run through the real `check_gold_output` — proving the detection logic works
+without needing a real LLM call or CI credentials.
+
+**Baseline committed this session is `data_source: "mock"`** (no `OPENAI_API_KEY` available, same
+documented gap as Sprints 8/12/22) — flagged explicitly, not presented as a real-quality
+baseline. It still exercises and protects the harness's own deterministic code (extraction,
+sandbox execution, output_validation, the comparator itself); catching a real prompt-*wording*
+regression needs one `--update-baseline` run with real credentials.
+
+`alembic/versions/0016_....py` was reserved for this sprint and confirmed **not needed** before
+writing any code (pure CI/test infrastructure, no new persisted state) — same pattern ADR-026
+already used for its own reserved-but-unused `0015`.
+
+Verified locally: `ruff check`/`format --check` clean; `mypy src/` clean (no hang this session);
+`pytest tests/unit` — 659 passed, 93.73% overall coverage; `pytest tests/integration` — 4 passed,
+14 skipped (pre-existing DB/network-unreachable skip pattern); `bandit`/`pip-audit` — no new
+findings, no known CVEs. `tests/e2e` not run locally (no Postgres/Redis in this sandbox) — CI is
+the real gate, same as every prior sprint's documented limitation.
+
+**Not done in this session, flagged explicitly**: no real-credentialed baseline run (the harness's
+actual prompt-regression-catching value is unverified against a real model in this sandbox — only
+its surrounding deterministic logic is); the `workflow_dispatch` trigger is a process convention,
+not a GitHub-enforced required check (this repo has no branch protection to attach one to) — a
+developer who forgets to run it before merging a prompt change is not stopped by CI.
 
 ## Sprint 24 — compliance enterprise: SOC2 readiness self-assessment, LGPD/GDPR data-processing record, tenant data deletion (PR open, not merged — migration `0014` not applied to production; checkpoint required before merge per this sprint's own instructions, tenant deletion is irreversible)
 
