@@ -31,6 +31,31 @@ class AnalysisTask(TypedDict):
     type: Literal["descriptive", "diagnostic_or_predictive"]
 
 
+class OutputSanityCheckEntry(TypedDict):
+    """One entry from `core/output_validation.py` (Sprint 21, ADR-026).
+
+    Mirrors `agents/quality.py`'s per-check dict shape — `check` names the rule,
+    `severity` is always "ok" or "warning" for this module (never "error", see
+    ADR-026 Decision 1), `detail` is a short human-readable explanation.
+    """
+
+    check: str
+    severity: Literal["ok", "warning"]
+    detail: str
+
+
+class OutputSanityCheck(TypedDict):
+    """Result of sanity-checking one Gold/Science sub-task's output against the
+    Silver data it was derived from (Sprint 21, ADR-026). Same three-key shape as
+    `PipelineState.quality_report` so the frontend/persistence layers reuse an
+    established pattern instead of a new one.
+    """
+
+    checks: list[OutputSanityCheckEntry]
+    severity: Literal["ok", "warning"]
+    summary: str
+
+
 class GoldResult(TypedDict):
     task_question: str
     gold_df: pd.DataFrame
@@ -43,6 +68,9 @@ class GoldResult(TypedDict):
     # Set by app.py when this result came from a simplified fallback question after
     # the original sub-task question failed outright — not set by run_analyst itself.
     repaired: NotRequired[bool]
+    # Set by pipeline_service.py after a successful run (Sprint 21, ADR-026) — absent
+    # on a failed sub-task, which has nothing to sanity-check.
+    sanity_check: NotRequired[OutputSanityCheck]
 
 
 class ModelInfo(TypedDict):
@@ -66,6 +94,9 @@ class ScienceResult(TypedDict):
     # Set by app.py when this result came from a simplified fallback question after
     # the original sub-task question failed outright — not set by run_science itself.
     repaired: NotRequired[bool]
+    # Set by pipeline_service.py after a successful run (Sprint 21, ADR-026) — absent
+    # on a failed sub-task, which has nothing to sanity-check.
+    sanity_check: NotRequired[OutputSanityCheck]
 
 
 class Recommendation(TypedDict):

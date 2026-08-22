@@ -303,6 +303,10 @@ def _serialize_analysis_result(
     }
     if "model_info" in result:
         serialized["model_info"] = result.get("model_info")
+    # Sprint 21 (ADR-026): only present on a successful sub-task (see
+    # `core/analysis_types.py`'s `sanity_check: NotRequired[...]`).
+    if "sanity_check" in result:
+        serialized["sanity_check"] = result.get("sanity_check")
     if isinstance(df, pd.DataFrame) and not df.empty:
         serialized["data_preview"] = df.head(20).to_dict(orient="records")
         serialized["data_shape"] = list(df.shape)
