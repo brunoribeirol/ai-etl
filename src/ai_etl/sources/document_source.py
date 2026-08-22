@@ -4,9 +4,9 @@ Unlike the other three connectors in this package (`csv_source.py`,
 `postgres_source.py`, `rest_source.py`), a document's text isn't already
 tabular — this is the one `sources/` connector that calls an LLM (via
 `core.llm.get_llm()`) to structure extracted text into rows, following the
-same retry-loop/JSON-parse shape `agents/orchestrator.py` already uses for
+same retry-loop/JSON-parse shape `agents/pipeline/orchestrator.py` already uses for
 spec -> pipeline_plan. Same convention as the other connectors otherwise: no
-source-level try/except, errors propagate to `agents/extractor.py`'s single
+source-level try/except, errors propagate to `agents/pipeline/extractor.py`'s single
 catch point.
 """
 

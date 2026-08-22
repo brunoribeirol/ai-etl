@@ -37,7 +37,7 @@ from ai_etl.core.scheduling import (
 
 router = APIRouter(prefix="/pipelines", tags=["pipelines"])
 
-# Sprint 16 (ADR-023) — mirrors `agents/quality.py::_CUSTOM_RULE_OPERATORS`'s keys
+# Sprint 16 (ADR-023) — mirrors `agents/pipeline/quality.py::_CUSTOM_RULE_OPERATORS`'s keys
 # exactly; kept as a literal here (not imported) so the API's request-validation
 # error message names them without importing an `agents/` module into `api/`.
 QualityRuleOperator = Literal["not_null", "gte", "lte", "gt", "lt", "eq", "ne"]
@@ -90,7 +90,7 @@ class CreatePipelineRequest(BaseModel):
     # custom rules, same behavior as every pipeline created before this sprint.
     quality_rules: list[QualityRule] = Field(default_factory=list)
     # Sprint 27 (ADR-028) — opt-in write-approval gate. `False` by default: zero
-    # behavior change unless explicitly turned on. See `agents/loader.py`.
+    # behavior change unless explicitly turned on. See `agents/pipeline/loader.py`.
     require_approval: bool = False
     approval_threshold_rows: Optional[int] = Field(default=None, ge=0)
 

@@ -13,6 +13,7 @@ from typing import Any, Literal
 
 import pandas as pd
 
+from ai_etl.agents._llm_codegen import strip_code_fences
 from ai_etl.core.analysis_types import AnalysisTask, TokenUsage
 from ai_etl.core.llm import extract_token_usage, get_llm
 
@@ -57,18 +58,6 @@ Example output:
 """
 
 
-def _strip_fences(text: str) -> str:
-    text = text.strip()
-    if text.startswith("```"):
-        lines = text.splitlines()
-        start = 1
-        end = len(lines)
-        if lines[-1].strip() == "```":
-            end -= 1
-        text = "\n".join(lines[start:end])
-    return text.strip()
-
-
 def plan_analysis_tasks(
     business_question: str, df: pd.DataFrame
 ) -> tuple[list[AnalysisTask], TokenUsage]:
@@ -88,7 +77,7 @@ def plan_analysis_tasks(
     try:
         response = llm.invoke(prompt)
         tokens = extract_token_usage(response)
-        raw = _strip_fences(str(response.content).strip())
+        raw = strip_code_fences(str(response.content).strip())
         parsed: Any = json.loads(raw)
         if not isinstance(parsed, list) or not parsed:
             raise ValueError("empty or non-list response")

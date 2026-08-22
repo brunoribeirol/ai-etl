@@ -13,6 +13,8 @@ from typing import Any
 
 import pandas as pd
 
+from ai_etl.agents._llm_codegen import build_column_stats as _build_column_stats
+from ai_etl.agents._llm_codegen import strip_code_fences as _strip_fences
 from ai_etl.core.analysis_types import ScienceResult, TokenUsage
 from ai_etl.core.llm import extract_token_usage, get_llm, sum_token_usage
 from ai_etl.core.sandbox import execute_in_sandbox, scale_timeout_for_rows
@@ -125,49 +127,6 @@ Ensure all four variables are defined: `predictions_df` (DataFrame), `fig` (Plot
 Use ONLY the exact column names: {columns_list}
 
 """
-
-
-def _build_column_stats(df: pd.DataFrame) -> str:
-    parts: list[str] = []
-    for col in df.columns:
-        try:
-            if pd.api.types.is_numeric_dtype(df[col]):
-                s = df[col].dropna()
-                if len(s) == 0:
-                    parts.append(f"  {col}: numeric, all null")
-                else:
-                    parts.append(
-                        f"  {col}: numeric, min={s.min():.4g}, max={s.max():.4g},"
-                        f" mean={s.mean():.4g}, nulls={df[col].isna().sum()}"
-                    )
-            elif pd.api.types.is_datetime64_any_dtype(df[col]):
-                parts.append(f"  {col}: datetime, range={df[col].min()} → {df[col].max()}")
-            else:
-                n_unique = df[col].nunique()
-                nulls = df[col].isna().sum()
-                if n_unique <= 20:
-                    top = df[col].value_counts().head(5).to_dict()
-                    top_str = ", ".join(f"'{k}': {v}" for k, v in top.items())
-                    parts.append(
-                        f"  {col}: categorical, {n_unique} unique, top=[{top_str}], nulls={nulls}"
-                    )
-                else:
-                    parts.append(f"  {col}: high-cardinality ({n_unique} unique), nulls={nulls}")
-        except Exception:  # noqa: BLE001
-            parts.append(f"  {col}: (stats unavailable)")
-    return "\n".join(parts) if parts else "(no stats)"
-
-
-def _strip_fences(code: str) -> str:
-    code = code.strip()
-    if code.startswith("```"):
-        lines = code.splitlines()
-        start = 1
-        end = len(lines)
-        if lines[-1].strip() == "```":
-            end -= 1
-        code = "\n".join(lines[start:end])
-    return code.strip()
 
 
 _INCREASE_WORDS = (

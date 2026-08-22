@@ -715,7 +715,7 @@ def test_run_full_analysis_task_retries_on_logical_failure_for_scheduled_pipelin
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The roadmap's own worked example: a source-connection failure caught
-    internally by `agents/extractor.py` (`status="failed"`, no exception) on
+    internally by `agents/pipeline/extractor.py` (`status="failed"`, no exception) on
     a *scheduled* fire must trigger a real retry, not be treated as done."""
 
     def _fake_run_full_analysis(

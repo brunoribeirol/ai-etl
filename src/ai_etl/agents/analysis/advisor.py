@@ -144,7 +144,7 @@ def run_advisor(
     """Generate prescriptive recommendations from all available analysis.
 
     `gold_results` and `science_results` hold one entry per sub-task produced by the
-    Planner (`ai_etl.agents.planner.plan_analysis_tasks`) — a multi-part business
+    Planner (`ai_etl.agents.analysis.planner.plan_analysis_tasks`) — a multi-part business
     question is answered by several independent Gold/Science runs, not a single one.
 
     Returns an AdvisorResult dict (see ai_etl.core.analysis_types).

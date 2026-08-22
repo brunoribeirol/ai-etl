@@ -34,7 +34,7 @@ class AnalysisTask(TypedDict):
 class OutputSanityCheckEntry(TypedDict):
     """One entry from `core/output_validation.py` (Sprint 21, ADR-026).
 
-    Mirrors `agents/quality.py`'s per-check dict shape — `check` names the rule,
+    Mirrors `agents/pipeline/quality.py`'s per-check dict shape — `check` names the rule,
     `severity` is always "ok" or "warning" for this module (never "error", see
     ADR-026 Decision 1), `detail` is a short human-readable explanation.
     """

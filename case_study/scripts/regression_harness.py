@@ -99,31 +99,31 @@ def _patch_mocked_pipeline(stack: ExitStack, plan: dict[str, Any], mock: dict[st
     deterministic fixed responses (`mock` block of its JSON definition)."""
     orchestrator_llm = MagicMock()
     orchestrator_llm.invoke.return_value = _mock_response(json.dumps(plan))
-    stack.enter_context(patch("ai_etl.agents.orchestrator.get_llm", return_value=orchestrator_llm))
+    stack.enter_context(patch("ai_etl.agents.pipeline.orchestrator.get_llm", return_value=orchestrator_llm))
 
     transformer_llm = MagicMock()
     transformer_llm.invoke.return_value = _mock_response(mock["transform_code"])
-    stack.enter_context(patch("ai_etl.agents.transformer.get_llm", return_value=transformer_llm))
+    stack.enter_context(patch("ai_etl.agents.pipeline.transformer.get_llm", return_value=transformer_llm))
 
     planner_llm = MagicMock()
     planner_llm.invoke.return_value = _mock_response(json.dumps(mock["planner_response"]))
-    stack.enter_context(patch("ai_etl.agents.planner.get_llm", return_value=planner_llm))
+    stack.enter_context(patch("ai_etl.agents.analysis.planner.get_llm", return_value=planner_llm))
 
     analyst_llm = MagicMock()
     gold_codes = mock.get("gold_codes", [])
     if gold_codes:
         analyst_llm.invoke.side_effect = [_mock_response(c) for c in gold_codes]
-    stack.enter_context(patch("ai_etl.agents.analyst.get_llm", return_value=analyst_llm))
+    stack.enter_context(patch("ai_etl.agents.analysis.analyst.get_llm", return_value=analyst_llm))
 
     science_llm = MagicMock()
     science_codes = mock.get("science_codes", [])
     if science_codes:
         science_llm.invoke.side_effect = [_mock_response(c) for c in science_codes]
-    stack.enter_context(patch("ai_etl.agents.science.get_llm", return_value=science_llm))
+    stack.enter_context(patch("ai_etl.agents.analysis.science.get_llm", return_value=science_llm))
 
     advisor_llm = MagicMock()
     advisor_llm.invoke.return_value = _mock_response(json.dumps(mock["advisor_response"]))
-    stack.enter_context(patch("ai_etl.agents.advisor.get_llm", return_value=advisor_llm))
+    stack.enter_context(patch("ai_etl.agents.analysis.advisor.get_llm", return_value=advisor_llm))
 
 
 def _ensure_generated(data: dict[str, Any]) -> Path:

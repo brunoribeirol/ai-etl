@@ -6,7 +6,7 @@ engine — no SQLAlchemy dialect applies, so this talks to `pymongo`
 other connector: a module-level `load_<type>(...) -> pd.DataFrame`, a
 connection string read from an env var (`MONGODB_URI`, same convention as
 `postgres_source.py`'s `POSTGRES_URL`/`mysql_source.py`'s `MYSQL_URL`), no
-source-level `try/except` (errors propagate to `agents/extractor.py`'s
+source-level `try/except` (errors propagate to `agents/pipeline/extractor.py`'s
 single catch point).
 
 **Schema inference for a schema-less store**: MongoDB documents in the same
@@ -17,7 +17,7 @@ equivalent of sampling: it flattens each document's keys into columns and
 unions them across every document it's given, filling `NaN` where a given
 document lacks a key. `limit` (default `MONGODB_SAMPLE_LIMIT`, see below)
 controls how many documents that union is built from, which doubles as the
-same purpose `agents/extractor.py::_extract_schema`'s `df.head(3)` sample
+same purpose `agents/pipeline/extractor.py::_extract_schema`'s `df.head(3)` sample
 serves for the other connectors — a bound on how much of a
 possibly-huge/heterogeneous collection gets pulled into a single
 `pipeline_plan` run and inspected for schema.

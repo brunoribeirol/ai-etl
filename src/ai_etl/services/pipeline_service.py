@@ -21,11 +21,11 @@ from typing import Any, Callable, Optional, cast
 
 import pandas as pd
 
-from ai_etl.agents.advisor import run_advisor
-from ai_etl.agents.analyst import run_analyst
-from ai_etl.agents.loader import loader_node
-from ai_etl.agents.planner import plan_analysis_tasks
-from ai_etl.agents.science import run_science
+from ai_etl.agents.analysis.advisor import run_advisor
+from ai_etl.agents.analysis.analyst import run_analyst
+from ai_etl.agents.analysis.planner import plan_analysis_tasks
+from ai_etl.agents.analysis.science import run_science
+from ai_etl.agents.pipeline.loader import loader_node
 from ai_etl.audit.db import (
     get_run_status_and_pipeline,
     get_saved_pipeline,
@@ -74,7 +74,7 @@ def _build_approval_policy(pipeline: dict[str, Any]) -> dict[str, Any]:
     `last_approved_at` is carried as an ISO string (not the raw `datetime`) since
     this dict crosses into `PipelineState`, which is JSON-serialized wholesale by
     `audit.db._make_serializable`/`save_run` — keeping it JSON-safe from the start
-    avoids a silent `str(datetime)` fallback there. `agents/loader.py::_is_write_gated`
+    avoids a silent `str(datetime)` fallback there. `agents/pipeline/loader.py::_is_write_gated`
     only ever checks it for `None`-ness, never parses it back into a `datetime`.
     """
     last_approved_at = pipeline.get("last_approved_at")

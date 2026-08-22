@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 import pandas as pd
 import pytest
 
-from ai_etl.agents.analyst import _build_column_stats, _strip_fences, run_analyst
+from ai_etl.agents.analysis.analyst import _build_column_stats, _strip_fences, run_analyst
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -26,7 +26,7 @@ def sample_df() -> pd.DataFrame:
 
 @pytest.fixture
 def mock_get_llm(mocker):
-    return mocker.patch("ai_etl.agents.analyst.get_llm")
+    return mocker.patch("ai_etl.agents.analysis.analyst.get_llm")
 
 
 def _make_llm_mock(responses: list[str]) -> MagicMock:
@@ -123,7 +123,7 @@ def test_run_analyst_scales_timeout_for_large_df(
         ignore_index=True,
     )
     spy = mocker.patch(
-        "ai_etl.agents.analyst.execute_in_sandbox", wraps=sandbox_module.execute_in_sandbox
+        "ai_etl.agents.analysis.analyst.execute_in_sandbox", wraps=sandbox_module.execute_in_sandbox
     )
 
     run_analyst(big_df, "Qual produto gerou mais receita?")

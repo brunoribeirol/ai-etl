@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from ai_etl.agents.orchestrator import orchestrator_node
+from ai_etl.agents.pipeline.orchestrator import orchestrator_node
 from ai_etl.core.state import initial_state
 
 VALID_PLAN = {
@@ -28,7 +28,7 @@ def _mock_llm(responses: list[str]) -> MagicMock:
 
 @pytest.fixture
 def mock_get_llm(mocker):
-    return mocker.patch("ai_etl.agents.orchestrator.get_llm")
+    return mocker.patch("ai_etl.agents.pipeline.orchestrator.get_llm")
 
 
 def test_valid_json_creates_pipeline_plan(mock_get_llm) -> None:

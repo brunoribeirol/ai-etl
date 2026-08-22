@@ -191,7 +191,7 @@ saved_pipelines = Table(
     Column("last_error", Text, nullable=True),
     # Sprint 16 (ADR-023) — operator-defined data quality rules for this pipeline,
     # a plain JSON array of rule dicts (`{"column", "operator", "value", "severity",
-    # "name"}` — see `agents/quality.py::_CUSTOM_RULE_OPERATORS`). Folded into every
+    # "name"}` — see `agents/pipeline/quality.py::_CUSTOM_RULE_OPERATORS`). Folded into every
     # subsequent scheduled run's `quality_report` alongside the fixed checks; not a
     # derived cache of another table (unlike `consecutive_failures` above) — this is
     # the rule definitions' only source of truth.
@@ -199,7 +199,7 @@ saved_pipelines = Table(
     # Sprint 27 (ADR-028, migration 0015) — opt-in write-approval gate. `False`
     # (the default) for every existing and new pipeline: zero behavior change
     # unless an operator explicitly turns this on. See
-    # `agents/loader.py::_is_write_gated` for the full gate decision.
+    # `agents/pipeline/loader.py::_is_write_gated` for the full gate decision.
     Column("require_approval", Boolean, nullable=False, server_default="false"),
     # `NULL` = "every write requires approval" (once `require_approval` is on).
     # A set value = "only a write whose row count is at or above this needs
@@ -218,7 +218,7 @@ saved_pipelines = Table(
     # `AI_ETL_LLM_MODEL`" — zero behavior change unless a tenant explicitly sets
     # both via `PUT /pipelines/{id}/llm-config`. Always set or cleared together
     # (never one `NULL` and the other not) — see
-    # `audit/db.py::set_saved_pipeline_llm_config`. Validated against
+    # `audit/db/pipelines.py::set_saved_pipeline_llm_config`. Validated against
     # `core/llm.ALLOWED_MODELS_BY_PROVIDER` before being persisted, never at read
     # time. Actual pipeline execution does not yet read these columns (see
     # ADR-031 §5, "Explicitly out of scope") — this is API-contract/persistence

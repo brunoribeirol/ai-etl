@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 import pandas as pd
 import pytest
 
-from ai_etl.agents.transformer import _clean_code, transformer_node
+from ai_etl.agents.pipeline.transformer import _clean_code, transformer_node
 from ai_etl.core.state import initial_state
 
 VALID_CODE = """
@@ -56,7 +56,7 @@ def _mock_llm(responses: list[str]) -> MagicMock:
 
 @pytest.fixture
 def mock_get_llm(mocker):
-    return mocker.patch("ai_etl.agents.transformer.get_llm")
+    return mocker.patch("ai_etl.agents.pipeline.transformer.get_llm")
 
 
 def test_valid_code_returns_transformed_dataframe(mock_get_llm) -> None:
@@ -94,7 +94,8 @@ def test_scales_timeout_for_large_source(mocker, mock_get_llm) -> None:
     )
     state["extracted_data"]["orders"] = big_df
     spy = mocker.patch(
-        "ai_etl.agents.transformer.execute_in_sandbox", wraps=sandbox_module.execute_in_sandbox
+        "ai_etl.agents.pipeline.transformer.execute_in_sandbox",
+        wraps=sandbox_module.execute_in_sandbox,
     )
 
     transformer_node(state)
@@ -110,7 +111,8 @@ def test_timeout_unchanged_for_small_source(mocker, mock_get_llm) -> None:
 
     mock_get_llm.return_value = _mock_llm([VALID_CODE])
     spy = mocker.patch(
-        "ai_etl.agents.transformer.execute_in_sandbox", wraps=sandbox_module.execute_in_sandbox
+        "ai_etl.agents.pipeline.transformer.execute_in_sandbox",
+        wraps=sandbox_module.execute_in_sandbox,
     )
 
     transformer_node(_make_state())

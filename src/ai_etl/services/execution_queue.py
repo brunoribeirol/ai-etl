@@ -84,7 +84,7 @@ BUDGET_INFLIGHT_LOCK_TTL_SECONDS = int(os.getenv("AI_ETL_BUDGET_INFLIGHT_LOCK_TT
 # scheduled fire can hit: an unhandled exception (Celery's own
 # `autoretry_for`, set on the task decorator below) and a *logical* failure
 # (`state["status"] == "failed"` returned with no exception — the common
-# case in practice, since `agents/extractor.py` catches a source-connection
+# case in practice, since `agents/pipeline/extractor.py` catches a source-connection
 # error internally rather than raising). Both share Celery's own
 # `self.request.retries` counter, per ADR-020 Decision 1 — one retry budget,
 # not two independently-tracked ones. Deliberately small: each retry of an
@@ -437,7 +437,7 @@ def run_full_analysis_task(
         # Sprint 15 (ADR-020 Decision 1) — Level B: this fire's own graph run
         # completed without raising (Level A above only fires on an
         # exception), but the *logical* result is still a failure — e.g.
-        # `agents/extractor.py` caught a source-connection error internally
+        # `agents/pipeline/extractor.py` caught a source-connection error internally
         # and wrote it to `state["error"]`/`status`, exactly the roadmap's
         # own "fonte indisponível" example. Only scheduled fires get this
         # auto-retry (`saved_pipeline_id is not None`) — an avulso `POST

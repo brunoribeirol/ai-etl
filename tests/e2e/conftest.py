@@ -183,10 +183,10 @@ def mock_pipeline_llm(mocker) -> Callable[[dict, str], None]:
     real OpenAI call.
 
     These scenarios pass `business_question=""` (Silver-ETL only, no real
-    question) — but `agents/planner.py::plan_analysis_tasks` treats an empty
+    question) — but `agents/analysis/planner.py::plan_analysis_tasks` treats an empty
     (or unparseable) LLM response as a *decomposition failure*, not "zero
     tasks", and falls back to exactly one descriptive task wrapping the
-    (empty) question. That one task always reaches Gold (`agents/analyst.py`),
+    (empty) question. That one task always reaches Gold (`agents/analysis/analyst.py`),
     never Science (the fallback is hardcoded `"type": "descriptive"`), so
     Analyst's LLM call must be mocked too — and `run_full_analysis` also calls
     Advisor unconditionally afterward regardless of how many sub-tasks ran.
@@ -213,15 +213,15 @@ def mock_pipeline_llm(mocker) -> Callable[[dict, str], None]:
     def configure(plan: dict, transform_code: str) -> None:
         orchestrator_llm = MagicMock()
         orchestrator_llm.invoke.return_value = _mock_response(json.dumps(plan))
-        mocker.patch("ai_etl.agents.orchestrator.get_llm", return_value=orchestrator_llm)
+        mocker.patch("ai_etl.agents.pipeline.orchestrator.get_llm", return_value=orchestrator_llm)
 
         transformer_llm = MagicMock()
         transformer_llm.invoke.return_value = _mock_response(transform_code)
-        mocker.patch("ai_etl.agents.transformer.get_llm", return_value=transformer_llm)
+        mocker.patch("ai_etl.agents.pipeline.transformer.get_llm", return_value=transformer_llm)
 
         planner_llm = MagicMock()
         planner_llm.invoke.return_value = _mock_response("[]")
-        mocker.patch("ai_etl.agents.planner.get_llm", return_value=planner_llm)
+        mocker.patch("ai_etl.agents.analysis.planner.get_llm", return_value=planner_llm)
 
         # Reached via Planner's fallback-to-one-task path (see docstring
         # above) — a trivial, always-valid Gold script wrapping the real
@@ -232,13 +232,13 @@ def mock_pipeline_llm(mocker) -> Callable[[dict, str], None]:
             "fig = go.Figure()\n"  # `fig` must be a real Figure, not None (analyst.py's contract)
             'narrative = "No business question was asked."'
         )
-        mocker.patch("ai_etl.agents.analyst.get_llm", return_value=analyst_llm)
+        mocker.patch("ai_etl.agents.analysis.analyst.get_llm", return_value=analyst_llm)
 
         advisor_llm = MagicMock()
         advisor_llm.invoke.return_value = _mock_response(
             json.dumps({"recommendations": [], "summary": "No sub-tasks were run."})
         )
-        mocker.patch("ai_etl.agents.advisor.get_llm", return_value=advisor_llm)
+        mocker.patch("ai_etl.agents.analysis.advisor.get_llm", return_value=advisor_llm)
 
     return configure
 

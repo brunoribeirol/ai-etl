@@ -3,7 +3,7 @@
 Pure functions, no I/O — mirrors `core/scheduling.py`'s split between
 "execution-scheduling infrastructure" (here: comparison math) and the
 services layer that fetches/persists/delivers around it
-(`audit/db.py::get_previous_completed_run`, `services/alerting.py`).
+(`audit/db/health.py::get_previous_completed_run`, `services/alerting.py`).
 
 A KPI is any named numeric value both runs happen to have (`rows_loaded`,
 `cost_usd`, `total_tokens`, or a Science sub-task's own numeric metric — see

@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 import pandas as pd
 import pytest
 
-from ai_etl.agents.advisor import run_advisor
+from ai_etl.agents.analysis.advisor import run_advisor
 
 
 @pytest.fixture
@@ -53,7 +53,7 @@ def science_result() -> list[dict]:
 
 @pytest.fixture
 def mock_get_llm(mocker):
-    return mocker.patch("ai_etl.agents.advisor.get_llm")
+    return mocker.patch("ai_etl.agents.analysis.advisor.get_llm")
 
 
 def _mock_llm(responses: list[str]) -> MagicMock:
