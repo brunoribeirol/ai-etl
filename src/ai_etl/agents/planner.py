@@ -8,12 +8,15 @@ one LLM call juggled everything at once.
 """
 
 import json
+import logging
 from typing import Any, Literal
 
 import pandas as pd
 
 from ai_etl.core.analysis_types import AnalysisTask, TokenUsage
 from ai_etl.core.llm import extract_token_usage, get_llm
+
+logger = logging.getLogger(__name__)
 
 _ZERO_TOKENS: TokenUsage = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
 
@@ -107,4 +110,14 @@ def plan_analysis_tasks(
         return cleaned, tokens
 
     except Exception:  # noqa: BLE001 — any planning failure degrades to one-shot mode
+        # No PipelineState exists at this layer (Planner runs outside the LangGraph
+        # graph, see module docstring) — `log_action()` doesn't apply here, same
+        # reasoning as `execution_queue.py`'s own `logging.warning()` at enqueue time.
+        # Without this, a decomposition failure was previously silent: the caller
+        # (and an external tester reporting "only got one sub-answer") had no signal
+        # to distinguish "the question really was simple" from "the LLM call failed".
+        logger.warning(
+            "plan_analysis_tasks: decomposition failed, falling back to one-shot mode",
+            exc_info=True,
+        )
         return [{"question": business_question, "type": "descriptive"}], _ZERO_TOKENS

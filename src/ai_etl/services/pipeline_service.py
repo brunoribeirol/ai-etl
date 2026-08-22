@@ -14,6 +14,7 @@ can omit it, since the default is a no-op.
 
 from __future__ import annotations
 
+import logging
 import time
 import uuid
 from typing import Any, Callable, Optional, cast
@@ -46,6 +47,8 @@ from ai_etl.core.analysis_types import (
 from ai_etl.core.graph import build_graph
 from ai_etl.core.output_validation import check_gold_output, check_science_output
 from ai_etl.core.state import PipelineState, initial_state
+
+logger = logging.getLogger(__name__)
 
 ProgressCallback = Callable[[str, str], None]
 
@@ -232,6 +235,17 @@ def run_gold_analysis(
     attempts = result.get("attempts", 1)
 
     if result["error"]:
+        # Agentic BI layer runs outside the LangGraph/PipelineState, so there's no
+        # `log_action()` audit trail here (see module docstring) — without this, a
+        # failed sub-task was only ever visible transiently via `progress_callback`,
+        # never in a queryable log a Sprint-28-era testers-report investigation could
+        # replay.
+        logger.warning(
+            "run_gold_analysis: analyst failed for task_question=%r after %s attempt(s): %s",
+            task_question,
+            attempts,
+            result["error"],
+        )
         progress_callback(stage, f"⚠️ Gold concluído com aviso ({elapsed_display}s)")
         return {**result, "task_question": task_question}
 
@@ -266,6 +280,14 @@ def run_science_analysis(
     attempts = result.get("attempts", 1)
 
     if result["error"]:
+        # See run_gold_analysis's comment above — same rationale.
+        logger.warning(
+            "run_science_analysis: science agent failed for task_question=%r after %s "
+            "attempt(s): %s",
+            task_question,
+            attempts,
+            result["error"],
+        )
         progress_callback(stage, f"⚠️ Science concluído com aviso ({elapsed_display}s)")
         return {**result, "task_question": task_question}
 
@@ -448,6 +470,10 @@ def run_advisor_analysis(
     n = len(result.get("recommendations", []))
 
     if result["error"]:
+        # See run_gold_analysis's comment above — same rationale.
+        logger.warning(
+            "run_advisor_analysis: advisor failed after %ss: %s", elapsed, result["error"]
+        )
         progress_callback("advisor", f"⚠️ Advisor com aviso ({elapsed}s)")
     else:
         progress_callback("advisor", f"✅ {n} recomendações geradas em {elapsed}s")
