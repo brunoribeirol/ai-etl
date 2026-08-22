@@ -153,3 +153,88 @@ def test_create_run_with_uploaded_csv(client: TestClient, mocker) -> None:
     mock_enqueue.assert_called_once()
     spec = mock_enqueue.call_args.args[0]
     assert "name, price" in spec
+
+
+# ---------------------------------------------------------------------------
+# Sprint 27 (ADR-028) — write-approval gate
+# ---------------------------------------------------------------------------
+
+
+def test_get_pending_approvals_returns_queue(client: TestClient, mocker) -> None:
+    mock_list = mocker.patch(
+        "ai_etl.api.routers.runs.list_pending_approvals",
+        return_value=[{"run_id": "run-1", "pipeline_name": "A"}],
+    )
+
+    response = client.get("/runs/pending-approval")
+
+    assert response.status_code == 200
+    assert response.json() == [{"run_id": "run-1", "pipeline_name": "A"}]
+    mock_list.assert_called_once_with("tenant-a")
+
+
+def test_approve_run_writes_and_returns_summary(client: TestClient, mocker) -> None:
+    mock_resume = mocker.patch(
+        "ai_etl.api.routers.runs.resume_pending_load",
+        return_value={"run_id": "run-1", "status": "completed", "error": None, "load_result": {}},
+    )
+
+    response = client.post("/runs/run-1/approve")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "completed"
+    mock_resume.assert_called_once_with("run-1", "tenant-a", run_dir=mocker.ANY)
+
+
+def test_approve_run_unknown_returns_404(client: TestClient, mocker) -> None:
+    mocker.patch(
+        "ai_etl.api.routers.runs.resume_pending_load",
+        side_effect=ValueError("Run 'run-1' not found."),
+    )
+
+    response = client.post("/runs/run-1/approve")
+
+    assert response.status_code == 404
+
+
+def test_approve_run_wrong_status_returns_409(client: TestClient, mocker) -> None:
+    mocker.patch(
+        "ai_etl.api.routers.runs.resume_pending_load",
+        side_effect=ValueError(
+            "Run 'run-1' is not awaiting approval (current status: 'completed')."
+        ),
+    )
+
+    response = client.post("/runs/run-1/approve")
+
+    assert response.status_code == 409
+
+
+def test_reject_run_marks_failed(client: TestClient, mocker) -> None:
+    mock_reject = mocker.patch(
+        "ai_etl.api.routers.runs.reject_pending_load",
+        return_value={
+            "run_id": "run-1",
+            "status": "failed",
+            "error": "Rejected by operator: too risky",
+            "load_result": None,
+        },
+    )
+
+    response = client.post("/runs/run-1/reject", json={"reason": "too risky"})
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "failed"
+    mock_reject.assert_called_once_with("run-1", "tenant-a", run_dir=mocker.ANY, reason="too risky")
+
+
+def test_reject_run_defaults_reason_to_empty_string(client: TestClient, mocker) -> None:
+    mock_reject = mocker.patch(
+        "ai_etl.api.routers.runs.reject_pending_load",
+        return_value={"run_id": "run-1", "status": "failed", "error": "Rejected by operator."},
+    )
+
+    response = client.post("/runs/run-1/reject", json={})
+
+    assert response.status_code == 200
+    mock_reject.assert_called_once_with("run-1", "tenant-a", run_dir=mocker.ANY, reason="")

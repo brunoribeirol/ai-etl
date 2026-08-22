@@ -57,3 +57,30 @@ def save_s3_parquet(df: pd.DataFrame, bucket: str, key: str) -> dict[str, Any]:
         raise RuntimeError(f"Load count mismatch: expected {len(df)}, got {count}")
 
     return {"rows_loaded": count, "destination": f"s3://{bucket}/{key}"}
+
+
+def preview_s3_parquet(df: pd.DataFrame, bucket: str, key: str) -> dict[str, Any]:
+    """Sprint 27 (ADR-028) — what `save_s3_parquet` would do, without writing
+    anything. Never calls `put_object` — a `head_object` (metadata only, no
+    object body transferred) reports the existing object's size if the key
+    is already occupied, `None` if it isn't (a fresh key, or any other
+    lookup failure — a preview should never fail the run over a diagnostic
+    read).
+    """
+    import boto3
+    from botocore.exceptions import ClientError
+
+    client = boto3.client("s3")
+    existing_bytes: int | None = None
+    try:
+        head = client.head_object(Bucket=bucket, Key=key)
+        existing_bytes = head.get("ContentLength")
+    except ClientError:
+        existing_bytes = None
+
+    return {
+        "destination_type": "s3_parquet",
+        "destination": f"s3://{bucket}/{key}",
+        "would_write_rows": len(df),
+        "existing": {"existing_bytes": existing_bytes} if existing_bytes is not None else None,
+    }

@@ -49,6 +49,10 @@ def _saved_pipeline_row(**overrides: object) -> dict:
         "last_error": None,
         # Sprint 16 (ADR-023) — operator-defined quality rules.
         "quality_rules": [],
+        # Sprint 27 (ADR-028) — write-approval gate.
+        "require_approval": False,
+        "approval_threshold_rows": None,
+        "last_approved_at": None,
         "created_at": datetime.now(tz=timezone.utc).isoformat(),
         "updated_at": datetime.now(tz=timezone.utc).isoformat(),
     }
@@ -243,6 +247,8 @@ def test_create_pipeline_happy_path(client: TestClient, mocker) -> None:
         business_question="",
         drift_threshold_pct=20.0,
         quality_rules=[],
+        require_approval=False,
+        approval_threshold_rows=None,
     )
 
 
@@ -274,6 +280,8 @@ def test_create_pipeline_accepts_custom_drift_threshold(client: TestClient, mock
         business_question="",
         drift_threshold_pct=5.0,
         quality_rules=[],
+        require_approval=False,
+        approval_threshold_rows=None,
     )
 
 
@@ -316,6 +324,8 @@ def test_patch_pipeline_pause(client: TestClient, mocker) -> None:
         is_active=False,
         drift_threshold_pct=None,
         quality_rules=None,
+        require_approval=None,
+        approval_threshold_rows=None,
     )
 
 
@@ -340,6 +350,8 @@ def test_patch_pipeline_updates_drift_threshold(client: TestClient, mocker) -> N
         is_active=None,
         drift_threshold_pct=50.0,
         quality_rules=None,
+        require_approval=None,
+        approval_threshold_rows=None,
     )
 
 
@@ -374,6 +386,8 @@ def test_create_pipeline_accepts_quality_rules(client: TestClient, mocker) -> No
         quality_rules=[
             {"column": "amount", "operator": "gte", "value": 0, "severity": "error", "name": None}
         ],
+        require_approval=False,
+        approval_threshold_rows=None,
     )
 
 
@@ -467,6 +481,8 @@ def test_patch_pipeline_updates_quality_rules(client: TestClient, mocker) -> Non
                 "name": None,
             }
         ],
+        require_approval=None,
+        approval_threshold_rows=None,
     )
 
 
@@ -492,6 +508,8 @@ def test_patch_pipeline_omitting_quality_rules_leaves_them_untouched(
         is_active=False,
         drift_threshold_pct=None,
         quality_rules=None,
+        require_approval=None,
+        approval_threshold_rows=None,
     )
 
 

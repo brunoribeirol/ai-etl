@@ -444,11 +444,23 @@ def run_full_analysis_task(
         # /runs` caller is already watching the result and can resubmit;
         # auto-retrying behind them would silently repeat real LLM cost for
         # a request they may not want repeated (see ADR-020 Decision 1).
-        if final_status != "completed" and self.request.retries < SCHEDULED_PIPELINE_MAX_RETRIES:
+        #
+        # Sprint 27 (ADR-028 Decision 3): `"awaiting_approval"` is a third,
+        # non-failure terminal status (a gated write correctly waiting on a
+        # human, not a broken pipeline) — excluded from both the retry
+        # condition (retrying would just recompute the same preview) and the
+        # health-tracking call below (would otherwise increment
+        # `consecutive_failures` and eventually fire a misleading "this
+        # pipeline is broken" alert for a pipeline working as configured).
+        if (
+            final_status not in ("completed", "awaiting_approval")
+            and self.request.retries < SCHEDULED_PIPELINE_MAX_RETRIES
+        ):
             raise self.retry(countdown=_level_b_retry_countdown(self.request.retries))
-        _record_scheduled_pipeline_health_best_effort(
-            saved_pipeline_id, tenant_id, final_status, state.get("error")
-        )
+        if final_status != "awaiting_approval":
+            _record_scheduled_pipeline_health_best_effort(
+                saved_pipeline_id, tenant_id, final_status, state.get("error")
+            )
 
     if saved_pipeline_id is not None and final_status == "completed":
         _run_drift_check_best_effort(
