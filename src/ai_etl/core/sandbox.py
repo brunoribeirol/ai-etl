@@ -143,7 +143,7 @@ def _run_function_mode(
     local_env: dict[str, Any] = {"dfs": dfs}
 
     try:
-        exec(code, sandbox_globals, local_env)  # noqa: S102
+        exec(code, sandbox_globals, local_env)  # noqa: S102  # nosemgrep: python.lang.security.audit.exec-detected.exec-detected -- the one reviewed exec() call site (SECURITY.md, ADR-003, ADR-007); restricted globals, isolated child process, timeout-bounded
     except SyntaxError as e:
         return None, f"SyntaxError: {e}"
     except Exception as e:
@@ -179,7 +179,7 @@ def _run_script_mode(
     exec_env: dict[str, Any] = {**sandbox_globals, **dfs}
 
     try:
-        exec(code, exec_env)  # noqa: S102
+        exec(code, exec_env)  # noqa: S102  # nosemgrep: python.lang.security.audit.exec-detected.exec-detected -- same reviewed sandbox call site as above (script mode)
     except SyntaxError as e:
         return {}, f"SyntaxError: {e}"
     except Exception as e:

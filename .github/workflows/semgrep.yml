@@ -1,0 +1,67 @@
+name: Semgrep
+
+# Sprint 31 (ADR-032, Decision 3) — SAST substitute for CodeQL, which is
+# disabled on this private repo (`codeql.yml`) because code scanning
+# requires GitHub Advanced Security, which this account's plan doesn't
+# include. Semgrep's free community rulesets run entirely from the public
+# registry, no GitHub App/token/GHAS entitlement needed, and no SARIF
+# upload to GitHub's code-scanning API (that path needs the same GHAS
+# entitlement CodeQL was blocked on) — findings are plain job output, and
+# `--error` fails the check the same way a required status check needs to.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: semgrep-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  semgrep:
+    name: Semgrep SAST
+    runs-on: ubuntu-latest
+    container:
+      image: semgrep/semgrep
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Run Semgrep (community rules)
+        # Scoped to src/ (Python backend) and frontend/ (Next.js/TypeScript)
+        # only — the same two languages CodeQL's own (disabled) matrix
+        # covered (python, javascript-typescript), not this repo's
+        # `.github/workflows/`, `infra/` (Terraform), or `Dockerfile`, which
+        # p/security-audit's multi-language rules would otherwise also flag
+        # and which are out of scope for "SAST substitute for CodeQL" as
+        # CodeQL itself was never configured to cover them either.
+        run: |
+          semgrep scan \
+            --config p/security-audit \
+            --config p/secrets \
+            --config p/python \
+            --config p/owasp-top-ten \
+            --config p/typescript \
+            --config p/react \
+            --config p/nextjs \
+            --metrics=off \
+            --error \
+            --exclude-rule python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text \
+            src frontend
+        # The excluded rule flags every sqlalchemy.text(f"...{table}...") call
+        # site this project already reviewed and accepted (SECURITY.md's "SQL"
+        # section: validated, identifier-only f-strings behind a regex
+        # allowlist, `# nosec B608` on each site — sources/postgres_source.py,
+        # sources/mysql_source.py, sources/sqlite_source.py,
+        # destinations/postgres_dest.py). The sandbox's one reviewed exec()
+        # call site (core/sandbox.py) and secrets_service.py's two
+        # name-only log lines carry inline `# nosemgrep` comments instead of
+        # a blanket rule exclusion, since those two rules are otherwise
+        # worth keeping fully active elsewhere in the codebase. Calibrated
+        # 2026-08-22 (ADR-032, Decision 3) against src/ + frontend/ with this
+        # exact command: zero findings.
