@@ -220,3 +220,31 @@ tenant_secrets = Table(
     UniqueConstraint("tenant_id", "name", name="uq_tenant_secrets_tenant_name"),
     Index("ix_tenant_secrets_tenant", "tenant_id"),
 )
+
+# Sprint 24 (ADR-025, migration 0014) — evidence that a tenant data-erasure
+# request (LGPD/GDPR, DELETE /tenant) was fulfilled. Deliberately has no FK
+# to `users.id`: the row it describes is deleted by the same operation that
+# writes this log entry (services/tenant_deletion_service.py). Stores only
+# the opaque tenant id (same classification as `users.id` today, not
+# sensitive on its own) and row/key counts — never the personal data itself.
+tenant_deletion_log = Table(
+    "tenant_deletion_log",
+    metadata,
+    Column("id", String, primary_key=True),
+    Column("tenant_id", String, nullable=False),
+    Column("requested_by", String, nullable=False),
+    Column("requested_at", DateTime(timezone=True), nullable=False),
+    Column("completed_at", DateTime(timezone=True), nullable=True),
+    Column("runs_deleted", Integer, nullable=False, server_default="0"),
+    Column("analysis_runs_deleted", Integer, nullable=False, server_default="0"),
+    Column("stage_latencies_deleted", Integer, nullable=False, server_default="0"),
+    Column("saved_pipelines_deleted", Integer, nullable=False, server_default="0"),
+    Column("secrets_deleted", Integer, nullable=False, server_default="0"),
+    Column("storage_keys_deleted", Integer, nullable=False, server_default="0"),
+    # "completed" | "failed" — see ADR-025 Decision 3: a partial storage
+    # cleanup failure still leaves status "completed" with `error` set, since
+    # the DB-side erasure (the higher-confidence signal) succeeded.
+    Column("status", String(20), nullable=False),
+    Column("error", Text, nullable=True),
+    Index("ix_tenant_deletion_log_tenant", "tenant_id"),
+)
