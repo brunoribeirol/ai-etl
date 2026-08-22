@@ -49,6 +49,14 @@ You will receive an acknowledgement within 72 hours.
   env-var-exposure angle of the introspection limitation; the introspection
   bypass itself (arbitrary code execution within the child process) remains
   accepted for the current scope.
+- **Update (Sprint 31, ADR-032 Decision 4):** the introspection bypass was
+  formally re-reviewed against explicit alternatives (Docker/gVisor,
+  patching the specific `__mro__` vector, third-party sandboxing libraries)
+  and the risk-acceptance re-confirmed with a concrete revisit trigger — see
+  [ADR-032](docs/adr/ADR-032-security-posture-admin-role-sast.md). Real
+  process/filesystem/network isolation (Docker or gVisor) is the stated
+  pre-requisite before opening self-serve external signups; still not
+  implemented.
 
 ### SQL
 - SQL queries use SQLAlchemy bound parameters (`text("... WHERE id = :id")`)
@@ -100,6 +108,36 @@ You will receive an acknowledgement within 72 hours.
   automatically; RLS was enabled by hand, out of band, after the fact.
   A future ADR/migration should retrofit `create_table` calls (or add a
   dedicated migration) so this is enforced structurally, not by memory.
+- **Update (Sprint 31, ADR-032 Decision 1):** the `rolbypassrls=true`
+  posture was formally re-reviewed against creating a non-bypass app role
+  with real per-tenant RLS policies, and kept as-is — a conscious trade-off,
+  not an unexamined gap. See
+  [ADR-032](docs/adr/ADR-032-security-posture-admin-role-sast.md) for the
+  full alternatives analysis and the explicit trigger for revisiting it
+  (opening the product to external paying tenants with real
+  data-sensitivity requirements).
+
+### Admin / support access (Sprint 31, ADR-032 Decision 2)
+- A platform `admin` RBAC role (`api/deps.py::require_admin`) exists
+  alongside `editor`/`viewer` (ADR-022), resolved from an individual Clerk
+  user id allowlist (`AI_ETL_PLATFORM_ADMINS`), independent of any Clerk
+  Organization role — a tenant's own org admin never gets platform access.
+- Every `/admin/*` route (`api/routers/admin.py`) is read-only this sprint
+  and writes exactly one entry to a dedicated, permanent audit trail
+  (`admin_action_log`, `audit/admin_log.py`) — who, what action, against
+  which tenant, when. Never `PipelineState.audit_log` (per-run) and never
+  `audit/db.py` (kept separate deliberately — see ADR-032).
+
+### SAST (Sprint 31, ADR-032 Decision 3)
+- CodeQL (`.github/workflows/codeql.yml`) remains disabled — this private
+  repo's GitHub plan doesn't include GitHub Advanced Security, which code
+  scanning requires; not fixable from workflow config.
+- `.github/workflows/semgrep.yml` runs Semgrep's free community rulesets
+  (security-audit, secrets, python, owasp-top-ten, typescript, react,
+  nextjs) on every PR and push to `main`, scoped to `src/` and `frontend/`
+  — no GHAS entitlement or SARIF upload required. See ADR-032 for the
+  calibration that confirmed a clean run before this became a blocking
+  check.
 
 ### Dependencies
 - `pip-audit` runs on every CI build and pre-commit hook to catch known CVEs.

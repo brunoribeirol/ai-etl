@@ -180,3 +180,99 @@ def test_require_role_viewer_allows_both_roles(
 
     viewer_dep = deps.require_role("viewer")
     assert viewer_dep(auth) == "org_x"
+
+
+# --- Sprint 31 (ADR-032) — platform `admin` role ---------------------------
+
+
+def test_platform_admin_user_id_resolves_to_admin_regardless_of_org(
+    monkeypatch: pytest.MonkeyPatch,
+    rsa_keypair: tuple[RSAPrivateKey, RSAPublicKey],
+    mocker,
+) -> None:
+    monkeypatch.setenv("AI_ETL_PLATFORM_ADMINS", "user_platform_admin")
+    private_key, public_key = rsa_keypair
+    _mock_jwks_client(monkeypatch, public_key)
+    mocker.patch("ai_etl.api.deps.ensure_user")
+
+    # No org at all.
+    token = _make_token(private_key, sub="user_platform_admin")
+    auth = deps.get_current_auth_context(authorization=f"Bearer {token}")
+    assert auth["role"] == "admin"
+    assert auth["user_id"] == "user_platform_admin"
+
+    # Also admin even inside an org where their own org role is a plain member.
+    token_in_org = _make_token(
+        private_key, sub="user_platform_admin", org_id="org_acme", org_role="org:member"
+    )
+    auth_in_org = deps.get_current_auth_context(authorization=f"Bearer {token_in_org}")
+    assert auth_in_org["role"] == "admin"
+
+
+def test_non_platform_admin_org_admin_stays_editor_not_admin(
+    monkeypatch: pytest.MonkeyPatch,
+    rsa_keypair: tuple[RSAPrivateKey, RSAPublicKey],
+    mocker,
+) -> None:
+    """A Clerk org's own admin role must never grant the platform `admin`
+    role — that would let any tenant self-promote to cross-tenant access."""
+    monkeypatch.setenv("AI_ETL_PLATFORM_ADMINS", "someone_else")
+    private_key, public_key = rsa_keypair
+    _mock_jwks_client(monkeypatch, public_key)
+    mocker.patch("ai_etl.api.deps.ensure_user")
+
+    token = _make_token(private_key, sub="user_org_admin", org_id="org_acme", org_role="org:admin")
+    auth = deps.get_current_auth_context(authorization=f"Bearer {token}")
+    assert auth["role"] == "editor"
+
+
+def test_platform_admins_unset_means_admin_role_unreachable(
+    monkeypatch: pytest.MonkeyPatch,
+    rsa_keypair: tuple[RSAPrivateKey, RSAPublicKey],
+    mocker,
+) -> None:
+    monkeypatch.delenv("AI_ETL_PLATFORM_ADMINS", raising=False)
+    private_key, public_key = rsa_keypair
+    _mock_jwks_client(monkeypatch, public_key)
+    mocker.patch("ai_etl.api.deps.ensure_user")
+
+    token = _make_token(private_key, sub="user_anyone")
+    auth = deps.get_current_auth_context(authorization=f"Bearer {token}")
+    assert auth["role"] != "admin"
+
+
+def test_require_admin_allows_platform_admin(
+    monkeypatch: pytest.MonkeyPatch,
+    rsa_keypair: tuple[RSAPrivateKey, RSAPublicKey],
+    mocker,
+) -> None:
+    monkeypatch.setenv("AI_ETL_PLATFORM_ADMINS", "user_platform_admin")
+    private_key, public_key = rsa_keypair
+    _mock_jwks_client(monkeypatch, public_key)
+    mocker.patch("ai_etl.api.deps.ensure_user")
+
+    token = _make_token(private_key, sub="user_platform_admin")
+    auth = deps.get_current_auth_context(authorization=f"Bearer {token}")
+
+    result = deps.require_admin(auth)
+    assert result["role"] == "admin"
+    assert result["user_id"] == "user_platform_admin"
+
+
+def test_require_admin_rejects_editor(
+    monkeypatch: pytest.MonkeyPatch,
+    rsa_keypair: tuple[RSAPrivateKey, RSAPublicKey],
+    mocker,
+) -> None:
+    monkeypatch.delenv("AI_ETL_PLATFORM_ADMINS", raising=False)
+    private_key, public_key = rsa_keypair
+    _mock_jwks_client(monkeypatch, public_key)
+    mocker.patch("ai_etl.api.deps.ensure_user")
+
+    token = _make_token(private_key, sub="user_regular")
+    auth = deps.get_current_auth_context(authorization=f"Bearer {token}")
+    assert auth["role"] == "editor"  # solo tenant, no org
+
+    with pytest.raises(HTTPException) as exc_info:
+        deps.require_admin(auth)
+    assert exc_info.value.status_code == 403
