@@ -59,3 +59,53 @@ def get_monthly_spend_usd(tenant_id: str) -> float:
     with get_engine().connect() as conn:
         result = conn.execute(stmt).scalar()
     return float(result) if result is not None else 0.0
+
+
+# --- Sprint 35 (FinOps: pre-run cost estimation) ---------------------------
+# Appended, not interleaved with the Sprint 29 functions above, per this
+# sprint's isolation rules (this file is shared with other in-flight
+# sprints — additions only, never a rewrite of an existing function).
+
+
+def get_avg_run_cost_usd(tenant_id: str, limit: int = 20) -> float | None:
+    """Average `analysis_runs.cost_usd` over this tenant's most recent
+    `limit` *priced* runs (Sprint 35) — `None` if the tenant has zero priced
+    runs yet (a brand-new tenant, or a run history made entirely of unpriced
+    models; see `core.pricing.compute_cost_usd`'s docstring for why
+    `cost_usd` is nullable).
+
+    Distinct from `get_monthly_spend_usd` above: that one sums a fixed
+    calendar-month window for budget *enforcement*; this one averages the
+    tenant's most recent runs regardless of month, as a per-run cost signal
+    for `services/cost_estimation.py::estimate_run_cost`."""
+    subq = (
+        select(analysis_runs.c.cost_usd)
+        .where(analysis_runs.c.tenant_id == tenant_id, analysis_runs.c.cost_usd.is_not(None))
+        .order_by(analysis_runs.c.timestamp.desc())
+        .limit(limit)
+        .subquery()
+    )
+    stmt = select(func.avg(subq.c.cost_usd))
+    with get_engine().connect() as conn:
+        result = conn.execute(stmt).scalar()
+    return float(result) if result is not None else None
+
+
+def get_global_avg_run_cost_usd(limit: int = 200) -> float | None:
+    """Same as `get_avg_run_cost_usd` above, but across every tenant's most
+    recent `limit` priced runs combined — the fallback
+    `services/cost_estimation.py::estimate_run_cost` uses for a tenant with
+    zero run history of its own (a brand-new tenant has no per-tenant signal
+    to estimate from otherwise). `None` only for a deployment with zero
+    priced runs across every tenant (e.g. right after a fresh install)."""
+    subq = (
+        select(analysis_runs.c.cost_usd)
+        .where(analysis_runs.c.cost_usd.is_not(None))
+        .order_by(analysis_runs.c.timestamp.desc())
+        .limit(limit)
+        .subquery()
+    )
+    stmt = select(func.avg(subq.c.cost_usd))
+    with get_engine().connect() as conn:
+        result = conn.execute(stmt).scalar()
+    return float(result) if result is not None else None
