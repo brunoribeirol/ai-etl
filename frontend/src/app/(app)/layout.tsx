@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { AgentsInfo } from "@/components/agents-info";
 import { AuthHeader } from "@/components/auth-header";
+import { MobileNav } from "@/components/mobile-nav";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { apiFetch } from "@/lib/api";
 import type { ApiConfig } from "@/lib/types";
 
@@ -12,6 +14,12 @@ import type { ApiConfig } from "@/lib/types";
  * from product (`/app`, `/pipelines`, `/historico`, `/resumo`, `/comecar`) —
  * every route in this group is still Clerk-protected by `proxy.ts`, same as
  * before the split.
+ *
+ * Sprint 38 mobile audit: the 5-link `<nav>` plus logo plus auth chrome
+ * never wrapped or scrolled on narrow viewports — it just overflowed the
+ * header. The horizontal `<nav>` is now `hidden` below `sm:` and replaced by
+ * `<MobileNav>`'s hamburger + Sheet at that width; `<ThemeToggle>` is new
+ * (light/dark toggle, same sprint).
  */
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   // Best-effort: the model badge / "Como funciona" panel is informational,
@@ -26,12 +34,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <>
-      <header className="sticky top-0 z-10 flex justify-between items-center px-6 h-16 border-b border-border/60 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="flex items-center gap-8">
-          <Link href="/app" className="font-semibold tracking-tight text-sm">
+      <header className="sticky top-0 z-10 flex justify-between items-center px-4 sm:px-6 h-16 border-b border-border/60 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="flex items-center gap-2 sm:gap-8 min-w-0">
+          <MobileNav />
+          <Link href="/app" className="font-semibold tracking-tight text-sm shrink-0">
             AI-ETL
           </Link>
-          <nav className="flex gap-6 text-sm text-muted-foreground">
+          <nav className="hidden sm:flex gap-6 text-sm text-muted-foreground">
             <Link href="/comecar" className="hover:text-foreground transition-colors">
               Começar
             </Link>
@@ -49,7 +58,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             </Link>
           </nav>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 shrink-0">
+          <ThemeToggle />
           <AgentsInfo modelName={modelName} />
           <AuthHeader />
         </div>

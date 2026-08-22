@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
+import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
@@ -30,18 +31,29 @@ export const metadata: Metadata = {
  * header/nav/auth chrome this file used to render directly. This file keeps
  * only what every route — marketing and app alike — genuinely needs:
  * `ClerkProvider` (so `(marketing)`'s sign-in button and `(app)`'s
- * `auth.protect()` share one session), fonts, and the dark theme class.
+ * `auth.protect()` share one session), fonts, and (Sprint 38) the theme
+ * provider driving the light/dark toggle.
+ *
+ * `className` no longer hardcodes `dark` (dark-only since Sprint 7) —
+ * `ThemeProvider` (`next-themes`, `attribute="class"`) now sets/removes that
+ * class on `<html>` itself, reading the visitor's stored/system preference.
+ * `suppressHydrationWarning` is required by `next-themes` for exactly this
+ * element: the class it applies client-side after reading `localStorage`
+ * legitimately differs from the class-less server-rendered markup.
  */
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <ClerkProvider>
       <html
         lang="pt-BR"
-        className={`dark ${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+        suppressHydrationWarning
       >
         <body className="min-h-full flex flex-col bg-background text-foreground">
-          {children}
-          <Toaster richColors position="top-right" />
+          <ThemeProvider>
+            {children}
+            <Toaster richColors position="top-right" />
+          </ThemeProvider>
         </body>
       </html>
     </ClerkProvider>

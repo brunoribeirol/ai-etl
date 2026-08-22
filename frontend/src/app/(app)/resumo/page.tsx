@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { apiFetch } from "@/lib/api";
+import { friendlyExecutiveError } from "@/lib/friendly-error";
 import type { SavedPipeline } from "@/lib/types";
 
 /**
@@ -34,7 +35,7 @@ export default async function ResumoIndexPage() {
 
       {error && (
         <p className="text-destructive text-sm" role="alert">
-          {error}
+          {friendlyExecutiveError(error)}
         </p>
       )}
 

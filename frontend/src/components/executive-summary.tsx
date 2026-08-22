@@ -4,6 +4,7 @@ import { useAuth } from "@clerk/nextjs";
 import { ArrowDown, ArrowUp, Minus } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
+import { friendlyExecutiveError } from "@/lib/friendly-error";
 import type { FullResult, PipelineRunHistoryEntry, SavedPipeline } from "@/lib/types";
 
 /**
@@ -165,7 +166,7 @@ export function ExecutiveSummary({ pipeline }: { pipeline: SavedPipeline }) {
   if (error) {
     return (
       <p className="text-destructive text-sm" role="alert">
-        {error}
+        {friendlyExecutiveError(error)}
       </p>
     );
   }
@@ -194,9 +195,15 @@ export function ExecutiveSummary({ pipeline }: { pipeline: SavedPipeline }) {
       {latest.status.toLowerCase() === "failed" && (
         <Card>
           <CardContent>
+            {/* Sprint 38 — previously interpolated `latest.error` (a raw
+                backend exception message, e.g. stack-trace-adjacent Python
+                text) straight into this executive-facing sentence. That
+                detail belongs on the technical "Histórico" page, not here —
+                this card now just says what happened and what to expect,
+                in plain language. */}
             <p className="text-sm text-red-400">
-              A última execução deste pipeline não terminou com sucesso
-              {latest.error ? `: ${latest.error}` : "."} A equipe técnica já foi avisada.
+              A última execução deste pipeline não terminou com sucesso. A equipe técnica já foi
+              avisada e está verificando o que aconteceu.
             </p>
           </CardContent>
         </Card>
@@ -216,7 +223,7 @@ export function ExecutiveSummary({ pipeline }: { pipeline: SavedPipeline }) {
           format={(v) => `US$ ${v.toFixed(4)}`}
         />
         <KpiCard
-          label="Uso de IA (tokens)"
+          label="Volume processado pela IA"
           current={latest.total_tokens}
           previous={previous?.total_tokens ?? null}
           format={(v) => v.toLocaleString("pt-BR")}

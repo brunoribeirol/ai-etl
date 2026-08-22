@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ExecutiveSummary } from "@/components/executive-summary";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { apiFetch } from "@/lib/api";
+import { friendlyExecutiveError } from "@/lib/friendly-error";
 import type { SavedPipeline } from "@/lib/types";
 
 /**
@@ -36,7 +37,9 @@ export default async function ResumoPage({
     return (
       <main className="flex-1 px-6 py-12 max-w-3xl mx-auto w-full">
         <Alert variant="destructive">
-          <AlertDescription>{error ?? "Pipeline não encontrado."}</AlertDescription>
+          <AlertDescription>
+            {error ? friendlyExecutiveError(error) : "Não encontramos esse pipeline. Ele pode ter sido removido."}
+          </AlertDescription>
         </Alert>
       </main>
     );
