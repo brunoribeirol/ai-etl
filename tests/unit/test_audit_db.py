@@ -25,8 +25,7 @@ import pytest
 import sqlalchemy
 from sqlalchemy import Engine
 
-from ai_etl.audit import db
-from ai_etl.audit.db import _write_run_row as _real_write_run_row
+from ai_etl.audit.db import budget as budget_db
 from ai_etl.audit.db import (
     get_monthly_budget,
     get_monthly_spend_usd,
@@ -36,6 +35,8 @@ from ai_etl.audit.db import (
     save_stage_latencies,
     set_monthly_budget,
 )
+from ai_etl.audit.db import runs as db
+from ai_etl.audit.db.runs import _write_run_row as _real_write_run_row
 from ai_etl.audit.models import analysis_runs as analysis_runs_table
 from ai_etl.audit.models import metadata as audit_metadata
 from ai_etl.audit.models import runs as runs_table
@@ -851,7 +852,7 @@ def test_load_full_result_degrades_gracefully_when_csv_missing(
 
 def test_get_monthly_budget_returns_none_when_unset(monkeypatch: pytest.MonkeyPatch) -> None:
     engine = _make_sqlite_engine()
-    monkeypatch.setattr(db, "get_engine", lambda: engine)
+    monkeypatch.setattr(budget_db, "get_engine", lambda: engine)
     _insert_user_row(engine, "tenant-a")
 
     assert get_monthly_budget("tenant-a") is None
@@ -861,14 +862,14 @@ def test_get_monthly_budget_returns_none_for_unknown_tenant(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     engine = _make_sqlite_engine()
-    monkeypatch.setattr(db, "get_engine", lambda: engine)
+    monkeypatch.setattr(budget_db, "get_engine", lambda: engine)
 
     assert get_monthly_budget("no-such-tenant") is None
 
 
 def test_set_monthly_budget_then_get_round_trips(monkeypatch: pytest.MonkeyPatch) -> None:
     engine = _make_sqlite_engine()
-    monkeypatch.setattr(db, "get_engine", lambda: engine)
+    monkeypatch.setattr(budget_db, "get_engine", lambda: engine)
     _insert_user_row(engine, "tenant-a")
 
     set_monthly_budget("tenant-a", 50.0)
@@ -880,7 +881,7 @@ def test_set_monthly_budget_none_clears_a_previously_set_cap(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     engine = _make_sqlite_engine()
-    monkeypatch.setattr(db, "get_engine", lambda: engine)
+    monkeypatch.setattr(budget_db, "get_engine", lambda: engine)
     _insert_user_row(engine, "tenant-a")
 
     set_monthly_budget("tenant-a", 50.0)
@@ -893,7 +894,7 @@ def test_get_monthly_spend_usd_sums_only_the_current_calendar_month(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     engine = _make_sqlite_engine()
-    monkeypatch.setattr(db, "get_engine", lambda: engine)
+    monkeypatch.setattr(budget_db, "get_engine", lambda: engine)
     _insert_user_row(engine, "tenant-a")
 
     now = datetime.now(tz=timezone.utc)
@@ -934,7 +935,7 @@ def test_get_monthly_spend_usd_sums_only_the_current_calendar_month(
 
 def test_get_monthly_spend_usd_is_scoped_per_tenant(monkeypatch: pytest.MonkeyPatch) -> None:
     engine = _make_sqlite_engine()
-    monkeypatch.setattr(db, "get_engine", lambda: engine)
+    monkeypatch.setattr(budget_db, "get_engine", lambda: engine)
     _insert_user_row(engine, "tenant-a")
     _insert_user_row(engine, "tenant-b")
 
@@ -975,7 +976,7 @@ def test_get_monthly_spend_usd_is_scoped_per_tenant(monkeypatch: pytest.MonkeyPa
 
 def test_get_monthly_spend_usd_is_zero_with_no_runs(monkeypatch: pytest.MonkeyPatch) -> None:
     engine = _make_sqlite_engine()
-    monkeypatch.setattr(db, "get_engine", lambda: engine)
+    monkeypatch.setattr(budget_db, "get_engine", lambda: engine)
     _insert_user_row(engine, "tenant-a")
 
     assert get_monthly_spend_usd("tenant-a") == 0.0

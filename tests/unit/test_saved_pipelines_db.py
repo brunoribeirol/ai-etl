@@ -14,6 +14,8 @@ import sqlalchemy
 from sqlalchemy import Engine
 
 from ai_etl.audit import db
+from ai_etl.audit.db import health as health_db
+from ai_etl.audit.db import pipelines as pipelines_db
 from ai_etl.audit.models import analysis_runs
 from ai_etl.audit.models import metadata as audit_metadata
 from ai_etl.audit.models import runs as runs_table
@@ -29,7 +31,8 @@ def _make_sqlite_engine() -> Engine:
 @pytest.fixture
 def engine(monkeypatch: pytest.MonkeyPatch) -> Engine:
     eng = _make_sqlite_engine()
-    monkeypatch.setattr(db, "get_engine", lambda: eng)
+    monkeypatch.setattr(pipelines_db, "get_engine", lambda: eng)
+    monkeypatch.setattr(health_db, "get_engine", lambda: eng)
     return eng
 
 
