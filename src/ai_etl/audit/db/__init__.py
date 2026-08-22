@@ -15,7 +15,8 @@ unchanged:
 - `health.py` — health-snapshot cache (`record_pipeline_health`,
   `get_pipeline_health`), run-history time series, and the drift-detection
   lookup (`get_previous_completed_run`).
-- `budget.py` — tenant monthly budget cap (Sprint 29, ADR-019).
+- `budget.py` — tenant monthly budget cap (Sprint 29, ADR-019); pre-run cost
+  estimation's historical-average helpers (Sprint 35).
 - `onboarding.py` — self-serve activation checklist (Sprint 26, ADR-027).
 
 Pure reorganization — no behavior change. Internal call sites within
@@ -23,7 +24,13 @@ Pure reorganization — no behavior change. Internal call sites within
 else should keep importing from `ai_etl.audit.db` as before.
 """
 
-from ai_etl.audit.db.budget import get_monthly_budget, get_monthly_spend_usd, set_monthly_budget
+from ai_etl.audit.db.budget import (
+    get_avg_run_cost_usd,
+    get_global_avg_run_cost_usd,
+    get_monthly_budget,
+    get_monthly_spend_usd,
+    set_monthly_budget,
+)
 from ai_etl.audit.db.health import (
     DEFAULT_PIPELINE_HEALTH_WINDOW,
     DEFAULT_PIPELINE_HISTORY_LIMIT,
@@ -63,6 +70,8 @@ __all__ = [
     "claim_due_pipeline",
     "create_saved_pipeline",
     "ensure_user",
+    "get_avg_run_cost_usd",
+    "get_global_avg_run_cost_usd",
     "get_monthly_budget",
     "get_monthly_spend_usd",
     "get_onboarding_status",

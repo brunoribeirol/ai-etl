@@ -10,7 +10,17 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from ai_etl.api.deps import get_current_tenant_id
-from ai_etl.api.routers import admin, budget, llm, onboarding, pipelines, runs, secrets, tenant
+from ai_etl.api.routers import (
+    admin,
+    budget,
+    cost_estimation,
+    llm,
+    onboarding,
+    pipelines,
+    runs,
+    secrets,
+    tenant,
+)
 from ai_etl.core.llm import get_model_name
 from ai_etl.core.logging_config import configure_logging
 from ai_etl.core.observability import init_sentry
@@ -42,6 +52,7 @@ app.add_middleware(
 )
 
 app.include_router(runs.router)
+app.include_router(cost_estimation.router)
 app.include_router(pipelines.router)
 app.include_router(budget.router)
 app.include_router(secrets.router)
