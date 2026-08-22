@@ -20,10 +20,10 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import TypedDict
 
 from sqlalchemy import Engine, delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from typing_extensions import TypedDict
 
 from ai_etl.audit.connection import get_engine
 from ai_etl.audit.models import (
