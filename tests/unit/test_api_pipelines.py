@@ -40,6 +40,10 @@ def _saved_pipeline_row(**overrides: object) -> dict:
         "last_task_id": None,
         "last_run_at": None,
         "drift_threshold_pct": 20.0,
+        # Sprint 15 (ADR-020) — health-snapshot cache columns.
+        "consecutive_failures": 0,
+        "last_status": None,
+        "last_error": None,
         "created_at": datetime.now(tz=timezone.utc).isoformat(),
         "updated_at": datetime.now(tz=timezone.utc).isoformat(),
     }
@@ -47,16 +51,29 @@ def _saved_pipeline_row(**overrides: object) -> dict:
     return row
 
 
+def _health(**overrides: object) -> dict:
+    health = {"success_rate": None, "avg_latency_seconds": None, "sample_size": 0}
+    health.update(overrides)
+    return health
+
+
 def test_list_pipelines_scoped_to_tenant(client: TestClient, mocker) -> None:
     mock_list = mocker.patch(
         "ai_etl.api.routers.pipelines.list_saved_pipelines",
         return_value=[_saved_pipeline_row()],
     )
+    mocker.patch(
+        "ai_etl.api.routers.pipelines.get_pipeline_health",
+        return_value=_health(success_rate=1.0, sample_size=5),
+    )
 
     response = client.get("/pipelines")
 
     assert response.status_code == 200
-    assert response.json()[0]["id"] == "pl-1"
+    body = response.json()[0]
+    assert body["id"] == "pl-1"
+    assert body["success_rate"] == 1.0
+    assert body["health_sample_size"] == 5
     mock_list.assert_called_once_with("tenant-a")
 
 
@@ -73,11 +90,15 @@ def test_get_pipeline_returns_row(client: TestClient, mocker) -> None:
         "ai_etl.api.routers.pipelines.get_saved_pipeline",
         return_value=_saved_pipeline_row(),
     )
+    mocker.patch("ai_etl.api.routers.pipelines.get_pipeline_health", return_value=_health())
 
     response = client.get("/pipelines/pl-1")
 
     assert response.status_code == 200
-    assert response.json()["name"] == "Nightly sync"
+    body = response.json()
+    assert body["name"] == "Nightly sync"
+    assert body["success_rate"] is None
+    assert body["health_sample_size"] == 0
 
 
 def test_get_pipeline_history_404_when_pipeline_unknown(client: TestClient, mocker) -> None:

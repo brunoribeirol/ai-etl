@@ -325,6 +325,9 @@ def test_run_full_analysis_task_forwards_saved_pipeline_id(
     # this unit test (its own behavior is covered by the dedicated drift
     # tests below).
     monkeypatch.setattr(eq_module, "get_saved_pipeline", lambda *a, **k: None)
+    # Sprint 15 (ADR-020): same reasoning — the health-tracking cache write
+    # is a real DB call, mocked here so this test stays a pure unit test.
+    monkeypatch.setattr(eq_module, "record_pipeline_health", lambda *a, **k: None)
 
     run_full_analysis_task(
         "spec", "question", "./runs", "tenant-a", saved_pipeline_id="pipeline-xyz"
@@ -362,6 +365,9 @@ def test_run_full_analysis_task_runs_drift_check_when_scheduled_and_completed(
         "get_saved_pipeline",
         lambda pid, tid: {"id": pid, "tenant_id": tid, "name": "P", "is_active": True},
     )
+    # Sprint 15 (ADR-020): mock the health-tracking write for the same
+    # reason as every other DB-touching call in this test — pure unit test.
+    monkeypatch.setattr(eq_module, "record_pipeline_health", lambda *a, **k: None)
     called = {}
 
     def _fake_check(**kwargs):
@@ -425,6 +431,7 @@ def test_run_full_analysis_task_swallows_drift_check_failures(
 
     monkeypatch.setattr(eq_module, "run_full_analysis", _fake_run_full_analysis)
     monkeypatch.setattr(eq_module, "get_saved_pipeline", _raise_get_saved_pipeline)
+    monkeypatch.setattr(eq_module, "record_pipeline_health", lambda *a, **k: None)
 
     result = run_full_analysis_task(
         "spec", "question", "./runs", "tenant-a", saved_pipeline_id="pl-1"
@@ -679,3 +686,219 @@ def test_uncapped_tenant_never_touches_the_inflight_lock(
 
     enqueue_analysis("spec", "question", "./runs", "tenant-a")
     enqueue_analysis("spec", "question", "./runs", "tenant-a")  # should not raise
+
+
+# --- Sprint 15 (ADR-020): scheduled-pipeline reliability -------------------
+#
+# `self.retry()`'s real machinery isn't exercised here — it involves a real
+# Celery request/broker context this project's local sandbox has a known,
+# unresolved hang bug with (see Vault `bugs-solved/mypy-pytest-hang-agent-
+# sandbox.md`'s 2026-08-21 update). Instead: `run_full_analysis_task.retry`
+# is monkeypatched directly (it's a bound method on the Task instance the
+# module-level `run_full_analysis_task` name *is*, since Celery's `Task
+# .__call__` binds `self` to that same instance when called directly, the
+# way every test in this file already calls it) — this tests the task's own
+# retry *decision* logic without touching Celery's real retry transport.
+# `push_request`/`pop_request` are Celery's own lightweight, in-memory,
+# officially-supported way to simulate `self.request.retries` — no broker,
+# no I/O, no hang risk.
+
+
+def test_level_b_retry_countdown_doubles_per_attempt() -> None:
+    assert eq_module._level_b_retry_countdown(0) == 60
+    assert eq_module._level_b_retry_countdown(1) == 120
+    assert eq_module._level_b_retry_countdown(2) == 240
+
+
+def test_run_full_analysis_task_retries_on_logical_failure_for_scheduled_pipeline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The roadmap's own worked example: a source-connection failure caught
+    internally by `agents/extractor.py` (`status="failed"`, no exception) on
+    a *scheduled* fire must trigger a real retry, not be treated as done."""
+
+    def _fake_run_full_analysis(
+        spec,
+        business_question,
+        run_dir,
+        progress_callback=None,
+        tenant_id=None,
+        saved_pipeline_id=None,
+    ):
+        return {
+            "state": {"run_id": "r1", "status": "failed", "error": "source unavailable"},
+            "tokens": {},
+        }
+
+    monkeypatch.setattr(eq_module, "run_full_analysis", _fake_run_full_analysis)
+
+    class _RetryRaisedError(Exception):
+        pass
+
+    retry_calls: list[int | None] = []
+
+    def _fake_retry(countdown: int | None = None, **kwargs: object) -> None:
+        retry_calls.append(countdown)
+        raise _RetryRaisedError()
+
+    monkeypatch.setattr(run_full_analysis_task, "retry", _fake_retry)
+
+    with pytest.raises(_RetryRaisedError):
+        run_full_analysis_task("spec", "question", "./runs", "tenant-a", saved_pipeline_id="pl-1")
+
+    assert retry_calls == [60]  # attempt 1 (retries=0 by default) -> 60s countdown
+
+
+def test_run_full_analysis_task_never_retries_a_failed_avulso_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A one-off `POST /runs` call (no `saved_pipeline_id`) must never be
+    auto-retried — the human watching the result is the retry decision-maker
+    for that flow, per ADR-020 Decision 1."""
+
+    def _fake_run_full_analysis(
+        spec,
+        business_question,
+        run_dir,
+        progress_callback=None,
+        tenant_id=None,
+        saved_pipeline_id=None,
+    ):
+        return {"state": {"run_id": "r1", "status": "failed", "error": "boom"}, "tokens": {}}
+
+    monkeypatch.setattr(eq_module, "run_full_analysis", _fake_run_full_analysis)
+
+    def _fail_if_called(*args: object, **kwargs: object) -> None:
+        raise AssertionError("retry() must not be called for an avulso run")
+
+    monkeypatch.setattr(run_full_analysis_task, "retry", _fail_if_called)
+
+    result = run_full_analysis_task("spec", "question", "./runs", "tenant-a")
+    assert result["status"] == "failed"
+
+
+def test_run_full_analysis_task_stops_retrying_once_max_retries_reached(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Once `self.request.retries` reaches `SCHEDULED_PIPELINE_MAX_RETRIES`,
+    the task must stop retrying and record the fire's health instead —
+    never retry forever."""
+
+    def _fake_run_full_analysis(
+        spec,
+        business_question,
+        run_dir,
+        progress_callback=None,
+        tenant_id=None,
+        saved_pipeline_id=None,
+    ):
+        return {
+            "state": {"run_id": "r1", "status": "failed", "error": "still broken"},
+            "tokens": {},
+        }
+
+    monkeypatch.setattr(eq_module, "run_full_analysis", _fake_run_full_analysis)
+
+    def _fail_if_called(*args: object, **kwargs: object) -> None:
+        raise AssertionError("retry() must not be called once retries are exhausted")
+
+    monkeypatch.setattr(run_full_analysis_task, "retry", _fail_if_called)
+
+    recorded: dict[str, object] = {}
+    monkeypatch.setattr(
+        eq_module,
+        "record_pipeline_health",
+        lambda pipeline_id, status, error=None: recorded.update(
+            pipeline_id=pipeline_id, status=status, error=error
+        ),
+    )
+    monkeypatch.setattr(eq_module, "get_saved_pipeline", lambda *a, **k: None)
+
+    run_full_analysis_task.push_request(retries=eq_module.SCHEDULED_PIPELINE_MAX_RETRIES)
+    try:
+        result = run_full_analysis_task(
+            "spec", "question", "./runs", "tenant-a", saved_pipeline_id="pl-1"
+        )
+    finally:
+        run_full_analysis_task.pop_request()
+
+    assert result["status"] == "failed"
+    assert recorded == {"pipeline_id": "pl-1", "status": "failed", "error": "still broken"}
+
+
+# --- Sprint 15 (ADR-020): health-tracking + alerting side effect ----------
+
+
+def test_record_scheduled_pipeline_health_resets_on_success(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    recorded: dict[str, object] = {}
+    monkeypatch.setattr(
+        eq_module,
+        "record_pipeline_health",
+        lambda pipeline_id, status, error=None: recorded.update(
+            pipeline_id=pipeline_id, status=status, error=error
+        ),
+    )
+
+    def _fail_if_called(*args: object, **kwargs: object) -> None:
+        raise AssertionError("a successful fire must never trigger a health alert")
+
+    monkeypatch.setattr(eq_module, "check_and_alert_pipeline_health", _fail_if_called)
+
+    eq_module._record_scheduled_pipeline_health_best_effort("pl-1", "tenant-a", "completed", None)
+
+    assert recorded == {"pipeline_id": "pl-1", "status": "completed", "error": None}
+
+
+def test_record_scheduled_pipeline_health_alerts_exactly_at_threshold(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`== HEALTH_ALERT_FAILURE_THRESHOLD`, not `>=` — a pipeline crossing
+    the threshold alerts once; staying broken past it must not re-alert on
+    every subsequent failure."""
+    monkeypatch.setattr(eq_module, "record_pipeline_health", lambda *a, **k: None)
+    monkeypatch.setattr(eq_module, "HEALTH_ALERT_FAILURE_THRESHOLD", 3)
+
+    alert_calls: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        eq_module, "check_and_alert_pipeline_health", lambda pipeline: alert_calls.append(pipeline)
+    )
+
+    def _pipeline_with(failures: int) -> dict[str, object]:
+        return {
+            "id": "pl-1",
+            "tenant_id": "tenant-a",
+            "name": "P",
+            "consecutive_failures": failures,
+            "last_error": "boom",
+        }
+
+    monkeypatch.setattr(eq_module, "get_saved_pipeline", lambda *a, **k: _pipeline_with(2))
+    eq_module._record_scheduled_pipeline_health_best_effort("pl-1", "tenant-a", "failed", "boom")
+    assert alert_calls == []  # below threshold — no alert yet
+
+    monkeypatch.setattr(eq_module, "get_saved_pipeline", lambda *a, **k: _pipeline_with(3))
+    eq_module._record_scheduled_pipeline_health_best_effort("pl-1", "tenant-a", "failed", "boom")
+    assert len(alert_calls) == 1  # crossed the threshold — exactly one alert
+
+    monkeypatch.setattr(eq_module, "get_saved_pipeline", lambda *a, **k: _pipeline_with(4))
+    eq_module._record_scheduled_pipeline_health_best_effort("pl-1", "tenant-a", "failed", "boom")
+    assert len(alert_calls) == 1  # past the threshold — no re-alert
+
+
+def test_record_scheduled_pipeline_health_swallows_failures(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A health-tracking/alerting hiccup must never propagate — the run it
+    describes has already completed (successfully or not) and was already
+    persisted before this best-effort step runs."""
+
+    def _raise(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("db unreachable")
+
+    monkeypatch.setattr(eq_module, "record_pipeline_health", _raise)
+
+    eq_module._record_scheduled_pipeline_health_best_effort(
+        "pl-1", "tenant-a", "failed", "boom"
+    )  # should not raise

@@ -619,6 +619,10 @@ def _saved_pipeline_row_to_dict(row: Any) -> dict[str, Any]:
         "last_run_at": row.last_run_at,
         # Sprint 14 (ADR-018) — per-pipeline "% change worth alerting on".
         "drift_threshold_pct": row.drift_threshold_pct,
+        # Sprint 15 (ADR-020) — health-snapshot cache, see models.py.
+        "consecutive_failures": row.consecutive_failures,
+        "last_status": row.last_status,
+        "last_error": row.last_error,
         "created_at": row.created_at,
         "updated_at": row.updated_at,
     }
@@ -659,6 +663,9 @@ def create_saved_pipeline(
         last_task_id=None,
         last_run_at=None,
         drift_threshold_pct=drift_threshold_pct,
+        consecutive_failures=0,
+        last_status=None,
+        last_error=None,
         created_at=now,
         updated_at=now,
     )
@@ -677,6 +684,9 @@ def create_saved_pipeline(
         "last_task_id": None,
         "last_run_at": None,
         "drift_threshold_pct": drift_threshold_pct,
+        "consecutive_failures": 0,
+        "last_status": None,
+        "last_error": None,
         "created_at": now,
         "updated_at": now,
     }
@@ -852,6 +862,107 @@ def record_pipeline_run(pipeline_id: str, task_id: str) -> None:
     )
     with get_engine().begin() as conn:
         conn.execute(stmt)
+
+
+def record_pipeline_health(pipeline_id: str, status: str, error: Optional[str] = None) -> None:
+    """Sprint 15 (ADR-020) — update the health-snapshot cache on
+    `saved_pipelines` after a scheduled fire's *final* attempt (any Level-B
+    retries `execution_queue.py::run_full_analysis_task` performs are
+    already exhausted by the time this is called — this records one fire's
+    terminal outcome, not each individual attempt).
+
+    `status` is `"completed"` or `"failed"` (mirrors `runs.status`).
+    `consecutive_failures` increments atomically via a SQL expression (not
+    read-then-write) to stay correct even if two fires of the same pipeline
+    somehow overlap; resets to 0 on `"completed"`. `last_error` is cleared
+    (`NULL`) on success, set to `error` otherwise.
+
+    Best-effort by convention of every other post-completion side effect in
+    this codebase (see `services/alerting.py`) — callers are expected to
+    wrap this in a try/except so a health-tracking hiccup never fails the
+    run itself; this function does not swallow errors on its own, since
+    unlike a delivery provider, a DB write failing here is worth surfacing
+    to the caller's own error handling.
+    """
+    now = datetime.now(tz=timezone.utc)
+    if status == "completed":
+        values: dict[str, Any] = {
+            "consecutive_failures": 0,
+            "last_status": status,
+            "last_error": None,
+            "updated_at": now,
+        }
+    else:
+        values = {
+            "consecutive_failures": saved_pipelines.c.consecutive_failures + 1,
+            "last_status": status,
+            "last_error": error,
+            "updated_at": now,
+        }
+    stmt = update(saved_pipelines).where(saved_pipelines.c.id == pipeline_id).values(**values)
+    with get_engine().begin() as conn:
+        conn.execute(stmt)
+
+
+DEFAULT_PIPELINE_HEALTH_WINDOW = 20
+
+
+def get_pipeline_health(
+    pipeline_id: str, tenant_id: str, window: int = DEFAULT_PIPELINE_HEALTH_WINDOW
+) -> dict[str, Any]:
+    """Sprint 15 (ADR-020) — success rate and average latency for a saved
+    pipeline's most recent `window` fires, computed from `runs`/
+    `stage_latencies` (both already persisted per execution, ADR-007/
+    ADR-017) — pure aggregation, no new instrumentation.
+
+    `consecutive_failures`/`last_status`/`last_error` are *not* recomputed
+    here — they live on the `saved_pipelines` row itself (the cache
+    `record_pipeline_health` maintains); read them from `get_saved_pipeline`
+    instead, same way `api/routers/pipelines.py` already does for every
+    other field.
+
+    Returns `{"success_rate": float | None, "avg_latency_seconds":
+    float | None, "sample_size": int}`. Both rate/latency are `None` when
+    `sample_size` is 0 (the pipeline has never fired) — never a fabricated
+    0.0, which would misleadingly read as "0% success" instead of "no data
+    yet".
+    """
+    recent_stmt = (
+        select(runs.c.run_id, runs.c.status)
+        .where(runs.c.saved_pipeline_id == pipeline_id, runs.c.tenant_id == tenant_id)
+        .order_by(runs.c.timestamp.desc())
+        .limit(window)
+    )
+    with get_engine().connect() as conn:
+        recent_rows = conn.execute(recent_stmt).fetchall()
+
+    sample_size = len(recent_rows)
+    if sample_size == 0:
+        return {"success_rate": None, "avg_latency_seconds": None, "sample_size": 0}
+
+    completed = sum(1 for row in recent_rows if row.status == "completed")
+    success_rate = completed / sample_size
+
+    run_ids = [row.run_id for row in recent_rows]
+    latency_stmt = (
+        select(
+            stage_latencies.c.run_id,
+            func.sum(stage_latencies.c.duration_seconds).label("total_seconds"),
+        )
+        .where(stage_latencies.c.run_id.in_(run_ids), stage_latencies.c.run_type == "silver")
+        .group_by(stage_latencies.c.run_id)
+    )
+    with get_engine().connect() as conn:
+        latency_rows = conn.execute(latency_stmt).fetchall()
+
+    avg_latency_seconds = (
+        sum(row.total_seconds for row in latency_rows) / len(latency_rows) if latency_rows else None
+    )
+    return {
+        "success_rate": success_rate,
+        "avg_latency_seconds": avg_latency_seconds,
+        "sample_size": sample_size,
+    }
 
 
 # Sprint 17 code review (PR #64): a tight-cron saved pipeline (ADR-016 allows
