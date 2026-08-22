@@ -13,6 +13,7 @@ from sqlalchemy import insert, select, update
 from ai_etl.audit.connection import get_engine
 from ai_etl.audit.models import runs, saved_pipelines
 from ai_etl.core.scheduling import compute_next_run_at
+from ai_etl.services.secrets_service import encrypt_value
 
 
 def _saved_pipeline_row_to_dict(row: Any) -> dict[str, Any]:
@@ -454,3 +455,131 @@ def set_saved_pipeline_llm_config(
     with get_engine().begin() as conn:
         conn.execute(stmt)
     return {"llm_provider": llm_provider, "llm_model": llm_model}
+
+
+# Sprint 37 (ADR-034) — per-`saved_pipeline` notification destination
+# (migration 0019). Same append-only rationale as the LLM-config block above:
+# two small standalone functions plus one internal-only sibling, rather than
+# folded into `create_saved_pipeline`/`update_saved_pipeline`/
+# `_saved_pipeline_row_to_dict`. `api/routers/pipelines.py` composes
+# `get_saved_pipeline_notification_config` onto `get_saved_pipeline`'s dict the
+# same way it already composes `get_saved_pipeline_llm_config`.
+
+
+def get_saved_pipeline_notification_config(
+    pipeline_id: str, tenant_id: str
+) -> Optional[dict[str, Any]]:
+    """Return `{"notification_channel": str | None, "notification_configured": bool,
+    "notification_active": bool}` for one saved pipeline, scoped to `tenant_id` —
+    `None` (the whole return value) covers both "unknown id" and "belongs to
+    another tenant", same soft-fail shape as `get_saved_pipeline`.
+
+    Deliberately never includes the target value (encrypted or decrypted) — this
+    is the shape any API endpoint may safely return. The actual destination is
+    only ever read by `get_saved_pipeline_notification_target`, an
+    internal-only sibling consumed exclusively by the delivery path
+    (`services/notifications.py`), never by a router.
+    """
+    stmt = select(
+        saved_pipelines.c.notification_channel,
+        saved_pipelines.c.notification_target_ciphertext,
+        saved_pipelines.c.notification_active,
+    ).where(saved_pipelines.c.id == pipeline_id, saved_pipelines.c.tenant_id == tenant_id)
+    with get_engine().connect() as conn:
+        row = conn.execute(stmt).first()
+    if row is None:
+        return None
+    return {
+        "notification_channel": row.notification_channel,
+        "notification_configured": row.notification_target_ciphertext is not None,
+        "notification_active": row.notification_active,
+    }
+
+
+def get_saved_pipeline_notification_target(
+    pipeline_id: str, tenant_id: str
+) -> Optional[dict[str, Any]]:
+    """Internal-only sibling of `get_saved_pipeline_notification_config` —
+    additionally returns the raw `notification_target_ciphertext`, still
+    encrypted (decrypting it is `services/notifications.py`'s responsibility,
+    same "audit/db never decrypts" boundary `services/secrets_service.py`
+    already draws around `tenant_secrets`).
+
+    **Never call this from an API router.** The whole point of the
+    config/target split above is that a notification target is never
+    serialized into an HTTP response, encrypted or not.
+    """
+    stmt = select(
+        saved_pipelines.c.notification_channel,
+        saved_pipelines.c.notification_target_ciphertext,
+        saved_pipelines.c.notification_active,
+    ).where(saved_pipelines.c.id == pipeline_id, saved_pipelines.c.tenant_id == tenant_id)
+    with get_engine().connect() as conn:
+        row = conn.execute(stmt).first()
+    if row is None:
+        return None
+    return {
+        "notification_channel": row.notification_channel,
+        "notification_target_ciphertext": row.notification_target_ciphertext,
+        "notification_active": row.notification_active,
+    }
+
+
+def set_saved_pipeline_notification_config(
+    pipeline_id: str,
+    tenant_id: str,
+    notification_channel: Optional[str],
+    notification_target: Optional[str],
+    notification_active: bool = True,
+) -> Optional[dict[str, Any]]:
+    """Set (or clear) one saved pipeline's notification destination.
+
+    `notification_channel`/`notification_target` are always written together
+    — pass both as `None` to clear the override back to "use this
+    deployment's global channel(s)" (`services/notifications.py`'s
+    `RESEND_API_KEY`/`SLACK_WEBHOOK_URL`/`TEAMS_WEBHOOK_URL`/
+    `GOOGLE_CHAT_WEBHOOK_URL` env vars), same "always set or cleared together"
+    convention `set_saved_pipeline_llm_config` already uses.
+
+    `notification_target` arrives here as plaintext (an email recipient list
+    or a webhook URL) and is encrypted with
+    `services.secrets_service.encrypt_value` before it ever reaches a SQL
+    statement — this function is the only place in the codebase that
+    persists it, and it never logs or returns the plaintext or ciphertext
+    back to the caller; the returned dict matches
+    `get_saved_pipeline_notification_config`'s config-only shape.
+
+    The caller (`api/routers/pipelines.py`) is responsible for validating
+    `notification_channel` against the allowed channel set
+    (`services.notifications.ALLOWED_NOTIFICATION_CHANNELS`) and the basic
+    shape of `notification_target` before calling this — this function
+    trusts its inputs, matching every other `audit/db` writer's "no
+    revalidation at the persistence layer" pattern (see
+    `create_saved_pipeline`'s docstring).
+
+    Returns the updated config dict, or `None` if `pipeline_id` doesn't
+    exist or doesn't belong to `tenant_id` (ownership check happens first,
+    before any write — same pattern as `set_saved_pipeline_llm_config`).
+    """
+    existing = get_saved_pipeline(pipeline_id, tenant_id)
+    if existing is None:
+        return None
+
+    ciphertext = encrypt_value(notification_target) if notification_target is not None else None
+    stmt = (
+        update(saved_pipelines)
+        .where(saved_pipelines.c.id == pipeline_id, saved_pipelines.c.tenant_id == tenant_id)
+        .values(
+            notification_channel=notification_channel,
+            notification_target_ciphertext=ciphertext,
+            notification_active=notification_active,
+            updated_at=datetime.now(tz=timezone.utc),
+        )
+    )
+    with get_engine().begin() as conn:
+        conn.execute(stmt)
+    return {
+        "notification_channel": notification_channel,
+        "notification_configured": ciphertext is not None,
+        "notification_active": notification_active,
+    }

@@ -225,6 +225,30 @@ saved_pipelines = Table(
     # only for this sprint.
     Column("llm_provider", String(20), nullable=True),
     Column("llm_model", String(100), nullable=True),
+    # Sprint 37 (ADR-034, migration 0019) — per-pipeline notification destination,
+    # replacing the deployment-global `RESEND_API_KEY`/`SLACK_WEBHOOK_URL`/
+    # `TEAMS_WEBHOOK_URL`/`GOOGLE_CHAT_WEBHOOK_URL` env vars `services/notifications.py`
+    # otherwise falls back to. `notification_channel` is `NULL` (the default for
+    # every existing and new pipeline) until an operator explicitly sets it via
+    # `PUT /pipelines/{id}/notifications` — zero behavior change until then, same
+    # "NULL = no override" convention as `llm_provider`/`llm_model` above.
+    #
+    # `notification_target_ciphertext` is a Fernet token (ADR-034: reuses
+    # `services/secrets_service`'s encryption mechanism/key,
+    # `AI_ETL_SECRETS_ENCRYPTION_KEY` — not the `tenant_secrets` table itself,
+    # since that table is keyed `(tenant_id, name)` for tenant-wide named
+    # credentials, not one destination scoped to a single pipeline row). Holds an
+    # email recipient list (comma-separated, "email" channel) or a webhook URL
+    # ("slack"/"teams"/"google_chat") — never the plaintext value, never logged,
+    # never returned by any API endpoint (see `audit/db/pipelines.py::
+    # get_saved_pipeline_notification_config`, which returns only whether a target
+    # is configured, not its value).
+    Column("notification_channel", String(20), nullable=True),
+    Column("notification_target_ciphertext", Text, nullable=True),
+    # Lets an operator temporarily silence a configured destination without
+    # clearing it (e.g. a webhook rotation in progress) — `True` by default so a
+    # freshly configured destination is active immediately.
+    Column("notification_active", Boolean, nullable=False, server_default="true"),
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("updated_at", DateTime(timezone=True), nullable=False),
     Index("ix_saved_pipelines_active_next_run", "is_active", "next_run_at"),

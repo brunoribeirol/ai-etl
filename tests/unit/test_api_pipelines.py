@@ -74,6 +74,18 @@ def _llm_config(**overrides: object) -> dict:
     return config
 
 
+def _notification_config(**overrides: object) -> dict:
+    # Sprint 37 (ADR-034) — `_with_health` merges this onto every saved-pipeline
+    # response too; the defaults here mean "no override configured".
+    config = {
+        "notification_channel": None,
+        "notification_configured": False,
+        "notification_active": True,
+    }
+    config.update(overrides)
+    return config
+
+
 def test_list_pipelines_scoped_to_tenant(client: TestClient, mocker) -> None:
     mock_list = mocker.patch(
         "ai_etl.api.routers.pipelines.list_saved_pipelines",
@@ -87,6 +99,10 @@ def test_list_pipelines_scoped_to_tenant(client: TestClient, mocker) -> None:
         "ai_etl.api.routers.pipelines.get_saved_pipeline_llm_config",
         return_value=_llm_config(),
     )
+    mocker.patch(
+        "ai_etl.api.routers.pipelines.get_saved_pipeline_notification_config",
+        return_value=_notification_config(),
+    )
 
     response = client.get("/pipelines")
 
@@ -97,6 +113,8 @@ def test_list_pipelines_scoped_to_tenant(client: TestClient, mocker) -> None:
     assert body["health_sample_size"] == 5
     assert body["llm_provider"] is None
     assert body["llm_model"] is None
+    assert body["notification_channel"] is None
+    assert body["notification_configured"] is False
     mock_list.assert_called_once_with("tenant-a")
 
 
@@ -117,6 +135,12 @@ def test_get_pipeline_returns_row(client: TestClient, mocker) -> None:
     mocker.patch(
         "ai_etl.api.routers.pipelines.get_saved_pipeline_llm_config",
         return_value=_llm_config(llm_provider="anthropic", llm_model="claude-sonnet-5"),
+    )
+    mocker.patch(
+        "ai_etl.api.routers.pipelines.get_saved_pipeline_notification_config",
+        return_value=_notification_config(
+            notification_channel="slack", notification_configured=True
+        ),
     )
 
     response = client.get("/pipelines/pl-1")
@@ -728,3 +752,163 @@ def test_get_allowed_llm_models(client: TestClient) -> None:
     assert "claude-sonnet-5" in body["anthropic"]
     assert "gemini-2.0-flash" in body["google"]
     assert "llama3.1" in body["ollama"]
+
+
+# Sprint 37 (ADR-034) — `/pipelines/{id}/notification-config` (per-pipeline
+# notification destination override) and
+# `/pipelines/notifications/allowed-channels` (the allowlist it validates against).
+
+
+def test_get_pipeline_notification_config_404_when_unknown(client: TestClient, mocker) -> None:
+    mocker.patch(
+        "ai_etl.api.routers.pipelines.get_saved_pipeline_notification_config", return_value=None
+    )
+
+    response = client.get("/pipelines/no-such-id/notification-config")
+
+    assert response.status_code == 404
+
+
+def test_get_pipeline_notification_config_returns_current_override(
+    client: TestClient, mocker
+) -> None:
+    mocker.patch(
+        "ai_etl.api.routers.pipelines.get_saved_pipeline_notification_config",
+        return_value=_notification_config(
+            notification_channel="slack", notification_configured=True
+        ),
+    )
+
+    response = client.get("/pipelines/pl-1/notification-config")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "notification_channel": "slack",
+        "notification_configured": True,
+        "notification_active": True,
+    }
+    # Never leaks the target value, not even under a different key name.
+    assert "notification_target" not in response.text
+
+
+def test_set_pipeline_notification_config_happy_path(client: TestClient, mocker) -> None:
+    mock_set = mocker.patch(
+        "ai_etl.api.routers.pipelines.set_saved_pipeline_notification_config",
+        return_value=_notification_config(
+            notification_channel="slack", notification_configured=True
+        ),
+    )
+
+    response = client.put(
+        "/pipelines/pl-1/notification-config",
+        json={
+            "notification_channel": "slack",
+            "notification_target": "https://hooks.slack.com/services/T/B/X",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "notification_channel": "slack",
+        "notification_configured": True,
+        "notification_active": True,
+    }
+    mock_set.assert_called_once_with(
+        "pl-1",
+        "tenant-a",
+        notification_channel="slack",
+        notification_target="https://hooks.slack.com/services/T/B/X",
+        notification_active=True,
+    )
+
+
+def test_set_pipeline_notification_config_rejects_unknown_channel(
+    client: TestClient, mocker
+) -> None:
+    mock_set = mocker.patch("ai_etl.api.routers.pipelines.set_saved_pipeline_notification_config")
+
+    response = client.put(
+        "/pipelines/pl-1/notification-config",
+        json={"notification_channel": "carrier_pigeon", "notification_target": "x"},
+    )
+
+    assert response.status_code == 400
+    mock_set.assert_not_called()
+
+
+def test_set_pipeline_notification_config_rejects_partial_pair(client: TestClient, mocker) -> None:
+    """`notification_channel` without `notification_target` (or vice versa) is
+    rejected by request validation before ever reaching the DB layer — see
+    `SetPipelineNotificationConfigRequest._both_or_neither`."""
+    mock_set = mocker.patch("ai_etl.api.routers.pipelines.set_saved_pipeline_notification_config")
+
+    response = client.put(
+        "/pipelines/pl-1/notification-config",
+        json={"notification_channel": "slack"},
+    )
+
+    assert response.status_code == 422
+    mock_set.assert_not_called()
+
+
+def test_set_pipeline_notification_config_clears_override_with_both_null(
+    client: TestClient, mocker
+) -> None:
+    mock_set = mocker.patch(
+        "ai_etl.api.routers.pipelines.set_saved_pipeline_notification_config",
+        return_value=_notification_config(),
+    )
+
+    response = client.put(
+        "/pipelines/pl-1/notification-config",
+        json={"notification_channel": None, "notification_target": None},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["notification_configured"] is False
+    mock_set.assert_called_once_with(
+        "pl-1",
+        "tenant-a",
+        notification_channel=None,
+        notification_target=None,
+        notification_active=True,
+    )
+
+
+def test_set_pipeline_notification_config_404_when_unknown_pipeline(
+    client: TestClient, mocker
+) -> None:
+    mocker.patch(
+        "ai_etl.api.routers.pipelines.set_saved_pipeline_notification_config", return_value=None
+    )
+
+    response = client.put(
+        "/pipelines/no-such-id/notification-config",
+        json={"notification_channel": "email", "notification_target": "a@example.com"},
+    )
+
+    assert response.status_code == 404
+
+
+def test_viewer_role_cannot_set_pipeline_notification_config(client: TestClient, mocker) -> None:
+    app.dependency_overrides[get_current_auth_context] = lambda: {
+        "tenant_id": "tenant-a",
+        "role": "viewer",
+    }
+    mock_set = mocker.patch("ai_etl.api.routers.pipelines.set_saved_pipeline_notification_config")
+
+    response = client.put(
+        "/pipelines/pl-1/notification-config",
+        json={"notification_channel": "email", "notification_target": "a@example.com"},
+    )
+
+    assert response.status_code == 403
+    mock_set.assert_not_called()
+
+
+def test_get_allowed_notification_channels(client: TestClient) -> None:
+    response = client.get("/pipelines/notifications/allowed-channels")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert set(body) == {"email", "slack", "teams", "google_chat"}

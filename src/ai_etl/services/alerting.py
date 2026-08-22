@@ -21,6 +21,7 @@ from ai_etl.core.llm import get_model_name
 from ai_etl.core.pricing import compute_cost_usd
 from ai_etl.services.digest import build_digest
 from ai_etl.services.notifications import (
+    resolve_pipeline_notification_override,
     send_email_digest,
     send_google_chat_digest,
     send_slack_digest,
@@ -140,10 +141,32 @@ def check_drift_and_notify(
         findings=triggered,
         advisor_result=advisor_result,
     )
-    email_sent = send_email_digest(digest["subject"], digest["html"], digest["text"])
-    slack_sent = send_slack_digest(digest["slack_blocks"], digest["text"])
-    teams_sent = send_teams_digest(digest["subject"], digest["text"])
-    google_chat_sent = send_google_chat_digest(digest["text"])
+    # Sprint 37 (ADR-034) — a saved pipeline may override one channel's
+    # destination; the other three channels are unaffected and still fall
+    # back to this deployment's global env vars, same as before this sprint.
+    override_channel, override_target = resolve_pipeline_notification_override(
+        pipeline["id"], pipeline["tenant_id"]
+    )
+    email_sent = send_email_digest(
+        digest["subject"],
+        digest["html"],
+        digest["text"],
+        override_recipients=override_target if override_channel == "email" else None,
+    )
+    slack_sent = send_slack_digest(
+        digest["slack_blocks"],
+        digest["text"],
+        override_webhook_url=override_target if override_channel == "slack" else None,
+    )
+    teams_sent = send_teams_digest(
+        digest["subject"],
+        digest["text"],
+        override_webhook_url=override_target if override_channel == "teams" else None,
+    )
+    google_chat_sent = send_google_chat_digest(
+        digest["text"],
+        override_webhook_url=override_target if override_channel == "google_chat" else None,
+    )
 
     return {
         "triggered": True,
