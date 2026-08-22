@@ -284,6 +284,17 @@ export function PipelinesManager() {
                   <span>Última: {new Date(pipeline.last_run_at).toLocaleString()}</span>
                 )}
               </div>
+              {/* Sprint 15 (ADR-020) — minimal health badge, no dedicated page
+                  (that's Sprint 18, UI executiva). Only shown once a pipeline
+                  has actually failed at least once — a healthy pipeline shows
+                  nothing extra here. */}
+              {pipeline.consecutive_failures > 0 && (
+                <div className="text-xs text-red-400" role="alert">
+                  {pipeline.consecutive_failures}{" "}
+                  {pipeline.consecutive_failures === 1 ? "falha seguida" : "falhas seguidas"}
+                  {pipeline.last_error && ` — ${pipeline.last_error}`}
+                </div>
+              )}
               <div className="flex gap-2 pt-1">
                 <Button
                   size="sm"

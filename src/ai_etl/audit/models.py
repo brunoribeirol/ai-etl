@@ -169,6 +169,24 @@ saved_pipelines = Table(
     # a customer with a naturally noisier pipeline can loosen it per pipeline
     # without a code change.
     Column("drift_threshold_pct", Float, nullable=False, server_default="20.0"),
+    # Sprint 15 (ADR-020, migration 0010) — a fast-read health-snapshot cache
+    # for this pipeline's most recent fires, not a second source of truth:
+    # the real per-fire history is still `runs`/`runs.error`, joined via
+    # `saved_pipeline_id` (ADR-017). These three columns exist so a health
+    # view (`GET /pipelines`) doesn't need an aggregate query per pipeline
+    # just to show "is this one currently broken."
+    #
+    # `consecutive_failures` increments once per fire whose final attempt
+    # (after Level-B retries are exhausted, see execution_queue.py) is not
+    # "completed"; resets to 0 on the next fire that completes successfully.
+    # `services/health_alerts.py` alerts the operator once this crosses
+    # `AI_ETL_HEALTH_ALERT_FAILURE_THRESHOLD` (default 3).
+    Column("consecutive_failures", Integer, nullable=False, server_default="0"),
+    # "completed" | "failed" — the outcome of the most recent fire's final
+    # attempt. `NULL` for a pipeline that has never fired yet.
+    Column("last_status", String(20), nullable=True),
+    # The most recent failure's error message; cleared (NULL) on success.
+    Column("last_error", Text, nullable=True),
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("updated_at", DateTime(timezone=True), nullable=False),
     Index("ix_saved_pipelines_active_next_run", "is_active", "next_run_at"),

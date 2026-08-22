@@ -79,7 +79,14 @@ jobs:
         run: uv run bandit -c pyproject.toml -r src/ai_etl/
 
       - name: Security — pip-audit
-        run: uv run pip-audit
+        # `uv sync`'s bootstrap pip inside the venv drifts out of date
+        # independently of this project's own declared deps -- upgrade it
+        # right before auditing so a newly-disclosed pip-itself CVE
+        # (unrelated to any dependency this project actually chose) doesn't
+        # fail every PR until the next `uv` release bumps the bundled pip.
+        run: |
+          uv run pip install --upgrade pip
+          uv run pip-audit
 
   e2e:
     name: "E2E (Sprint 5) — full stack against real Postgres/Redis"

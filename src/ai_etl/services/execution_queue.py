@@ -46,11 +46,17 @@ import redis
 from celery.result import AsyncResult
 from typing_extensions import TypedDict
 
-from ai_etl.audit.db import get_monthly_budget, get_monthly_spend_usd, get_saved_pipeline
+from ai_etl.audit.db import (
+    get_monthly_budget,
+    get_monthly_spend_usd,
+    get_saved_pipeline,
+    record_pipeline_health,
+)
 from ai_etl.core.analysis_types import AnalysisRunResult
 from ai_etl.core.celery_app import celery_app
 from ai_etl.core.state import PipelineState
 from ai_etl.services.alerting import check_drift_and_notify
+from ai_etl.services.health_alerts import check_and_alert_pipeline_health
 from ai_etl.services.pipeline_service import run_full_analysis
 
 logger = logging.getLogger(__name__)
@@ -73,6 +79,51 @@ BUDGET_WARNING_THRESHOLD_RATIO = float(os.getenv("AI_ETL_BUDGET_WARNING_THRESHOL
 # run's worst-case duration (sandbox timeouts scale up to a few minutes at
 # large row counts, ADR-013) without being effectively unbounded.
 BUDGET_INFLIGHT_LOCK_TTL_SECONDS = int(os.getenv("AI_ETL_BUDGET_INFLIGHT_LOCK_TTL_SECONDS", "900"))
+
+# Sprint 15 (ADR-020) — shared retry budget for BOTH failure classes a
+# scheduled fire can hit: an unhandled exception (Celery's own
+# `autoretry_for`, set on the task decorator below) and a *logical* failure
+# (`state["status"] == "failed"` returned with no exception — the common
+# case in practice, since `agents/extractor.py` catches a source-connection
+# error internally rather than raising). Both share Celery's own
+# `self.request.retries` counter, per ADR-020 Decision 1 — one retry budget,
+# not two independently-tracked ones. Deliberately small: each retry of an
+# LLM-calling pipeline costs real tokens (Sprint 3/8's own measured
+# ~$0.0006/run at this project's current scale), so retrying a persistently
+# broken source should cost at most a few multiples of one run, not an
+# unbounded number.
+SCHEDULED_PIPELINE_MAX_RETRIES = int(os.getenv("AI_ETL_SCHEDULED_PIPELINE_MAX_RETRIES", "2"))
+
+# Base backoff (seconds) between attempts, doubled per retry
+# (`_level_b_retry_countdown`) — gives a transient blip (a source flaking
+# for a few seconds) a real chance to clear before the next attempt, rather
+# than hammering it immediately. Also used as Celery's own `retry_backoff`
+# base for the unhandled-exception (Level A) path, so both failure classes
+# back off on the same schedule.
+SCHEDULED_PIPELINE_RETRY_BACKOFF_SECONDS = int(
+    os.getenv("AI_ETL_SCHEDULED_PIPELINE_RETRY_BACKOFF_SECONDS", "60")
+)
+
+# Sprint 15 (ADR-020 Decision 3) — alert the operator once `saved_pipelines
+# .consecutive_failures` reaches this value (after Level-B retries for that
+# fire are already exhausted, not on every retry). Compared with `==`, not
+# `>=`, at the call site — see `_record_scheduled_pipeline_health_best_effort`
+# — so a pipeline that stays broken alerts exactly once per crossing, not on
+# every subsequent failed fire.
+HEALTH_ALERT_FAILURE_THRESHOLD = int(os.getenv("AI_ETL_HEALTH_ALERT_FAILURE_THRESHOLD", "3"))
+
+
+def _level_b_retry_countdown(retries_so_far: int) -> int:
+    """Seconds to wait before the next attempt of a scheduled fire that
+    just failed logically (Level B, ADR-020 Decision 1) — doubles per
+    retry (60s, 120s, ... at the defaults), capped implicitly by
+    `SCHEDULED_PIPELINE_MAX_RETRIES` itself (there's no attempt past the
+    max to need a longer countdown for)."""
+    # `int(...)`: typeshed types `int.__pow__` as returning `Any` (a negative
+    # exponent would yield a float) -- `retries_so_far` is never negative
+    # here, but mypy can't know that, so the explicit cast keeps this
+    # function's own `-> int` contract honest instead of silently widening.
+    return int(SCHEDULED_PIPELINE_RETRY_BACKOFF_SECONDS * (2**retries_so_far))
 
 
 class RateLimitExceededError(Exception):
@@ -274,7 +325,23 @@ def check_budget_cap(tenant_id: str) -> BudgetStatus:
     return status
 
 
-@celery_app.task(name="ai_etl.run_full_analysis", bind=True)  # type: ignore[untyped-decorator]
+@celery_app.task(  # type: ignore[untyped-decorator]
+    name="ai_etl.run_full_analysis",
+    bind=True,
+    # Sprint 15 (ADR-020 Decision 1) — Level A: an unhandled exception
+    # escaping this task (infra transience — a DB/Redis blip, an uncaught
+    # bug) is retried automatically, backing off exponentially from
+    # `SCHEDULED_PIPELINE_RETRY_BACKOFF_SECONDS`. Applies to every run
+    # regardless of origin (scheduled or avulso) — an unhandled infra
+    # exception is never a deliberate user action to second-guess, unlike
+    # Level B below, which only applies to scheduled fires. Shares
+    # `max_retries`/the `self.request.retries` counter with Level B's manual
+    # `self.retry()` call further down — one retry budget, not two.
+    autoretry_for=(Exception,),
+    retry_backoff=SCHEDULED_PIPELINE_RETRY_BACKOFF_SECONDS,
+    retry_backoff_max=600,
+    max_retries=SCHEDULED_PIPELINE_MAX_RETRIES,
+)
 def run_full_analysis_task(
     self: Any,
     spec: str,
@@ -358,8 +425,32 @@ def run_full_analysis_task(
         _release_budget_inflight_lock(tenant_id)
 
     state = result["state"]
+    # `state["status"]` is a required `PipelineState` field and should always
+    # be set by the time the graph finishes — the `or "failed"` fallback is
+    # defensive, not expected in practice: an unexpectedly missing status is
+    # treated as a failure (triggers retry/health-tracking) rather than
+    # silently passing through as `None`, which none of the code below can
+    # meaningfully act on anyway.
+    final_status: str = state.get("status") or "failed"
 
-    if saved_pipeline_id is not None and state.get("status") == "completed":
+    if saved_pipeline_id is not None:
+        # Sprint 15 (ADR-020 Decision 1) — Level B: this fire's own graph run
+        # completed without raising (Level A above only fires on an
+        # exception), but the *logical* result is still a failure — e.g.
+        # `agents/extractor.py` caught a source-connection error internally
+        # and wrote it to `state["error"]`/`status`, exactly the roadmap's
+        # own "fonte indisponível" example. Only scheduled fires get this
+        # auto-retry (`saved_pipeline_id is not None`) — an avulso `POST
+        # /runs` caller is already watching the result and can resubmit;
+        # auto-retrying behind them would silently repeat real LLM cost for
+        # a request they may not want repeated (see ADR-020 Decision 1).
+        if final_status != "completed" and self.request.retries < SCHEDULED_PIPELINE_MAX_RETRIES:
+            raise self.retry(countdown=_level_b_retry_countdown(self.request.retries))
+        _record_scheduled_pipeline_health_best_effort(
+            saved_pipeline_id, tenant_id, final_status, state.get("error")
+        )
+
+    if saved_pipeline_id is not None and final_status == "completed":
         _run_drift_check_best_effort(
             saved_pipeline_id, tenant_id, run_dir, business_question, state, result
         )
@@ -402,6 +493,38 @@ def _run_drift_check_best_effort(
             log_dir=run_dir,
         )
     except Exception:  # nosec B110 — best-effort alerting, never fails the run
+        pass
+
+
+def _record_scheduled_pipeline_health_best_effort(
+    saved_pipeline_id: str, tenant_id: str, status: str, error: str | None
+) -> None:
+    """Update the health-snapshot cache after a scheduled fire's *final*
+    attempt (Level-B retries, if any, already exhausted by the time this is
+    called — see `run_full_analysis_task`), and alert the operator exactly
+    once when `consecutive_failures` crosses `HEALTH_ALERT_FAILURE_THRESHOLD`
+    (Sprint 15, ADR-020 Decisions 2/3).
+
+    Best-effort, same discipline as `_run_drift_check_best_effort` right
+    above: any failure here (a DB hiccup, an unreachable delivery provider)
+    is caught and swallowed — a health-tracking/alerting side effect must
+    never retroactively fail a run that has already completed (successfully
+    or not) and was already persisted.
+    """
+    try:
+        record_pipeline_health(saved_pipeline_id, status, error)
+        if status == "completed":
+            return
+        pipeline = get_saved_pipeline(saved_pipeline_id, tenant_id)
+        # `== `, not `>=`: alert exactly on the crossing, not on every
+        # failure past it — a pipeline stuck broken for weeks must not spam
+        # the operator once per fire (ADR-020 Decision 3).
+        if (
+            pipeline is not None
+            and pipeline["consecutive_failures"] == HEALTH_ALERT_FAILURE_THRESHOLD
+        ):
+            check_and_alert_pipeline_health(pipeline)
+    except Exception:  # nosec B110 — best-effort health tracking, never fails the run
         pass
 
 

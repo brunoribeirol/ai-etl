@@ -16,6 +16,7 @@ from ai_etl.api.deps import get_current_tenant_id
 from ai_etl.audit.db import (
     DEFAULT_PIPELINE_HISTORY_LIMIT,
     create_saved_pipeline,
+    get_pipeline_health,
     get_saved_pipeline,
     list_pipeline_run_history,
     list_saved_pipelines,
@@ -67,11 +68,30 @@ class UpdatePipelineRequest(BaseModel):
     drift_threshold_pct: Optional[float] = Field(default=None, gt=0)
 
 
+def _with_health(pipeline: dict[str, Any]) -> dict[str, Any]:
+    """Sprint 15 (ADR-020 Decision 4) — merge `success_rate`/
+    `avg_latency_seconds`/`health_sample_size` onto a saved-pipeline dict,
+    additive fields alongside the `consecutive_failures`/`last_status`/
+    `last_error` cache `_saved_pipeline_row_to_dict` already includes.
+    `consecutive_failures`/`last_status`/`last_error` are cheap (already on
+    the row); `success_rate`/`avg_latency_seconds` cost one extra aggregate
+    query per pipeline (`audit.db.get_pipeline_health`) — accepted at this
+    project's current scale, same posture ADR-020 documents.
+    """
+    health = get_pipeline_health(pipeline["id"], pipeline["tenant_id"])
+    return {
+        **pipeline,
+        "success_rate": health["success_rate"],
+        "avg_latency_seconds": health["avg_latency_seconds"],
+        "health_sample_size": health["sample_size"],
+    }
+
+
 @router.get("")
 def list_pipelines(
     tenant_id: Annotated[str, Depends(get_current_tenant_id)],
 ) -> list[dict[str, Any]]:
-    return list_saved_pipelines(tenant_id)
+    return [_with_health(p) for p in list_saved_pipelines(tenant_id)]
 
 
 @router.get("/{pipeline_id}")
@@ -82,7 +102,7 @@ def get_pipeline(
     pipeline = get_saved_pipeline(pipeline_id, tenant_id)
     if pipeline is None:
         raise HTTPException(status_code=404, detail="Saved pipeline not found.")
-    return pipeline
+    return _with_health(pipeline)
 
 
 @router.post("")

@@ -494,3 +494,192 @@ def test_list_pipeline_run_history_limit_keeps_most_recent_runs_oldest_first(
 
 def test_list_pipeline_run_history_default_limit_is_200(engine: Engine) -> None:
     assert db.DEFAULT_PIPELINE_HISTORY_LIMIT == 200
+
+
+# ---------------------------------------------------------------------------
+# record_pipeline_health / get_pipeline_health (Sprint 15, ADR-020)
+# ---------------------------------------------------------------------------
+
+
+def test_record_pipeline_health_resets_consecutive_failures_on_success(engine: Engine) -> None:
+    _insert_user(engine, "tenant-a")
+    pipeline = db.create_saved_pipeline("tenant-a", "A", "postgres", "spec a", "0 3 * * *")
+    db.record_pipeline_health(pipeline["id"], "failed", "boom")
+    db.record_pipeline_health(pipeline["id"], "failed", "boom again")
+
+    db.record_pipeline_health(pipeline["id"], "completed", None)
+
+    reloaded = db.get_saved_pipeline(pipeline["id"], "tenant-a")
+    assert reloaded is not None
+    assert reloaded["consecutive_failures"] == 0
+    assert reloaded["last_status"] == "completed"
+    assert reloaded["last_error"] is None
+
+
+def test_record_pipeline_health_increments_atomically_on_failure(engine: Engine) -> None:
+    _insert_user(engine, "tenant-a")
+    pipeline = db.create_saved_pipeline("tenant-a", "A", "postgres", "spec a", "0 3 * * *")
+
+    db.record_pipeline_health(pipeline["id"], "failed", "first error")
+    reloaded = db.get_saved_pipeline(pipeline["id"], "tenant-a")
+    assert reloaded is not None
+    assert reloaded["consecutive_failures"] == 1
+    assert reloaded["last_status"] == "failed"
+    assert reloaded["last_error"] == "first error"
+
+    db.record_pipeline_health(pipeline["id"], "failed", "second error")
+    reloaded = db.get_saved_pipeline(pipeline["id"], "tenant-a")
+    assert reloaded is not None
+    assert reloaded["consecutive_failures"] == 2
+    assert reloaded["last_error"] == "second error"
+
+
+def test_new_saved_pipeline_starts_with_zero_consecutive_failures(engine: Engine) -> None:
+    created = db.create_saved_pipeline("tenant-a", "A", "postgres", "spec a", "0 3 * * *")
+    assert created["consecutive_failures"] == 0
+    assert created["last_status"] is None
+    assert created["last_error"] is None
+
+
+def test_get_pipeline_health_returns_none_fields_when_never_fired(engine: Engine) -> None:
+    pipeline = db.create_saved_pipeline("tenant-a", "A", "postgres", "spec a", "0 3 * * *")
+
+    health = db.get_pipeline_health(pipeline["id"], "tenant-a")
+
+    assert health == {"success_rate": None, "avg_latency_seconds": None, "sample_size": 0}
+
+
+def test_get_pipeline_health_computes_success_rate(engine: Engine) -> None:
+    _insert_user(engine, "tenant-a")
+    pipeline = db.create_saved_pipeline("tenant-a", "A", "postgres", "spec a", "0 3 * * *")
+    now = datetime.now(timezone.utc)
+    _insert_run(engine, "run-1", "tenant-a", pipeline["id"], now, status="completed")
+    _insert_run(
+        engine, "run-2", "tenant-a", pipeline["id"], now + timedelta(hours=1), status="failed"
+    )
+    _insert_run(
+        engine, "run-3", "tenant-a", pipeline["id"], now + timedelta(hours=2), status="completed"
+    )
+    _insert_run(
+        engine, "run-4", "tenant-a", pipeline["id"], now + timedelta(hours=3), status="completed"
+    )
+
+    health = db.get_pipeline_health(pipeline["id"], "tenant-a")
+
+    assert health["success_rate"] == pytest.approx(0.75)
+    assert health["sample_size"] == 4
+
+
+def test_get_pipeline_health_windows_to_most_recent_fires(engine: Engine) -> None:
+    """A pipeline with more history than `window` only counts the most
+    recent `window` fires — an old streak of failures must not permanently
+    drag down a success rate that has since recovered."""
+    _insert_user(engine, "tenant-a")
+    pipeline = db.create_saved_pipeline("tenant-a", "A", "postgres", "spec a", "0 3 * * *")
+    t0 = datetime(2026, 8, 1, tzinfo=timezone.utc)
+    for i in range(3):
+        _insert_run(
+            engine,
+            f"old-fail-{i}",
+            "tenant-a",
+            pipeline["id"],
+            t0 + timedelta(hours=i),
+            status="failed",
+        )
+    for i in range(2):
+        _insert_run(
+            engine,
+            f"recent-ok-{i}",
+            "tenant-a",
+            pipeline["id"],
+            t0 + timedelta(hours=10 + i),
+            status="completed",
+        )
+
+    health = db.get_pipeline_health(pipeline["id"], "tenant-a", window=2)
+
+    assert health["success_rate"] == 1.0
+    assert health["sample_size"] == 2
+
+
+def test_get_pipeline_health_ignores_other_pipelines_and_tenants(engine: Engine) -> None:
+    _insert_user(engine, "tenant-a")
+    pipeline_a = db.create_saved_pipeline("tenant-a", "A", "postgres", "spec a", "0 3 * * *")
+    pipeline_b = db.create_saved_pipeline("tenant-a", "B", "postgres", "spec b", "0 3 * * *")
+    now = datetime.now(timezone.utc)
+    _insert_run(engine, "run-a1", "tenant-a", pipeline_a["id"], now, status="completed")
+    _insert_run(engine, "run-b1", "tenant-a", pipeline_b["id"], now, status="failed")
+
+    health = db.get_pipeline_health(pipeline_a["id"], "tenant-a")
+
+    assert health["success_rate"] == 1.0
+    assert health["sample_size"] == 1
+
+
+def test_get_pipeline_health_averages_silver_stage_latency(engine: Engine) -> None:
+    from ai_etl.audit.models import stage_latencies
+
+    _insert_user(engine, "tenant-a")
+    pipeline = db.create_saved_pipeline("tenant-a", "A", "postgres", "spec a", "0 3 * * *")
+    now = datetime.now(timezone.utc)
+    _insert_run(engine, "run-1", "tenant-a", pipeline["id"], now, status="completed")
+    _insert_run(
+        engine, "run-2", "tenant-a", pipeline["id"], now + timedelta(hours=1), status="completed"
+    )
+
+    with engine.begin() as conn:
+        # run-1: 2 Silver stages, 10s total. run-2: 1 Silver stage, 20s total.
+        # Average across the 2 runs: (10 + 20) / 2 = 15s -- not a per-stage
+        # average, a per-run-total average across runs.
+        conn.execute(
+            sqlalchemy.insert(stage_latencies).values(
+                run_id="run-1",
+                run_type="silver",
+                tenant_id="tenant-a",
+                stage="extractor",
+                seq=1,
+                duration_seconds=4.0,
+                timed_out=False,
+                recorded_at=now,
+            )
+        )
+        conn.execute(
+            sqlalchemy.insert(stage_latencies).values(
+                run_id="run-1",
+                run_type="silver",
+                tenant_id="tenant-a",
+                stage="transformer",
+                seq=1,
+                duration_seconds=6.0,
+                timed_out=False,
+                recorded_at=now,
+            )
+        )
+        conn.execute(
+            sqlalchemy.insert(stage_latencies).values(
+                run_id="run-2",
+                run_type="silver",
+                tenant_id="tenant-a",
+                stage="extractor",
+                seq=1,
+                duration_seconds=20.0,
+                timed_out=False,
+                recorded_at=now,
+            )
+        )
+
+    health = db.get_pipeline_health(pipeline["id"], "tenant-a")
+
+    assert health["avg_latency_seconds"] == pytest.approx(15.0)
+
+
+def test_get_pipeline_health_latency_is_none_without_stage_latencies(engine: Engine) -> None:
+    _insert_user(engine, "tenant-a")
+    pipeline = db.create_saved_pipeline("tenant-a", "A", "postgres", "spec a", "0 3 * * *")
+    _insert_run(
+        engine, "run-1", "tenant-a", pipeline["id"], datetime.now(timezone.utc), status="completed"
+    )
+
+    health = db.get_pipeline_health(pipeline["id"], "tenant-a")
+
+    assert health["avg_latency_seconds"] is None

@@ -143,6 +143,17 @@ export type SavedPipeline = {
   next_run_at: string;
   last_task_id: string | null;
   last_run_at: string | null;
+  // Sprint 15 (ADR-020) — health-snapshot cache (`consecutive_failures`/
+  // `last_status`/`last_error`, persisted on `saved_pipelines`) plus
+  // aggregated fields the API computes on read (`success_rate`/
+  // `avg_latency_seconds`/`health_sample_size`, `null` until the pipeline
+  // has fired at least once — never a fabricated 0).
+  consecutive_failures: number;
+  last_status: "completed" | "failed" | null;
+  last_error: string | null;
+  success_rate: number | null;
+  avg_latency_seconds: number | null;
+  health_sample_size: number;
   created_at: string;
   updated_at: string;
 };

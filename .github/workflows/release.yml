@@ -35,6 +35,7 @@ jobs:
           uv run mypy src/
           uv run pytest tests/unit/ -v --cov=src/ai_etl --cov-fail-under=80
           uv run bandit -c pyproject.toml -r src/ai_etl/
+          uv run pip install --upgrade pip
           uv run pip-audit
 
       - name: Extract version from tag
