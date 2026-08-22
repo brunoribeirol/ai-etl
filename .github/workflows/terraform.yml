@@ -1,0 +1,49 @@
+name: Terraform
+
+# Sprint 10 (ADR-015) added infra/aws/terraform/ as a portability proof --
+# `terraform apply` was deliberately never run against real AWS (see
+# docs/CURRENT_STATE.md), but nothing was gating the IaC itself from
+# silently rotting (a provider syntax error, a broken variable reference)
+# since it merged. `fmt -check`/`validate` need no AWS credentials -- they
+# don't touch any real cloud account, just the local HCL + provider schemas
+# downloaded from the public Terraform Registry.
+on:
+  push:
+    branches: [main, develop]
+    paths: ["infra/aws/terraform/**", ".github/workflows/terraform.yml"]
+  pull_request:
+    branches: [main]
+    paths: ["infra/aws/terraform/**", ".github/workflows/terraform.yml"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: terraform-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: "Terraform — fmt, validate"
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/aws/terraform
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+
+      - name: Format check
+        run: terraform fmt -check -recursive
+
+      # `-backend=false`: no state backend is configured for this
+      # portability-proof IaC (never applied for real, see module docstring
+      # above) -- validate only needs provider schemas, not a real backend.
+      - name: Init (no backend, no real AWS credentials)
+        run: terraform init -backend=false
+
+      - name: Validate
+        run: terraform validate

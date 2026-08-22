@@ -8,6 +8,13 @@ on:
     branches: [main]
     paths: ["frontend/**"]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: frontend-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   check:
     name: "Frontend — Lint, Type, Build"
@@ -30,6 +37,16 @@ jobs:
 
       - name: Lint
         run: npm run lint
+
+      # Parity with the backend's `pip-audit` step -- npm dependencies get
+      # the same real vulnerability gate the Python side already has.
+      # `--audit-level=high` (not `moderate`/every finding): a low/moderate
+      # advisory in a transitive dev-only dependency shouldn't block every
+      # PR the way pip-audit's stricter default does for a much smaller,
+      # backend-only dependency tree; revisit the threshold if this proves
+      # too loose in practice.
+      - name: Security — npm audit
+        run: npm audit --audit-level=high
 
       # `next build` runs its own TypeScript check as part of the build
       # (visible as a "Running TypeScript ..." step in its own output) — a
