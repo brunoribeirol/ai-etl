@@ -212,6 +212,19 @@ saved_pipelines = Table(
     # the first successful approval, by
     # `services/pipeline_service.py::resume_pending_load`.
     Column("last_approved_at", DateTime(timezone=True), nullable=True),
+    # Sprint 30 (ADR-031, migration 0016) — per-pipeline LLM provider/model
+    # override. Both `NULL` (the default for every existing and new pipeline) means
+    # "no override, use this deployment's global `AI_ETL_LLM_PROVIDER`/
+    # `AI_ETL_LLM_MODEL`" — zero behavior change unless a tenant explicitly sets
+    # both via `PUT /pipelines/{id}/llm-config`. Always set or cleared together
+    # (never one `NULL` and the other not) — see
+    # `audit/db.py::set_saved_pipeline_llm_config`. Validated against
+    # `core/llm.ALLOWED_MODELS_BY_PROVIDER` before being persisted, never at read
+    # time. Actual pipeline execution does not yet read these columns (see
+    # ADR-031 §5, "Explicitly out of scope") — this is API-contract/persistence
+    # only for this sprint.
+    Column("llm_provider", String(20), nullable=True),
+    Column("llm_model", String(100), nullable=True),
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("updated_at", DateTime(timezone=True), nullable=False),
     Index("ix_saved_pipelines_active_next_run", "is_active", "next_run_at"),

@@ -18,9 +18,16 @@ from ai_etl.audit.db import (
     create_saved_pipeline,
     get_pipeline_health,
     get_saved_pipeline,
+    get_saved_pipeline_llm_config,
     list_pipeline_run_history,
     list_saved_pipelines,
+    set_saved_pipeline_llm_config,
     update_saved_pipeline,
+)
+from ai_etl.core.llm import (
+    ALLOWED_MODELS_BY_PROVIDER,
+    UnsupportedProviderOrModelError,
+    validate_provider_and_model,
 )
 from ai_etl.core.scheduling import (
     SCHEDULABLE_SOURCE_TYPES,
@@ -120,11 +127,22 @@ def _with_health(pipeline: dict[str, Any]) -> dict[str, Any]:
     project's current scale, same posture ADR-020 documents.
     """
     health = get_pipeline_health(pipeline["id"], pipeline["tenant_id"])
+    # Sprint 30 (ADR-031) — merge the LLM provider/model override the same way
+    # `success_rate`/etc. above are merged: `_saved_pipeline_row_to_dict`
+    # (`audit/db.py`) intentionally wasn't touched to add these two columns (see
+    # `get_saved_pipeline_llm_config`'s docstring for why), so this router composes
+    # them on read instead.
+    llm_config = get_saved_pipeline_llm_config(pipeline["id"], pipeline["tenant_id"]) or {
+        "llm_provider": None,
+        "llm_model": None,
+    }
     return {
         **pipeline,
         "success_rate": health["success_rate"],
         "avg_latency_seconds": health["avg_latency_seconds"],
         "health_sample_size": health["sample_size"],
+        "llm_provider": llm_config["llm_provider"],
+        "llm_model": llm_config["llm_model"],
     }
 
 
@@ -230,3 +248,82 @@ def patch_pipeline(
     if updated is None:
         raise HTTPException(status_code=404, detail="Saved pipeline not found.")
     return updated
+
+
+# Sprint 30 (ADR-031) — per-pipeline LLM provider/model selection, split into its
+# own request model/endpoints (rather than folded into `UpdatePipelineRequest`/
+# `patch_pipeline`) since "clear the override" needs `llm_provider=None,
+# llm_model=None` to mean something different from "field omitted, leave
+# unchanged" — the PATCH-with-`None`-means-omitted convention every other field on
+# `UpdatePipelineRequest` already uses would make clearing an override
+# inexpressible.
+class SetPipelineLlmConfigRequest(BaseModel):
+    """`llm_provider`/`llm_model` both `None` clears the override (falls back to
+    this deployment's global `AI_ETL_LLM_PROVIDER`/`AI_ETL_LLM_MODEL`,
+    `core/llm.py`). Providing only one of the two is rejected — see
+    `_model_validator` below — since a provider without a model (or vice versa) is
+    not a state `core.llm.ALLOWED_MODELS_BY_PROVIDER` can validate.
+    """
+
+    llm_provider: Optional[str] = None
+    llm_model: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _both_or_neither(self) -> "SetPipelineLlmConfigRequest":
+        if (self.llm_provider is None) != (self.llm_model is None):
+            raise ValueError(
+                "llm_provider and llm_model must be set together, or both omitted/null "
+                "to clear the override."
+            )
+        return self
+
+
+@router.get("/{pipeline_id}/llm-config")
+def get_pipeline_llm_config(
+    pipeline_id: str,
+    tenant_id: Annotated[str, Depends(get_current_tenant_id)],
+) -> dict[str, Any]:
+    """Sprint 30 (ADR-031) — current LLM provider/model override for one saved
+    pipeline. Both fields `None` means "no override, using this deployment's
+    global default" (`GET /config`'s `model_name`)."""
+    config = get_saved_pipeline_llm_config(pipeline_id, tenant_id)
+    if config is None:
+        raise HTTPException(status_code=404, detail="Saved pipeline not found.")
+    return config
+
+
+@router.put("/{pipeline_id}/llm-config")
+def set_pipeline_llm_config(
+    pipeline_id: str,
+    body: SetPipelineLlmConfigRequest,
+    tenant_id: Annotated[str, Depends(require_role("editor"))],
+) -> dict[str, Any]:
+    """Sprint 30 (ADR-031) — set or clear a saved pipeline's LLM provider/model
+    override. A non-null pair must be in `core.llm.ALLOWED_MODELS_BY_PROVIDER`
+    (same allowlist-validation posture as `_validate_source_type` above for
+    `source_type`, ADR-016 Decision 3) — an out-of-allowlist choice is rejected
+    with 400 before it's ever persisted.
+    """
+    if body.llm_provider is not None and body.llm_model is not None:
+        try:
+            validate_provider_and_model(body.llm_provider, body.llm_model)
+        except UnsupportedProviderOrModelError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    updated = set_saved_pipeline_llm_config(
+        pipeline_id, tenant_id, llm_provider=body.llm_provider, llm_model=body.llm_model
+    )
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Saved pipeline not found.")
+    return updated
+
+
+@router.get("/llm/allowed-models")
+def get_allowed_llm_models(
+    tenant_id: Annotated[str, Depends(get_current_tenant_id)],
+) -> dict[str, list[str]]:
+    """Sprint 30 (ADR-031) — the allowlist `PUT /pipelines/{id}/llm-config`
+    validates against, sorted for stable UI rendering. Lives under `/pipelines`
+    (not a new top-level router) since its only consumer is the per-pipeline LLM
+    config picker this endpoint exists to back."""
+    return {provider: sorted(models) for provider, models in ALLOWED_MODELS_BY_PROVIDER.items()}

@@ -864,3 +864,69 @@ def test_list_pending_approvals_scoped_by_tenant_and_status(engine: Engine) -> N
     assert len(pending) == 1
     assert pending[0]["run_id"] == "run-1"
     assert pending[0]["pipeline_name"] == "A"
+
+
+# Sprint 30 (ADR-031) — `saved_pipelines.llm_provider`/`llm_model` (migration 0016).
+
+
+def test_get_saved_pipeline_llm_config_defaults_to_none_none(engine: Engine) -> None:
+    created = db.create_saved_pipeline("tenant-a", "A", "postgres", "spec a", "0 3 * * *")
+
+    config = db.get_saved_pipeline_llm_config(created["id"], "tenant-a")
+
+    assert config == {"llm_provider": None, "llm_model": None}
+
+
+def test_get_saved_pipeline_llm_config_none_for_unknown_or_other_tenant(engine: Engine) -> None:
+    created = db.create_saved_pipeline("tenant-a", "A", "postgres", "spec a", "0 3 * * *")
+
+    assert db.get_saved_pipeline_llm_config("no-such-id", "tenant-a") is None
+    assert db.get_saved_pipeline_llm_config(created["id"], "tenant-b") is None
+
+
+def test_set_saved_pipeline_llm_config_persists_and_reads_back(engine: Engine) -> None:
+    created = db.create_saved_pipeline("tenant-a", "A", "postgres", "spec a", "0 3 * * *")
+
+    result = db.set_saved_pipeline_llm_config(
+        created["id"], "tenant-a", llm_provider="anthropic", llm_model="claude-sonnet-5"
+    )
+
+    assert result == {"llm_provider": "anthropic", "llm_model": "claude-sonnet-5"}
+    assert db.get_saved_pipeline_llm_config(created["id"], "tenant-a") == result
+
+
+def test_set_saved_pipeline_llm_config_can_clear_back_to_none(engine: Engine) -> None:
+    created = db.create_saved_pipeline("tenant-a", "A", "postgres", "spec a", "0 3 * * *")
+    db.set_saved_pipeline_llm_config(
+        created["id"], "tenant-a", llm_provider="google", llm_model="gemini-2.0-flash"
+    )
+
+    cleared = db.set_saved_pipeline_llm_config(
+        created["id"], "tenant-a", llm_provider=None, llm_model=None
+    )
+
+    assert cleared == {"llm_provider": None, "llm_model": None}
+    assert db.get_saved_pipeline_llm_config(created["id"], "tenant-a") == cleared
+
+
+def test_set_saved_pipeline_llm_config_returns_none_for_other_tenant(engine: Engine) -> None:
+    created = db.create_saved_pipeline("tenant-a", "A", "postgres", "spec a", "0 3 * * *")
+
+    result = db.set_saved_pipeline_llm_config(
+        created["id"], "tenant-b", llm_provider="openai", llm_model="gpt-4o"
+    )
+
+    assert result is None
+    # Never wrote, since ownership check happens before any write.
+    assert db.get_saved_pipeline_llm_config(created["id"], "tenant-a") == {
+        "llm_provider": None,
+        "llm_model": None,
+    }
+
+
+def test_set_saved_pipeline_llm_config_returns_none_for_unknown_pipeline(engine: Engine) -> None:
+    result = db.set_saved_pipeline_llm_config(
+        "no-such-id", "tenant-a", llm_provider="openai", llm_model="gpt-4o"
+    )
+
+    assert result is None

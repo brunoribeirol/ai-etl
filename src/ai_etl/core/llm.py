@@ -7,6 +7,7 @@ and what's explicitly out of scope (no automatic cross-provider fallback).
 """
 
 import os
+import time
 from typing import Any
 
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -22,6 +23,56 @@ _DEFAULT_MODEL_BY_PROVIDER = {
     "google": "gemini-2.0-flash",
     "ollama": "llama3.1",
 }
+
+# Sprint 30 (ADR-031) — the allowlist backing the new per-`saved_pipeline`
+# provider/model selection endpoint (`api/routers/pipelines.py`), same pattern as
+# `core/scheduling.SCHEDULABLE_SOURCE_TYPES` (Sprint 13, ADR-016) validating
+# `saved_pipelines.source_type`. Kept here (not in `api/`) so it stays the single
+# source of truth alongside `_DEFAULT_MODEL_BY_PROVIDER` and
+# `core/pricing.MODEL_PRICING_USD_PER_MILLION_TOKENS` — every model listed here
+# must have a pricing entry, or its cost silently reads as "unknown" (see
+# `pricing.compute_cost_usd`'s docstring). A client picking a provider/model
+# outside this allowlist is rejected at the API layer before it ever reaches
+# `saved_pipelines`, the same defense-in-depth posture `_validate_source_type`
+# already applies to `source_type`.
+ALLOWED_MODELS_BY_PROVIDER: dict[str, frozenset[str]] = {
+    "openai": frozenset({"gpt-4o-mini", "gpt-4o"}),
+    "anthropic": frozenset({"claude-opus-5", "claude-sonnet-5", "claude-haiku-5"}),
+    "google": frozenset({"gemini-2.0-pro", "gemini-2.0-flash"}),
+    "ollama": frozenset({"llama3.1", "llama3.3", "mistral", "qwen2.5"}),
+}
+
+
+class UnsupportedProviderOrModelError(ValueError):
+    """Raised by `validate_provider_and_model` — a provider outside `_BUILDERS` or a
+    model outside `ALLOWED_MODELS_BY_PROVIDER[provider]`. Distinct from `RuntimeError`
+    (used elsewhere in this module for missing credentials/unsupported provider at
+    LLM-construction time) because this one is a client input-validation error the API
+    layer maps to `HTTPException(400, ...)`, not a deployment/environment misconfiguration.
+    """
+
+
+def validate_provider_and_model(provider: str, model: str) -> None:
+    """Raise `UnsupportedProviderOrModelError` unless `provider` is a supported
+    provider and `model` is in that provider's `ALLOWED_MODELS_BY_PROVIDER` allowlist.
+
+    Used by `api/routers/pipelines.py`'s per-pipeline LLM config endpoint (Sprint 30,
+    ADR-031) before persisting a tenant's choice — never called from `get_llm()`
+    itself, which stays permissive (any model string reaches the provider SDK
+    unvalidated, unchanged from ADR-014) since a deployment-level
+    `AI_ETL_LLM_MODEL` override is an operator decision, not untrusted client input.
+    """
+    allowed_models = ALLOWED_MODELS_BY_PROVIDER.get(provider)
+    if allowed_models is None:
+        supported = ", ".join(sorted(ALLOWED_MODELS_BY_PROVIDER))
+        raise UnsupportedProviderOrModelError(
+            f"Unsupported provider {provider!r}. Supported providers: {supported}."
+        )
+    if model not in allowed_models:
+        raise UnsupportedProviderOrModelError(
+            f"Model {model!r} is not allowed for provider {provider!r}. "
+            f"Allowed models: {sorted(allowed_models)}."
+        )
 
 
 def get_provider() -> str:
@@ -138,3 +189,49 @@ def sum_token_usage(*usages: TokenUsage) -> TokenUsage:
         "output_tokens": sum(u.get("output_tokens", 0) for u in usages),
         "total_tokens": sum(u.get("total_tokens", 0) for u in usages),
     }
+
+
+def test_provider_connectivity(provider: str, model: str) -> dict[str, Any]:
+    """Make one real, minimal `.invoke()` call against `provider`/`model` and report
+    whether it succeeded — Sprint 30 (ADR-031), closing the gap ADR-014 left open
+    ("provider selection is verified with mocked env vars... never by making a live
+    API call"). Backs `POST /llm/test-connectivity`.
+
+    Deliberately independent of `get_llm()`/`AI_ETL_LLM_PROVIDER`: this builds a
+    client for the caller-supplied `provider`/`model` pair directly via `_BUILDERS`,
+    so a tenant can test connectivity for a provider that isn't this deployment's
+    active global one. `provider`/`model` should already be `ALLOWED_MODELS_BY_PROVIDER`-
+    validated by the caller (`validate_provider_and_model`) — this function does not
+    re-validate them, matching the rest of this module's "caller validates, this
+    layer trusts" split.
+
+    Never raises: every failure mode (missing credential, unreachable provider,
+    invalid model id, network error) is caught and reported in the returned dict
+    instead, since this is meant to be called from an API endpoint that always wants
+    a 200 with a pass/fail body, not a 500 on the very "is this configured right?"
+    check it exists to answer.
+    """
+    started = time.monotonic()
+    try:
+        builder = _BUILDERS.get(provider)
+        if builder is None:
+            raise UnsupportedProviderOrModelError(f"Unsupported provider {provider!r}.")
+        llm = builder(model, 0.0)
+        llm.invoke("Reply with a single word: ok")
+        latency_ms = round((time.monotonic() - started) * 1000, 1)
+        return {
+            "ok": True,
+            "provider": provider,
+            "model": model,
+            "latency_ms": latency_ms,
+            "error": None,
+        }
+    except Exception as exc:  # noqa: BLE001 — connectivity probe, every failure is data
+        latency_ms = round((time.monotonic() - started) * 1000, 1)
+        return {
+            "ok": False,
+            "provider": provider,
+            "model": model,
+            "latency_ms": latency_ms,
+            "error": str(exc),
+        }
