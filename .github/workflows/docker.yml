@@ -43,7 +43,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
 
       # `load: true`, no `push` -- builds into the local Docker daemon only,
       # so Trivy below can scan it. Nothing is published anywhere from CI;
