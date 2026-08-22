@@ -41,6 +41,7 @@ type-check:
 
 security:
 	uv run bandit -c pyproject.toml -r src/ai_etl/
+	uv run pip install --upgrade pip
 	uv run pip-audit
 
 check: lint format-check type-check test test-e2e security
