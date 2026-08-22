@@ -35,6 +35,10 @@ def test_build_health_alert_handles_missing_last_error() -> None:
 
 
 def test_check_and_alert_pipeline_health_calls_every_channel(mocker) -> None:
+    mocker.patch(
+        "ai_etl.services.health_alerts.resolve_pipeline_notification_override",
+        return_value=(None, None),
+    )
     mock_email = mocker.patch("ai_etl.services.health_alerts.send_email_digest", return_value=True)
     mock_slack = mocker.patch("ai_etl.services.health_alerts.send_slack_digest", return_value=False)
     mock_teams = mocker.patch("ai_etl.services.health_alerts.send_teams_digest", return_value=False)
@@ -54,3 +58,27 @@ def test_check_and_alert_pipeline_health_calls_every_channel(mocker) -> None:
         "teams_sent": False,
         "google_chat_sent": False,
     }
+
+
+def test_check_and_alert_pipeline_health_forwards_override_only_to_matching_channel(
+    mocker,
+) -> None:
+    """Sprint 37 (ADR-034) — same per-pipeline channel override wiring as
+    `test_alerting.py::test_drift_notify_forwards_override_only_to_matching_channel`."""
+    mocker.patch(
+        "ai_etl.services.health_alerts.resolve_pipeline_notification_override",
+        return_value=("email", "tenant-b@example.com"),
+    )
+    mock_email = mocker.patch("ai_etl.services.health_alerts.send_email_digest", return_value=True)
+    mock_slack = mocker.patch("ai_etl.services.health_alerts.send_slack_digest", return_value=True)
+    mock_teams = mocker.patch("ai_etl.services.health_alerts.send_teams_digest", return_value=True)
+    mock_chat = mocker.patch(
+        "ai_etl.services.health_alerts.send_google_chat_digest", return_value=True
+    )
+
+    health_alerts.check_and_alert_pipeline_health(_pipeline())
+
+    assert mock_email.call_args.kwargs["override_recipients"] == "tenant-b@example.com"
+    assert mock_slack.call_args.kwargs["override_webhook_url"] is None
+    assert mock_teams.call_args.kwargs["override_webhook_url"] is None
+    assert mock_chat.call_args.kwargs["override_webhook_url"] is None

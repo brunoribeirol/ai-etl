@@ -102,6 +102,10 @@ def test_drift_over_threshold_triggers_digest_delivery(mocker) -> None:
     mocker.patch("ai_etl.services.alerting.load_full_result", return_value=None)
     mocker.patch("ai_etl.services.alerting.get_model_name", return_value="gpt-4o-mini")
     mocker.patch("ai_etl.services.alerting.compute_cost_usd", return_value=0.02)
+    mocker.patch(
+        "ai_etl.services.alerting.resolve_pipeline_notification_override",
+        return_value=(None, None),
+    )
     mock_email = mocker.patch("ai_etl.services.alerting.send_email_digest", return_value=True)
     mock_slack = mocker.patch("ai_etl.services.alerting.send_slack_digest", return_value=True)
     mock_teams = mocker.patch("ai_etl.services.alerting.send_teams_digest", return_value=True)
@@ -190,8 +194,14 @@ def test_science_metrics_are_compared_when_present(mocker) -> None:
     )
     mocker.patch("ai_etl.services.alerting.get_model_name", return_value="gpt-4o-mini")
     mocker.patch("ai_etl.services.alerting.compute_cost_usd", return_value=0.01)
+    mocker.patch(
+        "ai_etl.services.alerting.resolve_pipeline_notification_override",
+        return_value=(None, None),
+    )
     mocker.patch("ai_etl.services.alerting.send_email_digest", return_value=True)
     mocker.patch("ai_etl.services.alerting.send_slack_digest", return_value=True)
+    mocker.patch("ai_etl.services.alerting.send_teams_digest", return_value=True)
+    mocker.patch("ai_etl.services.alerting.send_google_chat_digest", return_value=True)
 
     current_science = [
         {
@@ -214,3 +224,50 @@ def test_science_metrics_are_compared_when_present(mocker) -> None:
     assert result["triggered"] is True
     names = {f["name"] for f in result["findings"] if f["triggered"]}
     assert any("rmse" in name for name in names)
+
+
+def test_drift_notify_forwards_override_only_to_matching_channel(mocker) -> None:
+    """Sprint 37 (ADR-034) — a configured `slack` override reaches
+    `send_slack_digest` as `override_webhook_url`; the other three channels get
+    `None` and fall back to their own global env var, unaffected."""
+    mocker.patch(
+        "ai_etl.services.alerting.get_previous_completed_run",
+        return_value={
+            "run_id": "run-1",
+            "rows_loaded": 1000,
+            "cost_usd": 0.01,
+            "total_tokens": 500,
+            "timestamp": None,
+        },
+    )
+    mocker.patch("ai_etl.services.alerting.load_full_result", return_value=None)
+    mocker.patch("ai_etl.services.alerting.get_model_name", return_value="gpt-4o-mini")
+    mocker.patch("ai_etl.services.alerting.compute_cost_usd", return_value=0.02)
+    mocker.patch(
+        "ai_etl.services.alerting.resolve_pipeline_notification_override",
+        return_value=("slack", "https://hooks.slack.com/services/TENANT-B"),
+    )
+    mock_email = mocker.patch("ai_etl.services.alerting.send_email_digest", return_value=True)
+    mock_slack = mocker.patch("ai_etl.services.alerting.send_slack_digest", return_value=True)
+    mock_teams = mocker.patch("ai_etl.services.alerting.send_teams_digest", return_value=True)
+    mock_google_chat = mocker.patch(
+        "ai_etl.services.alerting.send_google_chat_digest", return_value=True
+    )
+
+    alerting.check_drift_and_notify(
+        pipeline=_pipeline(drift_threshold_pct=20.0),
+        run_id="run-2",
+        rows_loaded=2000,
+        tokens={"input_tokens": 250, "output_tokens": 260, "total_tokens": 510},
+        science_results=[],
+        advisor_result=_advisor_result(),
+        business_question="",
+    )
+
+    assert mock_email.call_args.kwargs["override_recipients"] is None
+    assert (
+        mock_slack.call_args.kwargs["override_webhook_url"]
+        == "https://hooks.slack.com/services/TENANT-B"
+    )
+    assert mock_teams.call_args.kwargs["override_webhook_url"] is None
+    assert mock_google_chat.call_args.kwargs["override_webhook_url"] is None

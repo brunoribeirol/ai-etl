@@ -16,6 +16,7 @@ from __future__ import annotations
 from typing import Any
 
 from ai_etl.services.notifications import (
+    resolve_pipeline_notification_override,
     send_email_digest,
     send_google_chat_digest,
     send_slack_digest,
@@ -78,9 +79,31 @@ def check_and_alert_pipeline_health(pipeline: dict[str, Any]) -> dict[str, bool]
     failure.
     """
     alert = build_health_alert(pipeline)
+    # Sprint 37 (ADR-034) — same per-pipeline channel override as
+    # `services/alerting.py::check_drift_and_notify`; see that call site's
+    # comment for why the other three channels are left untouched.
+    override_channel, override_target = resolve_pipeline_notification_override(
+        pipeline["id"], pipeline["tenant_id"]
+    )
     return {
-        "email_sent": send_email_digest(alert["subject"], alert["html"], alert["text"]),
-        "slack_sent": send_slack_digest(alert["slack_blocks"], alert["text"]),
-        "teams_sent": send_teams_digest(alert["subject"], alert["text"]),
-        "google_chat_sent": send_google_chat_digest(alert["text"]),
+        "email_sent": send_email_digest(
+            alert["subject"],
+            alert["html"],
+            alert["text"],
+            override_recipients=override_target if override_channel == "email" else None,
+        ),
+        "slack_sent": send_slack_digest(
+            alert["slack_blocks"],
+            alert["text"],
+            override_webhook_url=override_target if override_channel == "slack" else None,
+        ),
+        "teams_sent": send_teams_digest(
+            alert["subject"],
+            alert["text"],
+            override_webhook_url=override_target if override_channel == "teams" else None,
+        ),
+        "google_chat_sent": send_google_chat_digest(
+            alert["text"],
+            override_webhook_url=override_target if override_channel == "google_chat" else None,
+        ),
     }

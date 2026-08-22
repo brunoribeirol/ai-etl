@@ -141,6 +141,29 @@ def generate_encryption_key() -> str:
     return Fernet.generate_key().decode("utf-8")
 
 
+def encrypt_value(value: str) -> str:
+    """Encrypt an arbitrary string with the same Fernet key/mechanism
+    `set_secret` uses (Sprint 37, ADR-034) — for callers that need
+    encryption-at-rest for one value tied to a single row (e.g. a saved
+    pipeline's notification webhook URL) rather than a named, listable
+    per-tenant secret (`tenant_secrets`, this module's own table). Raises
+    `SecretsEncryptionKeyMissingError` the same way `set_secret` does when
+    `AI_ETL_SECRETS_ENCRYPTION_KEY` is unset — fails closed, never stores
+    plaintext.
+    """
+    return _get_fernet().encrypt(value.encode("utf-8")).decode("utf-8")
+
+
+def decrypt_value(ciphertext: str) -> str:
+    """Decrypt a value produced by `encrypt_value`. Raises `InvalidToken`
+    (from `cryptography.fernet`) on a wrong/rotated key or corrupted
+    ciphertext — callers that must never raise into a best-effort delivery
+    path (`services/notifications.py`) are responsible for catching it,
+    same as `get_secret` already documents for its own `InvalidToken` case.
+    """
+    return _get_fernet().decrypt(ciphertext.encode("utf-8")).decode("utf-8")
+
+
 __all__ = [
     "SecretNotFoundError",
     "SecretsEncryptionKeyMissingError",
@@ -149,4 +172,6 @@ __all__ = [
     "list_secret_names",
     "delete_secret",
     "generate_encryption_key",
+    "encrypt_value",
+    "decrypt_value",
 ]

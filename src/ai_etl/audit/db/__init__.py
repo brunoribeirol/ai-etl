@@ -10,8 +10,9 @@ unchanged:
   reload helpers, and `save_stage_latencies` (ADR-007).
 - `pipelines.py` — saved-pipeline CRUD, scheduling claims
   (`claim_due_pipeline`/`release_pipeline_claim`), write-approval
-  (`mark_pipeline_approved`, `list_pending_approvals`), and per-pipeline
-  LLM provider/model overrides (Sprint 30, ADR-031).
+  (`mark_pipeline_approved`, `list_pending_approvals`), per-pipeline
+  LLM provider/model overrides (Sprint 30, ADR-031), and per-pipeline
+  notification destination overrides (Sprint 37, ADR-034).
 - `health.py` — health-snapshot cache (`record_pipeline_health`,
   `get_pipeline_health`), run-history time series, and the drift-detection
   lookup (`get_previous_completed_run`).
@@ -39,6 +40,8 @@ from ai_etl.audit.db.pipelines import (
     get_run_status_and_pipeline,
     get_saved_pipeline,
     get_saved_pipeline_llm_config,
+    get_saved_pipeline_notification_config,
+    get_saved_pipeline_notification_target,
     list_due_pipelines,
     list_pending_approvals,
     list_saved_pipelines,
@@ -46,6 +49,7 @@ from ai_etl.audit.db.pipelines import (
     record_pipeline_run,
     release_pipeline_claim,
     set_saved_pipeline_llm_config,
+    set_saved_pipeline_notification_config,
     update_saved_pipeline,
 )
 from ai_etl.audit.db.runs import (
@@ -71,6 +75,8 @@ __all__ = [
     "get_run_status_and_pipeline",
     "get_saved_pipeline",
     "get_saved_pipeline_llm_config",
+    "get_saved_pipeline_notification_config",
+    "get_saved_pipeline_notification_target",
     "list_due_pipelines",
     "list_pending_approvals",
     "list_pipeline_run_history",
@@ -86,5 +92,6 @@ __all__ = [
     "save_stage_latencies",
     "set_monthly_budget",
     "set_saved_pipeline_llm_config",
+    "set_saved_pipeline_notification_config",
     "update_saved_pipeline",
 ]

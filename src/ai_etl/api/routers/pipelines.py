@@ -19,9 +19,11 @@ from ai_etl.audit.db import (
     get_pipeline_health,
     get_saved_pipeline,
     get_saved_pipeline_llm_config,
+    get_saved_pipeline_notification_config,
     list_pipeline_run_history,
     list_saved_pipelines,
     set_saved_pipeline_llm_config,
+    set_saved_pipeline_notification_config,
     update_saved_pipeline,
 )
 from ai_etl.core.llm import (
@@ -34,6 +36,7 @@ from ai_etl.core.scheduling import (
     InvalidCronScheduleError,
     validate_cron_schedule,
 )
+from ai_etl.services.notifications import ALLOWED_NOTIFICATION_CHANNELS
 
 router = APIRouter(prefix="/pipelines", tags=["pipelines"])
 
@@ -136,6 +139,17 @@ def _with_health(pipeline: dict[str, Any]) -> dict[str, Any]:
         "llm_provider": None,
         "llm_model": None,
     }
+    # Sprint 37 (ADR-034) — same composition pattern as `llm_config` above; the
+    # notification target's value itself is never included here (only whether one
+    # is configured and active), see `get_saved_pipeline_notification_config`'s
+    # docstring for why.
+    notification_config = get_saved_pipeline_notification_config(
+        pipeline["id"], pipeline["tenant_id"]
+    ) or {
+        "notification_channel": None,
+        "notification_configured": False,
+        "notification_active": True,
+    }
     return {
         **pipeline,
         "success_rate": health["success_rate"],
@@ -143,6 +157,9 @@ def _with_health(pipeline: dict[str, Any]) -> dict[str, Any]:
         "health_sample_size": health["sample_size"],
         "llm_provider": llm_config["llm_provider"],
         "llm_model": llm_config["llm_model"],
+        "notification_channel": notification_config["notification_channel"],
+        "notification_configured": notification_config["notification_configured"],
+        "notification_active": notification_config["notification_active"],
     }
 
 
@@ -327,3 +344,103 @@ def get_allowed_llm_models(
     (not a new top-level router) since its only consumer is the per-pipeline LLM
     config picker this endpoint exists to back."""
     return {provider: sorted(models) for provider, models in ALLOWED_MODELS_BY_PROVIDER.items()}
+
+
+# Sprint 37 (ADR-034) — per-pipeline notification destination (email recipients /
+# webhook URL), same "own request model/endpoints, not folded into
+# `UpdatePipelineRequest`" rationale as the LLM-config block above: clearing the
+# override needs `notification_channel=None, notification_target=None` to mean
+# something different from "field omitted, leave unchanged".
+class SetPipelineNotificationConfigRequest(BaseModel):
+    """`notification_channel`/`notification_target` both `None` clears the
+    override (falls back to this deployment's global
+    `RESEND_API_KEY`/`SLACK_WEBHOOK_URL`/`TEAMS_WEBHOOK_URL`/
+    `GOOGLE_CHAT_WEBHOOK_URL` env vars, `services/notifications.py`).
+    Providing only one of the two is rejected — see `_both_or_neither`
+    below — same reasoning as `SetPipelineLlmConfigRequest`.
+
+    `notification_target` is plaintext on the wire (this endpoint requires
+    `editor`, same as every other pipeline-mutating endpoint here) — it is
+    encrypted before being persisted (`services.secrets_service.encrypt_value`,
+    called from `audit.db.set_saved_pipeline_notification_config`) and is
+    never echoed back in this or any other response.
+    """
+
+    notification_channel: Optional[str] = None
+    notification_target: Optional[str] = Field(default=None, min_length=1)
+    notification_active: bool = True
+
+    @model_validator(mode="after")
+    def _both_or_neither(self) -> "SetPipelineNotificationConfigRequest":
+        if (self.notification_channel is None) != (self.notification_target is None):
+            raise ValueError(
+                "notification_channel and notification_target must be set together, "
+                "or both omitted/null to clear the override."
+            )
+        return self
+
+
+@router.get("/{pipeline_id}/notification-config")
+def get_pipeline_notification_config(
+    pipeline_id: str,
+    tenant_id: Annotated[str, Depends(get_current_tenant_id)],
+) -> dict[str, Any]:
+    """Sprint 37 (ADR-034) — current notification destination override for one
+    saved pipeline. `notification_channel=None`/`notification_configured=False`
+    means "no override, using this deployment's global channel(s)". The
+    destination value itself (email recipients / webhook URL) is never
+    returned by any endpoint, encrypted or not — see
+    `audit.db.get_saved_pipeline_notification_config`'s docstring for why.
+    """
+    config = get_saved_pipeline_notification_config(pipeline_id, tenant_id)
+    if config is None:
+        raise HTTPException(status_code=404, detail="Saved pipeline not found.")
+    return config
+
+
+@router.put("/{pipeline_id}/notification-config")
+def set_pipeline_notification_config(
+    pipeline_id: str,
+    body: SetPipelineNotificationConfigRequest,
+    tenant_id: Annotated[str, Depends(require_role("editor"))],
+) -> dict[str, Any]:
+    """Sprint 37 (ADR-034) — set or clear a saved pipeline's notification
+    destination override. A non-null `notification_channel` must be one of
+    `services.notifications.ALLOWED_NOTIFICATION_CHANNELS` (same
+    allowlist-validation posture as `_validate_source_type` above for
+    `source_type`, ADR-016 Decision 3) — an out-of-allowlist channel is
+    rejected with 400 before it's ever persisted. `notification_target` is
+    encrypted before it reaches the database and is never returned.
+    """
+    if (
+        body.notification_channel is not None
+        and body.notification_channel not in ALLOWED_NOTIFICATION_CHANNELS
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Unsupported notification channel '{body.notification_channel}'. "
+                f"Allowed channels: {', '.join(ALLOWED_NOTIFICATION_CHANNELS)}."
+            ),
+        )
+
+    updated = set_saved_pipeline_notification_config(
+        pipeline_id,
+        tenant_id,
+        notification_channel=body.notification_channel,
+        notification_target=body.notification_target,
+        notification_active=body.notification_active,
+    )
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Saved pipeline not found.")
+    return updated
+
+
+@router.get("/notifications/allowed-channels")
+def get_allowed_notification_channels(
+    tenant_id: Annotated[str, Depends(get_current_tenant_id)],
+) -> list[str]:
+    """Sprint 37 (ADR-034) — the allowlist `PUT /pipelines/{id}/notification-config`
+    validates against. Lives under `/pipelines` (not a new top-level router), same
+    rationale as `GET /pipelines/llm/allowed-models`."""
+    return list(ALLOWED_NOTIFICATION_CHANNELS)

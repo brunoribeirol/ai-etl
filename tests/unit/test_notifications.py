@@ -208,3 +208,163 @@ def test_send_google_chat_digest_returns_false_on_http_error(
     monkeypatch.setattr(notifications.httpx, "post", _fake_post)
 
     assert notifications.send_google_chat_digest("body") is False
+
+
+# Sprint 37 (ADR-034) — per-pipeline notification destination override.
+
+
+def test_send_email_digest_override_recipients_takes_precedence_over_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("RESEND_API_KEY", "re_123")
+    monkeypatch.setenv("AI_ETL_ALERT_EMAIL_FROM", "alerts@example.com")
+    monkeypatch.setenv("AI_ETL_ALERT_EMAIL_TO", "global@example.com")
+    captured: dict = {}
+
+    def _fake_post(url, json=None, headers=None, timeout=None):  # noqa: ANN001
+        captured["json"] = json
+        return _FakeResponse(200)
+
+    monkeypatch.setattr(notifications.httpx, "post", _fake_post)
+
+    result = notifications.send_email_digest(
+        "s", "h", "t", override_recipients="tenant-b@example.com"
+    )
+
+    assert result is True
+    assert captured["json"]["to"] == ["tenant-b@example.com"]
+
+
+def test_send_email_digest_override_blank_returns_false(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("RESEND_API_KEY", "re_123")
+    monkeypatch.setenv("AI_ETL_ALERT_EMAIL_FROM", "alerts@example.com")
+    monkeypatch.setenv("AI_ETL_ALERT_EMAIL_TO", "global@example.com")
+
+    assert notifications.send_email_digest("s", "h", "t", override_recipients="   ,  ") is False
+
+
+def test_send_slack_digest_override_webhook_takes_precedence_over_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SLACK_WEBHOOK_URL", "https://hooks.slack.com/services/GLOBAL")
+    captured: dict = {}
+
+    def _fake_post(url, json=None, timeout=None):  # noqa: ANN001
+        captured["url"] = url
+        return _FakeResponse(200)
+
+    monkeypatch.setattr(notifications.httpx, "post", _fake_post)
+
+    result = notifications.send_slack_digest(
+        [], "fallback", override_webhook_url="https://hooks.slack.com/services/TENANT-B"
+    )
+
+    assert result is True
+    assert captured["url"] == "https://hooks.slack.com/services/TENANT-B"
+
+
+def test_send_teams_digest_override_webhook_takes_precedence_over_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("TEAMS_WEBHOOK_URL", "https://global.example.com/workflows/global")
+    captured: dict = {}
+
+    def _fake_post(url, json=None, timeout=None):  # noqa: ANN001
+        captured["url"] = url
+        return _FakeResponse(200)
+
+    monkeypatch.setattr(notifications.httpx, "post", _fake_post)
+
+    result = notifications.send_teams_digest(
+        "s", "b", override_webhook_url="https://tenant-b.example.com/workflows/x"
+    )
+
+    assert result is True
+    assert captured["url"] == "https://tenant-b.example.com/workflows/x"
+
+
+def test_send_google_chat_digest_override_webhook_takes_precedence_over_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(
+        "GOOGLE_CHAT_WEBHOOK_URL", "https://chat.googleapis.com/v1/spaces/GLOBAL/messages"
+    )
+    captured: dict = {}
+
+    def _fake_post(url, json=None, timeout=None):  # noqa: ANN001
+        captured["url"] = url
+        return _FakeResponse(200)
+
+    monkeypatch.setattr(notifications.httpx, "post", _fake_post)
+
+    result = notifications.send_google_chat_digest(
+        "b", override_webhook_url="https://chat.googleapis.com/v1/spaces/TENANT-B/messages"
+    )
+
+    assert result is True
+    assert captured["url"] == "https://chat.googleapis.com/v1/spaces/TENANT-B/messages"
+
+
+def test_resolve_pipeline_notification_override_returns_none_none_when_no_config(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "ai_etl.audit.db.get_saved_pipeline_notification_target", lambda pid, tid: None
+    )
+
+    assert notifications.resolve_pipeline_notification_override("pl-1", "tenant-a") == (None, None)
+
+
+def test_resolve_pipeline_notification_override_returns_none_none_when_inactive(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "ai_etl.audit.db.get_saved_pipeline_notification_target",
+        lambda pid, tid: {
+            "notification_channel": "slack",
+            "notification_target_ciphertext": "cipher",
+            "notification_active": False,
+        },
+    )
+
+    assert notifications.resolve_pipeline_notification_override("pl-1", "tenant-a") == (None, None)
+
+
+def test_resolve_pipeline_notification_override_decrypts_configured_target(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "ai_etl.audit.db.get_saved_pipeline_notification_target",
+        lambda pid, tid: {
+            "notification_channel": "slack",
+            "notification_target_ciphertext": "cipher",
+            "notification_active": True,
+        },
+    )
+    monkeypatch.setattr(notifications, "decrypt_value", lambda ct: "https://hooks.slack.com/x")
+
+    result = notifications.resolve_pipeline_notification_override("pl-1", "tenant-a")
+
+    assert result == ("slack", "https://hooks.slack.com/x")
+
+
+def test_resolve_pipeline_notification_override_swallows_decrypt_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from cryptography.fernet import InvalidToken
+
+    monkeypatch.setattr(
+        "ai_etl.audit.db.get_saved_pipeline_notification_target",
+        lambda pid, tid: {
+            "notification_channel": "slack",
+            "notification_target_ciphertext": "corrupted",
+            "notification_active": True,
+        },
+    )
+
+    def _raise(ct):  # noqa: ANN001
+        raise InvalidToken()
+
+    monkeypatch.setattr(notifications, "decrypt_value", _raise)
+
+    assert notifications.resolve_pipeline_notification_override("pl-1", "tenant-a") == (None, None)

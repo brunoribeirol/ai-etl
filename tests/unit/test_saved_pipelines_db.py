@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 import sqlalchemy
+from cryptography.fernet import Fernet
 from sqlalchemy import Engine
 
 from ai_etl.audit import db
@@ -930,6 +931,157 @@ def test_set_saved_pipeline_llm_config_returns_none_for_other_tenant(engine: Eng
 def test_set_saved_pipeline_llm_config_returns_none_for_unknown_pipeline(engine: Engine) -> None:
     result = db.set_saved_pipeline_llm_config(
         "no-such-id", "tenant-a", llm_provider="openai", llm_model="gpt-4o"
+    )
+
+    assert result is None
+
+
+# Sprint 37 (ADR-034) — per-pipeline notification destination override
+# (`notification_channel`/`notification_target_ciphertext`/`notification_active`,
+# migration 0019).
+
+
+@pytest.fixture
+def _encryption_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AI_ETL_SECRETS_ENCRYPTION_KEY", Fernet.generate_key().decode("utf-8"))
+
+
+def test_get_saved_pipeline_notification_config_defaults_to_unconfigured(engine: Engine) -> None:
+    created = db.create_saved_pipeline("tenant-a", "A", "postgres", "spec a", "0 3 * * *")
+
+    config = db.get_saved_pipeline_notification_config(created["id"], "tenant-a")
+
+    assert config == {
+        "notification_channel": None,
+        "notification_configured": False,
+        "notification_active": True,
+    }
+
+
+def test_get_saved_pipeline_notification_config_none_for_unknown_or_other_tenant(
+    engine: Engine,
+) -> None:
+    created = db.create_saved_pipeline("tenant-a", "A", "postgres", "spec a", "0 3 * * *")
+
+    assert db.get_saved_pipeline_notification_config("no-such-id", "tenant-a") is None
+    assert db.get_saved_pipeline_notification_config(created["id"], "tenant-b") is None
+
+
+def test_set_saved_pipeline_notification_config_persists_and_reads_back(
+    engine: Engine, _encryption_key: None
+) -> None:
+    created = db.create_saved_pipeline("tenant-a", "A", "postgres", "spec a", "0 3 * * *")
+
+    result = db.set_saved_pipeline_notification_config(
+        created["id"],
+        "tenant-a",
+        notification_channel="slack",
+        notification_target="https://hooks.slack.com/services/T/B/X",
+    )
+
+    assert result == {
+        "notification_channel": "slack",
+        "notification_configured": True,
+        "notification_active": True,
+    }
+    assert db.get_saved_pipeline_notification_config(created["id"], "tenant-a") == result
+
+
+def test_set_saved_pipeline_notification_config_encrypts_the_target_value(
+    engine: Engine, _encryption_key: None
+) -> None:
+    created = db.create_saved_pipeline("tenant-a", "A", "postgres", "spec a", "0 3 * * *")
+    plaintext = "https://hooks.slack.com/services/T/B/X"
+
+    db.set_saved_pipeline_notification_config(
+        created["id"], "tenant-a", notification_channel="slack", notification_target=plaintext
+    )
+
+    target = db.get_saved_pipeline_notification_target(created["id"], "tenant-a")
+    assert target is not None
+    assert target["notification_target_ciphertext"] != plaintext
+    from ai_etl.services.secrets_service import decrypt_value
+
+    assert decrypt_value(target["notification_target_ciphertext"]) == plaintext
+
+
+def test_set_saved_pipeline_notification_config_can_clear_back_to_none(
+    engine: Engine, _encryption_key: None
+) -> None:
+    created = db.create_saved_pipeline("tenant-a", "A", "postgres", "spec a", "0 3 * * *")
+    db.set_saved_pipeline_notification_config(
+        created["id"],
+        "tenant-a",
+        notification_channel="email",
+        notification_target="a@example.com",
+    )
+
+    cleared = db.set_saved_pipeline_notification_config(
+        created["id"], "tenant-a", notification_channel=None, notification_target=None
+    )
+
+    assert cleared == {
+        "notification_channel": None,
+        "notification_configured": False,
+        "notification_active": True,
+    }
+    assert db.get_saved_pipeline_notification_config(created["id"], "tenant-a") == cleared
+    assert db.get_saved_pipeline_notification_target(created["id"], "tenant-a") == {
+        "notification_channel": None,
+        "notification_target_ciphertext": None,
+        "notification_active": True,
+    }
+
+
+def test_set_saved_pipeline_notification_config_can_deactivate_without_clearing(
+    engine: Engine, _encryption_key: None
+) -> None:
+    created = db.create_saved_pipeline("tenant-a", "A", "postgres", "spec a", "0 3 * * *")
+    db.set_saved_pipeline_notification_config(
+        created["id"],
+        "tenant-a",
+        notification_channel="slack",
+        notification_target="https://hooks.slack.com/services/T/B/X",
+    )
+
+    silenced = db.set_saved_pipeline_notification_config(
+        created["id"],
+        "tenant-a",
+        notification_channel="slack",
+        notification_target="https://hooks.slack.com/services/T/B/X",
+        notification_active=False,
+    )
+
+    assert silenced == {
+        "notification_channel": "slack",
+        "notification_configured": True,
+        "notification_active": False,
+    }
+
+
+def test_set_saved_pipeline_notification_config_returns_none_for_other_tenant(
+    engine: Engine, _encryption_key: None
+) -> None:
+    created = db.create_saved_pipeline("tenant-a", "A", "postgres", "spec a", "0 3 * * *")
+
+    result = db.set_saved_pipeline_notification_config(
+        created["id"], "tenant-b", notification_channel="slack", notification_target="https://x"
+    )
+
+    assert result is None
+    # Never wrote, since ownership check happens before any write.
+    assert db.get_saved_pipeline_notification_config(created["id"], "tenant-a") == {
+        "notification_channel": None,
+        "notification_configured": False,
+        "notification_active": True,
+    }
+
+
+def test_set_saved_pipeline_notification_config_returns_none_for_unknown_pipeline(
+    engine: Engine, _encryption_key: None
+) -> None:
+    result = db.set_saved_pipeline_notification_config(
+        "no-such-id", "tenant-a", notification_channel="slack", notification_target="https://x"
     )
 
     assert result is None
