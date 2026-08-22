@@ -12,6 +12,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from ai_etl.api.deps import get_current_tenant_id
 from ai_etl.api.routers import admin, budget, llm, onboarding, pipelines, runs, secrets, tenant
 from ai_etl.core.llm import get_model_name
+from ai_etl.core.logging_config import configure_logging
+from ai_etl.core.observability import init_sentry
+
+# Sprint 34 (ADR-033) — both run before `FastAPI(...)` is constructed: JSON
+# logging must be attached before any import-time log line fires (several
+# routers/services log at module scope), and Sentry's `FastApiIntegration`
+# patches Starlette internals that `FastAPI(...)` reads at construction time.
+configure_logging()
+init_sentry(component="api")
 
 app = FastAPI(title="AI-ETL API", version="1.0.0")
 

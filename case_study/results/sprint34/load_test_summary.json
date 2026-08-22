@@ -1,0 +1,61 @@
+{
+  "n_requests": 30,
+  "n_completed": 30,
+  "n_errored": 0,
+  "error_rate": 0.0,
+  "error_rate_within_slo": true,
+  "total_elapsed_seconds": {
+    "p50": 5.798,
+    "p95": 6.709,
+    "p99": 6.768,
+    "mean": 5.866
+  },
+  "per_stage": {
+    "orchestrator": {
+      "n": 30,
+      "p50": 0.0,
+      "p95": 0.001,
+      "p99": 0.002,
+      "slo_p95_seconds": 1.0,
+      "within_slo": true
+    },
+    "extractor": {
+      "n": 30,
+      "p50": 0.053,
+      "p95": 0.092,
+      "p99": 0.112,
+      "slo_p95_seconds": 1.0,
+      "within_slo": true
+    },
+    "transformer": {
+      "n": 30,
+      "p50": 2.626,
+      "p95": 2.916,
+      "p99": 2.99,
+      "slo_p95_seconds": 20.0,
+      "within_slo": true
+    },
+    "quality": {
+      "n": 30,
+      "p50": 0.011,
+      "p95": 0.046,
+      "p99": 0.055,
+      "slo_p95_seconds": 1.0,
+      "within_slo": true
+    },
+    "loader": {
+      "n": 30,
+      "p50": 0.01,
+      "p95": 0.033,
+      "p99": 0.05,
+      "slo_p95_seconds": 1.0,
+      "within_slo": true
+    }
+  },
+  "generated_at": "2026-08-22T16:14:02.025242+00:00",
+  "wall_clock_seconds": 17.825,
+  "tenants": 10,
+  "requests_per_tenant": 3,
+  "data_source": "mock",
+  "note": "Mocked LLM (no OPENAI_API_KEY in this environment) \u2014 measures real sandbox/GIL contention under concurrency, not real LLM round-trip latency under load. See module docstring / ADR-033 for full scope."
+}

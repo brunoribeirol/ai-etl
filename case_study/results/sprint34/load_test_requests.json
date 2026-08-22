@@ -1,0 +1,422 @@
+[
+  {
+    "tenant_id": "tenant_3_6e4606",
+    "run_index": 0,
+    "status": "completed",
+    "elapsed_ms": 5487.6,
+    "stage_durations": {
+      "orchestrator": 0.00011158299457747489,
+      "extractor": 0.05313045799994143,
+      "transformer": 2.1591524169998593,
+      "quality": 0.012344791997747961,
+      "loader": 0.0225200839995523
+    },
+    "error": null
+  },
+  {
+    "tenant_id": "tenant_2_7d697c",
+    "run_index": 2,
+    "status": "completed",
+    "elapsed_ms": 5647.3,
+    "stage_durations": {
+      "orchestrator": 0.00018437499966239557,
+      "extractor": 0.06787637500383426,
+      "transformer": 2.6195876249985304,
+      "quality": 0.015542332999757491,
+      "loader": 0.023145958002714906
+    },
+    "error": null
+  },
+  {
+    "tenant_id": "tenant_0_880df5",
+    "run_index": 1,
+    "status": "completed",
+    "elapsed_ms": 5697.7,
+    "stage_durations": {
+      "orchestrator": 9.56250005401671e-05,
+      "extractor": 0.07469724999828031,
+      "transformer": 2.5914864590013167,
+      "quality": 0.006205874997249339,
+      "loader": 0.006710666995786596
+    },
+    "error": null
+  },
+  {
+    "tenant_id": "tenant_0_dfeb5c",
+    "run_index": 0,
+    "status": "completed",
+    "elapsed_ms": 5730.6,
+    "stage_durations": {
+      "orchestrator": 0.00016945799870882183,
+      "extractor": 0.07432191700354451,
+      "transformer": 2.4953740410055616,
+      "quality": 0.010744790997705422,
+      "loader": 0.01590691599994898
+    },
+    "error": null
+  },
+  {
+    "tenant_id": "tenant_1_50f0c2",
+    "run_index": 0,
+    "status": "completed",
+    "elapsed_ms": 5798.6,
+    "stage_durations": {
+      "orchestrator": 0.00011954200454056263,
+      "extractor": 0.07113350000145147,
+      "transformer": 2.4669249579965253,
+      "quality": 0.011374082998372614,
+      "loader": 0.010380166997492779
+    },
+    "error": null
+  },
+  {
+    "tenant_id": "tenant_0_1c86f4",
+    "run_index": 2,
+    "status": "completed",
+    "elapsed_ms": 5820.1,
+    "stage_durations": {
+      "orchestrator": 0.00011704100325005129,
+      "extractor": 0.07714150000538211,
+      "transformer": 2.6862040409978363,
+      "quality": 0.01934820799942827,
+      "loader": 0.01536166699952446
+    },
+    "error": null
+  },
+  {
+    "tenant_id": "tenant_2_9c142c",
+    "run_index": 0,
+    "status": "completed",
+    "elapsed_ms": 5798.0,
+    "stage_durations": {
+      "orchestrator": 0.00012287500430829823,
+      "extractor": 0.07159466699522454,
+      "transformer": 2.860499083995819,
+      "quality": 0.005141917004948482,
+      "loader": 0.006420457997592166
+    },
+    "error": null
+  },
+  {
+    "tenant_id": "tenant_1_4c1f7f",
+    "run_index": 2,
+    "status": "completed",
+    "elapsed_ms": 5860.8,
+    "stage_durations": {
+      "orchestrator": 9.183300426229835e-05,
+      "extractor": 0.07382608300395077,
+      "transformer": 2.8319550000014715,
+      "quality": 0.006415916999685578,
+      "loader": 0.006485541998699773
+    },
+    "error": null
+  },
+  {
+    "tenant_id": "tenant_2_670a87",
+    "run_index": 1,
+    "status": "completed",
+    "elapsed_ms": 5828.4,
+    "stage_durations": {
+      "orchestrator": 0.00010866700176848099,
+      "extractor": 0.054984000002150424,
+      "transformer": 2.7639951659948565,
+      "quality": 0.005277625001326669,
+      "loader": 0.006489250001322944
+    },
+    "error": null
+  },
+  {
+    "tenant_id": "tenant_1_922f87",
+    "run_index": 1,
+    "status": "completed",
+    "elapsed_ms": 5890.1,
+    "stage_durations": {
+      "orchestrator": 9.670799772720784e-05,
+      "extractor": 0.07164475000172388,
+      "transformer": 2.6327437910003937,
+      "quality": 0.028687875004834495,
+      "loader": 0.03368429200054379
+    },
+    "error": null
+  },
+  {
+    "tenant_id": "tenant_3_e3597f",
+    "run_index": 1,
+    "status": "completed",
+    "elapsed_ms": 4954.9,
+    "stage_durations": {
+      "orchestrator": 0.0003137079984298907,
+      "extractor": 0.011354959002346732,
+      "transformer": 1.794668124995951,
+      "quality": 0.00569366699346574,
+      "loader": 0.006915958001627587
+    },
+    "error": null
+  },
+  {
+    "tenant_id": "tenant_3_677a5d",
+    "run_index": 2,
+    "status": "completed",
+    "elapsed_ms": 5136.3,
+    "stage_durations": {
+      "orchestrator": 0.0003636659967014566,
+      "extractor": 0.07851541599666234,
+      "transformer": 2.1068173329986166,
+      "quality": 0.011109915998531505,
+      "loader": 0.006990792004216928
+    },
+    "error": null
+  },
+  {
+    "tenant_id": "tenant_4_6466d3",
+    "run_index": 0,
+    "status": "completed",
+    "elapsed_ms": 5133.2,
+    "stage_durations": {
+      "orchestrator": 0.0003893749963026494,
+      "extractor": 0.04052837500057649,
+      "transformer": 2.038065834000008,
+      "quality": 0.008040332999371458,
+      "loader": 0.0074690000037662685
+    },
+    "error": null
+  },
+  {
+    "tenant_id": "tenant_4_e00257",
+    "run_index": 1,
+    "status": "completed",
+    "elapsed_ms": 5271.8,
+    "stage_durations": {
+      "orchestrator": 0.00021412500063888729,
+      "extractor": 0.051613791998534,
+      "transformer": 2.1818651249996037,
+      "quality": 0.01043375000153901,
+      "loader": 0.009894167000311427
+    },
+    "error": null
+  },
+  {
+    "tenant_id": "tenant_5_88bca2",
+    "run_index": 0,
+    "status": "completed",
+    "elapsed_ms": 5414.8,
+    "stage_durations": {
+      "orchestrator": 0.00017783299699658528,
+      "extractor": 0.0821442080050474,
+      "transformer": 2.3422018340061186,
+      "quality": 0.017289167000853922,
+      "loader": 0.030869957998220343
+    },
+    "error": null
+  },
+  {
+    "tenant_id": "tenant_5_7e350e",
+    "run_index": 1,
+    "status": "completed",
+    "elapsed_ms": 5441.5,
+    "stage_durations": {
+      "orchestrator": 0.00016604200209258124,
+      "extractor": 0.016514165996341035,
+      "transformer": 2.4246397910028463,
+      "quality": 0.022773374999815132,
+      "loader": 0.03279433299758239
+    },
+    "error": null
+  },
+  {
+    "tenant_id": "tenant_4_7e464f",
+    "run_index": 2,
+    "status": "completed",
+    "elapsed_ms": 5603.9,
+    "stage_durations": {
+      "orchestrator": 0.00023800000053597614,
+      "extractor": 0.0521043750050012,
+      "transformer": 2.3711382080000476,
+      "quality": 0.012620500005141366,
+      "loader": 0.01433674999861978
+    },
+    "error": null
+  },
+  {
+    "tenant_id": "tenant_5_92935d",
+    "run_index": 2,
+    "status": "completed",
+    "elapsed_ms": 5585.9,
+    "stage_durations": {
+      "orchestrator": 0.0002639580052345991,
+      "extractor": 0.08306358299887506,
+      "transformer": 2.3440708330017515,
+      "quality": 0.038513833002070896,
+      "loader": 0.02946841700031655
+    },
+    "error": null
+  },
+  {
+    "tenant_id": "tenant_6_ff2747",
+    "run_index": 0,
+    "status": "completed",
+    "elapsed_ms": 5778.6,
+    "stage_durations": {
+      "orchestrator": 0.0001553330002934672,
+      "extractor": 0.11783945799834328,
+      "transformer": 2.347250583996356,
+      "quality": 0.051536792001570575,
+      "loader": 0.057301625005493406
+    },
+    "error": null
+  },
+  {
+    "tenant_id": "tenant_6_8f9fa2",
+    "run_index": 1,
+    "status": "completed",
+    "elapsed_ms": 5731.9,
+    "stage_durations": {
+      "orchestrator": 0.000240708002820611,
+      "extractor": 0.012468083994463086,
+      "transformer": 2.3832408749949536,
+      "quality": 0.05618837500514928,
+      "loader": 0.02150354100012919
+    },
+    "error": null
+  },
+  {
+    "tenant_id": "tenant_6_fc46a3",
+    "run_index": 2,
+    "status": "completed",
+    "elapsed_ms": 6340.2,
+    "stage_durations": {
+      "orchestrator": 0.0004891249991487712,
+      "extractor": 0.011654082998575177,
+      "transformer": 2.6956516249993,
+      "quality": 0.015529666998190805,
+      "loader": 0.007891166998888366
+    },
+    "error": null
+  },
+  {
+    "tenant_id": "tenant_7_70e9ef",
+    "run_index": 1,
+    "status": "completed",
+    "elapsed_ms": 6744.5,
+    "stage_durations": {
+      "orchestrator": 0.000317541002004873,
+      "extractor": 0.03175799999735318,
+      "transformer": 2.845193166001991,
+      "quality": 0.01283437500387663,
+      "loader": 0.012675165999098681
+    },
+    "error": null
+  },
+  {
+    "tenant_id": "tenant_7_e1a17b",
+    "run_index": 0,
+    "status": "completed",
+    "elapsed_ms": 6777.8,
+    "stage_durations": {
+      "orchestrator": 0.0021487080011866055,
+      "extractor": 0.03221141699759755,
+      "transformer": 3.0078778340030112,
+      "quality": 0.0052253329995437525,
+      "loader": 0.013658417003171053
+    },
+    "error": null
+  },
+  {
+    "tenant_id": "tenant_8_a489eb",
+    "run_index": 1,
+    "status": "completed",
+    "elapsed_ms": 6362.7,
+    "stage_durations": {
+      "orchestrator": 0.0002439170057186857,
+      "extractor": 0.013416125002549961,
+      "transformer": 2.876297374998103,
+      "quality": 0.009412042003532406,
+      "loader": 0.006814084001234733
+    },
+    "error": null
+  },
+  {
+    "tenant_id": "tenant_8_a34680",
+    "run_index": 0,
+    "status": "completed",
+    "elapsed_ms": 6411.2,
+    "stage_durations": {
+      "orchestrator": 0.000552083998627495,
+      "extractor": 0.010194583999691531,
+      "transformer": 2.9479283330001635,
+      "quality": 0.00516158300160896,
+      "loader": 0.007105874996341299
+    },
+    "error": null
+  },
+  {
+    "tenant_id": "tenant_7_2099a7",
+    "run_index": 2,
+    "status": "completed",
+    "elapsed_ms": 6665.5,
+    "stage_durations": {
+      "orchestrator": 0.00024037499679252505,
+      "extractor": 0.012577917004819028,
+      "transformer": 2.768733416000032,
+      "quality": 0.008948082999268081,
+      "loader": 0.006781459000194445
+    },
+    "error": null
+  },
+  {
+    "tenant_id": "tenant_8_66a04b",
+    "run_index": 2,
+    "status": "completed",
+    "elapsed_ms": 6377.4,
+    "stage_durations": {
+      "orchestrator": 0.00021829199977219105,
+      "extractor": 0.011320125006022863,
+      "transformer": 2.836770708003314,
+      "quality": 0.012098457998945378,
+      "loader": 0.010197750001680106
+    },
+    "error": null
+  },
+  {
+    "tenant_id": "tenant_9_0c25d3",
+    "run_index": 2,
+    "status": "completed",
+    "elapsed_ms": 6148.8,
+    "stage_durations": {
+      "orchestrator": 0.00031270799809135497,
+      "extractor": 0.021574250000412576,
+      "transformer": 2.632543750005425,
+      "quality": 0.010725957996328361,
+      "loader": 0.01373020799655933
+    },
+    "error": null
+  },
+  {
+    "tenant_id": "tenant_9_94b9ef",
+    "run_index": 1,
+    "status": "completed",
+    "elapsed_ms": 6171.5,
+    "stage_durations": {
+      "orchestrator": 0.00020249999943189323,
+      "extractor": 0.022282790996541735,
+      "transformer": 2.8624415419981233,
+      "quality": 0.009703000003355555,
+      "loader": 0.0065042499991250224
+    },
+    "error": null
+  },
+  {
+    "tenant_id": "tenant_9_765a32",
+    "run_index": 0,
+    "status": "completed",
+    "elapsed_ms": 6362.3,
+    "stage_durations": {
+      "orchestrator": 0.00042466699960641563,
+      "extractor": 0.09907162500167033,
+      "transformer": 2.796346499999345,
+      "quality": 0.005449125004815869,
+      "loader": 0.006687749999400694
+    },
+    "error": null
+  }
+]

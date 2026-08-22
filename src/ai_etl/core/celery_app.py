@@ -26,6 +26,18 @@ import os
 from celery import Celery
 from celery.schedules import schedule
 
+from ai_etl.core.logging_config import configure_logging
+from ai_etl.core.observability import init_sentry
+
+# Sprint 34 (ADR-033) — module-scope, same "runs once at import time" shape
+# as `api/main.py`'s bootstrap: `celery_app.py` is the single import site
+# every worker/beat process (`celery -A ai_etl.core.celery_app worker`)
+# loads before executing any task, so this covers both without a separate
+# entrypoint. `CeleryIntegration` (inside `init_sentry`) instruments task
+# execution automatically from here on — no per-task code change needed.
+configure_logging()
+init_sentry(component="worker")
+
 
 def _redis_url() -> str:
     return os.getenv("REDIS_URL", "redis://localhost:6379/0")
