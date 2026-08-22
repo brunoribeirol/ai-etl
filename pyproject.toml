@@ -74,6 +74,15 @@ dependencies = [
     # hangs indefinitely in this kind of sandboxed environment; S3 I/O itself
     # stays on the already-proven `boto3` path.
     "pyarrow>=15.0.0",
+    # Sprint 34 (ADR-033) — error tracking/APM, initialized conditionally by
+    # `core/observability.py::init_sentry()` (no `SENTRY_DSN` = no-op, same
+    # "optional, never breaks if absent" convention as Resend/Slack in
+    # `services/notifications.py`). Base dependency, not an extra: both the
+    # API process (`api/main.py`) and the Celery worker (`core/celery_app.py`)
+    # need it importable unconditionally, same rationale as
+    # langchain-anthropic/-google-genai/-ollama above. `[celery,fastapi]`
+    # pulls in both framework integrations this project actually uses.
+    "sentry-sdk[celery,fastapi]>=2.0.0",
 ]
 
 [project.optional-dependencies]
