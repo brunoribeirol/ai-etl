@@ -115,6 +115,59 @@ class TestGetLlmProviderSelection:
         assert llm.temperature == 0.7
 
 
+class TestGetLlmOverride:
+    """Sprint 30/gap-closing (ADR-031 §5) — get_llm()'s optional provider/model
+    override, closing the gap ADR-031 §5 flagged: a saved pipeline's configured
+    provider/model must actually reach the LLM client construction, not just the
+    deployment-global AI_ETL_LLM_PROVIDER/AI_ETL_LLM_MODEL env vars.
+    """
+
+    def test_no_override_preserves_env_var_behavior(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("AI_ETL_LLM_PROVIDER", "anthropic")
+        monkeypatch.setenv("AI_ETL_LLM_MODEL", "claude-opus-5")
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-fake")
+        llm = get_llm()
+        assert isinstance(llm, ChatAnthropic)
+        assert llm.model == "claude-opus-5"
+
+    def test_provider_override_wins_over_env_var(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("AI_ETL_LLM_PROVIDER", "openai")
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-fake")
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-fake")
+        llm = get_llm(provider="anthropic", model="claude-haiku-5")
+        assert isinstance(llm, ChatAnthropic)
+        assert llm.model == "claude-haiku-5"
+
+    def test_model_override_wins_over_env_var(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-fake")
+        monkeypatch.setenv("AI_ETL_LLM_MODEL", "gpt-4o-mini")
+        llm = get_llm(model="gpt-4o")
+        assert isinstance(llm, ChatOpenAI)
+        assert llm.model_name == "gpt-4o"
+
+    def test_provider_override_without_model_uses_that_providers_default(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Should not normally happen (llm_provider/llm_model are always persisted
+        together — ADR-031 §3), but falls back safely rather than reusing a
+        possibly-foreign AI_ETL_LLM_MODEL value."""
+        monkeypatch.setenv("AI_ETL_LLM_MODEL", "gpt-4o-mini")  # an OpenAI model id
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-fake")
+        llm = get_llm(provider="anthropic")
+        assert isinstance(llm, ChatAnthropic)
+        assert llm.model == "claude-sonnet-5"  # anthropic's own default, not gpt-4o-mini
+
+    def test_unsupported_provider_override_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        with pytest.raises(RuntimeError, match="Unsupported provider override"):
+            get_llm(provider="not-a-real-provider", model="whatever")
+
+    def test_missing_credential_for_override_still_fails_fast(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        with pytest.raises(RuntimeError, match="ANTHROPIC_API_KEY"):
+            get_llm(provider="anthropic", model="claude-sonnet-5")
+
+
 class TestGetLlmFailFast:
     """Missing credentials or an unknown provider must fail immediately and clearly
     — never silently fall back to OpenAI (ADR-014 §3).

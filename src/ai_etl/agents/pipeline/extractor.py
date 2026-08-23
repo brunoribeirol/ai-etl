@@ -39,6 +39,10 @@ def extractor_node(state: PipelineState) -> PipelineState:
     extracted_data: dict[str, Any] = {}
     source_schemas: dict[str, Any] = {}
 
+    provider_override = state.get("llm_provider_override")
+    model_override = state.get("llm_model_override")
+    document_source_used = False
+
     for source in sources:
         name = source["name"]
         source_type = source["type"]
@@ -66,7 +70,12 @@ def extractor_node(state: PipelineState) -> PipelineState:
             elif source_type == "rest":
                 df = load_rest(source["url"], source.get("params", {}), source.get("auth"))
             elif source_type == "document":
-                df = load_document(source["path"])
+                df = load_document(
+                    source["path"],
+                    llm_provider_override=provider_override,
+                    llm_model_override=model_override,
+                )
+                document_source_used = True
             else:
                 raise ValueError(f"Unsupported source type: {source_type}")
 
@@ -93,6 +102,17 @@ def extractor_node(state: PipelineState) -> PipelineState:
             "total_rows": {k: len(v) for k, v in extracted_data.items()},
         },
     )
+    if document_source_used and (provider_override or model_override):
+        # Sprint 30/gap-closing (ADR-031 §5) — visibility into the override actually
+        # used by document_source.py::load_document's own get_llm() call, distinct
+        # from the Orchestrator/Transformer entries since this node's LLM usage is
+        # conditional (only "document"-typed sources reach it).
+        new_log = log_action(
+            {**state, "audit_log": new_log},
+            "extractor",
+            "llm_override_used",
+            {"provider": provider_override, "model": model_override},
+        )
     return {
         **state,
         "extracted_data": extracted_data,

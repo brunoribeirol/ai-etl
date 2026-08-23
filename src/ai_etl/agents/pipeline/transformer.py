@@ -73,7 +73,21 @@ def transformer_node(state: PipelineState) -> PipelineState:
     if state.get("error"):
         return state
 
-    llm = get_llm()
+    provider_override = state.get("llm_provider_override")
+    model_override = state.get("llm_model_override")
+    llm = get_llm(provider=provider_override, model=model_override)
+    if provider_override or model_override:
+        # Sprint 30/gap-closing (ADR-031 §5) — see orchestrator_node's identical
+        # comment for rationale.
+        state = {
+            **state,
+            "audit_log": log_action(
+                state,
+                "transformer",
+                "llm_override_used",
+                {"provider": provider_override, "model": model_override},
+            ),
+        }
     transformations = state["pipeline_plan"].get("transformations", [])
     source_names = list(state["extracted_data"].keys())
     schema_summary = json.dumps(state["source_schemas"], indent=2, default=str)

@@ -196,11 +196,21 @@ def _validate_narrative_consistency(
         )
 
 
-def run_science(df: pd.DataFrame, business_question: str) -> ScienceResult:
+def run_science(
+    df: pd.DataFrame,
+    business_question: str,
+    llm_provider_override: str | None = None,
+    llm_model_override: str | None = None,
+) -> ScienceResult:
     """Run predictive analytics on the Silver DataFrame.
 
     Returns a ScienceResult dict (see ai_etl.core.analysis_types) with `task_question`
     left blank — callers running this per Planner sub-task fill it in themselves.
+
+    Args:
+        llm_provider_override / llm_model_override: Sprint 30/gap-closing (ADR-031
+            §5) — see `agents/analysis/planner.py::plan_analysis_tasks`'s identical
+            parameters for rationale. `None` (the default) — unchanged behavior.
     """
     from sklearn.cluster import KMeans
     from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
@@ -257,7 +267,7 @@ def run_science(df: pd.DataFrame, business_question: str) -> ScienceResult:
         "ExponentialSmoothing": ExponentialSmoothing,
     }
 
-    llm = get_llm()
+    llm = get_llm(provider=llm_provider_override, model=llm_model_override)
     last_error = ""
     last_code = ""
     attempt_usages: list[TokenUsage] = []

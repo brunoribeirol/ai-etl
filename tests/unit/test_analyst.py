@@ -246,3 +246,24 @@ def test_run_analyst_result_has_all_keys(mock_get_llm, sample_df: pd.DataFrame) 
         "error",
         "tokens",
     }
+
+
+# ---------------------------------------------------------------------------
+# LLM provider/model override (Sprint 30/gap-closing, ADR-031 §5)
+# ---------------------------------------------------------------------------
+
+
+def test_run_analyst_no_override_calls_get_llm_with_no_override(
+    mock_get_llm, sample_df: pd.DataFrame
+) -> None:
+    mock_get_llm.return_value = _make_llm_mock([HAPPY_CODE])
+    run_analyst(sample_df, "Qual produto?")
+
+    mock_get_llm.assert_called_once_with(provider=None, model=None)
+
+
+def test_run_analyst_forwards_llm_override(mock_get_llm, sample_df: pd.DataFrame) -> None:
+    mock_get_llm.return_value = _make_llm_mock([HAPPY_CODE])
+    run_analyst(sample_df, "Qual produto?", "anthropic", "claude-sonnet-5")
+
+    mock_get_llm.assert_called_once_with(provider="anthropic", model="claude-sonnet-5")

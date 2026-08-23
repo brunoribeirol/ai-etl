@@ -244,3 +244,28 @@ def test_run_advisor_returns_error_after_all_failures(
 
     assert result["error"] is not None
     assert result["recommendations"] == []
+
+
+# ---------------------------------------------------------------------------
+# LLM provider/model override (Sprint 30/gap-closing, ADR-031 §5)
+# ---------------------------------------------------------------------------
+
+
+def test_run_advisor_no_override_calls_get_llm_with_no_override(
+    mock_get_llm, sample_df, gold_result, science_result
+) -> None:
+    mock_get_llm.return_value = _mock_llm([VALID_RESPONSE])
+    run_advisor(sample_df, "Como crescer?", gold_result, science_result)
+
+    mock_get_llm.assert_called_once_with(provider=None, model=None)
+
+
+def test_run_advisor_forwards_llm_override(
+    mock_get_llm, sample_df, gold_result, science_result
+) -> None:
+    mock_get_llm.return_value = _mock_llm([VALID_RESPONSE])
+    run_advisor(
+        sample_df, "Como crescer?", gold_result, science_result, "anthropic", "claude-sonnet-5"
+    )
+
+    mock_get_llm.assert_called_once_with(provider="anthropic", model="claude-sonnet-5")

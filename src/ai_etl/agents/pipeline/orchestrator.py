@@ -53,9 +53,25 @@ def orchestrator_node(state: PipelineState) -> PipelineState:
     Retries up to 2 times on invalid JSON.
     Sets state["error"] if parsing fails after all retries.
     """
-    llm = get_llm()
+    provider_override = state.get("llm_provider_override")
+    model_override = state.get("llm_model_override")
+    llm = get_llm(provider=provider_override, model=model_override)
     spec = state["spec"]
     run_id = state.get("run_id") or str(uuid.uuid4())
+
+    if provider_override or model_override:
+        # Sprint 30/gap-closing (ADR-031 §5) — visibility into which provider/model
+        # actually ran this execution, not just the saved pipeline's configured
+        # intent. Logged once per node that calls get_llm() with an override.
+        state = {
+            **state,
+            "audit_log": log_action(
+                state,
+                "orchestrator",
+                "llm_override_used",
+                {"provider": provider_override, "model": model_override},
+            ),
+        }
 
     prompt = ORCHESTRATOR_PROMPT.format(spec=spec)
     last_error: str | None = None

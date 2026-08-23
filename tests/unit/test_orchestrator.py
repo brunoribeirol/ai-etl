@@ -74,3 +74,47 @@ def test_markdown_fenced_json_is_parsed(mock_get_llm) -> None:
     result = orchestrator_node(_make_state())
 
     assert result["pipeline_plan"] == VALID_PLAN
+
+
+class TestLlmOverride:
+    """Sprint 30/gap-closing (ADR-031 §5) — PipelineState's llm_provider_override/
+    llm_model_override actually reach get_llm(), and get audit-logged when used."""
+
+    def test_no_override_calls_get_llm_with_no_override(self, mock_get_llm) -> None:
+        mock_get_llm.return_value = _mock_llm([json.dumps(VALID_PLAN)])
+        orchestrator_node(_make_state())
+
+        mock_get_llm.assert_called_once_with(provider=None, model=None)
+
+    def test_override_is_forwarded_to_get_llm(self, mock_get_llm) -> None:
+        mock_get_llm.return_value = _mock_llm([json.dumps(VALID_PLAN)])
+        state = {
+            **_make_state(),
+            "llm_provider_override": "anthropic",
+            "llm_model_override": "claude-sonnet-5",
+        }
+        orchestrator_node(state)
+
+        mock_get_llm.assert_called_once_with(provider="anthropic", model="claude-sonnet-5")
+
+    def test_override_used_is_audit_logged(self, mock_get_llm) -> None:
+        mock_get_llm.return_value = _mock_llm([json.dumps(VALID_PLAN)])
+        state = {
+            **_make_state(),
+            "llm_provider_override": "anthropic",
+            "llm_model_override": "claude-sonnet-5",
+        }
+        result = orchestrator_node(state)
+
+        override_entries = [e for e in result["audit_log"] if e["action"] == "llm_override_used"]
+        assert len(override_entries) == 1
+        assert override_entries[0]["details"] == {
+            "provider": "anthropic",
+            "model": "claude-sonnet-5",
+        }
+
+    def test_no_override_does_not_add_audit_entry(self, mock_get_llm) -> None:
+        mock_get_llm.return_value = _mock_llm([json.dumps(VALID_PLAN)])
+        result = orchestrator_node(_make_state())
+
+        assert all(e["action"] != "llm_override_used" for e in result["audit_log"])

@@ -69,12 +69,14 @@ def health() -> dict[str, str]:
 
 @app.get("/config")
 def config(tenant_id: str = Depends(get_current_tenant_id)) -> dict[str, str]:
-    """Sprint 7: read-only — which model every agent in a run currently uses
-    (`AI_ETL_LLM_MODEL`, `core/llm.py`). Streamlit's sidebar showed the same
-    thing (`st.caption(f"Modelo: {LLM_MODEL}")`), also read-only — choosing a
-    model per run is real business logic (allowlist, cost-tracking, ~6
-    `get_llm()` call sites), deliberately out of scope here (see PR
-    description). Behind the same auth as every other endpoint even though
-    the value isn't sensitive, to keep one auth story rather than carving out
-    a public-endpoint exception for one low-stakes field."""
+    """Sprint 7: read-only — this deployment's global model (`AI_ETL_LLM_MODEL`,
+    `core/llm.py::get_model_name()`). Streamlit's sidebar showed the same thing
+    (`st.caption(f"Modelo: {LLM_MODEL}")`), also read-only. A per-`saved_pipeline`
+    override now exists (`GET/PUT /pipelines/{id}/llm-config`, Sprint 30 ADR-031,
+    actually wired into execution as of the Sprint 30 gap-closing fix) — this
+    endpoint intentionally stays scoped to the deployment default, not a
+    per-pipeline resolved value, since it takes no pipeline id. Behind the same
+    auth as every other endpoint even though the value isn't sensitive, to keep
+    one auth story rather than carving out a public-endpoint exception for one
+    low-stakes field."""
     return {"model_name": get_model_name()}

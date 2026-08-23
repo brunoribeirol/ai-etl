@@ -29,6 +29,7 @@ from ai_etl.agents.pipeline.loader import loader_node
 from ai_etl.audit.db import (
     get_run_status_and_pipeline,
     get_saved_pipeline,
+    get_saved_pipeline_llm_config,
     load_full_result,
     mark_pipeline_approved,
     record_pipeline_health,
@@ -124,18 +125,34 @@ def run_silver_pipeline(
     # write-approval policy, resolved here (not inside `loader_node`, which stays
     # a pure function of `PipelineState`) and carried into the graph via
     # `initial_state`. An avulso run always gets `None` — never gated.
+    # Sprint 30/gap-closing (ADR-031 §5) — same lookup gate as quality_rules/
+    # approval_policy above: this saved pipeline's own LLM provider/model override
+    # (Sprint 30, ADR-031 §3), resolved here (not inside any `agents/pipeline/*.py`
+    # node, which stay pure functions of `PipelineState`) and carried into the
+    # graph via `initial_state`. A separate `get_saved_pipeline_llm_config` call
+    # (not folded into `get_saved_pipeline`'s dict) — `audit/db.py`'s Sprint 30
+    # append-only constraint kept the two functions standalone; no reason to widen
+    # `get_saved_pipeline`'s return shape just because a caller now wants both.
     custom_quality_rules: list[dict[str, Any]] = []
     approval_policy: Optional[dict[str, Any]] = None
+    llm_provider_override: Optional[str] = None
+    llm_model_override: Optional[str] = None
     if saved_pipeline_id is not None and tenant_id is not None:
         pipeline = get_saved_pipeline(saved_pipeline_id, tenant_id)
         if pipeline is not None:
             custom_quality_rules = pipeline.get("quality_rules", [])
             approval_policy = _build_approval_policy(pipeline)
+        llm_config = get_saved_pipeline_llm_config(saved_pipeline_id, tenant_id)
+        if llm_config is not None:
+            llm_provider_override = llm_config.get("llm_provider")
+            llm_model_override = llm_config.get("llm_model")
     state = initial_state(
         spec=spec,
         run_id=run_id,
         custom_quality_rules=custom_quality_rules,
         approval_policy=approval_policy,
+        llm_provider_override=llm_provider_override,
+        llm_model_override=llm_model_override,
     )
     graph = build_graph()
 
@@ -211,12 +228,37 @@ def _record_stage_call(
     )
 
 
+def _log_llm_override_if_used(
+    agent: str, run_id: str, llm_provider_override: str | None, llm_model_override: str | None
+) -> None:
+    """Sprint 30/gap-closing (ADR-031 §5) — visibility into which provider/model
+    actually ran an Analyst/Science/Advisor/Planner call, for the agentic BI layer
+    that runs outside the LangGraph/PipelineState (see this module's docstring) and
+    therefore can't call `audit/logger.py::log_action` the way `agents/pipeline/*.py`
+    nodes do. Standard logging is the established substitute this module already
+    uses for that layer's other agent-level visibility (see `run_gold_analysis`'s/
+    `run_advisor_analysis`'s `logger.warning` calls on failure) — a no-op when no
+    override is configured, so this stays silent for every deployment-default run.
+    """
+    if llm_provider_override or llm_model_override:
+        logger.info(
+            "%s: llm override in use for run_id=%s — provider=%s model=%s",
+            agent,
+            run_id,
+            llm_provider_override,
+            llm_model_override,
+        )
+
+
 def run_gold_analysis(
     silver_df: pd.DataFrame,
     task_question: str,
     progress_callback: ProgressCallback = _noop_progress,
     stage: str = "gold",
     stage_log: "list[dict[str, Any]] | None" = None,
+    run_id: str = "",
+    llm_provider_override: str | None = None,
+    llm_model_override: str | None = None,
 ) -> GoldResult:
     """Run one Gold (descriptive) sub-task via the Analyst agent.
 
@@ -224,11 +266,16 @@ def run_gold_analysis(
     (see `_record_stage_call`) — omitted by default, populated by
     `run_analysis_tasks` when the caller wants Analyst/Science latencies
     persisted via `save_stage_latencies`.
+
+    `run_id`/`llm_provider_override`/`llm_model_override`: Sprint 30/gap-closing
+    (ADR-031 §5) — see `_log_llm_override_if_used`. `run_id` is only used for that
+    log line; it's not forwarded to `run_analyst` itself.
     """
     progress_callback(stage, f"🏅 Gold — {task_question}")
     progress_callback(stage, "🤖 **Analyst Agent** — Calculando KPIs e insights...")
+    _log_llm_override_if_used("analyst", run_id, llm_provider_override, llm_model_override)
     t0 = time.monotonic()
-    result = run_analyst(silver_df, task_question)
+    result = run_analyst(silver_df, task_question, llm_provider_override, llm_model_override)
     elapsed = time.monotonic() - t0
     _record_stage_call(stage_log, "analyst", elapsed, result.get("error"))
     elapsed_display = round(elapsed, 1)
@@ -265,15 +312,22 @@ def run_science_analysis(
     progress_callback: ProgressCallback = _noop_progress,
     stage: str = "science",
     stage_log: "list[dict[str, Any]] | None" = None,
+    run_id: str = "",
+    llm_provider_override: str | None = None,
+    llm_model_override: str | None = None,
 ) -> ScienceResult:
     """Run one Science (diagnostic/predictive) sub-task via the Science agent.
 
     `stage_log`: see `run_gold_analysis`.
+
+    `run_id`/`llm_provider_override`/`llm_model_override`: Sprint 30/gap-closing
+    (ADR-031 §5) — see `run_gold_analysis`'s identical parameters.
     """
     progress_callback(stage, f"🔬 Science — {task_question}")
     progress_callback(stage, "🤖 **Science Agent** — Treinando modelo e gerando previsões...")
+    _log_llm_override_if_used("science", run_id, llm_provider_override, llm_model_override)
     t0 = time.monotonic()
-    result = run_science(silver_df, task_question)
+    result = run_science(silver_df, task_question, llm_provider_override, llm_model_override)
     elapsed = time.monotonic() - t0
     _record_stage_call(stage_log, "science", elapsed, result.get("error"))
     elapsed_display = round(elapsed, 1)
@@ -314,6 +368,9 @@ def run_gold_with_repair(
     progress_callback: ProgressCallback = _noop_progress,
     stage: str = "gold",
     stage_log: "list[dict[str, Any]] | None" = None,
+    run_id: str = "",
+    llm_provider_override: str | None = None,
+    llm_model_override: str | None = None,
 ) -> GoldResult:
     """Run a Gold sub-task; if it fails outright, try once more with a simplified
     fallback question before giving up.
@@ -322,8 +379,20 @@ def run_gold_with_repair(
     a different failure mode: the question itself may be too specific/complex for the
     LLM to translate into working code at all, so the fallback rephrases it instead of
     repeating it verbatim.
+
+    `run_id`/`llm_provider_override`/`llm_model_override`: Sprint 30/gap-closing
+    (ADR-031 §5) — see `run_gold_analysis`'s identical parameters.
     """
-    result = run_gold_analysis(silver_df, task_question, progress_callback, stage, stage_log)
+    result = run_gold_analysis(
+        silver_df,
+        task_question,
+        progress_callback,
+        stage,
+        stage_log,
+        run_id,
+        llm_provider_override,
+        llm_model_override,
+    )
     if not result.get("error"):
         return result
 
@@ -336,7 +405,14 @@ def run_gold_with_repair(
         repair_stage, "A sub-análise falhou; tentando uma versão simplificada da pergunta..."
     )
     repaired = run_gold_analysis(
-        silver_df, fallback_question, progress_callback, repair_stage, stage_log
+        silver_df,
+        fallback_question,
+        progress_callback,
+        repair_stage,
+        stage_log,
+        run_id,
+        llm_provider_override,
+        llm_model_override,
     )
     progress_callback(
         repair_stage,
@@ -356,9 +432,25 @@ def run_science_with_repair(
     progress_callback: ProgressCallback = _noop_progress,
     stage: str = "science",
     stage_log: "list[dict[str, Any]] | None" = None,
+    run_id: str = "",
+    llm_provider_override: str | None = None,
+    llm_model_override: str | None = None,
 ) -> ScienceResult:
-    """Same auto-repair strategy as `run_gold_with_repair`, for Science sub-tasks."""
-    result = run_science_analysis(silver_df, task_question, progress_callback, stage, stage_log)
+    """Same auto-repair strategy as `run_gold_with_repair`, for Science sub-tasks.
+
+    `run_id`/`llm_provider_override`/`llm_model_override`: Sprint 30/gap-closing
+    (ADR-031 §5) — see `run_gold_analysis`'s identical parameters.
+    """
+    result = run_science_analysis(
+        silver_df,
+        task_question,
+        progress_callback,
+        stage,
+        stage_log,
+        run_id,
+        llm_provider_override,
+        llm_model_override,
+    )
     if not result.get("error"):
         return result
 
@@ -371,7 +463,14 @@ def run_science_with_repair(
         repair_stage, "A sub-análise falhou; tentando uma versão simplificada da pergunta..."
     )
     repaired = run_science_analysis(
-        silver_df, fallback_question, progress_callback, repair_stage, stage_log
+        silver_df,
+        fallback_question,
+        progress_callback,
+        repair_stage,
+        stage_log,
+        run_id,
+        llm_provider_override,
+        llm_model_override,
     )
     progress_callback(
         repair_stage,
@@ -390,6 +489,9 @@ def run_analysis_tasks(
     business_question: str,
     progress_callback: ProgressCallback = _noop_progress,
     stage_log: "list[dict[str, Any]] | None" = None,
+    run_id: str = "",
+    llm_provider_override: str | None = None,
+    llm_model_override: str | None = None,
 ) -> tuple[list[GoldResult], list[ScienceResult], TokenUsage]:
     """Decompose the business question and run each sub-task through Gold or Science.
 
@@ -404,10 +506,17 @@ def run_analysis_tasks(
     ADR-007 latency entry to, in call order — left `None` (the default) keeps this
     function's own return signature unchanged for existing callers.
 
+    `run_id`/`llm_provider_override`/`llm_model_override`: Sprint 30/gap-closing
+    (ADR-031 §5) — forwarded to the Planner call and to every Gold/Science sub-task
+    (and repair rerun) below. `None` (the default) — unchanged behavior.
+
     Returns (gold_results, science_results, planner_tokens).
     """
     progress_callback("planner", "🧭 Planner — decompondo a pergunta em sub-análises...")
-    tasks, planner_tokens = plan_analysis_tasks(business_question, silver_df)
+    _log_llm_override_if_used("planner", run_id, llm_provider_override, llm_model_override)
+    tasks, planner_tokens = plan_analysis_tasks(
+        business_question, silver_df, llm_provider_override, llm_model_override
+    )
     progress_callback("planner", f"✅ {len(tasks)} sub-análise(s) planejada(s)")
     for t in tasks:
         progress_callback("planner", f"- ({t['type']}) {t['question']}")
@@ -418,13 +527,27 @@ def run_analysis_tasks(
         if task["type"] == "descriptive":
             gold_results.append(
                 run_gold_with_repair(
-                    silver_df, task["question"], progress_callback, f"gold:{i}", stage_log
+                    silver_df,
+                    task["question"],
+                    progress_callback,
+                    f"gold:{i}",
+                    stage_log,
+                    run_id,
+                    llm_provider_override,
+                    llm_model_override,
                 )
             )
         else:
             science_results.append(
                 run_science_with_repair(
-                    silver_df, task["question"], progress_callback, f"science:{i}", stage_log
+                    silver_df,
+                    task["question"],
+                    progress_callback,
+                    f"science:{i}",
+                    stage_log,
+                    run_id,
+                    llm_provider_override,
+                    llm_model_override,
                 )
             )
     return gold_results, science_results, planner_tokens
@@ -458,14 +581,29 @@ def run_advisor_analysis(
     gold_results: list[GoldResult],
     science_results: list[ScienceResult],
     progress_callback: ProgressCallback = _noop_progress,
+    run_id: str = "",
+    llm_provider_override: str | None = None,
+    llm_model_override: str | None = None,
 ) -> AdvisorResult:
-    """Synthesize Gold/Science results into prescriptive recommendations."""
+    """Synthesize Gold/Science results into prescriptive recommendations.
+
+    `run_id`/`llm_provider_override`/`llm_model_override`: Sprint 30/gap-closing
+    (ADR-031 §5) — see `run_gold_analysis`'s identical parameters.
+    """
     progress_callback("advisor", "🎯 Advisor — recomendações prescritivas...")
     progress_callback(
         "advisor", "🤖 **Advisor Agent** — Sintetizando análises e gerando recomendações..."
     )
+    _log_llm_override_if_used("advisor", run_id, llm_provider_override, llm_model_override)
     t0 = time.time()
-    result = run_advisor(silver_df, business_question, gold_results, science_results)
+    result = run_advisor(
+        silver_df,
+        business_question,
+        gold_results,
+        science_results,
+        llm_provider_override,
+        llm_model_override,
+    )
     elapsed = round(time.time() - t0, 1)
     n = len(result.get("recommendations", []))
 
@@ -513,6 +651,13 @@ def run_full_analysis(
         spec, run_dir, progress_callback, tenant_id=tenant_id, saved_pipeline_id=saved_pipeline_id
     )
     silver_df = silver_state.get("transformed_data")
+    # Sprint 30/gap-closing (ADR-031 §5) — reuse the override `run_silver_pipeline`
+    # already resolved into `PipelineState` (via `get_saved_pipeline_llm_config`)
+    # instead of a second DB round-trip; the analytical layer (Planner/Analyst/
+    # Science/Advisor) runs outside the graph/`PipelineState`, so it's threaded
+    # through as plain parameters from here on.
+    llm_provider_override = silver_state.get("llm_provider_override")
+    llm_model_override = silver_state.get("llm_model_override")
 
     gold_results: list[GoldResult] = []
     science_results: list[ScienceResult] = []
@@ -528,10 +673,23 @@ def run_full_analysis(
         # incrementing `seq` per stage.
         analysis_stage_log: list[dict[str, Any]] = []
         gold_results, science_results, planner_tokens = run_analysis_tasks(
-            silver_df, question, progress_callback, analysis_stage_log
+            silver_df,
+            question,
+            progress_callback,
+            analysis_stage_log,
+            silver_state["run_id"],
+            llm_provider_override,
+            llm_model_override,
         )
         advisor_result = run_advisor_analysis(
-            silver_df, question, gold_results, science_results, progress_callback
+            silver_df,
+            question,
+            gold_results,
+            science_results,
+            progress_callback,
+            silver_state["run_id"],
+            llm_provider_override,
+            llm_model_override,
         )
         save_analysis(
             silver_state["run_id"],

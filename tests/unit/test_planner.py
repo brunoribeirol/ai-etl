@@ -100,3 +100,20 @@ def test_plan_analysis_tasks_skips_entries_without_question(mock_get_llm, sample
     tasks, _ = plan_analysis_tasks("pergunta", sample_df)
 
     assert tasks == [{"question": "Válida?", "type": "descriptive"}]
+
+
+def test_plan_analysis_tasks_no_override_calls_get_llm_with_no_override(
+    mock_get_llm, sample_df
+) -> None:
+    """Sprint 30/gap-closing (ADR-031 §5)."""
+    mock_get_llm.return_value = _mock_llm(json.dumps([{"question": "X?", "type": "descriptive"}]))
+    plan_analysis_tasks("pergunta", sample_df)
+
+    mock_get_llm.assert_called_once_with(provider=None, model=None)
+
+
+def test_plan_analysis_tasks_forwards_llm_override(mock_get_llm, sample_df) -> None:
+    mock_get_llm.return_value = _mock_llm(json.dumps([{"question": "X?", "type": "descriptive"}]))
+    plan_analysis_tasks("pergunta", sample_df, "anthropic", "claude-sonnet-5")
+
+    mock_get_llm.assert_called_once_with(provider="anthropic", model="claude-sonnet-5")

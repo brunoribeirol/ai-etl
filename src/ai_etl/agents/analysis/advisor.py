@@ -140,6 +140,8 @@ def run_advisor(
     business_question: str,
     gold_results: list[GoldResult],
     science_results: list[ScienceResult],
+    llm_provider_override: str | None = None,
+    llm_model_override: str | None = None,
 ) -> AdvisorResult:
     """Generate prescriptive recommendations from all available analysis.
 
@@ -148,6 +150,11 @@ def run_advisor(
     question is answered by several independent Gold/Science runs, not a single one.
 
     Returns an AdvisorResult dict (see ai_etl.core.analysis_types).
+
+    Args:
+        llm_provider_override / llm_model_override: Sprint 30/gap-closing (ADR-031
+            §5) — see `agents/analysis/planner.py::plan_analysis_tasks`'s identical
+            parameters for rationale. `None` (the default) — unchanged behavior.
     """
     data_overview = _build_data_overview(df)
     gold_context = _build_gold_context(gold_results)
@@ -160,7 +167,7 @@ def run_advisor(
         science_context=science_context,
     )
 
-    llm = get_llm()
+    llm = get_llm(provider=llm_provider_override, model=llm_model_override)
     attempt_usages: list[TokenUsage] = []
 
     for attempt in range(1, 3):
