@@ -14,6 +14,7 @@ import {
   Terminal,
   Workflow,
 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,39 +30,20 @@ const fadeUp = {
   transition: { duration: 0.5, ease: "easeOut" as const },
 };
 
-const DIFFERENTIATORS = [
-  {
-    icon: Database,
-    title: "Multi-fonte heterogênea, não um arquivo por vez",
-    body: "CSV, conexão real a Postgres/MySQL/MongoDB, REST autenticado e PDF/DOCX numa spec só — um agente decide como combinar. Não dá pra colar isso num chat.",
-  },
-  {
-    icon: FileStack,
-    title: "Pipeline auditável e persistido, não uma resposta efêmera",
-    body: "Cada execução gera código real — Transformer, Analyst, Science — salvo, revisável, versionável. Sobrevive a fechar a aba; a resposta de um chat não.",
-  },
-  {
-    icon: Workflow,
-    title: "API-first, não chat-first",
-    body: "O pipeline é um endpoint chamável, agendável, integrável a outro sistema — infraestrutura de dados, não uma conversa que alguém precisa lembrar de repetir toda semana.",
-  },
-  {
-    icon: ShieldCheck,
-    title: "Governança e isolamento por tenant",
-    body: "Dado sensível não passa pelo chat de um terceiro sem controle: isolamento por tenant, sandbox com timeout, log de auditoria de cada ação de cada agente.",
-  },
-];
+// Sprint 25 (ADR-036): translated title/body/label text now lives in
+// `messages/{locale}.json` under `landing.differentiators`/`landing.techFacts`
+// (arrays, read via `t.raw`) — these two arrays keep only the icon, correlated
+// by index with the translated array.
+const DIFFERENTIATOR_ICONS = [Database, FileStack, Workflow, ShieldCheck];
+const TECH_FACT_ICONS = [GitBranch, Terminal, Lock, Radar, Boxes, Sparkles];
 
-const TECH_FACTS = [
-  { icon: GitBranch, label: "Orquestração multiagente via LangGraph, estado explícito" },
-  { icon: Terminal, label: "Código gerado roda em sandbox isolado, com timeout" },
-  { icon: Lock, label: "Isolamento por tenant com Row-Level Security no Postgres" },
-  { icon: Radar, label: "Retry automático + monitoramento de saúde de execuções agendadas" },
-  { icon: Boxes, label: "Validação de saída: resultado é conferido antes de chegar a você" },
-  { icon: Sparkles, label: "Autoavaliação de prontidão SOC2 e política formal de dados (LGPD/GDPR)" },
-];
+type Differentiator = { title: string; body: string };
 
 export default function LandingPage() {
+  const t = useTranslations("landing");
+  const differentiators = t.raw("differentiators") as Differentiator[];
+  const techFacts = t.raw("techFacts") as string[];
+
   return (
     <main className="flex-1">
       {/* Hero */}
@@ -78,29 +60,27 @@ export default function LandingPage() {
         >
           <Badge variant="outline" className="gap-1.5 text-muted-foreground">
             <Sparkles className="size-3" />
-            Multiagente · código auditável
+            {t("heroBadge")}
           </Badge>
           <h1 className="text-balance text-4xl font-semibold tracking-tight sm:text-6xl">
-            Descreva o pipeline.
+            {t("heroTitleLine1")}
             <br />
-            Os agentes constroem — você audita.
+            {t("heroTitleLine2")}
           </h1>
           <p className="text-balance text-lg text-muted-foreground sm:text-xl">
-            Uma especificação em linguagem natural vira extração, limpeza e carga de dados
-            heterogêneos. Cada etapa gera código Python real, revisável — não uma resposta de
-            chat que some quando você fecha a aba.
+            {t("heroSubtitle")}
           </p>
           <div className="mt-2 flex flex-col items-center gap-3 sm:flex-row">
             <SignInButton forceRedirectUrl="/app">
               <Button size="lg" className="h-11 px-6 text-base">
-                Entrar e rodar um pipeline
+                {t("ctaPrimary")}
               </Button>
             </SignInButton>
             <Button
               size="lg"
               variant="ghost"
               className="h-11 px-6 text-base"
-              render={<a href="#como-funciona">Ver como funciona</a>}
+              render={<a href="#como-funciona">{t("ctaSecondary")}</a>}
             />
           </div>
         </motion.div>
@@ -110,32 +90,32 @@ export default function LandingPage() {
       <section className="border-t border-border/60 px-6 py-20 sm:py-28">
         <div className="mx-auto max-w-5xl">
           <motion.div {...fadeUp} className="mx-auto mb-12 max-w-2xl text-center">
-            <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-              &ldquo;Por que não subo a planilha num chat e pergunto?&rdquo;
-            </h2>
-            <p className="mt-3 text-muted-foreground">
-              Pergunta justa. Pra um arquivo isolado e uma pergunta pontual, um Code Interpreter
-              genérico já resolve — e é grátis. O AI-ETL existe pra onde isso para de funcionar.
-            </p>
+            <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">{t("whyTitle")}</h2>
+            <p className="mt-3 text-muted-foreground">{t("whyBody")}</p>
           </motion.div>
           <div className="grid gap-4 sm:grid-cols-2">
-            {DIFFERENTIATORS.map((item, i) => (
-              <motion.div
-                key={item.title}
-                {...fadeUp}
-                transition={{ ...fadeUp.transition, delay: i * 0.06 }}
-              >
-                <Card className="h-full">
-                  <CardHeader>
-                    <div className="mb-1 flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                      <item.icon className="size-4.5" />
-                    </div>
-                    <CardTitle className="text-base">{item.title}</CardTitle>
-                  </CardHeader>
-                  <CardContent className="text-sm text-muted-foreground">{item.body}</CardContent>
-                </Card>
-              </motion.div>
-            ))}
+            {differentiators.map((item, i) => {
+              const Icon = DIFFERENTIATOR_ICONS[i];
+              return (
+                <motion.div
+                  key={item.title}
+                  {...fadeUp}
+                  transition={{ ...fadeUp.transition, delay: i * 0.06 }}
+                >
+                  <Card className="h-full">
+                    <CardHeader>
+                      <div className="mb-1 flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                        <Icon className="size-4.5" />
+                      </div>
+                      <CardTitle className="text-base">{item.title}</CardTitle>
+                    </CardHeader>
+                    <CardContent className="text-sm text-muted-foreground">
+                      {item.body}
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              );
+            })}
           </div>
         </div>
       </section>
@@ -144,13 +124,8 @@ export default function LandingPage() {
       <section id="como-funciona" className="border-t border-border/60 px-6 py-20 sm:py-28">
         <div className="mx-auto max-w-5xl">
           <motion.div {...fadeUp} className="mx-auto mb-14 max-w-2xl text-center">
-            <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-              Do dado bruto à recomendação, uma pirâmide de agentes
-            </h2>
-            <p className="mt-3 text-muted-foreground">
-              Nove agentes especializados, cada um com uma responsabilidade só — o estado do
-              pipeline passa de um pro outro, nunca escondido numa caixa-preta.
-            </p>
+            <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">{t("howTitle")}</h2>
+            <p className="mt-3 text-muted-foreground">{t("howBody")}</p>
           </motion.div>
           <motion.div
             {...fadeUp}
@@ -184,7 +159,7 @@ export default function LandingPage() {
         <div className="mx-auto max-w-5xl">
           <motion.div {...fadeUp} className="mx-auto mb-12 max-w-2xl text-center">
             <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-              Feito pra duas pessoas na mesma empresa
+              {t("dualTitle")}
             </h2>
           </motion.div>
           <div className="grid gap-4 sm:grid-cols-2">
@@ -192,13 +167,12 @@ export default function LandingPage() {
               <Card className="h-full">
                 <CardHeader>
                   <Badge variant="secondary" className="mb-2 w-fit">
-                    Operador técnico
+                    {t("dualOperatorBadge")}
                   </Badge>
-                  <CardTitle>Quem hoje monta o relatório na mão</CardTitle>
+                  <CardTitle>{t("dualOperatorTitle")}</CardTitle>
                 </CardHeader>
                 <CardContent className="text-sm text-muted-foreground">
-                  Configura a fonte, escreve a spec, audita o código gerado antes de confiar nele.
-                  Sabe ler Python/pandas — não precisa escrever do zero toda semana.
+                  {t("dualOperatorBody")}
                 </CardContent>
               </Card>
             </motion.div>
@@ -206,13 +180,12 @@ export default function LandingPage() {
               <Card className="h-full">
                 <CardHeader>
                   <Badge variant="secondary" className="mb-2 w-fit">
-                    Consumidor executivo
+                    {t("dualExecBadge")}
                   </Badge>
-                  <CardTitle>Quem recebe o resultado, não configura nada</CardTitle>
+                  <CardTitle>{t("dualExecTitle")}</CardTitle>
                 </CardHeader>
                 <CardContent className="text-sm text-muted-foreground">
-                  Quer a resposta e a recomendação, sem virar refém de um número que a IA pode ter
-                  inventado — porque alguém do time já pôde auditar de onde ele veio.
+                  {t("dualExecBody")}
                 </CardContent>
               </Card>
             </motion.div>
@@ -225,19 +198,22 @@ export default function LandingPage() {
         <div className="mx-auto max-w-4xl">
           <motion.div {...fadeUp} className="mx-auto mb-12 max-w-2xl text-center">
             <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-              Construído pra produção, não só pra demo
+              {t("techTitle")}
             </h2>
           </motion.div>
           <motion.ul
             {...fadeUp}
             className="grid gap-x-8 gap-y-4 text-sm text-muted-foreground sm:grid-cols-2"
           >
-            {TECH_FACTS.map((fact) => (
-              <li key={fact.label} className="flex items-start gap-3">
-                <fact.icon className="mt-0.5 size-4 shrink-0 text-primary" />
-                <span>{fact.label}</span>
-              </li>
-            ))}
+            {techFacts.map((label, i) => {
+              const Icon = TECH_FACT_ICONS[i];
+              return (
+                <li key={label} className="flex items-start gap-3">
+                  <Icon className="mt-0.5 size-4 shrink-0 text-primary" />
+                  <span>{label}</span>
+                </li>
+              );
+            })}
           </motion.ul>
         </div>
       </section>
@@ -249,11 +225,11 @@ export default function LandingPage() {
           className="mx-auto flex max-w-2xl flex-col items-center gap-6 text-center"
         >
           <h2 className="text-balance text-2xl font-semibold tracking-tight sm:text-3xl">
-            Pare de reconciliar fontes à mão toda semana
+            {t("finalCtaTitle")}
           </h2>
           <SignInButton forceRedirectUrl="/app">
             <Button size="lg" className="h-11 px-8 text-base">
-              Entrar e rodar um pipeline
+              {t("ctaPrimary")}
             </Button>
           </SignInButton>
         </motion.div>

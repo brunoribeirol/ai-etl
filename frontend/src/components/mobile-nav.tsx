@@ -1,6 +1,7 @@
 "use client";
 
 import { Menu } from "lucide-react";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,13 +12,16 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 
+// Sprint 25 (ADR-036): labels now come from `messages/{locale}.json`'s
+// `appNav` namespace (shared with the horizontal `<nav>` in
+// `(app)/layout.tsx`) — only the href/translation-key pairing stays here.
 const NAV_LINKS = [
-  { href: "/comecar", label: "Começar" },
-  { href: "/app", label: "Executar" },
-  { href: "/historico", label: "Histórico" },
-  { href: "/pipelines", label: "Pipelines" },
-  { href: "/resumo", label: "Resumo" },
-];
+  { href: "/comecar", key: "comecar" },
+  { href: "/app", key: "executar" },
+  { href: "/historico", key: "historico" },
+  { href: "/pipelines", key: "pipelines" },
+  { href: "/resumo", key: "resumo" },
+] as const;
 
 /**
  * Sprint 38 — mobile-responsiveness audit finding: `(app)/layout.tsx`'s
@@ -34,19 +38,22 @@ const NAV_LINKS = [
  * `sm:` and up and swaps in this hamburger trigger below it.
  */
 export function MobileNav() {
+  const t = useTranslations("appNav");
+  const tCommon = useTranslations("common");
+
   return (
     <Sheet>
       <SheetTrigger
         render={
           <Button variant="ghost" size="icon-sm" className="sm:hidden">
             <Menu />
-            <span className="sr-only">Abrir menu</span>
+            <span className="sr-only">{tCommon("openMenu")}</span>
           </Button>
         }
       />
       <SheetContent side="left">
         <SheetHeader>
-          <SheetTitle>Menu</SheetTitle>
+          <SheetTitle>{tCommon("menu")}</SheetTitle>
         </SheetHeader>
         <nav className="flex flex-col gap-1 px-4 pb-4">
           {NAV_LINKS.map((link) => (
@@ -55,7 +62,7 @@ export function MobileNav() {
               href={link.href}
               className="rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
             >
-              {link.label}
+              {t(link.key)}
             </Link>
           ))}
         </nav>

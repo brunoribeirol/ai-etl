@@ -1,0 +1,67 @@
+{
+  "localeToggle": {
+    "switchTo": "Switch to {locale, select, en-US {English} other {Portuguese}}"
+  },
+  "common": {
+    "brand": "AI-ETL",
+    "openMenu": "Open menu",
+    "menu": "Menu"
+  },
+  "appNav": {
+    "comecar": "Get started",
+    "executar": "Run",
+    "historico": "History",
+    "pipelines": "Pipelines",
+    "resumo": "Summary"
+  },
+  "marketingLayout": {
+    "footer": "AI-ETL — multi-agent ETL framework, auditable code."
+  },
+  "landing": {
+    "heroBadge": "Multi-agent · auditable code",
+    "heroTitleLine1": "Describe the pipeline.",
+    "heroTitleLine2": "The agents build it — you audit it.",
+    "heroSubtitle": "A natural-language specification becomes extraction, cleaning, and loading of heterogeneous data. Every step generates real, reviewable Python code — not a chat answer that disappears when you close the tab.",
+    "ctaPrimary": "Sign in and run a pipeline",
+    "ctaSecondary": "See how it works",
+    "whyTitle": "“Why not just upload the spreadsheet to a chat and ask?”",
+    "whyBody": "Fair question. For a single file and a one-off question, a generic Code Interpreter already handles it — and it's free. AI-ETL exists for where that stops working.",
+    "differentiators": [
+      {
+        "title": "Heterogeneous multi-source, not one file at a time",
+        "body": "CSV, a real connection to Postgres/MySQL/MongoDB, authenticated REST, and PDF/DOCX in a single spec — one agent decides how to combine them. You can't paste that into a chat."
+      },
+      {
+        "title": "An auditable, persisted pipeline, not an ephemeral answer",
+        "body": "Every run generates real code — Transformer, Analyst, Science — saved, reviewable, versionable. It survives closing the tab; a chat answer doesn't."
+      },
+      {
+        "title": "API-first, not chat-first",
+        "body": "The pipeline is a callable, schedulable endpoint you can integrate into another system — data infrastructure, not a conversation someone has to remember to repeat every week."
+      },
+      {
+        "title": "Governance and tenant isolation",
+        "body": "Sensitive data never passes through a third party's uncontrolled chat: tenant isolation, a sandboxed execution with a timeout, and an audit log of every action every agent takes."
+      }
+    ],
+    "howTitle": "From raw data to a recommendation, a pyramid of agents",
+    "howBody": "Nine specialized agents, each with a single responsibility — the pipeline's state passes from one to the next, never hidden inside a black box.",
+    "dualTitle": "Built for two people at the same company",
+    "dualOperatorBadge": "Technical operator",
+    "dualOperatorTitle": "Whoever builds the report by hand today",
+    "dualOperatorBody": "Configures the source, writes the spec, audits the generated code before trusting it. Reads Python/pandas — doesn't need to write it from scratch every week.",
+    "dualExecBadge": "Executive consumer",
+    "dualExecTitle": "Whoever receives the result, configures nothing",
+    "dualExecBody": "Wants the answer and the recommendation, without becoming hostage to a number the AI might have made up — because someone on the team could already audit where it came from.",
+    "techTitle": "Built for production, not just a demo",
+    "techFacts": [
+      "Multi-agent orchestration via LangGraph, explicit state",
+      "Generated code runs in an isolated sandbox, with a timeout",
+      "Tenant isolation with Row-Level Security in Postgres",
+      "Automatic retry + health monitoring for scheduled runs",
+      "Output validation: the result is checked before it reaches you",
+      "Self-assessed SOC2 readiness and a formal data policy (LGPD/GDPR)"
+    ],
+    "finalCtaTitle": "Stop reconciling sources by hand every week"
+  }
+}
