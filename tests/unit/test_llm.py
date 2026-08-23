@@ -90,6 +90,28 @@ class TestGetLlmProviderSelection:
         assert isinstance(llm, ChatAnthropic)
         assert llm.model == "claude-sonnet-5"
 
+    def test_anthropic_sonnet_and_opus_omit_temperature(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Real bug found 2026-08-23 (confirmed against a real Anthropic API call,
+        not documentation alone): claude-opus-5/claude-sonnet-5 reject `temperature`
+        outright (`400 - "temperature is deprecated for this model"`). get_llm() must
+        not pass it through for these two models."""
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-fake")
+        for model in ("claude-opus-5", "claude-sonnet-5"):
+            llm = get_llm(provider="anthropic", model=model)
+            assert isinstance(llm, ChatAnthropic)
+            assert llm.model == model
+            assert llm.temperature is None
+
+    def test_anthropic_haiku_still_accepts_temperature(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-fake")
+        llm = get_llm(provider="anthropic", model="claude-haiku-4-5", temperature=0.3)
+        assert isinstance(llm, ChatAnthropic)
+        assert llm.temperature == 0.3
+
     def test_google_provider(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("AI_ETL_LLM_PROVIDER", "google")
         monkeypatch.setenv("GOOGLE_API_KEY", "fake-key")
