@@ -116,26 +116,67 @@ in this sandbox or CI.
   rather than rushing both halves in one PR). `GET /pipelines/{id}/llm-config`,
   `PUT /pipelines/{id}/llm-config`, and `GET /pipelines/llm/allowed-models` are the full
   contract a picker needs; no frontend component exists yet.
-- **Actually wiring the chosen provider/model into pipeline execution.** The 6 `get_llm()`
-  call sites (`agents/orchestrator.py`, `transformer.py`, `planner.py`, `analyst.py`,
-  `science.py`, `advisor.py`) still read the deployment-global `AI_ETL_LLM_PROVIDER`/
-  `AI_ETL_LLM_MODEL` unconditionally — ADR-014 §4 already deferred "per-agent provider
-  override" for the same reason this sprint defers "per-pipeline provider override actually
-  changing execution": threading a resolved provider/model through `PipelineState`
-  (mirroring `approval_policy`'s existing resolve-in-`pipeline_service`-then-carry-in-state
-  pattern) touches `core/state.py`, `core/graph.py`, all 6 agent call sites, and
-  `audit/db.py`'s cost-persistence path (`save_run`'s `model_name = get_model_name()` call,
-  an *existing* function this sprint's isolation rule forbids rewriting). Given that last
-  point, wiring real execution correctly in this sprint would either violate the append-only
-  constraint on `audit/db.py` or leave cost tracking inconsistent with the chosen provider —
-  worse than deferring outright. **This is the one place this sprint's Definition of Done
-  ("a execução de fato usa o provedor escolhido, e o custo aparece corretamente") is not met**
-  — flagged here as a real gap, not silently dropped. Follow-up: once Sprint 31/32 land and
-  `audit/db.py` is free to edit again, resolve a pipeline's `llm_provider`/`llm_model` in
-  `pipeline_service.run_silver_pipeline` (same shape as `_build_approval_policy`), carry it in
-  a new `PipelineState["llm_config"]` field, and have each `get_llm()` call site accept an
-  optional override.
 - **Automatic cross-provider fallback** — still out of scope, ADR-014 §4 already covers this.
+
+> **Update (gap-closing fix, post-Sprint 30):** "Actually wiring the chosen provider/model
+> into pipeline execution" — originally flagged above as the one place this sprint's own
+> Definition of Done wasn't met — is now closed. See §6 below for what changed, how, and the
+> one residual gap that fix deliberately left open (cost tracking).
+
+### 6. Gap-closing fix: the override now actually reaches execution
+
+Sprint 31/32 having landed and `audit/db.py`'s append-only constraint no longer applying to
+this file, the 7 real `get_llm()` call sites (`agents/pipeline/orchestrator.py`,
+`agents/pipeline/transformer.py`, `agents/analysis/planner.py`, `agents/analysis/analyst.py`,
+`agents/analysis/science.py`, `agents/analysis/advisor.py`, `sources/document_source.py` — one
+more than §5's original count of 6, since that count missed the document connector) now
+respect a `saved_pipeline`'s `llm_provider`/`llm_model` override, following the exact shape §5
+sketched:
+
+- **`get_llm()` gains optional `provider`/`model` parameters**, both `None` by default —
+  every existing call site that doesn't pass them keeps reading `AI_ETL_LLM_PROVIDER`/
+  `AI_ETL_LLM_MODEL` unchanged. Not re-validated against `ALLOWED_MODELS_BY_PROVIDER` here —
+  by the time an override reaches `get_llm()` it was already validated once, at the `PUT
+  /pipelines/{id}/llm-config` API boundary that persisted it, matching Decision 2's "validate
+  once, at the API layer" posture.
+- **`PipelineState` gains `llm_provider_override`/`llm_model_override`** (both
+  `Optional[str]`), resolved once in `services/pipeline_service.py::run_silver_pipeline` via
+  the new `get_saved_pipeline_llm_config` lookup (same gate as `custom_quality_rules`/
+  `approval_policy`: only a scheduled fire with both `saved_pipeline_id` and `tenant_id`) and
+  carried through `initial_state`. Every `agents/pipeline/*.py` node keeps its
+  `(state: PipelineState) -> PipelineState` signature — the override is just two more fields
+  read off `state`, never a new parameter.
+- **The analytical layer (Planner/Analyst/Science/Advisor) runs outside `PipelineState`**
+  (unchanged from this module's own docstring), so `run_analyst`/`run_science`/`run_advisor`/
+  `plan_analysis_tasks` each gained two optional trailing parameters instead, threaded through
+  `pipeline_service.py`'s `run_gold_analysis`/`run_science_analysis`/`run_advisor_analysis`/
+  `run_analysis_tasks` from the override `run_silver_pipeline` already resolved onto
+  `silver_state` (no second DB round-trip).
+- **`sources/document_source.py::load_document()`** — decided **in scope**: its `get_llm()`
+  call is reached from `agents/pipeline/extractor.py::extractor_node`, inside the same graph
+  run as every other `get_llm()` call site, so treating it as a silent exception to the
+  override would be inconsistent for no real benefit. It gained the same optional
+  `llm_provider_override`/`llm_model_override` parameters as the analytical layer (it isn't a
+  graph node itself, `extractor_node` is).
+- **Audit visibility (`log_action`) — two layers, matched to where the code already lives.**
+  `agents/pipeline/*.py` nodes (`orchestrator_node`, `transformer_node`, and `extractor_node`
+  when a `document` source runs) log a `llm_override_used` entry via `audit/logger.py::
+  log_action` when an override is actually used — a real, persisted `PipelineState.audit_log`
+  entry, visible via `save_run`. The analytical layer can't call `log_action` (no
+  `PipelineState` to append to — the same reason it already used plain `logger.warning` for
+  failures instead, see `pipeline_service.py`'s own comments) — it logs the same information
+  via standard `logging` (`_log_llm_override_if_used`, tagged with the run's `run_id`) instead
+  of inventing a second audit mechanism for one layer. Neither path fires when no override is
+  configured — a deployment running only the global default sees zero new log volume.
+
+**Residual gap, left open deliberately:** `audit/db.py`'s cost-persistence path
+(`_write_analysis_row`'s `model_name = get_model_name()`, and `save_run`'s equivalent) still
+reads the deployment-global model, not the resolved override — a pipeline that overrides to
+Claude still has its `cost_usd` priced as if it ran on the deployment default. Wiring this
+properly needs `_write_analysis_row` (currently only takes `run_id`/counts/tokens, no
+`PipelineState`) to accept a resolved model name from its caller, which is a real, separate
+change to `audit/db.py`'s cost path, not a corollary of this fix — left as an explicit,
+tracked follow-up rather than folded in here.
 
 ## Consequences
 
@@ -147,8 +188,13 @@ in this sandbox or CI.
 - `audit/db.py` grows by 2 functions, appended at the end of the file, touching no existing
   function body — a deliberate constraint for this parallel batch, documented above and in the
   functions' own docstrings, not an accident of style.
-- Frontend picker and real per-pipeline execution wiring are both real, tracked gaps against
-  this sprint's own roadmap Definition of Done — see §5.
+- Frontend picker is still a real, tracked gap against this sprint's own roadmap Definition of
+  Done — see §5. Real per-pipeline execution wiring is **no longer** a gap — see §6: `get_llm()`
+  now accepts an override, `PipelineState` carries it, and every real call site (including
+  `sources/document_source.py`) respects it, with `log_action`/`logging` visibility into which
+  provider actually ran. Cost tracking against the override is the one part of §6 still open —
+  `audit/db.py`'s cost-persistence path prices against the deployment-global model regardless of
+  an execution-time override.
 
 ## Alternatives considered
 

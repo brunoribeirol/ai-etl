@@ -59,20 +59,31 @@ Example output:
 
 
 def plan_analysis_tasks(
-    business_question: str, df: pd.DataFrame
+    business_question: str,
+    df: pd.DataFrame,
+    llm_provider_override: str | None = None,
+    llm_model_override: str | None = None,
 ) -> tuple[list[AnalysisTask], TokenUsage]:
     """Decompose a business question into up to MAX_TASKS independent sub-tasks.
 
     Falls back to a single descriptive task wrapping the original question if the LLM
     output can't be parsed — a decomposition failure should degrade to the old one-shot
     behavior, not block the pipeline.
+
+    Args:
+        llm_provider_override / llm_model_override: Sprint 30/gap-closing (ADR-031
+            §5) — the saved pipeline's LLM override, threaded in by
+            `services/pipeline_service.py::run_analysis_tasks` (resolved once in
+            `run_full_analysis` from `PipelineState`, since this agent runs outside
+            the LangGraph/PipelineState — see that module's docstring). `None` (the
+            default) for every existing caller — unchanged behavior.
     """
     prompt = _PROMPT_TEMPLATE.format(
         columns_list=str(df.columns.tolist()),
         question=business_question,
         max_tasks=MAX_TASKS,
     )
-    llm = get_llm()
+    llm = get_llm(provider=llm_provider_override, model=llm_model_override)
 
     try:
         response = llm.invoke(prompt)

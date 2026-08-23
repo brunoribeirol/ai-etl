@@ -188,6 +188,23 @@ def test_run_science_result_has_all_keys(mock_get_llm, sample_df: pd.DataFrame) 
     }
 
 
+def test_run_science_no_override_calls_get_llm_with_no_override(
+    mock_get_llm, sample_df: pd.DataFrame
+) -> None:
+    """Sprint 30/gap-closing (ADR-031 §5)."""
+    mock_get_llm.return_value = _mock_llm([HAPPY_CODE])
+    run_science(sample_df, "Qual será a receita?")
+
+    mock_get_llm.assert_called_once_with(provider=None, model=None)
+
+
+def test_run_science_forwards_llm_override(mock_get_llm, sample_df: pd.DataFrame) -> None:
+    mock_get_llm.return_value = _mock_llm([HAPPY_CODE])
+    run_science(sample_df, "Qual será a receita?", "anthropic", "claude-sonnet-5")
+
+    mock_get_llm.assert_called_once_with(provider="anthropic", model="claude-sonnet-5")
+
+
 def test_run_science_strips_fences(mock_get_llm, sample_df: pd.DataFrame) -> None:
     fenced = f"```python\n{HAPPY_CODE}\n```"
     mock_get_llm.return_value = _mock_llm([fenced])

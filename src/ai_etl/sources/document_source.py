@@ -40,15 +40,28 @@ Respond ONLY with a valid JSON array. No explanation, no markdown code fences.
 """
 
 
-def load_document(path: str) -> pd.DataFrame:
+def load_document(
+    path: str,
+    llm_provider_override: str | None = None,
+    llm_model_override: str | None = None,
+) -> pd.DataFrame:
     """Extract tabular data from a PDF or DOCX file into a DataFrame.
 
     Raises ValueError for unsupported extensions or if the LLM fails to
     produce a valid JSON array of row objects after MAX_ATTEMPTS retries —
     matching rest_source.py's plain-exception style for unexpected shapes.
+
+    Args:
+        llm_provider_override / llm_model_override: Sprint 30/gap-closing
+            (ADR-031 §5) — this connector's `get_llm()` call is reached from
+            `agents/pipeline/extractor.py::extractor_node`, inside the same graph
+            run as every other `get_llm()` call site, so it respects the same
+            per-`saved_pipeline` override rather than being a silent exception to
+            it. `None` (the default) for every caller that doesn't pass it —
+            unchanged behavior.
     """
     text = _extract_text(path)
-    return _structure_text(text)
+    return _structure_text(text, llm_provider_override, llm_model_override)
 
 
 def _extract_text(path: str) -> str:
@@ -73,8 +86,12 @@ def _extract_docx_text(path: str) -> str:
     return "\n".join(paragraph.text for paragraph in document.paragraphs)
 
 
-def _structure_text(text: str) -> pd.DataFrame:
-    llm = get_llm()
+def _structure_text(
+    text: str,
+    llm_provider_override: str | None = None,
+    llm_model_override: str | None = None,
+) -> pd.DataFrame:
+    llm = get_llm(provider=llm_provider_override, model=llm_model_override)
     prompt = DOCUMENT_EXTRACTION_PROMPT.format(text=text[:MAX_TEXT_CHARS])
     last_error: str | None = None
 

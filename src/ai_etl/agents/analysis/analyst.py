@@ -89,11 +89,21 @@ Use ONLY the exact column names: {columns_list}
 """
 
 
-def run_analyst(df: pd.DataFrame, business_question: str) -> GoldResult:
+def run_analyst(
+    df: pd.DataFrame,
+    business_question: str,
+    llm_provider_override: str | None = None,
+    llm_model_override: str | None = None,
+) -> GoldResult:
     """Answer a business question from a Silver DataFrame.
 
     Returns a GoldResult dict (see ai_etl.core.analysis_types) with `task_question`
     left blank — callers running this per Planner sub-task fill it in themselves.
+
+    Args:
+        llm_provider_override / llm_model_override: Sprint 30/gap-closing (ADR-031
+            §5) — see `agents/analysis/planner.py::plan_analysis_tasks`'s identical
+            parameters for rationale. `None` (the default) — unchanged behavior.
     """
     columns_list = str(df.columns.tolist())
     schema = {col: str(dtype) for col, dtype in df.dtypes.items()}
@@ -108,7 +118,7 @@ def run_analyst(df: pd.DataFrame, business_question: str) -> GoldResult:
         question=business_question,
     )
 
-    llm = get_llm()
+    llm = get_llm(provider=llm_provider_override, model=llm_model_override)
     last_error = ""
     last_code = ""
     attempt_usages: list[TokenUsage] = []

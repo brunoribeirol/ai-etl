@@ -149,7 +149,11 @@ _BUILDERS = {
 }
 
 
-def get_llm(temperature: float = 0.0) -> BaseChatModel:
+def get_llm(
+    temperature: float = 0.0,
+    provider: str | None = None,
+    model: str | None = None,
+) -> BaseChatModel:
     """Return a configured chat model client for the active provider.
 
     Provider is read from AI_ETL_LLM_PROVIDER (default: openai — unchanged behavior
@@ -157,15 +161,43 @@ def get_llm(temperature: float = 0.0) -> BaseChatModel:
     provider (see _DEFAULT_MODEL_BY_PROVIDER). Raises RuntimeError immediately (never
     silently falls back to OpenAI) if AI_ETL_LLM_PROVIDER names an unsupported
     provider or a required provider credential is missing — see ADR-014 §3.
+
+    Args:
+        provider: Optional per-execution override, closing the gap ADR-031 §5 flagged
+            as deferred — a `saved_pipeline`'s `llm_provider`/`llm_model` (Sprint 30),
+            resolved once by `services/pipeline_service.py` and threaded through
+            `PipelineState["llm_provider_override"]`/callers' own parameters. `None`
+            (the default) preserves ADR-014 behavior exactly: every existing call site
+            that doesn't pass this keeps reading `AI_ETL_LLM_PROVIDER`. Not
+            re-validated against `ALLOWED_MODELS_BY_PROVIDER` here — by the time an
+            override reaches this function it was already validated once, at the API
+            boundary that persisted it (`validate_provider_and_model`, called from
+            `PUT /pipelines/{id}/llm-config`), matching this module's established
+            "caller validates, this layer trusts" posture (see
+            `test_provider_connectivity`'s docstring for the same split).
+        model: Optional per-execution model override, paired with `provider` — see
+            above. If `provider` is given without `model` (should not normally happen,
+            since `llm_provider`/`llm_model` are always persisted together, both-or-
+            neither — ADR-031 §3), falls back to that provider's own default model
+            rather than a possibly-foreign `AI_ETL_LLM_MODEL` value.
     """
-    provider = get_provider()
-    builder = _BUILDERS.get(provider)
+    resolved_provider = provider.strip().lower() if provider else get_provider()
+    builder = _BUILDERS.get(resolved_provider)
     if builder is None:
         supported = ", ".join(sorted(_BUILDERS))
+        var_label = "provider override" if provider else "AI_ETL_LLM_PROVIDER"
         raise RuntimeError(
-            f"Unsupported AI_ETL_LLM_PROVIDER={provider!r}. Supported providers: {supported}."
+            f"Unsupported {var_label}={resolved_provider!r}. Supported providers: {supported}."
         )
-    return builder(get_model_name(), temperature)
+    if model:
+        resolved_model = model
+    elif provider:
+        resolved_model = _DEFAULT_MODEL_BY_PROVIDER.get(
+            resolved_provider, _DEFAULT_MODEL_BY_PROVIDER["openai"]
+        )
+    else:
+        resolved_model = get_model_name()
+    return builder(resolved_model, temperature)
 
 
 def extract_token_usage(response: Any) -> TokenUsage:

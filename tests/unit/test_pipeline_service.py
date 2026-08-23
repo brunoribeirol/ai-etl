@@ -185,6 +185,9 @@ def test_run_silver_pipeline_threads_quality_rules_for_scheduled_fire(monkeypatc
         "get_saved_pipeline",
         lambda pipeline_id, tenant_id: {"id": pipeline_id, "quality_rules": rules},
     )
+    monkeypatch.setattr(
+        pipeline_service, "get_saved_pipeline_llm_config", lambda pipeline_id, tenant_id: None
+    )
 
     pipeline_service.run_silver_pipeline(
         "read file.csv", run_dir="runs", tenant_id="tenant-a", saved_pipeline_id="pl-1"
@@ -214,6 +217,61 @@ def test_run_silver_pipeline_avulso_run_gets_empty_quality_rules(monkeypatch) ->
     assert captured_states[0]["custom_quality_rules"] == []
 
 
+def test_run_silver_pipeline_resolves_llm_override_for_scheduled_fire(monkeypatch) -> None:
+    """Sprint 30/gap-closing (ADR-031 §5) — a scheduled fire resolves its saved
+    pipeline's llm_provider/llm_model override and carries it into the initial
+    `PipelineState`, the same way quality_rules/approval_policy already do."""
+    chunks = [{"loader": {"status": "completed"}}]
+    captured_states: list[Any] = []
+    monkeypatch.setattr(
+        pipeline_service, "build_graph", lambda: _FakeGraph(chunks, captured_states)
+    )
+    monkeypatch.setattr(pipeline_service, "save_run", lambda *a, **k: pathlib.Path("x"))
+    monkeypatch.setattr(pipeline_service, "save_stage_latencies", lambda *a, **k: None)
+    monkeypatch.setattr(
+        pipeline_service,
+        "get_saved_pipeline",
+        lambda pipeline_id, tenant_id: {"id": pipeline_id, "quality_rules": []},
+    )
+    monkeypatch.setattr(
+        pipeline_service,
+        "get_saved_pipeline_llm_config",
+        lambda pipeline_id, tenant_id: {
+            "llm_provider": "anthropic",
+            "llm_model": "claude-sonnet-5",
+        },
+    )
+
+    pipeline_service.run_silver_pipeline(
+        "read file.csv", run_dir="runs", tenant_id="tenant-a", saved_pipeline_id="pl-1"
+    )
+
+    assert captured_states[0]["llm_provider_override"] == "anthropic"
+    assert captured_states[0]["llm_model_override"] == "claude-sonnet-5"
+
+
+def test_run_silver_pipeline_avulso_run_gets_no_llm_override(monkeypatch) -> None:
+    """An avulso run (no `saved_pipeline_id`) never looks up an LLM override —
+    `get_saved_pipeline_llm_config` is not even called."""
+    chunks = [{"loader": {"status": "completed"}}]
+    captured_states: list[Any] = []
+    monkeypatch.setattr(
+        pipeline_service, "build_graph", lambda: _FakeGraph(chunks, captured_states)
+    )
+    monkeypatch.setattr(pipeline_service, "save_run", lambda *a, **k: pathlib.Path("x"))
+    monkeypatch.setattr(pipeline_service, "save_stage_latencies", lambda *a, **k: None)
+
+    def _fail_if_called(pipeline_id: str, tenant_id: str) -> Any:
+        raise AssertionError("get_saved_pipeline_llm_config must not be called for an avulso run")
+
+    monkeypatch.setattr(pipeline_service, "get_saved_pipeline_llm_config", _fail_if_called)
+
+    pipeline_service.run_silver_pipeline("read file.csv", run_dir="runs", tenant_id="tenant-a")
+
+    assert captured_states[0]["llm_provider_override"] is None
+    assert captured_states[0]["llm_model_override"] is None
+
+
 def test_run_silver_pipeline_reports_failure(monkeypatch) -> None:
     chunks = [{"orchestrator": {"status": "failed", "error": "Orchestrator failed: bad JSON"}}]
     monkeypatch.setattr(pipeline_service, "build_graph", lambda: _FakeGraph(chunks))
@@ -238,7 +296,7 @@ def test_run_silver_pipeline_reports_failure(monkeypatch) -> None:
 
 def test_run_gold_analysis_emits_progress_events(monkeypatch) -> None:
     monkeypatch.setattr(
-        pipeline_service, "run_analyst", lambda df, q: _gold_result(error=None, attempts=2)
+        pipeline_service, "run_analyst", lambda df, q, *a, **k: _gold_result(error=None, attempts=2)
     )
 
     events, _cb = _recorder()
@@ -255,7 +313,9 @@ def test_run_gold_analysis_emits_progress_events(monkeypatch) -> None:
 
 def test_run_science_analysis_emits_progress_events(monkeypatch) -> None:
     monkeypatch.setattr(
-        pipeline_service, "run_science", lambda df, q: _science_result(error=None, attempts=1)
+        pipeline_service,
+        "run_science",
+        lambda df, q, *a, **k: _science_result(error=None, attempts=1),
     )
 
     events, _cb = _recorder()
@@ -271,7 +331,9 @@ def test_run_science_analysis_emits_progress_events(monkeypatch) -> None:
 def test_run_gold_analysis_attaches_sanity_check_on_success(monkeypatch) -> None:
     """Sprint 21 (ADR-026): a successful Gold sub-task gets a `sanity_check` key;
     a failed one does not (nothing to sanity-check)."""
-    monkeypatch.setattr(pipeline_service, "run_analyst", lambda df, q: _gold_result(error=None))
+    monkeypatch.setattr(
+        pipeline_service, "run_analyst", lambda df, q, *a, **k: _gold_result(error=None)
+    )
 
     result = pipeline_service.run_gold_analysis(pd.DataFrame({"a": [1]}), "pergunta")
 
@@ -280,7 +342,9 @@ def test_run_gold_analysis_attaches_sanity_check_on_success(monkeypatch) -> None
 
 
 def test_run_gold_analysis_omits_sanity_check_on_failure(monkeypatch) -> None:
-    monkeypatch.setattr(pipeline_service, "run_analyst", lambda df, q: _gold_result(error="boom"))
+    monkeypatch.setattr(
+        pipeline_service, "run_analyst", lambda df, q, *a, **k: _gold_result(error="boom")
+    )
 
     result = pipeline_service.run_gold_analysis(pd.DataFrame({"a": [1]}), "pergunta")
 
@@ -301,7 +365,7 @@ def test_run_gold_analysis_surfaces_ressalva_for_a_fabricated_result(monkeypatch
         "error": None,
         "tokens": dict(_ZERO_TOKENS),
     }
-    monkeypatch.setattr(pipeline_service, "run_analyst", lambda df, q: fabricated)
+    monkeypatch.setattr(pipeline_service, "run_analyst", lambda df, q, *a, **k: fabricated)
 
     events, _cb = _recorder()
     result = pipeline_service.run_gold_analysis(silver_df, "pergunta", _cb, stage="gold:0")
@@ -311,7 +375,9 @@ def test_run_gold_analysis_surfaces_ressalva_for_a_fabricated_result(monkeypatch
 
 
 def test_run_science_analysis_attaches_sanity_check_on_success(monkeypatch) -> None:
-    monkeypatch.setattr(pipeline_service, "run_science", lambda df, q: _science_result(error=None))
+    monkeypatch.setattr(
+        pipeline_service, "run_science", lambda df, q, *a, **k: _science_result(error=None)
+    )
 
     result = pipeline_service.run_science_analysis(pd.DataFrame({"a": [1]}), "pergunta")
 
@@ -320,7 +386,7 @@ def test_run_science_analysis_attaches_sanity_check_on_success(monkeypatch) -> N
 
 def test_run_science_analysis_omits_sanity_check_on_failure(monkeypatch) -> None:
     monkeypatch.setattr(
-        pipeline_service, "run_science", lambda df, q: _science_result(error="boom")
+        pipeline_service, "run_science", lambda df, q, *a, **k: _science_result(error="boom")
     )
 
     result = pipeline_service.run_science_analysis(pd.DataFrame({"a": [1]}), "pergunta")
@@ -336,7 +402,9 @@ def test_run_science_analysis_omits_sanity_check_on_failure(monkeypatch) -> None
 def test_run_gold_with_repair_returns_first_result_when_it_succeeds(monkeypatch) -> None:
     calls: list[str] = []
 
-    def fake_run_analyst(df: pd.DataFrame, question: str) -> dict[str, Any]:
+    def fake_run_analyst(
+        df: pd.DataFrame, question: str, *args: Any, **kwargs: Any
+    ) -> dict[str, Any]:
         calls.append(question)
         return _gold_result(error=None)
 
@@ -352,7 +420,9 @@ def test_run_gold_with_repair_returns_first_result_when_it_succeeds(monkeypatch)
 def test_run_gold_with_repair_retries_with_simplified_question_on_failure(monkeypatch) -> None:
     calls: list[str] = []
 
-    def fake_run_analyst(df: pd.DataFrame, question: str) -> dict[str, Any]:
+    def fake_run_analyst(
+        df: pd.DataFrame, question: str, *args: Any, **kwargs: Any
+    ) -> dict[str, Any]:
         calls.append(question)
         if len(calls) == 1:
             return _gold_result(error="boom")
@@ -372,7 +442,7 @@ def test_run_gold_with_repair_retries_with_simplified_question_on_failure(monkey
 
 def test_run_gold_with_repair_surfaces_original_error_when_both_attempts_fail(monkeypatch) -> None:
     monkeypatch.setattr(
-        pipeline_service, "run_analyst", lambda df, q: _gold_result(error=f"erro: {q}")
+        pipeline_service, "run_analyst", lambda df, q, *a, **k: _gold_result(error=f"erro: {q}")
     )
 
     result = pipeline_service.run_gold_with_repair(pd.DataFrame({"a": [1]}), "pergunta original")
@@ -384,7 +454,9 @@ def test_run_gold_with_repair_surfaces_original_error_when_both_attempts_fail(mo
 def test_run_science_with_repair_retries_on_failure(monkeypatch) -> None:
     calls: list[str] = []
 
-    def fake_run_science(df: pd.DataFrame, question: str) -> dict[str, Any]:
+    def fake_run_science(
+        df: pd.DataFrame, question: str, *args: Any, **kwargs: Any
+    ) -> dict[str, Any]:
         calls.append(question)
         if len(calls) == 1:
             return _science_result(error="boom")
@@ -408,7 +480,7 @@ def test_run_analysis_tasks_routes_by_type_and_stages_each_subtask(monkeypatch) 
     monkeypatch.setattr(
         pipeline_service,
         "plan_analysis_tasks",
-        lambda question, df: (
+        lambda question, df, *a, **k: (
             [
                 {"question": "quais os top produtos", "type": "descriptive"},
                 {"question": "por que caiu", "type": "diagnostic_or_predictive"},
@@ -416,8 +488,12 @@ def test_run_analysis_tasks_routes_by_type_and_stages_each_subtask(monkeypatch) 
             {"input_tokens": 1, "output_tokens": 1, "total_tokens": 2},
         ),
     )
-    monkeypatch.setattr(pipeline_service, "run_analyst", lambda df, q: _gold_result(error=None))
-    monkeypatch.setattr(pipeline_service, "run_science", lambda df, q: _science_result(error=None))
+    monkeypatch.setattr(
+        pipeline_service, "run_analyst", lambda df, q, *a, **k: _gold_result(error=None)
+    )
+    monkeypatch.setattr(
+        pipeline_service, "run_science", lambda df, q, *a, **k: _science_result(error=None)
+    )
 
     events, _cb = _recorder()
     gold_results, science_results, planner_tokens = pipeline_service.run_analysis_tasks(
@@ -503,13 +579,13 @@ def test_run_full_analysis_calls_stages_in_order_and_persists_analysis(monkeypat
     monkeypatch.setattr(
         pipeline_service,
         "plan_analysis_tasks",
-        lambda question, df: (
+        lambda question, df, *a, **k: (
             call_order.append("planner"),
             ([{"question": question, "type": "descriptive"}], dict(_ZERO_TOKENS)),
         )[1],
     )
 
-    def fake_run_analyst(df: pd.DataFrame, q: str) -> dict[str, Any]:
+    def fake_run_analyst(df: pd.DataFrame, q: str, *args: Any, **kwargs: Any) -> dict[str, Any]:
         call_order.append("gold")
         return _gold_result(error=None)
 
@@ -610,9 +686,14 @@ def test_run_full_analysis_forwards_progress_callback_to_every_stage(monkeypatch
     monkeypatch.setattr(
         pipeline_service,
         "plan_analysis_tasks",
-        lambda question, df: ([{"question": question, "type": "descriptive"}], dict(_ZERO_TOKENS)),
+        lambda question, df, *a, **k: (
+            [{"question": question, "type": "descriptive"}],
+            dict(_ZERO_TOKENS),
+        ),
     )
-    monkeypatch.setattr(pipeline_service, "run_analyst", lambda df, q: _gold_result(error=None))
+    monkeypatch.setattr(
+        pipeline_service, "run_analyst", lambda df, q, *a, **k: _gold_result(error=None)
+    )
     monkeypatch.setattr(pipeline_service, "run_advisor", lambda *a, **k: _advisor_result())
     monkeypatch.setattr(pipeline_service, "save_analysis", lambda *a, **k: pathlib.Path("x"))
     monkeypatch.setattr(pipeline_service, "save_stage_latencies", lambda *a, **k: None)
@@ -644,6 +725,9 @@ def test_run_silver_pipeline_resolves_approval_policy_for_scheduled_fire(monkeyp
             "approval_threshold_rows": 500,
             "last_approved_at": None,
         },
+    )
+    monkeypatch.setattr(
+        pipeline_service, "get_saved_pipeline_llm_config", lambda pipeline_id, tenant_id: None
     )
 
     pipeline_service.run_silver_pipeline(

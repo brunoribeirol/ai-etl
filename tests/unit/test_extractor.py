@@ -65,6 +65,57 @@ def test_document_source_extracted(mocker) -> None:
     assert result["error"] is None
 
 
+def test_document_source_no_override_calls_load_document_with_no_override(mocker) -> None:
+    """Sprint 30/gap-closing (ADR-031 §5)."""
+    df = pd.DataFrame({"product": ["A"]})
+    mock_load = mocker.patch("ai_etl.agents.pipeline.extractor.load_document", return_value=df)
+
+    sources = [{"name": "report", "type": "document", "path": "report.pdf"}]
+    result = extractor_node(_make_state(sources))
+
+    mock_load.assert_called_once_with(
+        "report.pdf", llm_provider_override=None, llm_model_override=None
+    )
+    assert all(e["action"] != "llm_override_used" for e in result["audit_log"])
+
+
+def test_document_source_forwards_llm_override_and_audit_logs_it(mocker) -> None:
+    df = pd.DataFrame({"product": ["A"]})
+    mock_load = mocker.patch("ai_etl.agents.pipeline.extractor.load_document", return_value=df)
+
+    sources = [{"name": "report", "type": "document", "path": "report.pdf"}]
+    state = {
+        **_make_state(sources),
+        "llm_provider_override": "anthropic",
+        "llm_model_override": "claude-sonnet-5",
+    }
+    result = extractor_node(state)
+
+    mock_load.assert_called_once_with(
+        "report.pdf", llm_provider_override="anthropic", llm_model_override="claude-sonnet-5"
+    )
+    override_entries = [e for e in result["audit_log"] if e["action"] == "llm_override_used"]
+    assert len(override_entries) == 1
+    assert override_entries[0]["details"] == {"provider": "anthropic", "model": "claude-sonnet-5"}
+
+
+def test_csv_source_with_override_does_not_audit_log_override(mocker) -> None:
+    """The override entry is only logged when a get_llm()-calling connector
+    (document) actually runs — a plain CSV source never touches get_llm()."""
+    df = pd.DataFrame({"a": [1]})
+    mocker.patch("ai_etl.agents.pipeline.extractor.load_csv", return_value=df)
+
+    sources = [{"name": "orders", "type": "csv", "path": "data/orders.csv"}]
+    state = {
+        **_make_state(sources),
+        "llm_provider_override": "anthropic",
+        "llm_model_override": "claude-sonnet-5",
+    }
+    result = extractor_node(state)
+
+    assert all(e["action"] != "llm_override_used" for e in result["audit_log"])
+
+
 def test_sqlite_source_extracted(mocker) -> None:
     df = pd.DataFrame({"id": [1, 2], "product": ["A", "B"]})
     mock_load = mocker.patch("ai_etl.agents.pipeline.extractor.load_sqlite", return_value=df)

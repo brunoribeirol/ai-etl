@@ -90,5 +90,29 @@ def test_load_document_composes_extract_and_structure(mocker) -> None:
 
     df = load_document("report.pdf")
 
-    mock_structure.assert_called_once_with("raw text")
+    mock_structure.assert_called_once_with("raw text", None, None)
     assert len(df) == 2
+
+
+def test_load_document_forwards_llm_override(mocker) -> None:
+    """Sprint 30/gap-closing (ADR-031 §5) — a per-pipeline LLM override reaches
+    document_source.py's own get_llm() call the same way it reaches every other
+    call site."""
+    mocker.patch("ai_etl.sources.document_source._extract_text", return_value="raw text")
+    mock_structure = mocker.patch(
+        "ai_etl.sources.document_source._structure_text",
+        return_value=pd.DataFrame(VALID_ROWS),
+    )
+
+    load_document(
+        "report.pdf", llm_provider_override="anthropic", llm_model_override="claude-haiku-5"
+    )
+
+    mock_structure.assert_called_once_with("raw text", "anthropic", "claude-haiku-5")
+
+
+def test_structure_text_forwards_override_to_get_llm(mock_get_llm) -> None:
+    mock_get_llm.return_value = _mock_llm([json.dumps(VALID_ROWS)])
+    _structure_text("some text", "anthropic", "claude-haiku-5")
+
+    mock_get_llm.assert_called_once_with(provider="anthropic", model="claude-haiku-5")

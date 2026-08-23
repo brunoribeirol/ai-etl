@@ -67,6 +67,20 @@ class PipelineState(TypedDict):
     #   "summary": "3 checks: 2 warnings, 0 errors"
     # }
 
+    # --- LLM provider/model override (Sprint 30/gap-closing, ADR-031 §5) ---
+    llm_provider_override: Optional[str]  # e.g. "anthropic" — resolved once by
+    # `services/pipeline_service.py::run_silver_pipeline` from the saved pipeline's
+    # own `llm_provider` column (via `audit/db.py::get_saved_pipeline_llm_config`),
+    # mirroring `custom_quality_rules`'/`approval_policy`'s resolve-in-service-then-
+    # carry-in-state pattern. `None` for every avulso run and every saved pipeline
+    # that never called `PUT /pipelines/{id}/llm-config` — falls back to this
+    # deployment's global `AI_ETL_LLM_PROVIDER`. Read by every `agents/pipeline/*.py`
+    # node that calls `core/llm.py::get_llm()`; never queried from the DB inside a
+    # node itself.
+    llm_model_override: Optional[str]  # paired with llm_provider_override above —
+    # always resolved (and `None`) together, since `saved_pipelines.llm_provider`/
+    # `llm_model` are always written or cleared together (ADR-031 §3).
+
     # --- Loader input (Sprint 27, ADR-028) ---
     approval_policy: Optional[dict[str, Any]]  # {"require_approval": bool,
     # "threshold_rows": int | None, "last_approved_at": str | None (isoformat)} —
@@ -106,6 +120,8 @@ def initial_state(
     run_id: str,
     custom_quality_rules: Optional[list[dict[str, Any]]] = None,
     approval_policy: Optional[dict[str, Any]] = None,
+    llm_provider_override: Optional[str] = None,
+    llm_model_override: Optional[str] = None,
 ) -> PipelineState:
     """Create a fresh PipelineState for a new pipeline run.
 
@@ -117,6 +133,14 @@ def initial_state(
         approval_policy: Sprint 27 (ADR-028) — this run's write-approval policy,
             already resolved by the caller from the saved pipeline it belongs to.
             `None` (the default) for every avulso run — never gated.
+        llm_provider_override: Sprint 30/gap-closing (ADR-031 §5) — this run's
+            saved-pipeline LLM provider override, already resolved by the caller
+            (`services/pipeline_service.py::run_silver_pipeline` via
+            `audit/db.py::get_saved_pipeline_llm_config`). `None` (the default) for
+            every avulso run and every saved pipeline without an override — falls
+            back to the deployment-global `AI_ETL_LLM_PROVIDER` at each `get_llm()`
+            call site.
+        llm_model_override: paired with `llm_provider_override` above.
     """
     return PipelineState(
         spec=spec,
@@ -130,6 +154,8 @@ def initial_state(
         transformation_error=None,
         custom_quality_rules=custom_quality_rules or [],
         quality_report={},
+        llm_provider_override=llm_provider_override,
+        llm_model_override=llm_model_override,
         approval_policy=approval_policy,
         approval_granted=False,
         load_result=None,
