@@ -37,7 +37,7 @@ _DEFAULT_MODEL_BY_PROVIDER = {
 # already applies to `source_type`.
 ALLOWED_MODELS_BY_PROVIDER: dict[str, frozenset[str]] = {
     "openai": frozenset({"gpt-4o-mini", "gpt-4o"}),
-    "anthropic": frozenset({"claude-opus-5", "claude-sonnet-5", "claude-haiku-5"}),
+    "anthropic": frozenset({"claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5"}),
     "google": frozenset({"gemini-2.0-pro", "gemini-2.0-flash"}),
     "ollama": frozenset({"llama3.1", "llama3.3", "mistral", "qwen2.5"}),
 }
@@ -115,6 +115,16 @@ def _build_openai(model: str, temperature: float) -> BaseChatModel:
     return ChatOpenAI(model=model, temperature=temperature)
 
 
+# Real bug found 2026-08-23 running a live 6-model comparison: `claude-opus-5` and
+# `claude-sonnet-5` reject `temperature` outright (`400 - "temperature is deprecated
+# for this model"`) — confirmed against the real Anthropic API, not documentation
+# alone. Sampling params were removed for this model generation; `claude-haiku-4-5`
+# (an older-tier model) still accepts it. Kept as an explicit set rather than a
+# version-string heuristic, matching this module's own "explicit allowlist over
+# pattern-matching" convention (see ALLOWED_MODELS_BY_PROVIDER above).
+_ANTHROPIC_MODELS_WITHOUT_TEMPERATURE = frozenset({"claude-opus-5", "claude-sonnet-5"})
+
+
 def _build_anthropic(model: str, temperature: float) -> BaseChatModel:
     from langchain_anthropic import ChatAnthropic
 
@@ -122,7 +132,10 @@ def _build_anthropic(model: str, temperature: float) -> BaseChatModel:
     # timeout/stop have no defaults in ChatAnthropic's generated __init__ signature
     # (mypy --strict flags them as missing without an explicit value) — None matches
     # the library's own runtime default for both.
-    return ChatAnthropic(model_name=model, temperature=temperature, timeout=None, stop=None)
+    kwargs: dict[str, Any] = {"model_name": model, "timeout": None, "stop": None}
+    if model not in _ANTHROPIC_MODELS_WITHOUT_TEMPERATURE:
+        kwargs["temperature"] = temperature
+    return ChatAnthropic(**kwargs)
 
 
 def _build_google(model: str, temperature: float) -> BaseChatModel:

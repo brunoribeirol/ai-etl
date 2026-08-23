@@ -35,29 +35,28 @@ Everything else — the real Silver LangGraph, real sandboxed transform
 execution, real Quality Agent, latency, cost, quality score — runs for real.
 
 --- Why every row may still say data_source != "real" ---
-This environment has no `OPENAI_API_KEY` (confirmed via `env | grep -i
-openai`) and no `ollama` binary (confirmed via `which ollama`). Per Sprint 8's
-brief, LLM calls are therefore mocked with deterministic, fixed responses
-(same technique as `tests/e2e/conftest.py::mock_pipeline_llm`) rather than
-skipped — this validates the full harness (real sandbox execution, real
-Quality Agent, real cost/latency/quality-score computation) end to end, but
-the resulting cost ($0.00, zero real tokens) and latency (no real network
-round trip to an LLM) numbers are NOT a real model comparison. Every output
+This script degrades gracefully per-model depending on what's actually
+reachable at run time (checked live via `_provider_and_access`, never
+assumed): OpenAI/Anthropic/Google need their respective `*_API_KEY` env var
+set; Ollama needs the `ollama` binary on `PATH` (checked via `shutil.which`)
+with its server reachable and the requested model already pulled. When a
+provider isn't reachable, LLM calls for that model are mocked with
+deterministic, fixed responses (same technique as
+`tests/e2e/conftest.py::mock_pipeline_llm`) rather than skipped — this still
+validates the full harness (real sandbox execution, real Quality Agent, real
+cost/latency/quality-score computation) end to end, but the resulting cost
+and latency numbers for that model are NOT a real comparison. Every output
 row is tagged `data_source`:
-  - "real"      — ran against a real API with the given model (requires a key
-                  reachable at execution time; not used in this session).
-  - "mock"      — OpenAI-shaped model, no key available; deterministic mocked
-                  LLM responses, $0 cost, near-zero LLM latency.
-  - "simulated" — an `ollama:*` model slot; this script does NOT invent
-                  latency/quality numbers for a real local model it never ran.
-                  It still exercises the same mocked pipeline (so the harness
-                  is proven to generalize to a 3rd provider slot) but reports
-                  cost_usd as `None` ("no per-token API pricing — self-hosted"
-                  is a real economic fact, not a fabricated number) and flags
-                  every metric as illustrative-only in the CSV.
-Re-run with `OPENAI_API_KEY` exported (and `ollama` installed/running, plus a
-model pulled) to get real numbers — no code change needed, `data_source` will
-flip to "real" automatically.
+  - "real" — ran against a real API/local server with the given model.
+  - "mock" — no credentials/access for that model's provider; deterministic
+             mocked LLM responses, $0 cost, near-zero LLM latency.
+Sprint 30 (ADR-031) added real Anthropic/Google support and this update adds
+real local Ollama execution (previously always mocked/"simulated" — see git
+history if you need that older 3-state version) — a `provider:model` CLI
+value like `anthropic:claude-haiku-4-5` or `ollama:mistral` selects both
+`AI_ETL_LLM_PROVIDER` and `AI_ETL_LLM_MODEL` for that run; a bare model name
+(no `:`) defaults to `provider=openai` for backward compatibility with
+Sprint 8's original `--models` values.
 """
 
 from __future__ import annotations
@@ -86,7 +85,14 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 SALES_CSV = REPO_ROOT / "case_study" / "data" / "sales.csv"
 SCENARIO1_SPEC = REPO_ROOT / "case_study" / "pipelines" / "scenario1_spec.txt"
 
-DEFAULT_MODELS = ["gpt-4o-mini", "gpt-4o", "ollama:llama3.1"]
+DEFAULT_MODELS = [
+    "gpt-4o-mini",
+    "gpt-4o",
+    "anthropic:claude-haiku-4-5",
+    "anthropic:claude-sonnet-5",
+    "ollama:llama3.1",
+    "ollama:mistral",
+]
 DEFAULT_N = 5  # matches case_study/results/tabela-resultados.md's established
 # convention (5 runs/scenario) — see the report for the full rationale.
 
@@ -134,7 +140,7 @@ class RunResult:
     provider: str
     scenario: int
     run_index: int
-    data_source: str  # "real" | "mock" | "simulated" | "skipped_no_infra"
+    data_source: str  # "real" | "mock" | "skipped_no_infra"
     status: str
     elapsed_ms: float | None = None
     rows_loaded: int | None = None
@@ -229,11 +235,15 @@ def _patch_mocked_pipeline(stack: ExitStack, plan: dict[str, Any], transform_cod
     `run_full_analysis` touches with deterministic, fixed responses."""
     orchestrator_llm = MagicMock()
     orchestrator_llm.invoke.return_value = _mock_response(json.dumps(plan))
-    stack.enter_context(patch("ai_etl.agents.pipeline.orchestrator.get_llm", return_value=orchestrator_llm))
+    stack.enter_context(
+        patch("ai_etl.agents.pipeline.orchestrator.get_llm", return_value=orchestrator_llm)
+    )
 
     transformer_llm = MagicMock()
     transformer_llm.invoke.return_value = _mock_response(transform_code)
-    stack.enter_context(patch("ai_etl.agents.pipeline.transformer.get_llm", return_value=transformer_llm))
+    stack.enter_context(
+        patch("ai_etl.agents.pipeline.transformer.get_llm", return_value=transformer_llm)
+    )
 
     planner_llm = MagicMock()
     planner_llm.invoke.return_value = _mock_response("[]")
@@ -296,8 +306,15 @@ def run_scenario1(
     }
     spec = SCENARIO1_SPEC.read_text()
 
+    # `model` may carry a `provider:` prefix (e.g. `anthropic:claude-haiku-4-5`)
+    # — core/llm.py::get_llm() reads provider and model from two separate env
+    # vars, so both need setting here, not just AI_ETL_LLM_MODEL as before
+    # Sprint 30 added real multi-provider support.
+    bare_model = model.partition(":")[2] if ":" in model else model
     old_env_model = os.environ.get("AI_ETL_LLM_MODEL")
-    os.environ["AI_ETL_LLM_MODEL"] = model
+    old_env_provider = os.environ.get("AI_ETL_LLM_PROVIDER")
+    os.environ["AI_ETL_LLM_MODEL"] = bare_model
+    os.environ["AI_ETL_LLM_PROVIDER"] = provider
     try:
         with ExitStack() as stack:
             if data_source != "real":
@@ -316,17 +333,13 @@ def run_scenario1(
 
         state = result["state"]
         tokens = result["tokens"]
-        cost_usd: float | None
-        if data_source == "simulated":
-            cost_usd = None  # no per-token API pricing for a self-hosted model
-        else:
-            cost_usd = compute_cost_usd(model, tokens)
+        # `compute_cost_usd` looks up the pricing table by bare model name
+        # (e.g. "claude-haiku-4-5"), not the "provider:model" CLI label.
+        cost_usd = compute_cost_usd(bare_model, tokens)
 
         note = ""
         if data_source == "mock":
             note = "mocked LLM, $0 real cost — plumbing validation only"
-        elif data_source == "simulated":
-            note = "ollama slot: Ollama unavailable in this sandbox, pipeline mocked for harness parity only"
 
         return RunResult(
             model=model,
@@ -351,11 +364,33 @@ def run_scenario1(
             os.environ.pop("AI_ETL_LLM_MODEL", None)
         else:
             os.environ["AI_ETL_LLM_MODEL"] = old_env_model
+        if old_env_provider is None:
+            os.environ.pop("AI_ETL_LLM_PROVIDER", None)
+        else:
+            os.environ["AI_ETL_LLM_PROVIDER"] = old_env_provider
 
 
 def _provider_and_access(model: str) -> tuple[str, bool]:
-    if model.startswith("ollama:"):
-        return "ollama", shutil.which("ollama") is not None
+    """Parse a `provider:model` (or bare `model`, defaulting to `openai` for
+    backward compatibility with pre-Sprint-30 `--models` values) string and
+    report whether real credentials/access exist for that provider.
+
+    Sprint 30 (ADR-031) added Anthropic/Google alongside the original
+    OpenAI/Ollama pair — this function used to hardcode a 2-provider
+    assumption (`ollama:` prefix vs. everything-else-is-OpenAI); extended
+    here rather than left stale, since a real multi-provider comparison
+    (this update's whole point) needs it to actually branch on all 4.
+    """
+    if ":" in model:
+        provider, _, _ = model.partition(":")
+    else:
+        provider = "openai"
+    if provider == "ollama":
+        return provider, shutil.which("ollama") is not None
+    if provider == "anthropic":
+        return provider, bool(os.environ.get("ANTHROPIC_API_KEY"))
+    if provider == "google":
+        return provider, bool(os.environ.get("GOOGLE_API_KEY"))
     return "openai", bool(os.environ.get("OPENAI_API_KEY"))
 
 
@@ -415,9 +450,11 @@ def main() -> None:
     all_rows: list[RunResult] = []
     for model in models:
         provider, has_real_access = _provider_and_access(model)
-        data_source = (
-            "real" if has_real_access else ("simulated" if provider == "ollama" else "mock")
-        )
+        # Ollama used to get a "simulated" fallback here (pre-Sprint-30, when
+        # this environment never had it installed) — now that it's a real,
+        # locally-reachable provider like any other, it gets the same
+        # real/mock branch as OpenAI/Anthropic/Google, not a 3rd state.
+        data_source = "real" if has_real_access else "mock"
         print(f"[model_comparison] model={model} data_source={data_source}")
 
         scenario_rows: list[RunResult] = []

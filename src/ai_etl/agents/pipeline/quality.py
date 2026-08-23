@@ -45,6 +45,50 @@ def quality_node(state: PipelineState) -> PipelineState:
     df: pd.DataFrame = state["transformed_data"]  # type: ignore[assignment]  # non-None guaranteed by error short-circuit above
     checks: list[dict[str, Any]] = []
 
+    # Real bug found 2026-08-23 running case_study/scripts/model_comparison.py against
+    # a local Ollama model (weaker instruction-following than the cloud models this
+    # project was originally tuned against): generated transform code renamed two
+    # source columns to the same target name, producing a DataFrame with duplicate
+    # column labels. `df[col]` on a duplicate-named column returns a DataFrame, not a
+    # Series — every column-by-column check below (`_check_nulls` first) then crashed
+    # with an uncaught `TypeError` instead of the graph's normal "route to END with a
+    # clear error" contract. Guard for it explicitly, before any check that assumes
+    # `df[col]` is always a Series — this is a real risk from ANY model's generated
+    # code, not specific to weaker/local ones, just more likely to surface there.
+    duplicate_columns = df.columns[df.columns.duplicated()].unique().tolist()
+    if duplicate_columns:
+        checks.append(
+            {
+                "check": "duplicate_columns",
+                "severity": "error",
+                "message": (
+                    f"Transformed data has duplicate column name(s): {duplicate_columns} — "
+                    "the generated transform likely renamed two different source columns to "
+                    "the same target name. Quality checks cannot run reliably against "
+                    "ambiguous column labels."
+                ),
+            }
+        )
+        overall_severity = "error"
+        quality_report = {
+            "checks": checks,
+            "severity": overall_severity,
+            "summary": f"{len(checks)} checks: 0 warnings, 1 errors",
+        }
+        new_log = log_action(
+            state,
+            "quality",
+            "checks_complete",
+            {"severity": overall_severity, "checks": len(checks), "errors": 1},
+        )
+        return {
+            **state,
+            "quality_report": quality_report,
+            "status": "failed",
+            "error": f"Quality gate blocked the pipeline: {quality_report['summary']}",
+            "audit_log": new_log,
+        }
+
     checks.extend(_check_nulls(df))
     checks.append(_check_duplicates(df))
     checks.extend(_check_logical_duplicates(df))
