@@ -24,6 +24,7 @@ import pandas as pd
 from ai_etl.agents.analysis.advisor import run_advisor
 from ai_etl.agents.analysis.analyst import run_analyst
 from ai_etl.agents.analysis.planner import plan_analysis_tasks
+from ai_etl.agents.analysis.reviewer import review_gold_result, review_science_result
 from ai_etl.agents.analysis.science import run_science
 from ai_etl.agents.pipeline.loader import loader_node
 from ai_etl.audit.db import (
@@ -47,8 +48,9 @@ from ai_etl.core.analysis_types import (
     TokenUsage,
 )
 from ai_etl.core.graph import build_graph
+from ai_etl.core.llm import is_llm_review_enabled, sum_token_usage
 from ai_etl.core.locale import DEFAULT_LOCALE
-from ai_etl.core.output_validation import check_gold_output, check_science_output
+from ai_etl.core.output_validation import append_check, check_gold_output, check_science_output
 from ai_etl.core.state import PipelineState, initial_state
 
 logger = logging.getLogger(__name__)
@@ -332,11 +334,31 @@ def run_gold_analysis(
     # Sprint 21 (ADR-026): sanity-check a successful result against the Silver data
     # it was derived from — a result that "ran" (ADR-007) is not necessarily correct.
     sanity_check = check_gold_output(result["gold_df"], silver_df, result.get("narrative", ""))
+    tokens = result["tokens"]
+    # ADR-037 (Sprint 21 follow-up): opt-in second LLM pass, additive to the
+    # deterministic checks above — see core.llm.is_llm_review_enabled's docstring
+    # for why this is a global env var, not a per-pipeline setting.
+    if is_llm_review_enabled():
+        review_entry, review_tokens = review_gold_result(
+            task_question,
+            result.get("narrative", ""),
+            result["gold_df"],
+            llm_provider_override,
+            llm_model_override,
+        )
+        tokens = sum_token_usage(tokens, review_tokens)
+        if review_entry is not None:
+            sanity_check = append_check(sanity_check, review_entry)
     if sanity_check["severity"] != "ok":
         progress_callback(stage, f"⚠️ Gold pronto com ressalva de sanity-check ({elapsed_display}s)")
     else:
         progress_callback(stage, f"✅ Gold pronto em {elapsed_display}s ({attempts} tentativa(s))")
-    return {**result, "task_question": task_question, "sanity_check": sanity_check}
+    return {
+        **result,
+        "task_question": task_question,
+        "sanity_check": sanity_check,
+        "tokens": tokens,
+    }
 
 
 def run_science_analysis(
@@ -388,6 +410,20 @@ def run_science_analysis(
     model_info = result.get("model_info", {})
     model_info_dict: dict[str, Any] = dict(model_info) if isinstance(model_info, dict) else {}
     sanity_check = check_science_output(result["predictions_df"], model_info_dict, silver_df)
+    tokens = result["tokens"]
+    # ADR-037 (Sprint 21 follow-up): see run_gold_analysis's identical block above.
+    if is_llm_review_enabled():
+        review_entry, review_tokens = review_science_result(
+            task_question,
+            result.get("narrative", ""),
+            result["predictions_df"],
+            model_info_dict,
+            llm_provider_override,
+            llm_model_override,
+        )
+        tokens = sum_token_usage(tokens, review_tokens)
+        if review_entry is not None:
+            sanity_check = append_check(sanity_check, review_entry)
     model_type = model_info_dict.get("model_type", "Modelo")
     if sanity_check["severity"] != "ok":
         progress_callback(
@@ -397,7 +433,12 @@ def run_science_analysis(
         progress_callback(
             stage, f"✅ {model_type} treinado em {elapsed_display}s ({attempts} tentativa(s))"
         )
-    return {**result, "task_question": task_question, "sanity_check": sanity_check}
+    return {
+        **result,
+        "task_question": task_question,
+        "sanity_check": sanity_check,
+        "tokens": tokens,
+    }
 
 
 def run_gold_with_repair(

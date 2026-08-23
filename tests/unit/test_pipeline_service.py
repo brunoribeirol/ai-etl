@@ -444,6 +444,84 @@ def test_run_science_analysis_omits_sanity_check_on_failure(monkeypatch) -> None
 
 
 # ---------------------------------------------------------------------------
+# run_gold_analysis / run_science_analysis — ADR-037 opt-in LLM review
+# ---------------------------------------------------------------------------
+
+
+def test_run_gold_analysis_skips_llm_review_when_disabled(monkeypatch) -> None:
+    """Default (env var unset): the reviewer is never called at all."""
+
+    def _fail_if_called(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError("review_gold_result should not be called when disabled")
+
+    monkeypatch.setattr(pipeline_service, "is_llm_review_enabled", lambda: False)
+    monkeypatch.setattr(
+        pipeline_service, "run_analyst", lambda df, q, *a, **k: _gold_result(error=None)
+    )
+    monkeypatch.setattr(pipeline_service, "review_gold_result", _fail_if_called)
+
+    result = pipeline_service.run_gold_analysis(pd.DataFrame({"a": [1]}), "pergunta")
+
+    assert result["tokens"] == _ZERO_TOKENS
+
+
+def test_run_gold_analysis_appends_llm_review_entry_when_enabled(monkeypatch) -> None:
+    monkeypatch.setattr(pipeline_service, "is_llm_review_enabled", lambda: True)
+    monkeypatch.setattr(
+        pipeline_service, "run_analyst", lambda df, q, *a, **k: _gold_result(error=None)
+    )
+    review_entry = {
+        "check": "llm_review",
+        "severity": "warning",
+        "detail": "answers a different question",
+    }
+    review_tokens = {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}
+    monkeypatch.setattr(
+        pipeline_service, "review_gold_result", lambda *a, **k: (review_entry, review_tokens)
+    )
+
+    result = pipeline_service.run_gold_analysis(pd.DataFrame({"a": [1]}), "pergunta")
+
+    assert result["sanity_check"]["severity"] == "warning"
+    assert review_entry in result["sanity_check"]["checks"]
+    assert result["tokens"] == review_tokens  # base was all-zero, so the sum equals review_tokens
+
+
+def test_run_gold_analysis_llm_review_returning_none_still_counts_tokens(monkeypatch) -> None:
+    """A review call that fails (see reviewer.py) still folds in its (zero) tokens
+    and adds no entry — never crashes the sub-task."""
+    monkeypatch.setattr(pipeline_service, "is_llm_review_enabled", lambda: True)
+    monkeypatch.setattr(
+        pipeline_service, "run_analyst", lambda df, q, *a, **k: _gold_result(error=None)
+    )
+    monkeypatch.setattr(
+        pipeline_service, "review_gold_result", lambda *a, **k: (None, dict(_ZERO_TOKENS))
+    )
+
+    result = pipeline_service.run_gold_analysis(pd.DataFrame({"a": [1]}), "pergunta")
+
+    assert result["sanity_check"]["severity"] == "ok"
+    assert result["tokens"] == _ZERO_TOKENS
+
+
+def test_run_science_analysis_appends_llm_review_entry_when_enabled(monkeypatch) -> None:
+    monkeypatch.setattr(pipeline_service, "is_llm_review_enabled", lambda: True)
+    monkeypatch.setattr(
+        pipeline_service, "run_science", lambda df, q, *a, **k: _science_result(error=None)
+    )
+    review_entry = {"check": "llm_review", "severity": "warning", "detail": "issue"}
+    review_tokens = {"input_tokens": 8, "output_tokens": 4, "total_tokens": 12}
+    monkeypatch.setattr(
+        pipeline_service, "review_science_result", lambda *a, **k: (review_entry, review_tokens)
+    )
+
+    result = pipeline_service.run_science_analysis(pd.DataFrame({"a": [1]}), "pergunta")
+
+    assert review_entry in result["sanity_check"]["checks"]
+    assert result["tokens"] == review_tokens
+
+
+# ---------------------------------------------------------------------------
 # run_gold_with_repair / run_science_with_repair — auto-repair fallback
 # ---------------------------------------------------------------------------
 

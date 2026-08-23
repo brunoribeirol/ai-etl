@@ -17,6 +17,7 @@ from ai_etl.core.llm import (
     get_llm,
     get_model_name,
     get_provider,
+    is_llm_review_enabled,
     validate_provider_and_model,
 )
 
@@ -36,6 +37,7 @@ def _clean_llm_env(monkeypatch: pytest.MonkeyPatch) -> None:
         "ANTHROPIC_API_KEY",
         "GOOGLE_API_KEY",
         "OLLAMA_BASE_URL",
+        "AI_ETL_LLM_REVIEW_ENABLED",
     ):
         monkeypatch.delenv(var, raising=False)
 
@@ -286,3 +288,22 @@ class TestProviderConnectivity:
 
         assert result["ok"] is False
         assert result["error"] is not None
+
+
+class TestIsLlmReviewEnabled:
+    """ADR-037 (Sprint 21 follow-up) — opt-in, default off."""
+
+    def test_defaults_to_false(self) -> None:
+        assert is_llm_review_enabled() is False
+
+    @pytest.mark.parametrize("value", ["1", "true", "True", "yes", "YES"])
+    def test_truthy_values_enable_it(self, monkeypatch: pytest.MonkeyPatch, value: str) -> None:
+        monkeypatch.setenv("AI_ETL_LLM_REVIEW_ENABLED", value)
+        assert is_llm_review_enabled() is True
+
+    @pytest.mark.parametrize("value", ["0", "false", "no", ""])
+    def test_falsy_values_keep_it_disabled(
+        self, monkeypatch: pytest.MonkeyPatch, value: str
+    ) -> None:
+        monkeypatch.setenv("AI_ETL_LLM_REVIEW_ENABLED", value)
+        assert is_llm_review_enabled() is False

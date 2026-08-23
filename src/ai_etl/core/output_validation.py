@@ -68,6 +68,18 @@ def _summarize(checks: list[OutputSanityCheckEntry]) -> OutputSanityCheck:
     return {"checks": checks, "severity": severity, "summary": summary}
 
 
+def append_check(
+    sanity_check: OutputSanityCheck, entry: OutputSanityCheckEntry
+) -> OutputSanityCheck:
+    """ADR-037 (Sprint 21 follow-up) — append one more entry (e.g. from
+    `agents/analysis/reviewer.py`'s optional LLM review) onto an existing
+    `OutputSanityCheck` and recompute `severity`/`summary` via the same
+    `_summarize` logic every deterministic check already goes through, so there is
+    exactly one place that derives those two fields from a `checks` list.
+    """
+    return _summarize([*sanity_check["checks"], entry])
+
+
 def check_gold_output(
     gold_df: pd.DataFrame, silver_df: pd.DataFrame, narrative: str
 ) -> OutputSanityCheck:
