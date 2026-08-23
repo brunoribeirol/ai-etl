@@ -76,7 +76,9 @@ def test_quality_node_error_severity_for_duplicate_column_names() -> None:
     assert result["quality_report"]["severity"] == "error"
     assert result["status"] == "failed"
     assert result["error"]  # must not be None — callers render it directly
-    dup_checks = [c for c in result["quality_report"]["checks"] if c["check"] == "duplicate_columns"]
+    dup_checks = [
+        c for c in result["quality_report"]["checks"] if c["check"] == "duplicate_columns"
+    ]
     assert len(dup_checks) == 1
     assert "duplicate column" in dup_checks[0]["message"].lower()
 
