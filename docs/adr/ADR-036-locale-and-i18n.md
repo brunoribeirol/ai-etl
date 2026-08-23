@@ -108,29 +108,48 @@ currency/date field in `GoldResult`/`ScienceResult`/`AdvisorResult` to reformat 
 today; the narrative is free text the LLM composes. This is a real limitation, not a full
 implementation, and is called out explicitly in Consequences below.
 
-### 3. Frontend: `next-intl`, App Router route groups, one message catalog per locale
+### 3. Frontend: `next-intl`, cookie-resolved (no URL locale prefix), one message catalog per locale
 
 No i18n library existed in `frontend/` before this sprint (confirmed by inspection — zero
 `next-intl`/`i18n` references anywhere in `frontend/src` or `package.json`). `next-intl` is the
-current de-facto standard for the Next.js App Router (server component support, typed message
-catalogs, App Router route-group locale segments) — chosen over rolling a custom
+current de-facto standard for the Next.js App Router (server component support via
+`getTranslations`, typed message catalogs) — chosen over rolling a custom
 context/localStorage-only solution because the requirement is explicitly "the landing page
-entire, the app entire," which needs server-rendered locale-aware routes (so a shared link or a
+entire, the app entire," which needs server-rendered, locale-aware pages (so a shared link or a
 crawler gets the right language on first paint), not just a client-side toggle repainting
 strings after hydration.
 
-`messages/en.json` / `messages/pt-BR.json` hold the UI string catalog (landing + app shell +
-navigation + forms + toasts). The toggle persists the choice (cookie-backed, read by
-`next-intl`'s middleware on every request, so it survives a reload and a shared link) and is
-reachable from any screen via the shared app/marketing shell, not a page-local control.
+**Locale is resolved from a cookie (`src/i18n/request.ts`), not a `/en`/`/pt-BR` URL prefix** —
+deliberately *not* next-intl's routing/`localePrefix`/`pathnames` middleware integration, which
+is the library's other common setup. This app already shipped at `/`, `/app`, `/pipelines`,
+`/historico`, `/resumo`, `/comecar` (and their dynamic segments) before this sprint, and
+`src/middleware.ts` already owns request-level routing for Clerk auth
+(`clerkMiddleware`/`auth.protect()`, `isPublicRoute`) — layering next-intl's own routing
+middleware on top would mean either running two middleware chains or rewriting Clerk's matcher
+logic to be locale-prefix-aware, and every existing bookmark/link would need a redirect to keep
+working. A cookie read in `src/i18n/request.ts` (server) and written by
+`src/i18n/actions.ts::setLocaleCookie` (a Server Action, called from
+`src/components/locale-toggle.tsx`) gets the same "resolved once per request, available to every
+Server and Client Component" result without touching `src/middleware.ts` or any route path — the
+same non-URL persistence shape `next-themes` already uses for light/dark (`localStorage` there,
+a cookie here because the choice must be visible to Server Components, which `localStorage`
+never is).
 
-The backend narrative toggle is a **separate axis** from the frontend UI toggle: the frontend
-locale cookie is a *display* preference (which catalog to render chrome in) and does not, by
-itself, change what language the Advisor writes in — that is `users.locale`, set once via
-`PATCH /tenant/locale` (surfaced in a settings control that also flips the frontend cookie in the
-same action) so a tenant configuring "English" gets both an English UI and an English narrative
-from one control, without conflating "how this browser renders buttons" with "what language a
-persisted, cross-session, billing-relevant tenant setting is in."
+`messages/pt-BR.json` / `messages/en-US.json` hold the UI string catalog (landing + app shell +
+navigation + forms + toasts), organized by one namespace per page/component. The toggle
+(`<LocaleToggle>`) is reachable from any screen via the shared app/marketing shell, not a
+page-local control, and persists via the cookie above (one year, survives a reload and a shared
+link — the URL itself is unaffected either way).
+
+The backend narrative toggle is a **separate axis** from the frontend UI toggle, kept in sync by
+one control rather than merged into one setting: the frontend locale cookie is a *display*
+preference (which catalog to render chrome in) and does not, by itself, change what language the
+Advisor writes in — that is `users.locale`. Inside the authenticated `(app)` shell,
+`<LocaleToggle syncBackend>` calls `PATCH /tenant/locale` in the same click that flips the UI
+cookie, so a signed-in tenant clicking the toggle gets both an English UI and an English
+narrative on the next run from one control. On the signed-out marketing page, the same
+`<LocaleToggle>` component (`syncBackend` left at its default `false`) only flips the UI cookie —
+there is no signed-in tenant yet to configure `users.locale` for.
 
 ## Consequences
 
