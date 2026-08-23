@@ -66,22 +66,55 @@
   },
   "agents": {
     "pyramid": [
-      { "label": "Bronze", "description": "Raw data, untouched." },
-      { "label": "Silver", "description": "Cleaned, standardized, validated." },
-      { "label": "Gold", "description": "KPIs and descriptive insights." },
-      { "label": "Science", "description": "Forecasts and predictive models." },
-      { "label": "Advisor", "description": "Actionable recommendations." }
+      {
+        "label": "Bronze",
+        "description": "Raw data, untouched."
+      },
+      {
+        "label": "Silver",
+        "description": "Cleaned, standardized, validated."
+      },
+      {
+        "label": "Gold",
+        "description": "KPIs and descriptive insights."
+      },
+      {
+        "label": "Science",
+        "description": "Forecasts and predictive models."
+      },
+      {
+        "label": "Advisor",
+        "description": "Actionable recommendations."
+      }
     ],
     "roster": [
-      { "description": "Reads the specification and plans the pipeline (sources, transformations, destination)." },
-      { "description": "Extracts and inspects the data from each source (CSV, Postgres, REST, PDF/DOCX)." },
-      { "description": "Generates and runs (in a sandbox) the cleaning/transformation code — the Silver layer." },
-      { "description": "Checks for nulls, duplicates, and outliers in the transformed data." },
-      { "description": "Persists the cleaned data to the configured destination." },
-      { "description": "Breaks the business question down into sub-analyses (Gold and/or Science)." },
-      { "description": "Generates pandas code, computes KPIs, and builds the chart for each descriptive sub-analysis." },
-      { "description": "Trains a predictive model (scikit-learn) and generates forecasts." },
-      { "description": "Synthesizes Gold + Science into prioritized, actionable recommendations." }
+      {
+        "description": "Reads the specification and plans the pipeline (sources, transformations, destination)."
+      },
+      {
+        "description": "Extracts and inspects the data from each source (CSV, Postgres, REST, PDF/DOCX)."
+      },
+      {
+        "description": "Generates and runs (in a sandbox) the cleaning/transformation code — the Silver layer."
+      },
+      {
+        "description": "Checks for nulls, duplicates, and outliers in the transformed data."
+      },
+      {
+        "description": "Persists the cleaned data to the configured destination."
+      },
+      {
+        "description": "Breaks the business question down into sub-analyses (Gold and/or Science)."
+      },
+      {
+        "description": "Generates pandas code, computes KPIs, and builds the chart for each descriptive sub-analysis."
+      },
+      {
+        "description": "Trains a predictive model (scikit-learn) and generates forecasts."
+      },
+      {
+        "description": "Synthesizes Gold + Science into prioritized, actionable recommendations."
+      }
     ]
   },
   "agentsInfo": {
@@ -278,9 +311,16 @@
     "toastResumed": "Pipeline resumed.",
     "invalidJson": "Quality rules: invalid JSON.",
     "invalidJsonShape": "Quality rules: must be a list (JSON array), e.g. [].",
-    "missingApiUrl": "NEXT_PUBLIC_API_URL is not configured."
+    "missingApiUrl": "NEXT_PUBLIC_API_URL is not configured.",
+    "modelLabel": "AI model",
+    "modelHint": "(cost and reliability shown per model — Sprint 30/35)",
+    "toastModelUpdated": "Model updated."
   },
   "runSections": {
     "code": "Code"
+  },
+  "modelPicker": {
+    "priceLine": "${input}/${output} per 1M tokens (input/output)",
+    "reliabilityVerified": "Verified — real comparison run"
   }
 }

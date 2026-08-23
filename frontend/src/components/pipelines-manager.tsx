@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/status-badge";
+import { ModelPicker } from "@/components/model-picker";
 import { SCHEDULABLE_SOURCE_TYPES, type QualityRule, type SavedPipeline } from "@/lib/types";
 
 /**
@@ -46,6 +47,12 @@ export function PipelinesManager() {
   // own Sprint 13 precedent ("não precisa ser bonita, precisa funcionar").
   const [qualityRulesText, setQualityRulesText] = useState("[]");
   const [submitting, setSubmitting] = useState(false);
+  // Sprint 30 (ADR-031) frontend — the pipeline currently being edited's LLM
+  // provider/model override, kept separate from the fields above since it
+  // writes via its own endpoint (`PUT /pipelines/{id}/llm-config`), not the
+  // main PATCH `handleSubmit` below.
+  const [llmProvider, setLlmProvider] = useState<string | null>(null);
+  const [llmModel, setLlmModel] = useState<string | null>(null);
 
   const authedFetch = useCallback(
     async (path: string, init?: RequestInit) => {
@@ -93,6 +100,8 @@ export function PipelinesManager() {
     setBusinessQuestion("");
     setCronSchedule("0 3 * * *");
     setQualityRulesText("[]");
+    setLlmProvider(null);
+    setLlmModel(null);
   }
 
   function startEdit(pipeline: SavedPipeline) {
@@ -103,6 +112,27 @@ export function PipelinesManager() {
     setBusinessQuestion(pipeline.business_question);
     setCronSchedule(pipeline.cron_schedule);
     setQualityRulesText(JSON.stringify(pipeline.quality_rules ?? [], null, 2));
+    setLlmProvider(pipeline.llm_provider);
+    setLlmModel(pipeline.llm_model);
+  }
+
+  /** Sprint 30 (ADR-031) frontend — writes a model-picker click immediately via
+   * `PUT /pipelines/{id}/llm-config`, independent of the main form's `Save`
+   * button (see `<ModelPicker>`'s own docstring for why). */
+  async function handleModelSelect(provider: string, model: string) {
+    if (!editingId) return;
+    try {
+      await authedFetch(`/pipelines/${editingId}/llm-config`, {
+        method: "PUT",
+        body: JSON.stringify({ llm_provider: provider, llm_model: model }),
+      });
+      setLlmProvider(provider);
+      setLlmModel(model);
+      toast.success(t("toastModelUpdated"));
+      await loadPipelines();
+    } catch (err) {
+      toast.error(String(err instanceof Error ? err.message : err));
+    }
   }
 
   /** Sprint 16 (ADR-023) — parses the raw JSON textarea into `QualityRule[]`,
@@ -278,6 +308,25 @@ export function PipelinesManager() {
               />
               <p className="text-xs text-muted-foreground">{t("qualityRulesHelp")}</p>
             </div>
+
+            {/* Sprint 30 (ADR-031) frontend — only shown while editing an
+                already-saved pipeline: the model picker needs a real
+                pipeline id to call `PUT /pipelines/{id}/llm-config` against,
+                which doesn't exist yet for a pipeline still being created. */}
+            {editingId && (
+              <div className="flex flex-col gap-2">
+                <Label>
+                  {t("modelLabel")}{" "}
+                  <span className="text-muted-foreground font-normal">{t("modelHint")}</span>
+                </Label>
+                <ModelPicker
+                  currentProvider={llmProvider}
+                  currentModel={llmModel}
+                  onSelect={handleModelSelect}
+                  disabled={submitting}
+                />
+              </div>
+            )}
 
             <div className="flex gap-2">
               <Button type="submit" disabled={submitting} className="flex-1">

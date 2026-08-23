@@ -66,22 +66,55 @@
   },
   "agents": {
     "pyramid": [
-      { "label": "Bronze", "description": "Dado bruto, sem nenhum toque." },
-      { "label": "Silver", "description": "Limpo, padronizado, validado." },
-      { "label": "Gold", "description": "KPIs e insights descritivos." },
-      { "label": "Science", "description": "Previsões e modelos preditivos." },
-      { "label": "Advisor", "description": "Recomendações de ação." }
+      {
+        "label": "Bronze",
+        "description": "Dado bruto, sem nenhum toque."
+      },
+      {
+        "label": "Silver",
+        "description": "Limpo, padronizado, validado."
+      },
+      {
+        "label": "Gold",
+        "description": "KPIs e insights descritivos."
+      },
+      {
+        "label": "Science",
+        "description": "Previsões e modelos preditivos."
+      },
+      {
+        "label": "Advisor",
+        "description": "Recomendações de ação."
+      }
     ],
     "roster": [
-      { "description": "Lê a especificação e planeja o pipeline (fontes, transformações, destino)." },
-      { "description": "Extrai e inspeciona os dados de cada fonte (CSV, Postgres, REST, PDF/DOCX)." },
-      { "description": "Gera e executa (em sandbox) o código de limpeza/transformação — a camada Silver." },
-      { "description": "Verifica nulos, duplicatas e outliers nos dados transformados." },
-      { "description": "Persiste os dados limpos no destino configurado." },
-      { "description": "Decompõe a pergunta de negócio em sub-análises (Gold e/ou Science)." },
-      { "description": "Gera código pandas, calcula KPIs e cria o gráfico de cada sub-análise descritiva." },
-      { "description": "Treina um modelo preditivo (scikit-learn) e gera previsões." },
-      { "description": "Sintetiza Gold + Science em recomendações de ação priorizadas." }
+      {
+        "description": "Lê a especificação e planeja o pipeline (fontes, transformações, destino)."
+      },
+      {
+        "description": "Extrai e inspeciona os dados de cada fonte (CSV, Postgres, REST, PDF/DOCX)."
+      },
+      {
+        "description": "Gera e executa (em sandbox) o código de limpeza/transformação — a camada Silver."
+      },
+      {
+        "description": "Verifica nulos, duplicatas e outliers nos dados transformados."
+      },
+      {
+        "description": "Persiste os dados limpos no destino configurado."
+      },
+      {
+        "description": "Decompõe a pergunta de negócio em sub-análises (Gold e/ou Science)."
+      },
+      {
+        "description": "Gera código pandas, calcula KPIs e cria o gráfico de cada sub-análise descritiva."
+      },
+      {
+        "description": "Treina um modelo preditivo (scikit-learn) e gera previsões."
+      },
+      {
+        "description": "Sintetiza Gold + Science em recomendações de ação priorizadas."
+      }
     ]
   },
   "agentsInfo": {
@@ -278,9 +311,16 @@
     "toastResumed": "Pipeline retomado.",
     "invalidJson": "Regras de qualidade: JSON inválido.",
     "invalidJsonShape": "Regras de qualidade: deve ser uma lista (array JSON), ex: [].",
-    "missingApiUrl": "NEXT_PUBLIC_API_URL não está configurada."
+    "missingApiUrl": "NEXT_PUBLIC_API_URL não está configurada.",
+    "modelLabel": "Modelo de IA",
+    "modelHint": "(custo e confiabilidade por modelo — Sprint 30/35)",
+    "toastModelUpdated": "Modelo atualizado."
   },
   "runSections": {
     "code": "Código"
+  },
+  "modelPicker": {
+    "priceLine": "${input}/${output} por 1M tokens (entrada/saída)",
+    "reliabilityVerified": "Verificado — comparação real"
   }
 }
