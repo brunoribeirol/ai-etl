@@ -65,6 +65,22 @@ def test_quality_node_error_severity_for_high_nulls() -> None:
     assert result["error"]  # must not be None — callers render it directly
 
 
+def test_quality_node_error_severity_for_duplicate_column_names() -> None:
+    """Real bug found 2026-08-23 (generated transform code renamed two source
+    columns to the same target name) — `df[col]` on a duplicate-named column
+    returns a DataFrame, not a Series, which used to crash `_check_nulls` with
+    an uncaught `TypeError` instead of blocking the pipeline through the
+    normal quality-gate contract."""
+    df = pd.DataFrame([[1, 2, 3]], columns=["a", "a", "b"])
+    result = quality_node(_state_with_df(df))  # type: ignore[arg-type]
+    assert result["quality_report"]["severity"] == "error"
+    assert result["status"] == "failed"
+    assert result["error"]  # must not be None — callers render it directly
+    dup_checks = [c for c in result["quality_report"]["checks"] if c["check"] == "duplicate_columns"]
+    assert len(dup_checks) == 1
+    assert "duplicate column" in dup_checks[0]["message"].lower()
+
+
 def test_quality_node_ok_severity_leaves_error_untouched() -> None:
     df = pd.DataFrame({"a": [1, 2, 3]})
     result = quality_node(_state_with_df(df))  # type: ignore[arg-type]

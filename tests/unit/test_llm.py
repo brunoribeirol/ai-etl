@@ -134,9 +134,9 @@ class TestGetLlmOverride:
         monkeypatch.setenv("AI_ETL_LLM_PROVIDER", "openai")
         monkeypatch.setenv("OPENAI_API_KEY", "sk-fake")
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-fake")
-        llm = get_llm(provider="anthropic", model="claude-haiku-5")
+        llm = get_llm(provider="anthropic", model="claude-haiku-4-5")
         assert isinstance(llm, ChatAnthropic)
-        assert llm.model == "claude-haiku-5"
+        assert llm.model == "claude-haiku-4-5"
 
     def test_model_override_wins_over_env_var(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("OPENAI_API_KEY", "sk-fake")

@@ -37,7 +37,7 @@ _DEFAULT_MODEL_BY_PROVIDER = {
 # already applies to `source_type`.
 ALLOWED_MODELS_BY_PROVIDER: dict[str, frozenset[str]] = {
     "openai": frozenset({"gpt-4o-mini", "gpt-4o"}),
-    "anthropic": frozenset({"claude-opus-5", "claude-sonnet-5", "claude-haiku-5"}),
+    "anthropic": frozenset({"claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5"}),
     "google": frozenset({"gemini-2.0-pro", "gemini-2.0-flash"}),
     "ollama": frozenset({"llama3.1", "llama3.3", "mistral", "qwen2.5"}),
 }

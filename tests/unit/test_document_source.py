@@ -105,14 +105,14 @@ def test_load_document_forwards_llm_override(mocker) -> None:
     )
 
     load_document(
-        "report.pdf", llm_provider_override="anthropic", llm_model_override="claude-haiku-5"
+        "report.pdf", llm_provider_override="anthropic", llm_model_override="claude-haiku-4-5"
     )
 
-    mock_structure.assert_called_once_with("raw text", "anthropic", "claude-haiku-5")
+    mock_structure.assert_called_once_with("raw text", "anthropic", "claude-haiku-4-5")
 
 
 def test_structure_text_forwards_override_to_get_llm(mock_get_llm) -> None:
     mock_get_llm.return_value = _mock_llm([json.dumps(VALID_ROWS)])
-    _structure_text("some text", "anthropic", "claude-haiku-5")
+    _structure_text("some text", "anthropic", "claude-haiku-4-5")
 
-    mock_get_llm.assert_called_once_with(provider="anthropic", model="claude-haiku-5")
+    mock_get_llm.assert_called_once_with(provider="anthropic", model="claude-haiku-4-5")

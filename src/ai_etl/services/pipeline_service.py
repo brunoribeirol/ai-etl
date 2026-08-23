@@ -152,7 +152,26 @@ def run_silver_pipeline(
     # locale is a per-*tenant* setting (users.locale), not per-saved-pipeline: resolved
     # whenever a real tenant_id is present, regardless of saved_pipeline_id, so every
     # avulso run also gets its tenant's configured locale.
-    locale = get_locale(tenant_id) if tenant_id is not None else DEFAULT_LOCALE
+    #
+    # Real regression found post-merge (2026-08-23): `get_locale()` has no fail-safe
+    # against an unreachable/unconfigured database (unlike the saved_pipeline lookups
+    # above, which only run when saved_pipeline_id is also set) — a DB hiccup, or any
+    # caller with no APP_DATABASE_URL at all (e.g. case_study/scripts/model_comparison.py,
+    # which deliberately bypasses persistence), previously crashed the *entire* run
+    # before a single agent ran, for a cosmetic i18n setting. Narrating the run in the
+    # wrong language is a much smaller failure than never running it — fall back to
+    # DEFAULT_LOCALE and log, don't propagate.
+    locale = DEFAULT_LOCALE
+    if tenant_id is not None:
+        try:
+            locale = get_locale(tenant_id)
+        except Exception:  # noqa: BLE001 — see comment above: never let this block a run
+            logger.warning(
+                "run_silver_pipeline: failed to resolve tenant locale, "
+                "falling back to default (%r)",
+                DEFAULT_LOCALE,
+                exc_info=True,
+            )
     state = initial_state(
         spec=spec,
         run_id=run_id,
