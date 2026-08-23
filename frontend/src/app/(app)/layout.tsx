@@ -1,6 +1,8 @@
+import { getTranslations } from "next-intl/server";
 import Link from "next/link";
 import { AgentsInfo } from "@/components/agents-info";
 import { AuthHeader } from "@/components/auth-header";
+import { LocaleToggle } from "@/components/locale-toggle";
 import { MobileNav } from "@/components/mobile-nav";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { apiFetch } from "@/lib/api";
@@ -20,8 +22,19 @@ import type { ApiConfig } from "@/lib/types";
  * header. The horizontal `<nav>` is now `hidden` below `sm:` and replaced by
  * `<MobileNav>`'s hamburger + Sheet at that width; `<ThemeToggle>` is new
  * (light/dark toggle, same sprint).
+ *
+ * Sprint 25 (ADR-036) — nav labels come from `messages/{locale}.json`'s
+ * `appNav` namespace (`getTranslations`, this is an async Server Component,
+ * same reason `apiFetch` above is awaited directly rather than via a hook).
+ * `<LocaleToggle syncBackend>` — unlike the marketing layout's toggle, every
+ * visitor here is signed in (`src/middleware.ts` protects this whole route
+ * group), so flipping the UI locale also persists it as this tenant's
+ * `users.locale` via `PATCH /tenant/locale` (ADR-036 §3).
  */
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
+  const t = await getTranslations("appNav");
+  const tCommon = await getTranslations("common");
+
   // Best-effort: the model badge / "Como funciona" panel is informational,
   // not load-bearing — a config-fetch failure shouldn't break every page's
   // layout the way a failed page-level fetch would.
@@ -38,27 +51,28 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <div className="flex items-center gap-2 sm:gap-8 min-w-0">
           <MobileNav />
           <Link href="/app" className="font-semibold tracking-tight text-sm shrink-0">
-            AI-ETL
+            {tCommon("brand")}
           </Link>
           <nav className="hidden sm:flex gap-6 text-sm text-muted-foreground">
             <Link href="/comecar" className="hover:text-foreground transition-colors">
-              Começar
+              {t("comecar")}
             </Link>
             <Link href="/app" className="hover:text-foreground transition-colors">
-              Executar
+              {t("executar")}
             </Link>
             <Link href="/historico" className="hover:text-foreground transition-colors">
-              Histórico
+              {t("historico")}
             </Link>
             <Link href="/pipelines" className="hover:text-foreground transition-colors">
-              Pipelines
+              {t("pipelines")}
             </Link>
             <Link href="/resumo" className="hover:text-foreground transition-colors">
-              Resumo
+              {t("resumo")}
             </Link>
           </nav>
         </div>
         <div className="flex items-center gap-1 shrink-0">
+          <LocaleToggle syncBackend />
           <ThemeToggle />
           <AgentsInfo modelName={modelName} />
           <AuthHeader />

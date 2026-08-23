@@ -21,6 +21,8 @@ unchanged:
 - `onboarding.py` — self-serve activation checklist (Sprint 26, ADR-027).
 - `retention.py` — per-tenant automatic run-retention policy config
   (Sprint 36, ADR-035), same shape as `budget.py`'s spend cap.
+- `locale.py` — per-tenant locale config (Sprint 25, ADR-036), same shape as
+  `retention.py`'s single scalar column.
 
 Pure reorganization — no behavior change. Internal call sites within
 `audit/` should import directly from the specific submodule; everything
@@ -42,6 +44,7 @@ from ai_etl.audit.db.health import (
     list_pipeline_run_history,
     record_pipeline_health,
 )
+from ai_etl.audit.db.locale import get_locale, set_locale
 from ai_etl.audit.db.onboarding import get_onboarding_status
 from ai_etl.audit.db.pipelines import (
     claim_due_pipeline,
@@ -85,6 +88,7 @@ __all__ = [
     "ensure_user",
     "get_avg_run_cost_usd",
     "get_global_avg_run_cost_usd",
+    "get_locale",
     "get_monthly_budget",
     "get_monthly_spend_usd",
     "get_onboarding_status",
@@ -110,6 +114,7 @@ __all__ = [
     "save_analysis",
     "save_run",
     "save_stage_latencies",
+    "set_locale",
     "set_monthly_budget",
     "set_retention_days",
     "set_saved_pipeline_llm_config",

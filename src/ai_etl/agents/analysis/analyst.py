@@ -15,6 +15,12 @@ from ai_etl.agents._llm_codegen import build_column_stats as _build_column_stats
 from ai_etl.agents._llm_codegen import strip_code_fences as _strip_fences
 from ai_etl.core.analysis_types import GoldResult, TokenUsage
 from ai_etl.core.llm import extract_token_usage, get_llm, sum_token_usage
+from ai_etl.core.locale import (
+    DEFAULT_LOCALE,
+    currency_hint,
+    narrative_language_instruction,
+    resolve_locale,
+)
 from ai_etl.core.sandbox import execute_in_sandbox, scale_timeout_for_rows
 
 # Lower than Transformer's default (30s, core/sandbox.py) — deliberately, per
@@ -44,8 +50,11 @@ You are an expert data analyst. You have access to a cleaned pandas DataFrame ca
 ## Sample data (first 5 rows):
 {sample}
 
-## Business question (in Portuguese):
+## Business question:
 "{question}"
+
+## Language and formatting for this tenant
+{language_instruction} {currency_hint}
 
 ## Your task
 
@@ -59,12 +68,13 @@ Write Python code that defines EXACTLY three variables:
 2. `fig` — a Plotly figure that best visualizes `gold_df`.
    - Use `px` (plotly.express) for simple charts or `go` (plotly.graph_objects) for composites.
    - Choose the most appropriate chart type (bar, line, pie, scatter, etc.).
-   - Set a descriptive title in Portuguese.
-   - Set Portuguese axis labels where applicable.
+   - Set a descriptive title using the tenant's language above.
+   - Set axis labels in the tenant's language above, where applicable.
    - Use a clean color scheme (e.g. `color_discrete_sequence=px.colors.qualitative.Set2`).
 
-3. `narrative` — a 2–3 sentence string in Portuguese explaining the main insight for a
-   non-technical business user. Be specific: include actual numbers from `gold_df`.
+3. `narrative` — a 2–3 sentence string, in the tenant's language above, explaining the main
+   insight for a non-technical business user. Be specific: include actual numbers from
+   `gold_df`.
 
 ## Critical rules
 - `df` is already loaded — do NOT read any files.
@@ -76,6 +86,13 @@ Write Python code that defines EXACTLY three variables:
 - `fig` must be a Plotly Figure object. Do NOT call `fig.show()`.
 - Respond ONLY with valid Python code. No markdown fences. No explanations. No comments.
 """
+
+_FALLBACK_NARRATIVE: dict[str, str] = {
+    "pt-BR": "Não foi possível gerar a análise automaticamente. Tente reformular a "
+    "pergunta com mais detalhes.",
+    "en-US": "The automatic analysis could not be generated. Try rephrasing the "
+    "question with more detail.",
+}
 
 _RETRY_PREFIX = """\
 The previous attempt failed. Here is the error:
@@ -94,6 +111,7 @@ def run_analyst(
     business_question: str,
     llm_provider_override: str | None = None,
     llm_model_override: str | None = None,
+    locale: str = DEFAULT_LOCALE,
 ) -> GoldResult:
     """Answer a business question from a Silver DataFrame.
 
@@ -104,7 +122,11 @@ def run_analyst(
         llm_provider_override / llm_model_override: Sprint 30/gap-closing (ADR-031
             §5) — see `agents/analysis/planner.py::plan_analysis_tasks`'s identical
             parameters for rationale. `None` (the default) — unchanged behavior.
+        locale: Sprint 25 (ADR-036) — the tenant's configured locale, same threading
+            pattern as `llm_provider_override` above. Defaults to `DEFAULT_LOCALE`
+            ("pt-BR") — unchanged behavior for every existing caller.
     """
+    resolved_locale = resolve_locale(locale)
     columns_list = str(df.columns.tolist())
     schema = {col: str(dtype) for col, dtype in df.dtypes.items()}
     sample = df.head(5).to_dict(orient="records")
@@ -116,6 +138,8 @@ def run_analyst(
         stats=stats,
         sample=json.dumps(sample, default=str, ensure_ascii=False, indent=2),
         question=business_question,
+        language_instruction=narrative_language_instruction(resolved_locale),
+        currency_hint=currency_hint(resolved_locale),
     )
 
     llm = get_llm(provider=llm_provider_override, model=llm_model_override)
@@ -185,7 +209,7 @@ def run_analyst(
         "task_question": "",
         "gold_df": pd.DataFrame(),
         "fig": None,
-        "narrative": "Não foi possível gerar a análise automaticamente. Tente reformular a pergunta com mais detalhes.",
+        "narrative": _FALLBACK_NARRATIVE.get(resolved_locale, _FALLBACK_NARRATIVE[DEFAULT_LOCALE]),
         "code": last_code,
         "attempts": 3,
         "error": last_error,

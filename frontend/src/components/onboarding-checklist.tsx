@@ -2,6 +2,7 @@
 
 import { useAuth } from "@clerk/nextjs";
 import { CheckCircle2, Circle } from "lucide-react";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -16,6 +17,7 @@ import type { OnboardingStatus } from "@/lib/types";
  * known, flagged scope cut, same posture Sprint 13's manager took.
  */
 export function OnboardingChecklist() {
+  const t = useTranslations("onboardingChecklist");
   const { getToken } = useAuth();
   const apiUrl = process.env.NEXT_PUBLIC_API_URL;
   const [status, setStatus] = useState<OnboardingStatus | null>(null);
@@ -25,7 +27,7 @@ export function OnboardingChecklist() {
     let cancelled = false;
     async function load() {
       if (!apiUrl) {
-        setError("NEXT_PUBLIC_API_URL is not configured.");
+        setError(t("missingApiUrl"));
         return;
       }
       try {
@@ -44,25 +46,25 @@ export function OnboardingChecklist() {
     return () => {
       cancelled = true;
     };
-  }, [apiUrl, getToken]);
+  }, [apiUrl, getToken, t]);
 
   const items = [
     {
       done: status?.has_completed_run ?? false,
-      label: "Rode seu primeiro pipeline",
-      hint: "Use o exemplo pré-carregado abaixo ou envie seu próprio arquivo.",
+      label: t("item1Label"),
+      hint: t("item1Hint"),
       href: null,
     },
     {
       done: status?.has_saved_pipeline ?? false,
-      label: "Crie um pipeline agendado",
-      hint: "Conecte uma fonte viva (Postgres, REST...) para rodar sozinho no horário certo.",
+      label: t("item2Label"),
+      hint: t("item2Hint"),
       href: "/pipelines",
     },
     {
       done: status?.has_saved_pipeline ?? false,
-      label: "Veja o resumo executivo",
-      hint: "Disponível assim que um pipeline agendado tiver ao menos uma execução.",
+      label: t("item3Label"),
+      hint: t("item3Hint"),
       href: "/resumo",
     },
   ];

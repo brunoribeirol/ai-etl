@@ -1,3 +1,4 @@
+import { getTranslations } from "next-intl/server";
 import { DataTable } from "@/components/data-table";
 import { PlotlyChart } from "@/components/plotly-chart";
 import { Badge } from "@/components/ui/badge";
@@ -7,7 +8,7 @@ import type { AnalysisEntry } from "@/lib/types";
 /** One Gold or Science sub-task entry — narrative, chart (if any), data
  * preview table, matching `app.py::_render_results`'s per-sub-task layout.
  * Sprint 7: wrapped in a Card instead of a bare `<section>`, same content. */
-export function AnalysisSection({
+export async function AnalysisSection({
   title,
   entry,
   dataKey,
@@ -16,6 +17,7 @@ export function AnalysisSection({
   entry: AnalysisEntry;
   dataKey: "gold_df" | "predictions_df";
 }) {
+  const t = await getTranslations("analysisSection");
   const rows = entry[dataKey];
   const sanityCheck = entry.sanity_check;
   const hasCaveat = sanityCheck && sanityCheck.severity !== "ok";
@@ -28,7 +30,7 @@ export function AnalysisSection({
           {entry.task_question ? ` — ${entry.task_question}` : ""}
           {entry.repaired && (
             <Badge variant="outline" className="text-amber-400 border-amber-500/30 bg-amber-500/10">
-              reparado
+              {t("repaired")}
             </Badge>
           )}
           {hasCaveat && (
@@ -37,7 +39,7 @@ export function AnalysisSection({
               className="text-amber-400 border-amber-500/30 bg-amber-500/10"
               title={sanityCheck.summary}
             >
-              ressalva
+              {t("caveat")}
             </Badge>
           )}
         </CardTitle>
@@ -46,7 +48,7 @@ export function AnalysisSection({
         {entry.narrative && <p className="text-sm text-muted-foreground">{entry.narrative}</p>}
         {hasCaveat && (
           <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-sm text-amber-400">
-            <p className="font-medium">Resultado com ressalva de sanity-check</p>
+            <p className="font-medium">{t("caveatHeading")}</p>
             <ul className="mt-1 list-disc pl-4">
               {sanityCheck.checks
                 .filter((c) => c.severity !== "ok")

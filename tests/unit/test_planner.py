@@ -45,6 +45,17 @@ def test_plan_analysis_tasks_parses_valid_json(mock_get_llm, sample_df) -> None:
     assert tokens == {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}
 
 
+def test_plan_analysis_tasks_en_us_locale_instructs_english(mock_get_llm, sample_df) -> None:
+    """Sprint 25 (ADR-036)."""
+    response = json.dumps([{"question": "What are the main KPIs?", "type": "descriptive"}])
+    llm = _mock_llm(response)
+    mock_get_llm.return_value = llm
+    plan_analysis_tasks("complex question", sample_df, locale="en-US")
+
+    sent_prompt = llm.invoke.call_args[0][0]
+    assert "English (US)" in sent_prompt
+
+
 def test_plan_analysis_tasks_strips_markdown_fences(mock_get_llm, sample_df) -> None:
     payload = json.dumps([{"question": "X?", "type": "descriptive"}])
     mock_get_llm.return_value = _mock_llm(f"```json\n{payload}\n```")

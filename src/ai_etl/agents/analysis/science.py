@@ -17,6 +17,12 @@ from ai_etl.agents._llm_codegen import build_column_stats as _build_column_stats
 from ai_etl.agents._llm_codegen import strip_code_fences as _strip_fences
 from ai_etl.core.analysis_types import ScienceResult, TokenUsage
 from ai_etl.core.llm import extract_token_usage, get_llm, sum_token_usage
+from ai_etl.core.locale import (
+    DEFAULT_LOCALE,
+    currency_hint,
+    narrative_language_instruction,
+    resolve_locale,
+)
 from ai_etl.core.sandbox import execute_in_sandbox, scale_timeout_for_rows
 
 # Higher than Analyst's (15s) but still lower than Transformer's default (30s,
@@ -44,8 +50,11 @@ You are a senior data scientist. You have access to a cleaned pandas DataFrame c
 ## Sample data (first 5 rows):
 {sample}
 
-## Business question (in Portuguese):
+## Business question:
 "{question}"
+
+## Language and formatting for this tenant
+{language_instruction} {currency_hint}
 
 ## Your task
 
@@ -79,12 +88,12 @@ Then write Python code that defines EXACTLY four variables:
    - REGRESSION: scatter actual vs. predicted + a reference line
    - CLASSIFICATION: bar chart of class distribution or feature importance
    - CLUSTERING: scatter or bar chart colored by cluster
-   - Set a descriptive title in Portuguese. Use professional color palettes.
+   - Set a descriptive title using the tenant's language above. Use professional color palettes.
 
-3. `narrative` — a 2–4 sentence string in Portuguese for a non-technical business user.
-   Include: what type of analysis was used, the main finding, and a business implication.
-   Be specific with numbers, and the DIRECTION you state (increase/decrease) MUST match
-   the actual numbers in `predictions_df` — never claim a trend the data doesn't show.
+3. `narrative` — a 2–4 sentence string, in the tenant's language above, for a non-technical
+   business user. Include: what type of analysis was used, the main finding, and a business
+   implication. Be specific with numbers, and the DIRECTION you state (increase/decrease)
+   MUST match the actual numbers in `predictions_df` — never claim a trend the data doesn't show.
 
 4. `model_info` — a Python dict with:
    {{"model_type": str, "task": str, "metrics": dict, "features": list, "target": str}}
@@ -116,6 +125,13 @@ Then write Python code that defines EXACTLY four variables:
 - Respond ONLY with valid Python code. No markdown fences. No explanations.
 """
 
+_FALLBACK_NARRATIVE: dict[str, str] = {
+    "pt-BR": "Não foi possível executar a análise preditiva. Tente reformular a "
+    "pergunta ou verifique se os dados têm estrutura adequada para modelagem.",
+    "en-US": "The predictive analysis could not be run. Try rephrasing the question "
+    "or check whether the data has a structure suitable for modeling.",
+}
+
 _RETRY_PREFIX = """\
 The previous attempt failed with this error:
 
@@ -129,6 +145,11 @@ Use ONLY the exact column names: {columns_list}
 """
 
 
+# Sprint 25 (ADR-036): checked unconditionally regardless of the tenant's locale rather
+# than switched per locale — simpler than threading locale into this one validator too,
+# and an extra vocabulary match is harmless here: it can only ever add to a detected
+# direction, and the validator only rejects on a genuine contradiction against the
+# numbers, never on vocabulary alone.
 _INCREASE_WORDS = (
     "aumento",
     "aumenta",
@@ -140,6 +161,18 @@ _INCREASE_WORDS = (
     "alta",
     "melhora",
     "melhoria",
+    "increase",
+    "increases",
+    "increased",
+    "growth",
+    "grows",
+    "grew",
+    "rise",
+    "rises",
+    "rose",
+    "improve",
+    "improved",
+    "improvement",
 )
 _DECREASE_WORDS = (
     "queda",
@@ -153,6 +186,20 @@ _DECREASE_WORDS = (
     "baixa",
     "piora",
     "declínio",
+    "decrease",
+    "decreases",
+    "decreased",
+    "decline",
+    "declines",
+    "declined",
+    "drop",
+    "drops",
+    "dropped",
+    "fall",
+    "falls",
+    "fell",
+    "worsen",
+    "worsened",
 )
 
 
@@ -201,6 +248,7 @@ def run_science(
     business_question: str,
     llm_provider_override: str | None = None,
     llm_model_override: str | None = None,
+    locale: str = DEFAULT_LOCALE,
 ) -> ScienceResult:
     """Run predictive analytics on the Silver DataFrame.
 
@@ -211,7 +259,11 @@ def run_science(
         llm_provider_override / llm_model_override: Sprint 30/gap-closing (ADR-031
             §5) — see `agents/analysis/planner.py::plan_analysis_tasks`'s identical
             parameters for rationale. `None` (the default) — unchanged behavior.
+        locale: Sprint 25 (ADR-036) — the tenant's configured locale, same threading
+            pattern as `llm_provider_override` above. Defaults to `DEFAULT_LOCALE`
+            ("pt-BR") — unchanged behavior for every existing caller.
     """
+    resolved_locale = resolve_locale(locale)
     from sklearn.cluster import KMeans
     from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
     from sklearn.linear_model import LinearRegression, LogisticRegression, Ridge
@@ -237,6 +289,8 @@ def run_science(
         stats=stats,
         sample=json.dumps(sample, default=str, ensure_ascii=False, indent=2),
         question=business_question,
+        language_instruction=narrative_language_instruction(resolved_locale),
+        currency_hint=currency_hint(resolved_locale),
     )
 
     # Modules (px/go/math) go through extra_modules, imported by dotted path
@@ -342,7 +396,7 @@ def run_science(
         "task_question": "",
         "predictions_df": pd.DataFrame(),
         "fig": None,
-        "narrative": "Não foi possível executar a análise preditiva. Tente reformular a pergunta ou verifique se os dados têm estrutura adequada para modelagem.",
+        "narrative": _FALLBACK_NARRATIVE.get(resolved_locale, _FALLBACK_NARRATIVE[DEFAULT_LOCALE]),
         "model_info": {},
         "code": last_code,
         "attempts": 3,

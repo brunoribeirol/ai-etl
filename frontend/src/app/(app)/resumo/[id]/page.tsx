@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { getTranslations } from "next-intl/server";
 import { ExecutiveSummary } from "@/components/executive-summary";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { apiFetch } from "@/lib/api";
@@ -24,6 +25,7 @@ export default async function ResumoPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const t = await getTranslations("resumoPage");
 
   let pipeline: SavedPipeline | null = null;
   let error: string | null = null;
@@ -38,7 +40,10 @@ export default async function ResumoPage({
       <main className="flex-1 px-6 py-12 max-w-3xl mx-auto w-full">
         <Alert variant="destructive">
           <AlertDescription>
-            {error ? friendlyExecutiveError(error) : "Não encontramos esse pipeline. Ele pode ter sido removido."}
+            {/* Sprint 38 — friendlyExecutiveError still returns hardcoded
+                Portuguese text regardless of locale; out of this task's file
+                list (lib/friendly-error.ts), left untouched. */}
+            {error ? friendlyExecutiveError(error) : t("notFound")}
           </AlertDescription>
         </Alert>
       </main>
@@ -49,7 +54,7 @@ export default async function ResumoPage({
     <main className="flex-1 px-6 py-12 max-w-3xl mx-auto w-full flex flex-col gap-6">
       <div className="flex flex-col gap-1">
         <Link href="/resumo" className="text-xs text-muted-foreground hover:text-foreground w-fit">
-          ← Resumo executivo
+          {t("backLink")}
         </Link>
         <h1 className="text-2xl font-semibold tracking-tight">
           {pipeline.business_question || pipeline.name}

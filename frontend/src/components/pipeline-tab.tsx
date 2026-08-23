@@ -1,4 +1,5 @@
 import { CheckCircle2, AlertTriangle, XCircle } from "lucide-react";
+import { getTranslations } from "next-intl/server";
 import type { ReactNode } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AGENTS } from "@/lib/agents";
@@ -27,7 +28,7 @@ function agentLabel(node: string): string {
  * here, not reproduced), `pipeline_plan`, and `quality_report`, all already
  * present in `GET /runs/{run_id}`'s `state` — no backend change needed.
  */
-export function PipelineTab({
+export async function PipelineTab({
   stageDurations,
   pipelinePlan,
   qualityReport,
@@ -36,17 +37,14 @@ export function PipelineTab({
   pipelinePlan?: Record<string, unknown>;
   qualityReport?: { checks?: QualityCheck[]; severity?: string; summary?: string };
 }) {
+  const t = await getTranslations("pipelineTab");
   const hasAny =
     (stageDurations && Object.keys(stageDurations).length > 0) ||
     (qualityReport?.checks && qualityReport.checks.length > 0) ||
     (pipelinePlan && Object.keys(pipelinePlan).length > 0);
 
   if (!hasAny) {
-    return (
-      <p className="text-sm text-muted-foreground">
-        Nenhum detalhe de execução disponível para este run.
-      </p>
-    );
+    return <p className="text-sm text-muted-foreground">{t("emptyState")}</p>;
   }
 
   return (
@@ -54,7 +52,7 @@ export function PipelineTab({
       {stageDurations && Object.keys(stageDurations).length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Execução dos agentes Silver</CardTitle>
+            <CardTitle>{t("silverExecutionHeading")}</CardTitle>
           </CardHeader>
           <CardContent>
             <ul className="flex flex-col gap-2">
@@ -74,7 +72,7 @@ export function PipelineTab({
       {qualityReport?.checks && qualityReport.checks.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Relatório de qualidade</CardTitle>
+            <CardTitle>{t("qualityReportHeading")}</CardTitle>
           </CardHeader>
           <CardContent>
             <ul className="flex flex-col gap-2">
@@ -83,27 +81,32 @@ export function PipelineTab({
                   {SEVERITY_ICON[check.severity] ?? SEVERITY_ICON.ok}
                   <span>
                     <span className="font-medium">
-                      {check.check === "custom_rule" ? check.rule_name ?? "regra customizada" : check.check}
+                      {check.check === "custom_rule"
+                        ? check.rule_name ?? t("customRuleFallback")
+                        : check.check}
                     </span>
                     {check.column && (
                       <>
                         {" "}
-                        em <span className="font-mono text-xs">{check.column}</span>
+                        {t("inPreposition")} <span className="font-mono text-xs">{check.column}</span>
                       </>
                     )}
                     {check.null_ratio != null && (
                       <span className="text-muted-foreground">
                         {" "}
-                        — razão de nulos: {(check.null_ratio * 100).toFixed(1)}%
+                        {t("nullRatioSuffix", { pct: (check.null_ratio * 100).toFixed(1) })}
                       </span>
                     )}
                     {check.count != null && (
-                      <span className="text-muted-foreground"> — {check.count} duplicatas</span>
+                      <span className="text-muted-foreground">
+                        {" "}
+                        {t("duplicatesSuffix", { count: check.count })}
+                      </span>
                     )}
                     {check.outlier_count != null && (
                       <span className="text-muted-foreground">
                         {" "}
-                        — {check.outlier_count} outliers
+                        {t("outliersSuffix", { count: check.outlier_count })}
                       </span>
                     )}
                     {/* Sprint 16 (ADR-023) — custom rule detail: either an evaluation
@@ -116,8 +119,8 @@ export function PipelineTab({
                         {" "}
                         — {check.operator} {String(check.value ?? "")} —{" "}
                         {check.violation_count === 0
-                          ? "sem violações"
-                          : `${check.violation_count} violação(ões)`}
+                          ? t("noViolations")
+                          : t("violationsCount", { count: check.violation_count ?? 0 })}
                       </span>
                     )}
                   </span>
@@ -131,7 +134,7 @@ export function PipelineTab({
       {pipelinePlan && Object.keys(pipelinePlan).length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Plano do pipeline</CardTitle>
+            <CardTitle>{t("pipelinePlanHeading")}</CardTitle>
           </CardHeader>
           <CardContent>
             <pre className="text-xs overflow-x-auto text-muted-foreground">

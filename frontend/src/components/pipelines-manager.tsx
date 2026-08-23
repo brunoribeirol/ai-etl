@@ -2,6 +2,7 @@
 
 import { useAuth } from "@clerk/nextjs";
 import { FileText, LineChart, PauseCircle, PlayCircle, Plus } from "lucide-react";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -26,6 +27,7 @@ import { SCHEDULABLE_SOURCE_TYPES, type QualityRule, type SavedPipeline } from "
  * shadcn Select component for one dropdown.
  */
 export function PipelinesManager() {
+  const t = useTranslations("pipelinesManager");
   const { getToken } = useAuth();
   const apiUrl = process.env.NEXT_PUBLIC_API_URL;
 
@@ -47,7 +49,7 @@ export function PipelinesManager() {
 
   const authedFetch = useCallback(
     async (path: string, init?: RequestInit) => {
-      if (!apiUrl) throw new Error("NEXT_PUBLIC_API_URL is not configured.");
+      if (!apiUrl) throw new Error(t("missingApiUrl"));
       const token = await getToken();
       const response = await fetch(`${apiUrl}${path}`, {
         ...init,
@@ -63,7 +65,7 @@ export function PipelinesManager() {
       }
       return response.json();
     },
-    [apiUrl, getToken],
+    [apiUrl, getToken, t],
   );
 
   const loadPipelines = useCallback(async () => {
@@ -113,10 +115,10 @@ export function PipelinesManager() {
     try {
       parsed = JSON.parse(qualityRulesText);
     } catch {
-      throw new Error("Regras de qualidade: JSON inválido.");
+      throw new Error(t("invalidJson"));
     }
     if (!Array.isArray(parsed)) {
-      throw new Error("Regras de qualidade: deve ser uma lista (array JSON), ex: [].");
+      throw new Error(t("invalidJsonShape"));
     }
     return parsed as QualityRule[];
   }
@@ -138,7 +140,7 @@ export function PipelinesManager() {
             quality_rules: qualityRules,
           }),
         });
-        toast.success("Pipeline atualizado.");
+        toast.success(t("toastUpdated"));
       } else {
         await authedFetch("/pipelines", {
           method: "POST",
@@ -151,7 +153,7 @@ export function PipelinesManager() {
             quality_rules: qualityRules,
           }),
         });
-        toast.success("Pipeline agendado.");
+        toast.success(t("toastCreated"));
       }
       resetForm();
       await loadPipelines();
@@ -168,7 +170,7 @@ export function PipelinesManager() {
         method: "PATCH",
         body: JSON.stringify({ is_active: !pipeline.is_active }),
       });
-      toast.success(pipeline.is_active ? "Pipeline pausado." : "Pipeline retomado.");
+      toast.success(pipeline.is_active ? t("toastPaused") : t("toastResumed"));
       await loadPipelines();
     } catch (err) {
       toast.error(String(err));
@@ -181,27 +183,25 @@ export function PipelinesManager() {
         <CardContent>
           <form onSubmit={handleSubmit} className="flex flex-col gap-5">
             <h2 className="text-sm font-medium">
-              {editingId ? "Editar pipeline" : "Novo pipeline agendado"}
+              {editingId ? t("editHeading") : t("newHeading")}
             </h2>
 
             <div className="flex flex-col gap-2">
-              <Label htmlFor="name">Nome</Label>
+              <Label htmlFor="name">{t("nameLabel")}</Label>
               <Input
                 id="name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 disabled={submitting}
                 required
-                placeholder="Sincronização noturna de pedidos"
+                placeholder={t("namePlaceholder")}
               />
             </div>
 
             <div className="flex flex-col gap-2">
               <Label htmlFor="sourceType">
-                Tipo de fonte{" "}
-                <span className="text-muted-foreground font-normal">
-                  (apenas fontes &ldquo;vivas&rdquo; podem ser agendadas — ADR-016)
-                </span>
+                {t("sourceTypeLabel")}{" "}
+                <span className="text-muted-foreground font-normal">{t("sourceTypeHint")}</span>
               </Label>
               <select
                 id="sourceType"
@@ -219,7 +219,7 @@ export function PipelinesManager() {
             </div>
 
             <div className="flex flex-col gap-2">
-              <Label htmlFor="spec">Spec (linguagem natural)</Label>
+              <Label htmlFor="spec">{t("specLabel")}</Label>
               <Textarea
                 id="spec"
                 value={spec}
@@ -233,23 +233,21 @@ export function PipelinesManager() {
             </div>
 
             <div className="flex flex-col gap-2">
-              <Label htmlFor="businessQuestion">Pergunta de negócio (opcional)</Label>
+              <Label htmlFor="businessQuestion">{t("businessQuestionLabel")}</Label>
               <Textarea
                 id="businessQuestion"
                 value={businessQuestion}
                 onChange={(e) => setBusinessQuestion(e.target.value)}
                 disabled={submitting}
                 rows={2}
-                placeholder="Quais produtos vendem mais?"
+                placeholder={t("businessQuestionPlaceholder")}
               />
             </div>
 
             <div className="flex flex-col gap-2">
               <Label htmlFor="cronSchedule">
-                Agendamento (cron){" "}
-                <span className="text-muted-foreground font-normal">
-                  ex: &ldquo;0 3 * * *&rdquo; = todo dia às 3h
-                </span>
+                {t("cronLabel")}{" "}
+                <span className="text-muted-foreground font-normal">{t("cronHint")}</span>
               </Label>
               <Input
                 id="cronSchedule"
@@ -264,7 +262,7 @@ export function PipelinesManager() {
 
             <div className="flex flex-col gap-2">
               <Label htmlFor="qualityRules">
-                Regras de qualidade (opcional){" "}
+                {t("qualityRulesLabel")}{" "}
                 <span className="text-muted-foreground font-normal font-mono">
                   {'JSON, ex: [{"column": "amount", "operator": "gte", "value": 0}]'}
                 </span>
@@ -278,23 +276,20 @@ export function PipelinesManager() {
                 className="font-mono text-xs"
                 placeholder='[{"column": "customer_id", "operator": "not_null"}]'
               />
-              <p className="text-xs text-muted-foreground">
-                Operadores: not_null, gte, lte, gt, lt, eq, ne. Severidade padrão: error
-                (bloqueia o pipeline quando violada).
-              </p>
+              <p className="text-xs text-muted-foreground">{t("qualityRulesHelp")}</p>
             </div>
 
             <div className="flex gap-2">
               <Button type="submit" disabled={submitting} className="flex-1">
-                {editingId ? "Salvar alterações" : (
+                {editingId ? t("saveChanges") : (
                   <>
-                    <Plus className="h-4 w-4" /> Agendar pipeline
+                    <Plus className="h-4 w-4" /> {t("schedulePipeline")}
                   </>
                 )}
               </Button>
               {editingId && (
                 <Button type="button" variant="outline" onClick={resetForm} disabled={submitting}>
-                  Cancelar
+                  {t("cancel")}
                 </Button>
               )}
             </div>
@@ -303,7 +298,7 @@ export function PipelinesManager() {
       </Card>
 
       <div className="flex flex-col gap-3">
-        <h2 className="text-sm font-medium text-muted-foreground">Pipelines salvos</h2>
+        <h2 className="text-sm font-medium text-muted-foreground">{t("savedPipelinesHeading")}</h2>
 
         {error && (
           <p className="text-destructive text-sm" role="alert">
@@ -311,7 +306,7 @@ export function PipelinesManager() {
           </p>
         )}
         {!loading && !error && pipelines.length === 0 && (
-          <p className="text-sm text-muted-foreground">Nenhum pipeline agendado ainda.</p>
+          <p className="text-sm text-muted-foreground">{t("emptyState")}</p>
         )}
 
         {pipelines.map((pipeline) => (
@@ -331,14 +326,14 @@ export function PipelinesManager() {
                 <span className="text-xs text-muted-foreground">
                   {pipeline.quality_rules.length}{" "}
                   {pipeline.quality_rules.length === 1
-                    ? "regra de qualidade customizada"
-                    : "regras de qualidade customizadas"}
+                    ? t("customQualityRuleOne")
+                    : t("customQualityRuleOther")}
                 </span>
               )}
               <div className="flex justify-between items-center text-xs text-muted-foreground">
-                <span>Próxima execução: {new Date(pipeline.next_run_at).toLocaleString()}</span>
+                <span>{t("nextRun", { when: new Date(pipeline.next_run_at).toLocaleString() })}</span>
                 {pipeline.last_run_at && (
-                  <span>Última: {new Date(pipeline.last_run_at).toLocaleString()}</span>
+                  <span>{t("lastRun", { when: new Date(pipeline.last_run_at).toLocaleString() })}</span>
                 )}
               </div>
               {/* Sprint 15 (ADR-020) — minimal health badge, no dedicated page
@@ -348,7 +343,9 @@ export function PipelinesManager() {
               {pipeline.consecutive_failures > 0 && (
                 <div className="text-xs text-red-400" role="alert">
                   {pipeline.consecutive_failures}{" "}
-                  {pipeline.consecutive_failures === 1 ? "falha seguida" : "falhas seguidas"}
+                  {pipeline.consecutive_failures === 1
+                    ? t("consecutiveFailureOne")
+                    : t("consecutiveFailureOther")}
                   {pipeline.last_error && ` — ${pipeline.last_error}`}
                 </div>
               )}
@@ -361,7 +358,7 @@ export function PipelinesManager() {
                     // non-technical stakeholder, separate from "Histórico"
                     // (run-by-run technical detail, Pipeline/Código tabs).
                     <Link href={`/resumo/${pipeline.id}`}>
-                      <FileText className="h-4 w-4" /> Resumo
+                      <FileText className="h-4 w-4" /> {t("resumo")}
                     </Link>
                   }
                 />
@@ -370,21 +367,21 @@ export function PipelinesManager() {
                   variant="outline"
                   render={
                     <Link href={`/pipelines/${pipeline.id}/historico`}>
-                      <LineChart className="h-4 w-4" /> Histórico
+                      <LineChart className="h-4 w-4" /> {t("historico")}
                     </Link>
                   }
                 />
                 <Button size="sm" variant="outline" onClick={() => startEdit(pipeline)}>
-                  Editar
+                  {t("edit")}
                 </Button>
                 <Button size="sm" variant="outline" onClick={() => toggleActive(pipeline)}>
                   {pipeline.is_active ? (
                     <>
-                      <PauseCircle className="h-4 w-4" /> Pausar
+                      <PauseCircle className="h-4 w-4" /> {t("pause")}
                     </>
                   ) : (
                     <>
-                      <PlayCircle className="h-4 w-4" /> Retomar
+                      <PlayCircle className="h-4 w-4" /> {t("resume")}
                     </>
                   )}
                 </Button>

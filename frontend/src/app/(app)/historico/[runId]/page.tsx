@@ -1,3 +1,4 @@
+import { getTranslations } from "next-intl/server";
 import { AnalysisSection } from "@/components/analysis-section";
 import { CodeTab } from "@/components/code-tab";
 import { DataTable } from "@/components/data-table";
@@ -23,6 +24,7 @@ export default async function RunDetail({
   params: Promise<{ runId: string }>;
 }) {
   const { runId } = await params;
+  const t = await getTranslations("runDetailPage");
 
   let result: FullResult | null = null;
   let error: string | null = null;
@@ -36,7 +38,7 @@ export default async function RunDetail({
     return (
       <main className="flex-1 px-6 py-12 max-w-4xl mx-auto w-full">
         <Alert variant="destructive">
-          <AlertDescription>{error ?? "Run não encontrado."}</AlertDescription>
+          <AlertDescription>{error ?? t("notFound")}</AlertDescription>
         </Alert>
       </main>
     );
@@ -54,7 +56,7 @@ export default async function RunDetail({
         </div>
         {result.question && (
           <p className="text-sm text-muted-foreground">
-            O que fazer sobre: &quot;{result.question}&quot;
+            {t("questionPrefix", { question: result.question })}
           </p>
         )}
       </div>
@@ -63,7 +65,7 @@ export default async function RunDetail({
         silver={
           silverRows ? (
             <>
-              <h2 className="font-medium mb-3">Silver</h2>
+              <h2 className="font-medium mb-3">{t("silverHeading")}</h2>
               <DataTable rows={silverRows} />
             </>
           ) : null

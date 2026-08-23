@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { motion } from "motion/react";
+import { useTranslations } from "next-intl";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 /**
@@ -28,6 +29,10 @@ export function RunSections({
   advisor: ReactNode;
   code: ReactNode;
 }) {
+  // Sprint 25 (ADR-036) — "Silver"/"Pipeline"/"Gold"/"Science"/"Advisor" are
+  // this product's own technical vocabulary (see `lib/agents.ts`), identical
+  // in both locales — only "Código" is translated (`runSections.code`).
+  const t = useTranslations("runSections");
   const tabs = [
     silver && { value: "silver", label: "Silver", content: silver },
     pipeline && { value: "pipeline", label: "Pipeline", content: pipeline },
@@ -38,7 +43,7 @@ export function RunSections({
       content: science,
     },
     advisor && { value: "advisor", label: "Advisor", content: advisor },
-    code && { value: "code", label: "Código", content: code },
+    code && { value: "code", label: t("code"), content: code },
   ].filter(Boolean) as { value: string; label: string; content: ReactNode | ReactNode[] }[];
 
   if (tabs.length === 0) {

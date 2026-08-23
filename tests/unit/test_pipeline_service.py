@@ -20,6 +20,16 @@ from ai_etl.services import pipeline_service
 _ZERO_TOKENS = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
 
 
+@pytest.fixture(autouse=True)
+def _default_locale(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Sprint 25 (ADR-036): `run_silver_pipeline` calls `get_locale(tenant_id)` for
+    every run with a real `tenant_id` — default it to a no-DB stub here so every
+    existing test in this module (most of which pass `tenant_id="tenant-a"` without
+    caring about locale) doesn't need a real `users` table. Tests that specifically
+    exercise locale resolution override this with their own `monkeypatch.setattr`."""
+    monkeypatch.setattr(pipeline_service, "get_locale", lambda tenant_id: "pt-BR")
+
+
 def _recorder() -> tuple[list[tuple[str, str]], pipeline_service.ProgressCallback]:
     """A ProgressCallback that records every (stage, message) call it receives."""
     events: list[tuple[str, str]] = []
@@ -248,6 +258,45 @@ def test_run_silver_pipeline_resolves_llm_override_for_scheduled_fire(monkeypatc
 
     assert captured_states[0]["llm_provider_override"] == "anthropic"
     assert captured_states[0]["llm_model_override"] == "claude-sonnet-5"
+
+
+def test_run_silver_pipeline_resolves_locale_for_any_run_with_a_tenant_id(monkeypatch) -> None:
+    """Sprint 25 (ADR-036) — unlike quality_rules/the LLM override above, locale is
+    resolved for ANY run with a real `tenant_id`, avulso or scheduled — it does not
+    require a `saved_pipeline_id` too."""
+    chunks = [{"loader": {"status": "completed"}}]
+    captured_states: list[Any] = []
+    monkeypatch.setattr(
+        pipeline_service, "build_graph", lambda: _FakeGraph(chunks, captured_states)
+    )
+    monkeypatch.setattr(pipeline_service, "save_run", lambda *a, **k: pathlib.Path("x"))
+    monkeypatch.setattr(pipeline_service, "save_stage_latencies", lambda *a, **k: None)
+    monkeypatch.setattr(pipeline_service, "get_locale", lambda tenant_id: "en-US")
+
+    pipeline_service.run_silver_pipeline("read file.csv", run_dir="runs", tenant_id="tenant-a")
+
+    assert captured_states[0]["locale"] == "en-US"
+
+
+def test_run_silver_pipeline_no_tenant_id_defaults_locale_without_a_db_call(monkeypatch) -> None:
+    """An avulso run with no `tenant_id` at all (e.g. a script/test caller) must not
+    call `get_locale` — there's no tenant to look one up for."""
+    chunks = [{"loader": {"status": "completed"}}]
+    captured_states: list[Any] = []
+    monkeypatch.setattr(
+        pipeline_service, "build_graph", lambda: _FakeGraph(chunks, captured_states)
+    )
+    monkeypatch.setattr(pipeline_service, "save_run", lambda *a, **k: pathlib.Path("x"))
+    monkeypatch.setattr(pipeline_service, "save_stage_latencies", lambda *a, **k: None)
+
+    def _fail_if_called(tenant_id: str) -> Any:
+        raise AssertionError("get_locale must not be called with no tenant_id")
+
+    monkeypatch.setattr(pipeline_service, "get_locale", _fail_if_called)
+
+    pipeline_service.run_silver_pipeline("read file.csv", run_dir="runs")
+
+    assert captured_states[0]["locale"] == "pt-BR"
 
 
 def test_run_silver_pipeline_avulso_run_gets_no_llm_override(monkeypatch) -> None:

@@ -2,6 +2,7 @@
 
 import { useAuth } from "@clerk/nextjs";
 import { ArrowRight } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Figure } from "react-plotly.js";
 import { PlotlyChart } from "@/components/plotly-chart";
@@ -34,6 +35,7 @@ import type { AnalysisEntry, FullResult, PipelineRunHistoryEntry } from "@/lib/t
 const HISTORY_LIMIT = 200;
 
 export function PipelineHistory({ pipelineId }: { pipelineId: string }) {
+  const t = useTranslations("pipelineHistory");
   const { getToken } = useAuth();
   const apiUrl = process.env.NEXT_PUBLIC_API_URL;
 
@@ -92,7 +94,7 @@ export function PipelineHistory({ pipelineId }: { pipelineId: string }) {
         {
           x,
           y: history.map((h) => h.rows_loaded),
-          name: "Linhas carregadas",
+          name: t("seriesRowsLoaded"),
           type: "scatter",
           mode: "lines+markers",
           yaxis: "y",
@@ -100,7 +102,7 @@ export function PipelineHistory({ pipelineId }: { pipelineId: string }) {
         {
           x,
           y: history.map((h) => h.total_tokens),
-          name: "Tokens totais",
+          name: t("seriesTotalTokens"),
           type: "scatter",
           mode: "lines+markers",
           yaxis: "y2",
@@ -108,7 +110,7 @@ export function PipelineHistory({ pipelineId }: { pipelineId: string }) {
         {
           x,
           y: history.map((h) => h.cost_usd),
-          name: "Custo (USD)",
+          name: t("seriesCost"),
           type: "scatter",
           mode: "lines+markers",
           yaxis: "y3",
@@ -116,13 +118,18 @@ export function PipelineHistory({ pipelineId }: { pipelineId: string }) {
       ],
       layout: {
         legend: { orientation: "h", y: -0.2 },
-        xaxis: { title: { text: "Execução" } },
-        yaxis: { title: { text: "Linhas" }, domain: [0, 1] },
-        yaxis2: { overlaying: "y", side: "right", title: { text: "Tokens" }, showgrid: false },
+        xaxis: { title: { text: t("axisExecution") } },
+        yaxis: { title: { text: t("axisRows") }, domain: [0, 1] },
+        yaxis2: {
+          overlaying: "y",
+          side: "right",
+          title: { text: t("axisTokens") },
+          showgrid: false,
+        },
         yaxis3: { visible: false, overlaying: "y" },
       },
     };
-  }, [history]);
+  }, [history, t]);
 
   async function loadDiff() {
     if (!runA || !runB) return;
@@ -143,7 +150,7 @@ export function PipelineHistory({ pipelineId }: { pipelineId: string }) {
   }
 
   if (loading) {
-    return <p className="text-sm text-muted-foreground">Carregando histórico...</p>;
+    return <p className="text-sm text-muted-foreground">{t("loading")}</p>;
   }
   if (error) {
     return (
@@ -153,21 +160,17 @@ export function PipelineHistory({ pipelineId }: { pipelineId: string }) {
     );
   }
   if (history.length === 0) {
-    return (
-      <p className="text-sm text-muted-foreground">
-        Este pipeline ainda não executou nenhuma vez.
-      </p>
-    );
+    return <p className="text-sm text-muted-foreground">{t("empty")}</p>;
   }
 
   return (
     <div className="flex flex-col gap-8">
       <Card>
         <CardContent>
-          <h2 className="text-sm font-medium mb-1">KPIs ao longo do tempo</h2>
+          <h2 className="text-sm font-medium mb-1">{t("kpiHeading")}</h2>
           {history.length === HISTORY_LIMIT && (
             <p className="text-xs text-muted-foreground mb-2">
-              Últimas {HISTORY_LIMIT} execuções.
+              {t("kpiLimitNote", { limit: HISTORY_LIMIT })}
             </p>
           )}
           <PlotlyChart figure={chartFigure} />
@@ -177,12 +180,11 @@ export function PipelineHistory({ pipelineId }: { pipelineId: string }) {
       <div className="flex flex-col gap-3">
         <div>
           <h2 className="text-sm font-medium text-muted-foreground">
-            Execuções ({history.length})
+            {t("executionsHeading", { count: history.length })}
           </h2>
           {history.length === HISTORY_LIMIT && (
             <p className="text-xs text-muted-foreground">
-              Mostrando as últimas {HISTORY_LIMIT} execuções — este pipeline pode ter mais no
-              histórico.
+              {t("executionsLimitNote", { limit: HISTORY_LIMIT })}
             </p>
           )}
         </div>
@@ -198,7 +200,9 @@ export function PipelineHistory({ pipelineId }: { pipelineId: string }) {
                 {new Date(run.timestamp).toLocaleString()}
               </span>
               <span className="text-xs text-muted-foreground w-20 text-right">
-                {run.rows_loaded ?? "—"} linhas
+                {run.rows_loaded != null
+                  ? t("rowsSuffix", { count: run.rows_loaded })
+                  : "—"}
               </span>
               <span className="text-xs text-muted-foreground w-24 text-right">
                 {run.cost_usd != null ? `US$ ${run.cost_usd.toFixed(4)}` : "—"}
@@ -226,11 +230,9 @@ export function PipelineHistory({ pipelineId }: { pipelineId: string }) {
 
       <div className="flex flex-col gap-3">
         <div className="flex items-center gap-3">
-          <h2 className="text-sm font-medium text-muted-foreground">
-            Diff entre execuções
-          </h2>
+          <h2 className="text-sm font-medium text-muted-foreground">{t("diffHeading")}</h2>
           <Button size="sm" disabled={!runA || !runB || diffLoading} onClick={loadDiff}>
-            {diffLoading ? "Comparando..." : "Comparar A → B"}
+            {diffLoading ? t("diffComparing") : t("diffCompareButton")}
           </Button>
         </div>
         {diffError && (
@@ -283,6 +285,7 @@ function DeltaRow({
 }
 
 function RunDiff({ a, b }: { a: FullResult; b: FullResult }) {
+  const t = useTranslations("pipelineHistory");
   const goldByQuestion = useMemo(() => matchByQuestion(a.gold, b.gold), [a.gold, b.gold]);
   const scienceByQuestion = useMemo(
     () => matchByQuestion(a.science, b.science),
@@ -293,9 +296,9 @@ function RunDiff({ a, b }: { a: FullResult; b: FullResult }) {
     <Card>
       <CardContent className="flex flex-col gap-4">
         <div>
-          <h3 className="text-sm font-medium mb-1">Silver</h3>
+          <h3 className="text-sm font-medium mb-1">{t("silverHeading")}</h3>
           <DeltaRow
-            label="Linhas carregadas"
+            label={t("rowsLoadedLabel")}
             a={_num(a.state.transformed_data?.length)}
             b={_num(b.state.transformed_data?.length)}
           />
@@ -303,12 +306,12 @@ function RunDiff({ a, b }: { a: FullResult; b: FullResult }) {
 
         {goldByQuestion.length > 0 && (
           <div>
-            <h3 className="text-sm font-medium mb-1">Gold</h3>
+            <h3 className="text-sm font-medium mb-1">{t("goldHeading")}</h3>
             {goldByQuestion.map(([question, entryA, entryB]) => (
               <div key={question} className="mb-2">
                 <p className="text-xs text-muted-foreground truncate">{question}</p>
                 <DeltaRow
-                  label="Linhas no resultado"
+                  label={t("resultRowsLabel")}
                   a={_num(entryA?.data_shape?.[0])}
                   b={_num(entryB?.data_shape?.[0])}
                 />
@@ -319,7 +322,7 @@ function RunDiff({ a, b }: { a: FullResult; b: FullResult }) {
 
         {scienceByQuestion.length > 0 && (
           <div>
-            <h3 className="text-sm font-medium mb-1">Science</h3>
+            <h3 className="text-sm font-medium mb-1">{t("scienceHeading")}</h3>
             {scienceByQuestion.map(([question, entryA, entryB]) => (
               <div key={question} className="mb-2">
                 <p className="text-xs text-muted-foreground truncate">{question}</p>

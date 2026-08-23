@@ -2,6 +2,7 @@
 
 import { useAuth } from "@clerk/nextjs";
 import { ArrowDown, ArrowUp, Minus } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { friendlyExecutiveError } from "@/lib/friendly-error";
@@ -23,16 +24,22 @@ import type { FullResult, PipelineRunHistoryEntry, SavedPipeline } from "@/lib/t
  * fresh token per request.
  */
 
-const STATUS_LABEL: Record<string, string> = {
-  completed: "Concluído com sucesso",
-  success: "Concluído com sucesso",
-  failed: "Falhou",
-  failure: "Falhou",
-  error: "Falhou",
-  running: "Em execução",
-  started: "Em execução",
-  pending: "Aguardando execução",
-};
+// Sprint 25 (ADR-036) — labels come from `messages/{locale}.json`'s
+// `executiveSummary` namespace (built into a lookup map inside the
+// component, since this constant needs `useTranslations`); tone (color) is
+// locale-independent and stays a plain module-level map.
+function buildStatusLabels(t: (key: string) => string): Record<string, string> {
+  return {
+    completed: t("statusCompleted"),
+    success: t("statusCompleted"),
+    failed: t("statusFailed"),
+    failure: t("statusFailed"),
+    error: t("statusFailed"),
+    running: t("statusRunning"),
+    started: t("statusRunning"),
+    pending: t("statusPending"),
+  };
+}
 
 const STATUS_TONE: Record<string, string> = {
   completed: "text-emerald-400",
@@ -45,10 +52,6 @@ const STATUS_TONE: Record<string, string> = {
   pending: "text-amber-400",
 };
 
-function statusLabel(status: string): string {
-  return STATUS_LABEL[status.toLowerCase()] ?? status;
-}
-
 function statusTone(status: string): string {
   return STATUS_TONE[status.toLowerCase()] ?? "text-muted-foreground";
 }
@@ -58,11 +61,13 @@ function KpiCard({
   current,
   previous,
   format,
+  t,
 }: {
   label: string;
   current: number | null;
   previous: number | null;
   format: (v: number) => string;
+  t: ReturnType<typeof useTranslations>;
 }) {
   const delta = current !== null && previous !== null ? current - previous : null;
   const pctChange =
@@ -87,13 +92,13 @@ function KpiCard({
               <ArrowDown className="h-3 w-3" />
             )}
             {pctChange !== null
-              ? `${Math.abs(pctChange).toFixed(0)}% em relação à última execução`
-              : "mudou em relação à última execução"}
+              ? t("deltaPercent", { percent: Math.abs(pctChange).toFixed(0) })
+              : t("deltaChanged")}
           </span>
         )}
         {delta === 0 && (
           <span className="flex items-center gap-1 text-xs text-muted-foreground">
-            <Minus className="h-3 w-3" /> sem mudança
+            <Minus className="h-3 w-3" /> {t("deltaUnchanged")}
           </span>
         )}
       </CardContent>
@@ -102,6 +107,9 @@ function KpiCard({
 }
 
 export function ExecutiveSummary({ pipeline }: { pipeline: SavedPipeline }) {
+  const t = useTranslations("executiveSummary");
+  const statusLabels = buildStatusLabels(t);
+  const statusLabel = (status: string) => statusLabels[status.toLowerCase()] ?? status;
   const { getToken } = useAuth();
   const apiUrl = process.env.NEXT_PUBLIC_API_URL;
 
@@ -161,21 +169,20 @@ export function ExecutiveSummary({ pipeline }: { pipeline: SavedPipeline }) {
   }, [authedFetch, pipeline.id]);
 
   if (loading) {
-    return <p className="text-sm text-muted-foreground">Carregando resumo...</p>;
+    return <p className="text-sm text-muted-foreground">{t("loading")}</p>;
   }
   if (error) {
     return (
       <p className="text-destructive text-sm" role="alert">
+        {/* Sprint 38 — friendlyExecutiveError still returns hardcoded
+            Portuguese text regardless of locale; out of this task's file
+            list (lib/friendly-error.ts), left untouched. */}
         {friendlyExecutiveError(error)}
       </p>
     );
   }
   if (!history || history.length === 0) {
-    return (
-      <p className="text-sm text-muted-foreground">
-        Este pipeline ainda não executou — volte aqui depois da primeira execução agendada.
-      </p>
-    );
+    return <p className="text-sm text-muted-foreground">{t("emptyHistory")}</p>;
   }
 
   const latest = history[history.length - 1];
@@ -188,7 +195,7 @@ export function ExecutiveSummary({ pipeline }: { pipeline: SavedPipeline }) {
           {statusLabel(latest.status)}
         </span>
         <span className="text-xs text-muted-foreground">
-          Última atualização: {new Date(latest.timestamp).toLocaleString()}
+          {t("lastUpdated", { when: new Date(latest.timestamp).toLocaleString() })}
         </span>
       </div>
 
@@ -201,32 +208,32 @@ export function ExecutiveSummary({ pipeline }: { pipeline: SavedPipeline }) {
                 detail belongs on the technical "Histórico" page, not here —
                 this card now just says what happened and what to expect,
                 in plain language. */}
-            <p className="text-sm text-red-400">
-              A última execução deste pipeline não terminou com sucesso. A equipe técnica já foi
-              avisada e está verificando o que aconteceu.
-            </p>
+            <p className="text-sm text-red-400">{t("failedNotice")}</p>
           </CardContent>
         </Card>
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <KpiCard
-          label="Linhas processadas"
+          label={t("kpiRowsLoaded")}
           current={latest.rows_loaded}
           previous={previous?.rows_loaded ?? null}
           format={(v) => v.toLocaleString("pt-BR")}
+          t={t}
         />
         <KpiCard
-          label="Custo da execução"
+          label={t("kpiCost")}
           current={latest.cost_usd}
           previous={previous?.cost_usd ?? null}
           format={(v) => `US$ ${v.toFixed(4)}`}
+          t={t}
         />
         <KpiCard
-          label="Volume processado pela IA"
+          label={t("kpiTokens")}
           current={latest.total_tokens}
           previous={previous?.total_tokens ?? null}
           format={(v) => v.toLocaleString("pt-BR")}
+          t={t}
         />
       </div>
 
@@ -235,7 +242,7 @@ export function ExecutiveSummary({ pipeline }: { pipeline: SavedPipeline }) {
           {latestRun.advisor.summary && (
             <Card>
               <CardContent>
-                <h2 className="text-sm font-medium mb-2">O que aconteceu</h2>
+                <h2 className="text-sm font-medium mb-2">{t("whatHappenedHeading")}</h2>
                 <p className="text-sm text-muted-foreground">{latestRun.advisor.summary}</p>
               </CardContent>
             </Card>
@@ -243,7 +250,7 @@ export function ExecutiveSummary({ pipeline }: { pipeline: SavedPipeline }) {
           {latestRun.advisor.recommendations?.length > 0 && (
             <Card>
               <CardContent>
-                <h2 className="text-sm font-medium mb-3">Recomendações</h2>
+                <h2 className="text-sm font-medium mb-3">{t("recommendationsHeading")}</h2>
                 <ul className="flex flex-col gap-3">
                   {latestRun.advisor.recommendations.map((rec, i) => (
                     <li key={i} className="border border-border/60 rounded-lg p-3 text-sm">
@@ -258,10 +265,7 @@ export function ExecutiveSummary({ pipeline }: { pipeline: SavedPipeline }) {
         </div>
       ) : (
         latest.status.toLowerCase() === "completed" && (
-          <p className="text-sm text-muted-foreground">
-            Este pipeline não tem uma pergunta de negócio configurada, então não há um resumo
-            de análise para mostrar aqui — apenas os números acima.
-          </p>
+          <p className="text-sm text-muted-foreground">{t("noSummary")}</p>
         )
       )}
     </div>

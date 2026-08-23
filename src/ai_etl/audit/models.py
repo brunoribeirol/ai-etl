@@ -50,6 +50,15 @@ users = Table(
     # `audit/db/retention.py` for the get/set accessors (same shape as
     # `monthly_budget_usd` above).
     Column("retention_days", Integer, nullable=True),
+    # Sprint 25 (ADR-036, migration 0020) — per-tenant locale, driving the
+    # Transformer's date-parsing convention and the language the Analyst/Science/
+    # Advisor narrative is generated in (see `core/locale.py`). `NOT NULL DEFAULT
+    # 'pt-BR'` — unlike `llm_provider`/`llm_model` above, locale always has a value;
+    # every existing tenant reads back `'pt-BR'` after the migration, which is the
+    # behavior every one of them already has today. Only `'pt-BR'`/`'en-US'` are
+    # valid — enforced by `core/locale.py::resolve_locale()` and the
+    # `PATCH /tenant/locale` API boundary, never re-validated at read time.
+    Column("locale", String(10), nullable=False, server_default="pt-BR"),
 )
 
 runs = Table(

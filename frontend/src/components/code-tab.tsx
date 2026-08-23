@@ -1,3 +1,4 @@
+import { getTranslations } from "next-intl/server";
 import { CodeBlock } from "@/components/code-block";
 import type { AnalysisEntry } from "@/lib/types";
 
@@ -8,7 +9,7 @@ import type { AnalysisEntry } from "@/lib/types";
  * `_serialize_analysis_result` — see PR description) so older runs saved
  * before this change simply won't have it (`code` is optional).
  */
-export function CodeTab({
+export async function CodeTab({
   transformationCode,
   gold,
   science,
@@ -17,16 +18,17 @@ export function CodeTab({
   gold: AnalysisEntry[];
   science: AnalysisEntry[];
 }) {
+  const t = await getTranslations("codeTab");
   const hasAny = transformationCode || gold.some((g) => g.code) || science.some((s) => s.code);
   if (!hasAny) {
-    return <p className="text-sm text-muted-foreground">Nenhum código disponível para este run.</p>;
+    return <p className="text-sm text-muted-foreground">{t("empty")}</p>;
   }
 
   return (
     <div className="flex flex-col gap-6">
       {transformationCode && (
         <section className="flex flex-col gap-2">
-          <h3 className="text-sm font-medium">Transformer — Silver</h3>
+          <h3 className="text-sm font-medium">{t("transformerHeading")}</h3>
           <CodeBlock code={transformationCode} filename="transform.py" />
         </section>
       )}
@@ -35,7 +37,9 @@ export function CodeTab({
           entry.code && (
             <section key={`gold-code-${i}`} className="flex flex-col gap-2">
               <h3 className="text-sm font-medium">
-                Analyst — {entry.task_question ?? `Gold ${i + 1}`}
+                {t("analystHeading", {
+                  question: entry.task_question ?? t("analystFallback", { index: i + 1 }),
+                })}
               </h3>
               <CodeBlock code={entry.code} filename={`gold_${i}.py`} />
             </section>
@@ -46,7 +50,9 @@ export function CodeTab({
           entry.code && (
             <section key={`science-code-${i}`} className="flex flex-col gap-2">
               <h3 className="text-sm font-medium">
-                Science Agent — {entry.task_question ?? `Science ${i + 1}`}
+                {t("scienceHeading", {
+                  question: entry.task_question ?? t("scienceFallback", { index: i + 1 }),
+                })}
               </h3>
               <CodeBlock code={entry.code} filename={`science_${i}.py`} />
             </section>

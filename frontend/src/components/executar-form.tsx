@@ -3,6 +3,7 @@
 import { useAuth } from "@clerk/nextjs";
 import { AnimatePresence, motion } from "motion/react";
 import { Loader2, UploadCloud } from "lucide-react";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -46,6 +47,7 @@ export function ExecutarForm({
   initialFile = null,
   initialBusinessQuestion = "",
 }: ExecutarFormProps = {}) {
+  const t = useTranslations("executarForm");
   const { getToken } = useAuth();
   const apiUrl = process.env.NEXT_PUBLIC_API_URL;
 
@@ -81,7 +83,7 @@ export function ExecutarForm({
           if (pollTimer.current) clearInterval(pollTimer.current);
           setSubmitting(false);
           if (data.result?.status === "completed") {
-            toast.success("Análise concluída.");
+            toast.success(t("toastSuccess"));
           } else if (data.error) {
             toast.error(data.error);
           }
@@ -98,11 +100,11 @@ export function ExecutarForm({
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     if (!apiUrl) {
-      setError("NEXT_PUBLIC_API_URL is not configured.");
+      setError(t("missingApiUrl"));
       return;
     }
     if (!file && !manualSpec.trim()) {
-      setError("Anexe um arquivo ou escreva um spec manual.");
+      setError(t("missingInput"));
       return;
     }
 
@@ -149,14 +151,14 @@ export function ExecutarForm({
         <CardContent>
           <form onSubmit={handleSubmit} className="flex flex-col gap-5">
             <div className="flex flex-col gap-2">
-              <Label htmlFor="file">Arquivo (CSV, Excel, JSON, PDF, DOCX)</Label>
+              <Label htmlFor="file">{t("fileLabel")}</Label>
               <label
                 htmlFor="file"
                 className="flex items-center gap-3 border border-dashed rounded-md px-4 py-3 text-sm cursor-pointer hover:bg-accent/50 transition-colors"
               >
                 <UploadCloud className="h-4 w-4 text-muted-foreground shrink-0" />
                 <span className="truncate text-muted-foreground">
-                  {file ? file.name : "Clique para selecionar um arquivo"}
+                  {file ? file.name : t("fileCta")}
                 </span>
               </label>
               <Input
@@ -170,9 +172,9 @@ export function ExecutarForm({
 
             <div className="flex flex-col gap-2">
               <Label htmlFor="manualSpec">
-                Ou: spec manual{" "}
+                {t("specLabel")}{" "}
                 <span className="text-muted-foreground font-normal">
-                  (opcional se um arquivo foi anexado)
+                  {t("specOptionalHint")}
                 </span>
               </Label>
               <Textarea
@@ -187,20 +189,20 @@ export function ExecutarForm({
             </div>
 
             <div className="flex flex-col gap-2">
-              <Label htmlFor="businessQuestion">Pergunta de negócio (opcional)</Label>
+              <Label htmlFor="businessQuestion">{t("businessQuestionLabel")}</Label>
               <Textarea
                 id="businessQuestion"
                 value={businessQuestion}
                 onChange={(e) => setBusinessQuestion(e.target.value)}
                 disabled={submitting}
                 rows={2}
-                placeholder="Quais produtos vendem mais?"
+                placeholder={t("businessQuestionPlaceholder")}
               />
             </div>
 
             <Button type="submit" disabled={submitting} className="w-full">
               {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
-              {submitting ? "Executando..." : "Analisar dados"}
+              {submitting ? t("submitLoading") : t("submitIdle")}
             </Button>
           </form>
         </CardContent>
@@ -223,19 +225,19 @@ export function ExecutarForm({
             <Card>
               <CardContent className="flex flex-col gap-3 text-sm">
                 <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Task</span>
+                  <span className="text-muted-foreground">{t("taskLabel")}</span>
                   <span className="font-mono text-xs">{taskId}</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Status</span>
+                  <span className="text-muted-foreground">{t("statusLabel")}</span>
                   {displayStatus && <StatusBadge status={displayStatus} />}
                 </div>
                 <AgentProgress meta={status?.meta ?? null} done={!!status?.ready} />
                 {status?.ready && status.result?.status === "completed" && (
                   <p className="text-emerald-400">
-                    ✅ Concluído —{" "}
+                    ✅ {t("completedPrefix")}{" "}
                     <Link href={`/historico/${status.result.run_id}`} className="underline">
-                      ver run {status.result.run_id}
+                      {t("viewRun", { runId: status.result.run_id ?? "" })}
                     </Link>
                   </p>
                 )}

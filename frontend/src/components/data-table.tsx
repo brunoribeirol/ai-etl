@@ -1,3 +1,4 @@
+import { getTranslations } from "next-intl/server";
 import {
   Table,
   TableBody,
@@ -12,10 +13,11 @@ import {
  * `_render_results` already use — the full data was always a CSV download
  * away, never meant to be rendered in full inline). Sprint 7: shadcn Table
  * instead of a raw `<table>`, same data/behavior. */
-export function DataTable({ rows }: { rows: Record<string, unknown>[] }) {
+export async function DataTable({ rows }: { rows: Record<string, unknown>[] }) {
   if (rows.length === 0) {
     return null;
   }
+  const t = await getTranslations("dataTable");
 
   const columns = Object.keys(rows[0]);
 
@@ -43,7 +45,7 @@ export function DataTable({ rows }: { rows: Record<string, unknown>[] }) {
       </Table>
       {rows.length > 20 && (
         <p className="text-xs text-muted-foreground px-3 py-2 border-t border-border/60">
-          Mostrando 20 de {rows.length} linhas.
+          {t("showing", { count: rows.length })}
         </p>
       )}
     </div>
