@@ -81,6 +81,19 @@ class PipelineState(TypedDict):
     # always resolved (and `None`) together, since `saved_pipelines.llm_provider`/
     # `llm_model` are always written or cleared together (ADR-031 §3).
 
+    # --- Locale (Sprint 25, ADR-036) ---
+    locale: str  # e.g. "pt-BR" (default) or "en-US" — resolved once by
+    # `services/pipeline_service.py::run_silver_pipeline` from the tenant's own
+    # `users.locale` column (via `audit/db.py::get_locale`), same resolve-in-service-
+    # then-carry-in-state pattern as `llm_provider_override` above, but keyed only on
+    # `tenant_id` (not `saved_pipeline_id` too) since locale is a per-tenant, not
+    # per-pipeline, setting (ADR-036 §1) — applies to every run, avulso or scheduled.
+    # Never `Optional`: always has a value, unlike the LLM override. Read by
+    # `agents/pipeline/transformer.py` (date-parsing convention hint) and by the
+    # analytical layer (`agents/analysis/*.py`, forwarded as a plain parameter the
+    # same way `llm_provider_override`/`llm_model_override` are — see
+    # `services/pipeline_service.py::run_full_analysis`).
+
     # --- Loader input (Sprint 27, ADR-028) ---
     approval_policy: Optional[dict[str, Any]]  # {"require_approval": bool,
     # "threshold_rows": int | None, "last_approved_at": str | None (isoformat)} —
@@ -122,6 +135,7 @@ def initial_state(
     approval_policy: Optional[dict[str, Any]] = None,
     llm_provider_override: Optional[str] = None,
     llm_model_override: Optional[str] = None,
+    locale: str = "pt-BR",
 ) -> PipelineState:
     """Create a fresh PipelineState for a new pipeline run.
 
@@ -141,6 +155,11 @@ def initial_state(
             back to the deployment-global `AI_ETL_LLM_PROVIDER` at each `get_llm()`
             call site.
         llm_model_override: paired with `llm_provider_override` above.
+        locale: Sprint 25 (ADR-036) — this run's tenant-configured locale, already
+            resolved by the caller (`services/pipeline_service.py::run_silver_pipeline`
+            via `audit/db.py::get_locale`). Defaults to `"pt-BR"` for every avulso run
+            with no `tenant_id` and every caller predating this sprint — unchanged
+            behavior.
     """
     return PipelineState(
         spec=spec,
@@ -156,6 +175,7 @@ def initial_state(
         quality_report={},
         llm_provider_override=llm_provider_override,
         llm_model_override=llm_model_override,
+        locale=locale,
         approval_policy=approval_policy,
         approval_granted=False,
         load_result=None,

@@ -27,6 +27,7 @@ from sqlalchemy import Engine
 
 from ai_etl.audit.db import budget as budget_db
 from ai_etl.audit.db import (
+    get_locale,
     get_monthly_budget,
     get_monthly_spend_usd,
     get_retention_days,
@@ -35,9 +36,11 @@ from ai_etl.audit.db import (
     save_analysis,
     save_run,
     save_stage_latencies,
+    set_locale,
     set_monthly_budget,
     set_retention_days,
 )
+from ai_etl.audit.db import locale as locale_db
 from ai_etl.audit.db import retention as retention_db
 from ai_etl.audit.db import runs as db
 from ai_etl.audit.db.runs import _write_run_row as _real_write_run_row
@@ -1057,3 +1060,49 @@ def test_list_tenants_with_retention_is_empty_when_no_tenant_has_a_policy(
     _insert_user_row(engine, "tenant-a")
 
     assert list_tenants_with_retention() == []
+
+
+# ---------------------------------------------------------------------------
+# locale (Sprint 25, ADR-036)
+# ---------------------------------------------------------------------------
+
+
+def test_get_locale_defaults_to_pt_br_for_a_tenant_that_never_configured_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = _make_sqlite_engine()
+    monkeypatch.setattr(locale_db, "get_engine", lambda: engine)
+    _insert_user_row(engine, "tenant-a")
+
+    assert get_locale("tenant-a") == "pt-BR"
+
+
+def test_get_locale_defaults_to_pt_br_for_an_unknown_tenant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = _make_sqlite_engine()
+    monkeypatch.setattr(locale_db, "get_engine", lambda: engine)
+
+    assert get_locale("no-such-tenant") == "pt-BR"
+
+
+def test_set_locale_then_get_round_trips(monkeypatch: pytest.MonkeyPatch) -> None:
+    engine = _make_sqlite_engine()
+    monkeypatch.setattr(locale_db, "get_engine", lambda: engine)
+    _insert_user_row(engine, "tenant-a")
+
+    set_locale("tenant-a", "en-US")
+
+    assert get_locale("tenant-a") == "en-US"
+
+
+def test_set_locale_does_not_affect_other_tenants(monkeypatch: pytest.MonkeyPatch) -> None:
+    engine = _make_sqlite_engine()
+    monkeypatch.setattr(locale_db, "get_engine", lambda: engine)
+    _insert_user_row(engine, "tenant-a")
+    _insert_user_row(engine, "tenant-b")
+
+    set_locale("tenant-a", "en-US")
+
+    assert get_locale("tenant-a") == "en-US"
+    assert get_locale("tenant-b") == "pt-BR"

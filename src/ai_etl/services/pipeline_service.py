@@ -27,6 +27,7 @@ from ai_etl.agents.analysis.planner import plan_analysis_tasks
 from ai_etl.agents.analysis.science import run_science
 from ai_etl.agents.pipeline.loader import loader_node
 from ai_etl.audit.db import (
+    get_locale,
     get_run_status_and_pipeline,
     get_saved_pipeline,
     get_saved_pipeline_llm_config,
@@ -46,6 +47,7 @@ from ai_etl.core.analysis_types import (
     TokenUsage,
 )
 from ai_etl.core.graph import build_graph
+from ai_etl.core.locale import DEFAULT_LOCALE
 from ai_etl.core.output_validation import check_gold_output, check_science_output
 from ai_etl.core.state import PipelineState, initial_state
 
@@ -146,6 +148,11 @@ def run_silver_pipeline(
         if llm_config is not None:
             llm_provider_override = llm_config.get("llm_provider")
             llm_model_override = llm_config.get("llm_model")
+    # Sprint 25 (ADR-036) — unlike quality_rules/approval_policy/the LLM override above,
+    # locale is a per-*tenant* setting (users.locale), not per-saved-pipeline: resolved
+    # whenever a real tenant_id is present, regardless of saved_pipeline_id, so every
+    # avulso run also gets its tenant's configured locale.
+    locale = get_locale(tenant_id) if tenant_id is not None else DEFAULT_LOCALE
     state = initial_state(
         spec=spec,
         run_id=run_id,
@@ -153,6 +160,7 @@ def run_silver_pipeline(
         approval_policy=approval_policy,
         llm_provider_override=llm_provider_override,
         llm_model_override=llm_model_override,
+        locale=locale,
     )
     graph = build_graph()
 
@@ -259,6 +267,7 @@ def run_gold_analysis(
     run_id: str = "",
     llm_provider_override: str | None = None,
     llm_model_override: str | None = None,
+    locale: str = DEFAULT_LOCALE,
 ) -> GoldResult:
     """Run one Gold (descriptive) sub-task via the Analyst agent.
 
@@ -270,12 +279,17 @@ def run_gold_analysis(
     `run_id`/`llm_provider_override`/`llm_model_override`: Sprint 30/gap-closing
     (ADR-031 §5) — see `_log_llm_override_if_used`. `run_id` is only used for that
     log line; it's not forwarded to `run_analyst` itself.
+
+    `locale`: Sprint 25 (ADR-036) — the tenant's configured locale, forwarded to
+    `run_analyst` for the narrative's output language. Defaults to `DEFAULT_LOCALE`.
     """
     progress_callback(stage, f"🏅 Gold — {task_question}")
     progress_callback(stage, "🤖 **Analyst Agent** — Calculando KPIs e insights...")
     _log_llm_override_if_used("analyst", run_id, llm_provider_override, llm_model_override)
     t0 = time.monotonic()
-    result = run_analyst(silver_df, task_question, llm_provider_override, llm_model_override)
+    result = run_analyst(
+        silver_df, task_question, llm_provider_override, llm_model_override, locale
+    )
     elapsed = time.monotonic() - t0
     _record_stage_call(stage_log, "analyst", elapsed, result.get("error"))
     elapsed_display = round(elapsed, 1)
@@ -315,6 +329,7 @@ def run_science_analysis(
     run_id: str = "",
     llm_provider_override: str | None = None,
     llm_model_override: str | None = None,
+    locale: str = DEFAULT_LOCALE,
 ) -> ScienceResult:
     """Run one Science (diagnostic/predictive) sub-task via the Science agent.
 
@@ -322,12 +337,16 @@ def run_science_analysis(
 
     `run_id`/`llm_provider_override`/`llm_model_override`: Sprint 30/gap-closing
     (ADR-031 §5) — see `run_gold_analysis`'s identical parameters.
+
+    `locale`: Sprint 25 (ADR-036) — see `run_gold_analysis`'s identical parameter.
     """
     progress_callback(stage, f"🔬 Science — {task_question}")
     progress_callback(stage, "🤖 **Science Agent** — Treinando modelo e gerando previsões...")
     _log_llm_override_if_used("science", run_id, llm_provider_override, llm_model_override)
     t0 = time.monotonic()
-    result = run_science(silver_df, task_question, llm_provider_override, llm_model_override)
+    result = run_science(
+        silver_df, task_question, llm_provider_override, llm_model_override, locale
+    )
     elapsed = time.monotonic() - t0
     _record_stage_call(stage_log, "science", elapsed, result.get("error"))
     elapsed_display = round(elapsed, 1)
@@ -371,6 +390,7 @@ def run_gold_with_repair(
     run_id: str = "",
     llm_provider_override: str | None = None,
     llm_model_override: str | None = None,
+    locale: str = DEFAULT_LOCALE,
 ) -> GoldResult:
     """Run a Gold sub-task; if it fails outright, try once more with a simplified
     fallback question before giving up.
@@ -382,6 +402,8 @@ def run_gold_with_repair(
 
     `run_id`/`llm_provider_override`/`llm_model_override`: Sprint 30/gap-closing
     (ADR-031 §5) — see `run_gold_analysis`'s identical parameters.
+
+    `locale`: Sprint 25 (ADR-036) — see `run_gold_analysis`'s identical parameter.
     """
     result = run_gold_analysis(
         silver_df,
@@ -392,6 +414,7 @@ def run_gold_with_repair(
         run_id,
         llm_provider_override,
         llm_model_override,
+        locale,
     )
     if not result.get("error"):
         return result
@@ -413,6 +436,7 @@ def run_gold_with_repair(
         run_id,
         llm_provider_override,
         llm_model_override,
+        locale,
     )
     progress_callback(
         repair_stage,
@@ -435,11 +459,14 @@ def run_science_with_repair(
     run_id: str = "",
     llm_provider_override: str | None = None,
     llm_model_override: str | None = None,
+    locale: str = DEFAULT_LOCALE,
 ) -> ScienceResult:
     """Same auto-repair strategy as `run_gold_with_repair`, for Science sub-tasks.
 
     `run_id`/`llm_provider_override`/`llm_model_override`: Sprint 30/gap-closing
     (ADR-031 §5) — see `run_gold_analysis`'s identical parameters.
+
+    `locale`: Sprint 25 (ADR-036) — see `run_gold_analysis`'s identical parameter.
     """
     result = run_science_analysis(
         silver_df,
@@ -450,6 +477,7 @@ def run_science_with_repair(
         run_id,
         llm_provider_override,
         llm_model_override,
+        locale,
     )
     if not result.get("error"):
         return result
@@ -471,6 +499,7 @@ def run_science_with_repair(
         run_id,
         llm_provider_override,
         llm_model_override,
+        locale,
     )
     progress_callback(
         repair_stage,
@@ -492,6 +521,7 @@ def run_analysis_tasks(
     run_id: str = "",
     llm_provider_override: str | None = None,
     llm_model_override: str | None = None,
+    locale: str = DEFAULT_LOCALE,
 ) -> tuple[list[GoldResult], list[ScienceResult], TokenUsage]:
     """Decompose the business question and run each sub-task through Gold or Science.
 
@@ -510,12 +540,15 @@ def run_analysis_tasks(
     (ADR-031 §5) — forwarded to the Planner call and to every Gold/Science sub-task
     (and repair rerun) below. `None` (the default) — unchanged behavior.
 
+    `locale`: Sprint 25 (ADR-036) — same forwarding, for the Planner/Analyst/Science
+    output language. Defaults to `DEFAULT_LOCALE`.
+
     Returns (gold_results, science_results, planner_tokens).
     """
     progress_callback("planner", "🧭 Planner — decompondo a pergunta em sub-análises...")
     _log_llm_override_if_used("planner", run_id, llm_provider_override, llm_model_override)
     tasks, planner_tokens = plan_analysis_tasks(
-        business_question, silver_df, llm_provider_override, llm_model_override
+        business_question, silver_df, llm_provider_override, llm_model_override, locale
     )
     progress_callback("planner", f"✅ {len(tasks)} sub-análise(s) planejada(s)")
     for t in tasks:
@@ -535,6 +568,7 @@ def run_analysis_tasks(
                     run_id,
                     llm_provider_override,
                     llm_model_override,
+                    locale,
                 )
             )
         else:
@@ -548,6 +582,7 @@ def run_analysis_tasks(
                     run_id,
                     llm_provider_override,
                     llm_model_override,
+                    locale,
                 )
             )
     return gold_results, science_results, planner_tokens
@@ -584,11 +619,14 @@ def run_advisor_analysis(
     run_id: str = "",
     llm_provider_override: str | None = None,
     llm_model_override: str | None = None,
+    locale: str = DEFAULT_LOCALE,
 ) -> AdvisorResult:
     """Synthesize Gold/Science results into prescriptive recommendations.
 
     `run_id`/`llm_provider_override`/`llm_model_override`: Sprint 30/gap-closing
     (ADR-031 §5) — see `run_gold_analysis`'s identical parameters.
+
+    `locale`: Sprint 25 (ADR-036) — see `run_gold_analysis`'s identical parameter.
     """
     progress_callback("advisor", "🎯 Advisor — recomendações prescritivas...")
     progress_callback(
@@ -603,6 +641,7 @@ def run_advisor_analysis(
         science_results,
         llm_provider_override,
         llm_model_override,
+        locale,
     )
     elapsed = round(time.time() - t0, 1)
     n = len(result.get("recommendations", []))
@@ -658,6 +697,10 @@ def run_full_analysis(
     # through as plain parameters from here on.
     llm_provider_override = silver_state.get("llm_provider_override")
     llm_model_override = silver_state.get("llm_model_override")
+    # Sprint 25 (ADR-036) — same reuse rationale as the LLM override above: the
+    # tenant's locale, already resolved into `PipelineState` by `run_silver_pipeline`
+    # (via `audit/db.py::get_locale`), forwarded as a plain parameter from here on.
+    locale = silver_state.get("locale", DEFAULT_LOCALE)
 
     gold_results: list[GoldResult] = []
     science_results: list[ScienceResult] = []
@@ -680,6 +723,7 @@ def run_full_analysis(
             silver_state["run_id"],
             llm_provider_override,
             llm_model_override,
+            locale,
         )
         advisor_result = run_advisor_analysis(
             silver_df,
@@ -690,6 +734,7 @@ def run_full_analysis(
             silver_state["run_id"],
             llm_provider_override,
             llm_model_override,
+            locale,
         )
         save_analysis(
             silver_state["run_id"],

@@ -205,6 +205,16 @@ def test_run_science_forwards_llm_override(mock_get_llm, sample_df: pd.DataFrame
     mock_get_llm.assert_called_once_with(provider="anthropic", model="claude-sonnet-5")
 
 
+def test_run_science_en_us_locale_instructs_english(mock_get_llm, sample_df: pd.DataFrame) -> None:
+    """Sprint 25 (ADR-036)."""
+    llm = _mock_llm([HAPPY_CODE])
+    mock_get_llm.return_value = llm
+    run_science(sample_df, "Qual será a receita?", locale="en-US")
+
+    sent_prompt = llm.invoke.call_args[0][0]
+    assert "English (US)" in sent_prompt
+
+
 def test_run_science_strips_fences(mock_get_llm, sample_df: pd.DataFrame) -> None:
     fenced = f"```python\n{HAPPY_CODE}\n```"
     mock_get_llm.return_value = _mock_llm([fenced])

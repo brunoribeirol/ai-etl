@@ -12,6 +12,7 @@ import pandas as pd
 
 from ai_etl.core.analysis_types import AdvisorResult, GoldResult, ScienceResult, TokenUsage
 from ai_etl.core.llm import extract_token_usage, get_llm, sum_token_usage
+from ai_etl.core.locale import DEFAULT_LOCALE, narrative_language_instruction, resolve_locale
 
 _PROMPT_TEMPLATE = """\
 You are a senior business advisor with deep expertise in data-driven strategy.
@@ -48,11 +49,15 @@ Respond ONLY with valid JSON (no markdown fences) in this exact structure:
       "expected_impact": "..."
     }}
   ],
-  "summary": "2-3 sentence executive summary in Portuguese for a non-technical CEO."
+  "summary": "2-3 sentence executive summary for a non-technical CEO."
 }}
 
+## Language for this tenant
+{language_instruction}
+
 Rules:
-- Write the "action", "rationale", and "expected_impact" fields in Portuguese.
+- Write the "action", "rationale", "expected_impact", and "summary" fields in the tenant's
+  language above.
 - "priority" must be exactly one of: "high", "medium", "low".
 - Be specific: mention actual column names, product names, or numbers from the data.
 - Do NOT invent data that was not provided.
@@ -67,6 +72,11 @@ Rules:
 """
 
 _PRIORITY_ORDER = {"high": 0, "medium": 1, "low": 2}
+
+_FALLBACK_SUMMARY: dict[str, str] = {
+    "pt-BR": "Não foi possível gerar recomendações automaticamente.",
+    "en-US": "Automatic recommendations could not be generated.",
+}
 
 
 def _build_data_overview(df: pd.DataFrame) -> str:
@@ -142,6 +152,7 @@ def run_advisor(
     science_results: list[ScienceResult],
     llm_provider_override: str | None = None,
     llm_model_override: str | None = None,
+    locale: str = DEFAULT_LOCALE,
 ) -> AdvisorResult:
     """Generate prescriptive recommendations from all available analysis.
 
@@ -155,7 +166,11 @@ def run_advisor(
         llm_provider_override / llm_model_override: Sprint 30/gap-closing (ADR-031
             §5) — see `agents/analysis/planner.py::plan_analysis_tasks`'s identical
             parameters for rationale. `None` (the default) — unchanged behavior.
+        locale: Sprint 25 (ADR-036) — the tenant's configured locale, same threading
+            pattern as `llm_provider_override` above. Defaults to `DEFAULT_LOCALE`
+            ("pt-BR") — unchanged behavior for every existing caller.
     """
+    resolved_locale = resolve_locale(locale)
     data_overview = _build_data_overview(df)
     gold_context = _build_gold_context(gold_results)
     science_context = _build_science_context(science_results)
@@ -165,6 +180,7 @@ def run_advisor(
         data_overview=data_overview,
         gold_context=gold_context,
         science_context=science_context,
+        language_instruction=narrative_language_instruction(resolved_locale),
     )
 
     llm = get_llm(provider=llm_provider_override, model=llm_model_override)
@@ -211,7 +227,7 @@ def run_advisor(
 
     return {
         "recommendations": [],
-        "summary": "Não foi possível gerar recomendações automaticamente.",
+        "summary": _FALLBACK_SUMMARY.get(resolved_locale, _FALLBACK_SUMMARY[DEFAULT_LOCALE]),
         "error": "JSON parsing failed after 2 attempts",
         "tokens": sum_token_usage(*attempt_usages),
     }

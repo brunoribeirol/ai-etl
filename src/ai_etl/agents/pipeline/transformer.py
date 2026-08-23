@@ -4,6 +4,7 @@ import json
 
 from ai_etl.audit.logger import log_action
 from ai_etl.core.llm import get_llm
+from ai_etl.core.locale import date_parse_hint, resolve_locale
 from ai_etl.core.sandbox import execute_in_sandbox, scale_timeout_for_rows
 from ai_etl.core.state import PipelineState
 
@@ -36,25 +37,26 @@ Rules:
 - The function must return a single pd.DataFrame.
 - Handle edge cases (empty DataFrames, missing columns).
 - Do not read from files or databases — data is already in `dfs`.
-- When parsing a date/datetime column with `pd.to_datetime(..., errors="coerce")`, the
-  default parse assumes month-first (MM/DD/YYYY) and will silently turn a large fraction
-  of a day-first dataset (DD/MM/YYYY, common outside the US) into NaT instead of raising.
-  Try the default parse, and if more than 5% of non-null values become NaT, retry the
-  same column with `dayfirst=True` and keep whichever attempt produced fewer NaT.
+- When parsing a date/datetime column with `pd.to_datetime(..., errors="coerce")`, a
+  day-first dataset (DD/MM/YYYY) parsed with the default month-first reading will
+  silently turn a large fraction of it into NaT instead of raising — always try BOTH
+  readings for any ambiguous date column and keep whichever produced fewer NaT.
+  {date_parse_hint}
 
-WRONG (silently drops most day-first dates as NaT, no fallback attempted):
+Example fallback pattern (WRONG: no fallback attempted, silently drops day-first dates):
 ```python
 df["date"] = pd.to_datetime(df["date"], errors="coerce")
 ```
 
-RIGHT (falls back to dayfirst parsing when the default parse looks wrong):
+RIGHT (tries both readings, keeps whichever produced fewer NaT — see the hint above for
+which reading to attempt first for this tenant):
 ```python
 parsed = pd.to_datetime(df["date"], errors="coerce")
 non_null = df["date"].notna().sum()
 if non_null > 0 and parsed.isna().sum() / non_null > 0.05:
-    parsed_dayfirst = pd.to_datetime(df["date"], errors="coerce", dayfirst=True)
-    if parsed_dayfirst.isna().sum() < parsed.isna().sum():
-        parsed = parsed_dayfirst
+    parsed_alt = pd.to_datetime(df["date"], errors="coerce", dayfirst=True)
+    if parsed_alt.isna().sum() < parsed.isna().sum():
+        parsed = parsed_alt
 df["date"] = parsed
 ```
 
@@ -92,10 +94,12 @@ def transformer_node(state: PipelineState) -> PipelineState:
     source_names = list(state["extracted_data"].keys())
     schema_summary = json.dumps(state["source_schemas"], indent=2, default=str)
 
+    locale = resolve_locale(state.get("locale"))
     prompt = TRANSFORMER_PROMPT.format(
         transformations="\n".join(f"- {t}" for t in transformations),
         schema_summary=schema_summary,
         source_names=", ".join(source_names),
+        date_parse_hint=date_parse_hint(locale),
     )
 
     last_error: str | None = None

@@ -16,6 +16,7 @@ import pandas as pd
 from ai_etl.agents._llm_codegen import strip_code_fences
 from ai_etl.core.analysis_types import AnalysisTask, TokenUsage
 from ai_etl.core.llm import extract_token_usage, get_llm
+from ai_etl.core.locale import DEFAULT_LOCALE, narrative_language_instruction, resolve_locale
 
 logger = logging.getLogger(__name__)
 
@@ -32,14 +33,14 @@ answerable on its own with a single descriptive or predictive/diagnostic analysi
 ## Dataset columns
 {columns_list}
 
-## Business question (in Portuguese)
+## Business question
 "{question}"
 
 ## Your task
 
 Produce a JSON array of 1 to {max_tasks} sub-tasks. Each sub-task is an object with:
-- "question": a specific, self-contained question in Portuguese (a narrow slice of the
-  original question, not a restatement of the whole thing)
+- "question": a specific, self-contained question (a narrow slice of the original
+  question, not a restatement of the whole thing). {language_instruction}
 - "type": "descriptive" for KPIs, aggregations, rankings, and comparisons on the
   existing data; "diagnostic_or_predictive" for explaining why something happened, or
   forecasting/classifying/clustering/regression
@@ -50,7 +51,7 @@ Rules:
 - Cap at {max_tasks} sub-tasks — merge closely related asks into one when needed.
 - Respond ONLY with a valid JSON array. No markdown fences, no explanation.
 
-Example output:
+Example output (Portuguese shown, but write in the language of the instruction above):
 [
   {{"question": "Quais são os principais KPIs gerais do catálogo?", "type": "descriptive"}},
   {{"question": "Por que a avaliação média caiu em 2020?", "type": "diagnostic_or_predictive"}}
@@ -63,6 +64,7 @@ def plan_analysis_tasks(
     df: pd.DataFrame,
     llm_provider_override: str | None = None,
     llm_model_override: str | None = None,
+    locale: str = DEFAULT_LOCALE,
 ) -> tuple[list[AnalysisTask], TokenUsage]:
     """Decompose a business question into up to MAX_TASKS independent sub-tasks.
 
@@ -77,11 +79,15 @@ def plan_analysis_tasks(
             `run_full_analysis` from `PipelineState`, since this agent runs outside
             the LangGraph/PipelineState — see that module's docstring). `None` (the
             default) for every existing caller — unchanged behavior.
+        locale: Sprint 25 (ADR-036) — the tenant's configured locale, same threading
+            pattern as `llm_provider_override` above. Defaults to `DEFAULT_LOCALE`
+            ("pt-BR") — unchanged behavior for every existing caller.
     """
     prompt = _PROMPT_TEMPLATE.format(
         columns_list=str(df.columns.tolist()),
         question=business_question,
         max_tasks=MAX_TASKS,
+        language_instruction=narrative_language_instruction(resolve_locale(locale)),
     )
     llm = get_llm(provider=llm_provider_override, model=llm_model_override)
 

@@ -1,15 +1,15 @@
-"""`/tenant` endpoints — self-service tenant data erasure, export, and
-retention (Sprint 24 ADR-025, Sprint 36 ADR-035).
+"""`/tenant` endpoints — self-service tenant data erasure, export,
+retention, and locale (Sprint 24 ADR-025, Sprint 36 ADR-035, Sprint 25 ADR-036).
 
 `editor`-only for anything that mutates/deletes (`DELETE /tenant`,
-`PATCH /tenant/retention`), same trust boundary as `PATCH /budget` and
-`POST/DELETE /secrets`: a tenant can only ever act on its own data, resolved
-from the verified JWT (`require_role`/`get_current_tenant_id`), never an
-arbitrary `tenant_id` — there is no admin role able to target another
-tenant (ADR-022's still-open limitation, deliberately not resolved here, see
-ADR-025 Decision 1). `GET /tenant/export` and `GET /tenant/retention` are
-read-only and available to `viewer` too, same access-right tier as
-`GET /budget`/`GET /pipelines`.
+`PATCH /tenant/retention`, `PATCH /tenant/locale`), same trust boundary as
+`PATCH /budget` and `POST/DELETE /secrets`: a tenant can only ever act on its
+own data, resolved from the verified JWT (`require_role`/
+`get_current_tenant_id`), never an arbitrary `tenant_id` — there is no admin
+role able to target another tenant (ADR-022's still-open limitation,
+deliberately not resolved here, see ADR-025 Decision 1). `GET /tenant/export`,
+`GET /tenant/retention`, and `GET /tenant/locale` are read-only and available
+to `viewer` too, same access-right tier as `GET /budget`/`GET /pipelines`.
 """
 
 from typing import Annotated, Literal
@@ -18,7 +18,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from ai_etl.api.deps import get_current_tenant_id, require_role
+from ai_etl.audit.db.locale import get_locale, set_locale
 from ai_etl.audit.db.retention import RetentionPolicy, get_retention_days, set_retention_days
+from ai_etl.core.locale import SUPPORTED_LOCALES
 from ai_etl.services.tenant_deletion_service import (
     TenantDeletionSummary,
     TenantNotFoundError,
@@ -40,6 +42,19 @@ class SetRetentionRequest(BaseModel):
     # with no default so a caller must pass the key, not omit it, mirroring
     # `SetBudgetRequest` (api/routers/budget.py).
     retention_days: int | None = Field(ge=1)
+
+
+class LocaleConfig(BaseModel):
+    tenant_id: str
+    locale: str
+
+
+class SetLocaleRequest(BaseModel):
+    # Validated against `core.locale.SUPPORTED_LOCALES` below — 422 on anything
+    # else, same "allowlist validated once at the boundary" pattern as
+    # `core.llm.validate_provider_and_model` (ADR-031 §2). No `None` case (unlike
+    # `SetRetentionRequest.retention_days`): locale always has a value (ADR-036 §1).
+    locale: str
 
 
 @router.delete("")
@@ -83,3 +98,31 @@ def patch_retention(
 ) -> RetentionPolicy:
     set_retention_days(tenant_id, body.retention_days)
     return RetentionPolicy(tenant_id=tenant_id, retention_days=body.retention_days)
+
+
+@router.get("/locale")
+def get_tenant_locale(
+    tenant_id: Annotated[str, Depends(get_current_tenant_id)],
+) -> LocaleConfig:
+    """Current locale (ADR-036) — `"pt-BR"` for every tenant that never called
+    `PATCH /tenant/locale`, same "default until explicitly changed" contract as
+    `GET /tenant/retention`."""
+    return LocaleConfig(tenant_id=tenant_id, locale=get_locale(tenant_id))
+
+
+@router.patch("/locale")
+def patch_tenant_locale(
+    body: SetLocaleRequest,
+    tenant_id: Annotated[str, Depends(require_role("editor"))],
+) -> LocaleConfig:
+    """Set this tenant's locale (ADR-036) — drives the Transformer's date-parsing
+    convention and the language Analyst/Science/Advisor generate narrative text in
+    on every subsequent run. Takes effect on the *next* run; never retroactively
+    rewrites an already-persisted run's narrative."""
+    if body.locale not in SUPPORTED_LOCALES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unsupported locale {body.locale!r}. Supported: {SUPPORTED_LOCALES}.",
+        )
+    set_locale(tenant_id, body.locale)
+    return LocaleConfig(tenant_id=tenant_id, locale=body.locale)

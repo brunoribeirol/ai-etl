@@ -267,3 +267,39 @@ def test_run_analyst_forwards_llm_override(mock_get_llm, sample_df: pd.DataFrame
     run_analyst(sample_df, "Qual produto?", "anthropic", "claude-sonnet-5")
 
     mock_get_llm.assert_called_once_with(provider="anthropic", model="claude-sonnet-5")
+
+
+# ---------------------------------------------------------------------------
+# run_analyst — locale (Sprint 25, ADR-036)
+# ---------------------------------------------------------------------------
+
+
+def test_run_analyst_default_locale_instructs_portuguese(
+    mock_get_llm, sample_df: pd.DataFrame
+) -> None:
+    llm = _make_llm_mock([HAPPY_CODE])
+    mock_get_llm.return_value = llm
+    run_analyst(sample_df, "Qual produto?")
+
+    sent_prompt = llm.invoke.call_args[0][0]
+    assert "Portuguese (Brazil)" in sent_prompt
+
+
+def test_run_analyst_en_us_locale_instructs_english(mock_get_llm, sample_df: pd.DataFrame) -> None:
+    llm = _make_llm_mock([HAPPY_CODE])
+    mock_get_llm.return_value = llm
+    run_analyst(sample_df, "Qual produto?", locale="en-US")
+
+    sent_prompt = llm.invoke.call_args[0][0]
+    assert "English (US)" in sent_prompt
+
+
+def test_run_analyst_unsupported_locale_falls_back_to_default(
+    mock_get_llm, sample_df: pd.DataFrame
+) -> None:
+    llm = _make_llm_mock([HAPPY_CODE])
+    mock_get_llm.return_value = llm
+    run_analyst(sample_df, "Qual produto?", locale="fr-FR")
+
+    sent_prompt = llm.invoke.call_args[0][0]
+    assert "Portuguese (Brazil)" in sent_prompt

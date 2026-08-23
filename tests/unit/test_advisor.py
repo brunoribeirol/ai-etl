@@ -98,6 +98,24 @@ def test_run_advisor_happy_path(mock_get_llm, sample_df, gold_result, science_re
     assert len(result["summary"]) > 0
 
 
+def test_run_advisor_en_us_locale_instructs_english(
+    mock_get_llm, sample_df, gold_result, science_result
+) -> None:
+    """Sprint 25 (ADR-036)."""
+    llm = _mock_llm([VALID_RESPONSE])
+    mock_get_llm.return_value = llm
+    run_advisor(
+        sample_df,
+        "Como aumentar o faturamento?",
+        gold_result,
+        science_result,
+        locale="en-US",
+    )
+
+    sent_prompt = llm.invoke.call_args[0][0]
+    assert "English (US)" in sent_prompt
+
+
 def test_run_advisor_prompt_forbids_restating_the_request(
     mock_get_llm, sample_df, gold_result, science_result
 ) -> None:

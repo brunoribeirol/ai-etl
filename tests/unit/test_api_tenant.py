@@ -250,3 +250,75 @@ def test_viewer_role_cannot_patch_retention(client: TestClient, mocker) -> None:
 
     assert response.status_code == 403
     mock_set.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# `GET`/`PATCH /tenant/locale` (Sprint 25, ADR-036)
+# ---------------------------------------------------------------------------
+
+
+def test_get_locale_defaults_to_pt_br(client: TestClient, mocker) -> None:
+    mocker.patch("ai_etl.api.routers.tenant.get_locale", return_value="pt-BR")
+
+    response = client.get("/tenant/locale")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["tenant_id"] == "tenant-a"
+    assert body["locale"] == "pt-BR"
+
+
+def test_viewer_role_can_read_locale(client: TestClient, mocker) -> None:
+    app.dependency_overrides[get_current_auth_context] = lambda: {
+        "tenant_id": "tenant-a",
+        "role": "viewer",
+    }
+    mocker.patch("ai_etl.api.routers.tenant.get_locale", return_value="en-US")
+
+    response = client.get("/tenant/locale")
+
+    assert response.status_code == 200
+    assert response.json()["locale"] == "en-US"
+
+
+def test_patch_locale_happy_path(client: TestClient, mocker) -> None:
+    mock_set = mocker.patch("ai_etl.api.routers.tenant.set_locale")
+
+    response = client.patch("/tenant/locale", json={"locale": "en-US"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["tenant_id"] == "tenant-a"
+    assert body["locale"] == "en-US"
+    mock_set.assert_called_once_with("tenant-a", "en-US")
+
+
+def test_patch_locale_rejects_unsupported_locale(client: TestClient, mocker) -> None:
+    mock_set = mocker.patch("ai_etl.api.routers.tenant.set_locale")
+
+    response = client.patch("/tenant/locale", json={"locale": "fr-FR"})
+
+    assert response.status_code == 422
+    mock_set.assert_not_called()
+
+
+def test_patch_locale_requires_the_key_present(client: TestClient, mocker) -> None:
+    mock_set = mocker.patch("ai_etl.api.routers.tenant.set_locale")
+
+    response = client.patch("/tenant/locale", json={})
+
+    assert response.status_code == 422
+    mock_set.assert_not_called()
+
+
+def test_viewer_role_cannot_patch_locale(client: TestClient, mocker) -> None:
+    app.dependency_overrides[get_current_auth_context] = lambda: {
+        "tenant_id": "tenant-a",
+        "role": "viewer",
+    }
+    mock_set = mocker.patch("ai_etl.api.routers.tenant.set_locale")
+
+    response = client.patch("/tenant/locale", json={"locale": "en-US"})
+
+    assert response.status_code == 403
+    mock_set.assert_not_called()
