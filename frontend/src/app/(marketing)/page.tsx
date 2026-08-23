@@ -38,11 +38,14 @@ const DIFFERENTIATOR_ICONS = [Database, FileStack, Workflow, ShieldCheck];
 const TECH_FACT_ICONS = [GitBranch, Terminal, Lock, Radar, Boxes, Sparkles];
 
 type Differentiator = { title: string; body: string };
+type PyramidText = { label: string; description: string };
 
 export default function LandingPage() {
   const t = useTranslations("landing");
+  const tAgents = useTranslations("agents");
   const differentiators = t.raw("differentiators") as Differentiator[];
   const techFacts = t.raw("techFacts") as string[];
+  const pyramidText = tAgents.raw("pyramid") as PyramidText[];
 
   return (
     <main className="flex-1">
@@ -132,12 +135,14 @@ export default function LandingPage() {
             className="flex flex-col gap-3 sm:flex-row sm:items-stretch sm:gap-2"
           >
             {PYRAMID.map((tier, i) => (
-              <div key={tier.label} className="flex flex-1 items-center gap-2 sm:contents">
+              <div key={tier.id} className="flex flex-1 items-center gap-2 sm:contents">
                 <Card className="w-full flex-1 py-5 text-center">
                   <CardContent className="flex flex-col items-center gap-1.5 px-3">
                     <span className="text-2xl">{tier.emoji}</span>
-                    <span className="text-sm font-medium">{tier.label}</span>
-                    <span className="text-xs text-muted-foreground">{tier.description}</span>
+                    <span className="text-sm font-medium">{pyramidText[i].label}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {pyramidText[i].description}
+                    </span>
                   </CardContent>
                 </Card>
                 {i < PYRAMID.length - 1 && (

@@ -63,5 +63,224 @@
       "Autoavaliação de prontidão SOC2 e política formal de dados (LGPD/GDPR)"
     ],
     "finalCtaTitle": "Pare de reconciliar fontes à mão toda semana"
+  },
+  "agents": {
+    "pyramid": [
+      { "label": "Bronze", "description": "Dado bruto, sem nenhum toque." },
+      { "label": "Silver", "description": "Limpo, padronizado, validado." },
+      { "label": "Gold", "description": "KPIs e insights descritivos." },
+      { "label": "Science", "description": "Previsões e modelos preditivos." },
+      { "label": "Advisor", "description": "Recomendações de ação." }
+    ],
+    "roster": [
+      { "description": "Lê a especificação e planeja o pipeline (fontes, transformações, destino)." },
+      { "description": "Extrai e inspeciona os dados de cada fonte (CSV, Postgres, REST, PDF/DOCX)." },
+      { "description": "Gera e executa (em sandbox) o código de limpeza/transformação — a camada Silver." },
+      { "description": "Verifica nulos, duplicatas e outliers nos dados transformados." },
+      { "description": "Persiste os dados limpos no destino configurado." },
+      { "description": "Decompõe a pergunta de negócio em sub-análises (Gold e/ou Science)." },
+      { "description": "Gera código pandas, calcula KPIs e cria o gráfico de cada sub-análise descritiva." },
+      { "description": "Treina um modelo preditivo (scikit-learn) e gera previsões." },
+      { "description": "Sintetiza Gold + Science em recomendações de ação priorizadas." }
+    ]
+  },
+  "agentsInfo": {
+    "trigger": "Como funciona",
+    "title": "Como funciona",
+    "description": "Dado bruto → ETL auditável → insights descritivos → modelos preditivos → recomendações.",
+    "modelInUse": "Modelo em uso",
+    "pyramidHeading": "Pirâmide analítica",
+    "rosterHeading": "Agentes"
+  },
+  "executarPage": {
+    "title": "Executar análise",
+    "subtitle": "Suba um arquivo ou escreva um spec manual, opcionalmente com uma pergunta de negócio. O pipeline agente cuida do resto."
+  },
+  "comecarPage": {
+    "title": "Comece em poucos minutos",
+    "subtitle": "Conecte uma fonte, descreva o que você quer e veja o resultado — sem precisar de instrução prévia."
+  },
+  "historicoPage": {
+    "title": "Histórico",
+    "subtitle": "Runs anteriores desta conta.",
+    "columnRun": "Run",
+    "columnStatus": "Status",
+    "columnModel": "Modelo",
+    "columnCost": "Custo",
+    "columnWhen": "Quando",
+    "emptyState": "Nenhum run ainda."
+  },
+  "runDetailPage": {
+    "notFound": "Run não encontrado.",
+    "questionPrefix": "O que fazer sobre: \"{question}\"",
+    "silverHeading": "Silver"
+  },
+  "pipelinesPage": {
+    "title": "Pipelines agendados",
+    "subtitle": "Crie um pipeline uma vez e deixe-o rodar sozinho no horário configurado."
+  },
+  "pipelineHistoryPage": {
+    "notFound": "Pipeline não encontrado.",
+    "backLink": "← Pipelines agendados"
+  },
+  "resumoIndexPage": {
+    "title": "Resumo executivo",
+    "subtitle": "O resultado dos seus pipelines, em linguagem simples — sem código, sem termos técnicos.",
+    "emptyState": "Nenhum pipeline agendado ainda. Crie um em “Pipelines” para ver o resumo aqui depois da primeira execução.",
+    "needsAttention": "Precisa de atenção"
+  },
+  "resumoPage": {
+    "notFound": "Não encontramos esse pipeline. Ele pode ter sido removido.",
+    "backLink": "← Resumo executivo"
+  },
+  "analysisSection": {
+    "repaired": "reparado",
+    "caveat": "ressalva",
+    "caveatHeading": "Resultado com ressalva de sanity-check"
+  },
+  "codeBlock": {
+    "copyLabel": "Copiar código"
+  },
+  "codeTab": {
+    "empty": "Nenhum código disponível para este run.",
+    "transformerHeading": "Transformer — Silver",
+    "analystHeading": "Analyst — {question}",
+    "analystFallback": "Gold {index}",
+    "scienceHeading": "Science Agent — {question}",
+    "scienceFallback": "Science {index}"
+  },
+  "dataTable": {
+    "showing": "Mostrando 20 de {count} linhas."
+  },
+  "executarForm": {
+    "fileLabel": "Arquivo (CSV, Excel, JSON, PDF, DOCX)",
+    "fileCta": "Clique para selecionar um arquivo",
+    "specLabel": "Ou: spec manual",
+    "specOptionalHint": "(opcional se um arquivo foi anexado)",
+    "businessQuestionLabel": "Pergunta de negócio (opcional)",
+    "businessQuestionPlaceholder": "Quais produtos vendem mais?",
+    "submitIdle": "Analisar dados",
+    "submitLoading": "Executando...",
+    "missingApiUrl": "NEXT_PUBLIC_API_URL não está configurada.",
+    "missingInput": "Anexe um arquivo ou escreva um spec manual.",
+    "toastSuccess": "Análise concluída.",
+    "taskLabel": "Task",
+    "statusLabel": "Status",
+    "completedPrefix": "Concluído —",
+    "viewRun": "ver run {runId}"
+  },
+  "onboardingWizard": {
+    "step1Title": "Passo 1 — escolha uma fonte",
+    "step1Hint": "Sem dado próprio ainda? Use o exemplo pré-carregado para ver o pipeline completo rodar em minutos.",
+    "useExample": "Usar exemplo (vendas)",
+    "useOwnFile": "Enviar meu próprio arquivo",
+    "exampleLoadError": "Não foi possível carregar o exemplo: {error}",
+    "exampleQuestion": "Quais produtos vendem mais e como as vendas variam por região?"
+  },
+  "onboardingChecklist": {
+    "heading": "O que falta para estar pronto",
+    "missingApiUrl": "NEXT_PUBLIC_API_URL não está configurada.",
+    "item1Label": "Rode seu primeiro pipeline",
+    "item1Hint": "Use o exemplo pré-carregado abaixo ou envie seu próprio arquivo.",
+    "item2Label": "Crie um pipeline agendado",
+    "item2Hint": "Conecte uma fonte viva (Postgres, REST...) para rodar sozinho no horário certo.",
+    "item3Label": "Veja o resumo executivo",
+    "item3Hint": "Disponível assim que um pipeline agendado tiver ao menos uma execução."
+  },
+  "executiveSummary": {
+    "statusCompleted": "Concluído com sucesso",
+    "statusFailed": "Falhou",
+    "statusRunning": "Em execução",
+    "statusPending": "Aguardando execução",
+    "loading": "Carregando resumo...",
+    "emptyHistory": "Este pipeline ainda não executou — volte aqui depois da primeira execução agendada.",
+    "lastUpdated": "Última atualização: {when}",
+    "failedNotice": "A última execução deste pipeline não terminou com sucesso. A equipe técnica já foi avisada e está verificando o que aconteceu.",
+    "kpiRowsLoaded": "Linhas processadas",
+    "kpiCost": "Custo da execução",
+    "kpiTokens": "Volume processado pela IA",
+    "deltaPercent": "{percent}% em relação à última execução",
+    "deltaChanged": "mudou em relação à última execução",
+    "deltaUnchanged": "sem mudança",
+    "whatHappenedHeading": "O que aconteceu",
+    "recommendationsHeading": "Recomendações",
+    "noSummary": "Este pipeline não tem uma pergunta de negócio configurada, então não há um resumo de análise para mostrar aqui — apenas os números acima."
+  },
+  "pipelineHistory": {
+    "seriesRowsLoaded": "Linhas carregadas",
+    "seriesTotalTokens": "Tokens totais",
+    "seriesCost": "Custo (USD)",
+    "axisExecution": "Execução",
+    "axisRows": "Linhas",
+    "axisTokens": "Tokens",
+    "loading": "Carregando histórico...",
+    "empty": "Este pipeline ainda não executou nenhuma vez.",
+    "kpiHeading": "KPIs ao longo do tempo",
+    "kpiLimitNote": "Últimas {limit} execuções.",
+    "executionsHeading": "Execuções ({count})",
+    "executionsLimitNote": "Mostrando as últimas {limit} execuções — este pipeline pode ter mais no histórico.",
+    "rowsSuffix": "{count} linhas",
+    "diffHeading": "Diff entre execuções",
+    "diffCompareButton": "Comparar A → B",
+    "diffComparing": "Comparando...",
+    "silverHeading": "Silver",
+    "goldHeading": "Gold",
+    "scienceHeading": "Science",
+    "rowsLoadedLabel": "Linhas carregadas",
+    "resultRowsLabel": "Linhas no resultado"
+  },
+  "pipelineTab": {
+    "emptyState": "Nenhum detalhe de execução disponível para este run.",
+    "silverExecutionHeading": "Execução dos agentes Silver",
+    "qualityReportHeading": "Relatório de qualidade",
+    "pipelinePlanHeading": "Plano do pipeline",
+    "customRuleFallback": "regra customizada",
+    "inPreposition": "em",
+    "nullRatioSuffix": "— razão de nulos: {pct}%",
+    "duplicatesSuffix": "— {count} duplicatas",
+    "outliersSuffix": "— {count} outliers",
+    "noViolations": "sem violações",
+    "violationsCount": "{count} violação(ões)"
+  },
+  "pipelinesManager": {
+    "editHeading": "Editar pipeline",
+    "newHeading": "Novo pipeline agendado",
+    "nameLabel": "Nome",
+    "namePlaceholder": "Sincronização noturna de pedidos",
+    "sourceTypeLabel": "Tipo de fonte",
+    "sourceTypeHint": "(apenas fontes “vivas” podem ser agendadas — ADR-016)",
+    "specLabel": "Spec (linguagem natural)",
+    "businessQuestionLabel": "Pergunta de negócio (opcional)",
+    "businessQuestionPlaceholder": "Quais produtos vendem mais?",
+    "cronLabel": "Agendamento (cron)",
+    "cronHint": "ex: “0 3 * * *” = todo dia às 3h",
+    "qualityRulesLabel": "Regras de qualidade (opcional)",
+    "qualityRulesHelp": "Operadores: not_null, gte, lte, gt, lt, eq, ne. Severidade padrão: error (bloqueia o pipeline quando violada).",
+    "saveChanges": "Salvar alterações",
+    "schedulePipeline": "Agendar pipeline",
+    "cancel": "Cancelar",
+    "savedPipelinesHeading": "Pipelines salvos",
+    "emptyState": "Nenhum pipeline agendado ainda.",
+    "customQualityRuleOne": "regra de qualidade customizada",
+    "customQualityRuleOther": "regras de qualidade customizadas",
+    "nextRun": "Próxima execução: {when}",
+    "lastRun": "Última: {when}",
+    "consecutiveFailureOne": "falha seguida",
+    "consecutiveFailureOther": "falhas seguidas",
+    "resumo": "Resumo",
+    "historico": "Histórico",
+    "edit": "Editar",
+    "pause": "Pausar",
+    "resume": "Retomar",
+    "toastUpdated": "Pipeline atualizado.",
+    "toastCreated": "Pipeline agendado.",
+    "toastPaused": "Pipeline pausado.",
+    "toastResumed": "Pipeline retomado.",
+    "invalidJson": "Regras de qualidade: JSON inválido.",
+    "invalidJsonShape": "Regras de qualidade: deve ser uma lista (array JSON), ex: [].",
+    "missingApiUrl": "NEXT_PUBLIC_API_URL não está configurada."
+  },
+  "runSections": {
+    "code": "Código"
   }
 }

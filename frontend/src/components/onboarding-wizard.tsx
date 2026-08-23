@@ -1,6 +1,7 @@
 "use client";
 
 import { FileSpreadsheet, Loader2, UploadCloud } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
 import { ExecutarForm } from "@/components/executar-form";
@@ -8,8 +9,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
 const EXAMPLE_CSV_URL = "/examples/sample-sales.csv";
-const EXAMPLE_BUSINESS_QUESTION =
-  "Quais produtos vendem mais e como as vendas variam por região?";
 
 /**
  * Sprint 26 (ADR-027) — guided first-run flow. Step 1 picks a source
@@ -21,6 +20,7 @@ const EXAMPLE_BUSINESS_QUESTION =
  * wizard never reimplements upload/poll/result logic.
  */
 export function OnboardingWizard() {
+  const t = useTranslations("onboardingWizard");
   const [ready, setReady] = useState(false);
   const [initialFile, setInitialFile] = useState<File | null>(null);
   const [initialBusinessQuestion, setInitialBusinessQuestion] = useState("");
@@ -34,10 +34,10 @@ export function OnboardingWizard() {
       const blob = await response.blob();
       const file = new File([blob], "sample-sales.csv", { type: "text/csv" });
       setInitialFile(file);
-      setInitialBusinessQuestion(EXAMPLE_BUSINESS_QUESTION);
+      setInitialBusinessQuestion(t("exampleQuestion"));
       setReady(true);
     } catch (err) {
-      toast.error(`Não foi possível carregar o exemplo: ${String(err)}`);
+      toast.error(t("exampleLoadError", { error: String(err) }));
     } finally {
       setLoadingExample(false);
     }
@@ -57,11 +57,8 @@ export function OnboardingWizard() {
     <Card className="max-w-xl w-full">
       <CardContent className="flex flex-col gap-4">
         <div>
-          <span className="text-sm font-medium">Passo 1 — escolha uma fonte</span>
-          <p className="text-xs text-muted-foreground mt-1">
-            Sem dado próprio ainda? Use o exemplo pré-carregado para ver o pipeline completo
-            rodar em minutos.
-          </p>
+          <span className="text-sm font-medium">{t("step1Title")}</span>
+          <p className="text-xs text-muted-foreground mt-1">{t("step1Hint")}</p>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Button
@@ -76,7 +73,7 @@ export function OnboardingWizard() {
             ) : (
               <FileSpreadsheet className="h-5 w-5" />
             )}
-            <span>Usar exemplo (vendas)</span>
+            <span>{t("useExample")}</span>
           </Button>
           <Button
             type="button"
@@ -86,7 +83,7 @@ export function OnboardingWizard() {
             disabled={loadingExample}
           >
             <UploadCloud className="h-5 w-5" />
-            <span>Enviar meu próprio arquivo</span>
+            <span>{t("useOwnFile")}</span>
           </Button>
         </div>
       </CardContent>

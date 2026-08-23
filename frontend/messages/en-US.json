@@ -63,5 +63,224 @@
       "Self-assessed SOC2 readiness and a formal data policy (LGPD/GDPR)"
     ],
     "finalCtaTitle": "Stop reconciling sources by hand every week"
+  },
+  "agents": {
+    "pyramid": [
+      { "label": "Bronze", "description": "Raw data, untouched." },
+      { "label": "Silver", "description": "Cleaned, standardized, validated." },
+      { "label": "Gold", "description": "KPIs and descriptive insights." },
+      { "label": "Science", "description": "Forecasts and predictive models." },
+      { "label": "Advisor", "description": "Actionable recommendations." }
+    ],
+    "roster": [
+      { "description": "Reads the specification and plans the pipeline (sources, transformations, destination)." },
+      { "description": "Extracts and inspects the data from each source (CSV, Postgres, REST, PDF/DOCX)." },
+      { "description": "Generates and runs (in a sandbox) the cleaning/transformation code — the Silver layer." },
+      { "description": "Checks for nulls, duplicates, and outliers in the transformed data." },
+      { "description": "Persists the cleaned data to the configured destination." },
+      { "description": "Breaks the business question down into sub-analyses (Gold and/or Science)." },
+      { "description": "Generates pandas code, computes KPIs, and builds the chart for each descriptive sub-analysis." },
+      { "description": "Trains a predictive model (scikit-learn) and generates forecasts." },
+      { "description": "Synthesizes Gold + Science into prioritized, actionable recommendations." }
+    ]
+  },
+  "agentsInfo": {
+    "trigger": "How it works",
+    "title": "How it works",
+    "description": "Raw data → auditable ETL → descriptive insights → predictive models → recommendations.",
+    "modelInUse": "Model in use",
+    "pyramidHeading": "Analytical pyramid",
+    "rosterHeading": "Agents"
+  },
+  "executarPage": {
+    "title": "Run an analysis",
+    "subtitle": "Upload a file or write a manual spec, optionally with a business question. The agent pipeline handles the rest."
+  },
+  "comecarPage": {
+    "title": "Get started in a few minutes",
+    "subtitle": "Connect a source, describe what you want, and see the result — no prior training needed."
+  },
+  "historicoPage": {
+    "title": "History",
+    "subtitle": "Previous runs for this account.",
+    "columnRun": "Run",
+    "columnStatus": "Status",
+    "columnModel": "Model",
+    "columnCost": "Cost",
+    "columnWhen": "When",
+    "emptyState": "No runs yet."
+  },
+  "runDetailPage": {
+    "notFound": "Run not found.",
+    "questionPrefix": "What to do about: \"{question}\"",
+    "silverHeading": "Silver"
+  },
+  "pipelinesPage": {
+    "title": "Scheduled pipelines",
+    "subtitle": "Create a pipeline once and let it run on its own on the configured schedule."
+  },
+  "pipelineHistoryPage": {
+    "notFound": "Pipeline not found.",
+    "backLink": "← Scheduled pipelines"
+  },
+  "resumoIndexPage": {
+    "title": "Executive summary",
+    "subtitle": "Your pipelines' results, in plain language — no code, no technical jargon.",
+    "emptyState": "No scheduled pipeline yet. Create one in \"Pipelines\" to see its summary here after the first run.",
+    "needsAttention": "Needs attention"
+  },
+  "resumoPage": {
+    "notFound": "We couldn't find that pipeline. It may have been removed.",
+    "backLink": "← Executive summary"
+  },
+  "analysisSection": {
+    "repaired": "repaired",
+    "caveat": "caveat",
+    "caveatHeading": "Result with a sanity-check caveat"
+  },
+  "codeBlock": {
+    "copyLabel": "Copy code"
+  },
+  "codeTab": {
+    "empty": "No code available for this run.",
+    "transformerHeading": "Transformer — Silver",
+    "analystHeading": "Analyst — {question}",
+    "analystFallback": "Gold {index}",
+    "scienceHeading": "Science Agent — {question}",
+    "scienceFallback": "Science {index}"
+  },
+  "dataTable": {
+    "showing": "Showing 20 of {count} rows."
+  },
+  "executarForm": {
+    "fileLabel": "File (CSV, Excel, JSON, PDF, DOCX)",
+    "fileCta": "Click to select a file",
+    "specLabel": "Or: manual spec",
+    "specOptionalHint": "(optional if a file was attached)",
+    "businessQuestionLabel": "Business question (optional)",
+    "businessQuestionPlaceholder": "Which products sell the most?",
+    "submitIdle": "Analyze data",
+    "submitLoading": "Running...",
+    "missingApiUrl": "NEXT_PUBLIC_API_URL is not configured.",
+    "missingInput": "Attach a file or write a manual spec.",
+    "toastSuccess": "Analysis completed.",
+    "taskLabel": "Task",
+    "statusLabel": "Status",
+    "completedPrefix": "Completed —",
+    "viewRun": "view run {runId}"
+  },
+  "onboardingWizard": {
+    "step1Title": "Step 1 — choose a source",
+    "step1Hint": "No data of your own yet? Use the preloaded example to see the full pipeline run in minutes.",
+    "useExample": "Use example (sales)",
+    "useOwnFile": "Upload my own file",
+    "exampleLoadError": "Couldn't load the example: {error}",
+    "exampleQuestion": "Which products sell the most and how do sales vary by region?"
+  },
+  "onboardingChecklist": {
+    "heading": "What's left to be ready",
+    "missingApiUrl": "NEXT_PUBLIC_API_URL is not configured.",
+    "item1Label": "Run your first pipeline",
+    "item1Hint": "Use the preloaded example below or upload your own file.",
+    "item2Label": "Create a scheduled pipeline",
+    "item2Hint": "Connect a live source (Postgres, REST...) to run on its own on the right schedule.",
+    "item3Label": "Check the executive summary",
+    "item3Hint": "Available as soon as a scheduled pipeline has at least one run."
+  },
+  "executiveSummary": {
+    "statusCompleted": "Completed successfully",
+    "statusFailed": "Failed",
+    "statusRunning": "Running",
+    "statusPending": "Awaiting run",
+    "loading": "Loading summary...",
+    "emptyHistory": "This pipeline hasn't run yet — check back after its first scheduled run.",
+    "lastUpdated": "Last updated: {when}",
+    "failedNotice": "This pipeline's last run didn't finish successfully. The technical team has already been notified and is looking into it.",
+    "kpiRowsLoaded": "Rows processed",
+    "kpiCost": "Run cost",
+    "kpiTokens": "Volume processed by the AI",
+    "deltaPercent": "{percent}% vs. the last run",
+    "deltaChanged": "changed vs. the last run",
+    "deltaUnchanged": "no change",
+    "whatHappenedHeading": "What happened",
+    "recommendationsHeading": "Recommendations",
+    "noSummary": "This pipeline has no business question configured, so there's no analysis summary to show here — just the numbers above."
+  },
+  "pipelineHistory": {
+    "seriesRowsLoaded": "Rows loaded",
+    "seriesTotalTokens": "Total tokens",
+    "seriesCost": "Cost (USD)",
+    "axisExecution": "Run",
+    "axisRows": "Rows",
+    "axisTokens": "Tokens",
+    "loading": "Loading history...",
+    "empty": "This pipeline hasn't run yet.",
+    "kpiHeading": "KPIs over time",
+    "kpiLimitNote": "Last {limit} runs.",
+    "executionsHeading": "Runs ({count})",
+    "executionsLimitNote": "Showing the last {limit} runs — this pipeline may have more in its history.",
+    "rowsSuffix": "{count} rows",
+    "diffHeading": "Diff between runs",
+    "diffCompareButton": "Compare A → B",
+    "diffComparing": "Comparing...",
+    "silverHeading": "Silver",
+    "goldHeading": "Gold",
+    "scienceHeading": "Science",
+    "rowsLoadedLabel": "Rows loaded",
+    "resultRowsLabel": "Rows in result"
+  },
+  "pipelineTab": {
+    "emptyState": "No run detail available for this run.",
+    "silverExecutionHeading": "Silver agent execution",
+    "qualityReportHeading": "Quality report",
+    "pipelinePlanHeading": "Pipeline plan",
+    "customRuleFallback": "custom rule",
+    "inPreposition": "on",
+    "nullRatioSuffix": "— null ratio: {pct}%",
+    "duplicatesSuffix": "— {count} duplicates",
+    "outliersSuffix": "— {count} outliers",
+    "noViolations": "no violations",
+    "violationsCount": "{count} violation(s)"
+  },
+  "pipelinesManager": {
+    "editHeading": "Edit pipeline",
+    "newHeading": "New scheduled pipeline",
+    "nameLabel": "Name",
+    "namePlaceholder": "Nightly order sync",
+    "sourceTypeLabel": "Source type",
+    "sourceTypeHint": "(only \"live\" sources can be scheduled — ADR-016)",
+    "specLabel": "Spec (natural language)",
+    "businessQuestionLabel": "Business question (optional)",
+    "businessQuestionPlaceholder": "Which products sell the most?",
+    "cronLabel": "Schedule (cron)",
+    "cronHint": "e.g. \"0 3 * * *\" = every day at 3am",
+    "qualityRulesLabel": "Quality rules (optional)",
+    "qualityRulesHelp": "Operators: not_null, gte, lte, gt, lt, eq, ne. Default severity: error (blocks the pipeline when violated).",
+    "saveChanges": "Save changes",
+    "schedulePipeline": "Schedule pipeline",
+    "cancel": "Cancel",
+    "savedPipelinesHeading": "Saved pipelines",
+    "emptyState": "No scheduled pipeline yet.",
+    "customQualityRuleOne": "custom quality rule",
+    "customQualityRuleOther": "custom quality rules",
+    "nextRun": "Next run: {when}",
+    "lastRun": "Last: {when}",
+    "consecutiveFailureOne": "consecutive failure",
+    "consecutiveFailureOther": "consecutive failures",
+    "resumo": "Summary",
+    "historico": "History",
+    "edit": "Edit",
+    "pause": "Pause",
+    "resume": "Resume",
+    "toastUpdated": "Pipeline updated.",
+    "toastCreated": "Pipeline scheduled.",
+    "toastPaused": "Pipeline paused.",
+    "toastResumed": "Pipeline resumed.",
+    "invalidJson": "Quality rules: invalid JSON.",
+    "invalidJsonShape": "Quality rules: must be a list (JSON array), e.g. [].",
+    "missingApiUrl": "NEXT_PUBLIC_API_URL is not configured."
+  },
+  "runSections": {
+    "code": "Code"
   }
 }

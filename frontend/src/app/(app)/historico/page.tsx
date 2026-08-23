@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Inbox } from "lucide-react";
+import { getTranslations } from "next-intl/server";
 import { apiFetch } from "@/lib/api";
 import type { RunSummary } from "@/lib/types";
 import { StatusBadge } from "@/components/status-badge";
@@ -20,6 +21,7 @@ import {
  * target per row.
  */
 export default async function Historico() {
+  const t = await getTranslations("historicoPage");
   let runs: RunSummary[] = [];
   let error: string | null = null;
 
@@ -32,8 +34,8 @@ export default async function Historico() {
   return (
     <main className="flex-1 px-6 py-12 max-w-4xl mx-auto w-full flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Histórico</h1>
-        <p className="text-sm text-muted-foreground mt-1">Runs anteriores desta conta.</p>
+        <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
+        <p className="text-sm text-muted-foreground mt-1">{t("subtitle")}</p>
       </div>
 
       {error && (
@@ -45,7 +47,7 @@ export default async function Historico() {
       {!error && runs.length === 0 && (
         <div className="flex flex-col items-center gap-3 py-16 text-muted-foreground border border-dashed rounded-xl">
           <Inbox className="h-6 w-6" />
-          <p className="text-sm">Nenhum run ainda.</p>
+          <p className="text-sm">{t("emptyState")}</p>
         </div>
       )}
 
@@ -54,11 +56,11 @@ export default async function Historico() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Run</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Modelo</TableHead>
-                <TableHead className="text-right">Custo</TableHead>
-                <TableHead className="text-right">Quando</TableHead>
+                <TableHead>{t("columnRun")}</TableHead>
+                <TableHead>{t("columnStatus")}</TableHead>
+                <TableHead>{t("columnModel")}</TableHead>
+                <TableHead className="text-right">{t("columnCost")}</TableHead>
+                <TableHead className="text-right">{t("columnWhen")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

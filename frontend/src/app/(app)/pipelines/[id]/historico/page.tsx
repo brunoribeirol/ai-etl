@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { getTranslations } from "next-intl/server";
 import { PipelineHistory } from "@/components/pipeline-history";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { apiFetch } from "@/lib/api";
@@ -23,6 +24,7 @@ export default async function PipelineHistoryPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const t = await getTranslations("pipelineHistoryPage");
 
   let pipeline: SavedPipeline | null = null;
   let error: string | null = null;
@@ -36,7 +38,7 @@ export default async function PipelineHistoryPage({
     return (
       <main className="flex-1 px-6 py-12 max-w-4xl mx-auto w-full">
         <Alert variant="destructive">
-          <AlertDescription>{error ?? "Pipeline não encontrado."}</AlertDescription>
+          <AlertDescription>{error ?? t("notFound")}</AlertDescription>
         </Alert>
       </main>
     );
@@ -49,7 +51,7 @@ export default async function PipelineHistoryPage({
           href="/pipelines"
           className="text-xs text-muted-foreground hover:text-foreground w-fit"
         >
-          ← Pipelines agendados
+          {t("backLink")}
         </Link>
         <h1 className="text-2xl font-semibold tracking-tight">{pipeline.name}</h1>
         <p className="text-sm text-muted-foreground font-mono">

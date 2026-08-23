@@ -1,6 +1,7 @@
 "use client";
 
 import { Check, Copy } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 
@@ -8,6 +9,7 @@ import { Button } from "@/components/ui/button";
  * the generated code (Transformer/Analyst/Science) is short pandas/sklearn
  * snippets, not something worth a new dependency for. */
 export function CodeBlock({ code, filename }: { code: string; filename?: string }) {
+  const t = useTranslations("codeBlock");
   const [copied, setCopied] = useState(false);
 
   async function handleCopy() {
@@ -22,7 +24,7 @@ export function CodeBlock({ code, filename }: { code: string; filename?: string 
         <span className="text-xs text-muted-foreground font-mono">{filename ?? "code.py"}</span>
         <Button variant="ghost" size="icon-xs" onClick={handleCopy}>
           {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-          <span className="sr-only">Copiar código</span>
+          <span className="sr-only">{t("copyLabel")}</span>
         </Button>
       </div>
       <pre className="overflow-x-auto p-3 text-xs leading-relaxed">

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { getTranslations } from "next-intl/server";
 import { Card, CardContent } from "@/components/ui/card";
 import { apiFetch } from "@/lib/api";
 import { friendlyExecutiveError } from "@/lib/friendly-error";
@@ -15,6 +16,7 @@ import type { SavedPipeline } from "@/lib/types";
  * avulso run has no business-question-first identity to navigate by.
  */
 export default async function ResumoIndexPage() {
+  const t = await getTranslations("resumoIndexPage");
   let pipelines: SavedPipeline[] = [];
   let error: string | null = null;
   try {
@@ -26,25 +28,20 @@ export default async function ResumoIndexPage() {
   return (
     <main className="flex-1 px-6 py-12 max-w-3xl mx-auto w-full flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Resumo executivo</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          O resultado dos seus pipelines, em linguagem simples — sem código, sem termos
-          técnicos.
-        </p>
+        <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
+        <p className="text-sm text-muted-foreground mt-1">{t("subtitle")}</p>
       </div>
 
       {error && (
         <p className="text-destructive text-sm" role="alert">
+          {/* Sprint 38 — friendlyExecutiveError still returns hardcoded
+              Portuguese text regardless of locale; out of this task's file
+              list (lib/friendly-error.ts), left untouched. */}
           {friendlyExecutiveError(error)}
         </p>
       )}
 
-      {!error && pipelines.length === 0 && (
-        <p className="text-sm text-muted-foreground">
-          Nenhum pipeline agendado ainda. Crie um em &ldquo;Pipelines&rdquo; para ver o resumo
-          aqui depois da primeira execução.
-        </p>
-      )}
+      {!error && pipelines.length === 0 && <p className="text-sm text-muted-foreground">{t("emptyState")}</p>}
 
       <div className="flex flex-col gap-3">
         {pipelines.map((pipeline) => (
@@ -58,7 +55,7 @@ export default async function ResumoIndexPage() {
                   <span className="text-xs text-muted-foreground">{pipeline.name}</span>
                 )}
                 {pipeline.consecutive_failures > 0 && (
-                  <span className="text-xs text-red-400 mt-1">Precisa de atenção</span>
+                  <span className="text-xs text-red-400 mt-1">{t("needsAttention")}</span>
                 )}
               </CardContent>
             </Card>
