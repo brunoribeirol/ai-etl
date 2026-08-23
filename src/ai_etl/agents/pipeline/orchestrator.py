@@ -3,6 +3,7 @@
 import json
 import uuid
 
+from ai_etl.agents._llm_codegen import strip_code_fences
 from ai_etl.audit.logger import log_action
 from ai_etl.core.llm import get_llm
 from ai_etl.core.state import PipelineState
@@ -78,7 +79,15 @@ def orchestrator_node(state: PipelineState) -> PipelineState:
 
     for attempt in range(1, 3):
         response = llm.invoke(prompt)
-        content = str(response.content).strip()
+        # Real bug found 2026-08-23 running a live model comparison: unlike every
+        # other agent that parses an LLM response (Transformer/Analyst/Science/
+        # Advisor, via this same strip_code_fences), the Orchestrator used to call
+        # json.loads() directly with no fence-stripping — already flagged as a real
+        # gap in the 2026-08-22 audit ("costs 1 retry whenever the model ignores 'no
+        # markdown fences'"), confirmed here as more than cosmetic: claude-haiku-4-5
+        # consistently wraps its JSON in ```json fences on every attempt, so the old
+        # code failed both retries and the run every time (100% failure rate).
+        content = strip_code_fences(str(response.content).strip())
 
         try:
             pipeline_plan = json.loads(content)

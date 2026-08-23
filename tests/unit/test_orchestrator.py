@@ -67,13 +67,18 @@ def test_all_retries_exhausted_sets_failed(mock_get_llm) -> None:
 
 
 def test_markdown_fenced_json_is_parsed(mock_get_llm) -> None:
+    # Real bug found 2026-08-23 running a live model comparison: claude-haiku-4-5
+    # fences its JSON on every attempt, so the old json.loads()-with-no-stripping
+    # behavior failed 100% of real Haiku runs, not just "1 wasted retry" as this
+    # test used to document. Now uses strip_code_fences (same helper every other
+    # agent already uses) — fenced JSON succeeds on the *first* attempt.
     fenced = f"```json\n{json.dumps(VALID_PLAN)}\n```"
-    # Orchestrator tries json.loads directly; fenced JSON fails on attempt 1.
-    # LLM returns clean JSON on retry (attempt 2) — documents current behavior.
-    mock_get_llm.return_value = _mock_llm([fenced, json.dumps(VALID_PLAN)])
+    mock = _mock_llm([fenced])
+    mock_get_llm.return_value = mock
     result = orchestrator_node(_make_state())
 
     assert result["pipeline_plan"] == VALID_PLAN
+    assert mock.invoke.call_count == 1  # no retry needed — fences stripped on attempt 1
 
 
 class TestLlmOverride:
