@@ -190,6 +190,11 @@ export type SavedPipeline = {
   // Sprint 16 (ADR-023) — operator-defined quality rules, run on every subsequent
   // execution of this pipeline alongside the fixed checks.
   quality_rules: QualityRule[];
+  // Sprint 30 (ADR-031) — per-pipeline LLM provider/model override, merged onto
+  // every `saved_pipeline` dict by `api/routers/pipelines.py::_with_health`.
+  // Both `null` means "no override, uses this deployment's global default".
+  llm_provider: string | null;
+  llm_model: string | null;
   created_at: string;
   updated_at: string;
 };
