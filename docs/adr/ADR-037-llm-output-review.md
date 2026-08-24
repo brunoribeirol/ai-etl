@@ -82,6 +82,22 @@ markdown-fence-wrapped JSON/code responses.
   estimate (`core/cost_estimation.py`, Sprint 35 — today's heuristic doesn't account for an
   optional extra LLM call), are both real, deferred follow-ups, not silently out of scope.
 
+## Update (2026-08-23, same day, PR #113 merged)
+
+Implemented and merged as designed above — `agents/analysis/reviewer.py`,
+`core/output_validation.py::append_check`, `core/llm.py::is_llm_review_enabled`, wired
+into `services/pipeline_service.py`. Verified locally (ruff/mypy/bandit clean, full
+unit suite `930 passed`) via a `/tmp` mirror of the dev venv — this repo's own `.venv`
+lives under an iCloud-synced path and hit the same install stall documented in
+`bugs-solved/mypy-pytest-hang-agent-sandbox.md`.
+
+**Owner decision, same day**: turn this on in production immediately rather than wait
+and observe — `AI_ETL_LLM_REVIEW_ENABLED=true` set on both `ai-etl` and
+`tranquil-appreciation` Railway services, both redeployed and confirmed healthy. This
+is a live cost-increasing change (roughly doubles Gold/Science LLM cost per sub-task,
+per Decision 1) — flagged here explicitly since it's a real, ongoing budget impact
+someone reviewing production costs later should know traces back to this ADR.
+
 ## Related
 
 - ADR-026 — the deterministic checks this ADR adds a second, additive layer alongside, and the
