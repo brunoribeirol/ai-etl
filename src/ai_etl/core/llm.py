@@ -80,6 +80,17 @@ def get_provider() -> str:
     return os.getenv("AI_ETL_LLM_PROVIDER", "openai").strip().lower()
 
 
+def is_llm_review_enabled() -> bool:
+    """ADR-037 (Sprint 21 follow-up) — whether the second-pass LLM output review
+    (`agents/analysis/reviewer.py`) runs after a successful Gold/Science sub-task.
+
+    Opt-in, default off: this roughly doubles Gold/Science LLM cost per sub-task
+    when enabled. One global env var, not a per-pipeline setting — see ADR-037
+    Decision 1 for why.
+    """
+    return os.getenv("AI_ETL_LLM_REVIEW_ENABLED", "").strip().lower() in ("1", "true", "yes")
+
+
 def get_model_name() -> str:
     """Return the configured model name for the active provider, without constructing
     a client.

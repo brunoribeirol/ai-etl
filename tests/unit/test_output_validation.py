@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from ai_etl.core.output_validation import check_gold_output, check_science_output
+from ai_etl.core.output_validation import append_check, check_gold_output, check_science_output
 
 # ---------------------------------------------------------------------------
 # check_gold_output
@@ -139,3 +139,35 @@ def test_check_science_output_ignores_non_dict_metrics_key_gracefully() -> None:
 
     assert result["severity"] == "ok"
     assert result["checks"] == []
+
+
+# ---------------------------------------------------------------------------
+# append_check (ADR-037 — Sprint 21 follow-up, LLM review extension point)
+# ---------------------------------------------------------------------------
+
+
+def test_append_check_ok_entry_keeps_severity_ok() -> None:
+    silver_df = pd.DataFrame({"category": ["a", "b", "c"], "amount": [10, 20, 30]})
+    gold_df = silver_df.groupby("category", as_index=False)["amount"].sum()
+    base = check_gold_output(gold_df, silver_df, narrative="ok")
+    assert base["severity"] == "ok"
+
+    result = append_check(base, {"check": "llm_review", "severity": "ok", "detail": "consistent"})
+
+    assert result["severity"] == "ok"
+    assert {"check": "llm_review", "severity": "ok", "detail": "consistent"} in result["checks"]
+
+
+def test_append_check_warning_entry_escalates_severity() -> None:
+    silver_df = pd.DataFrame({"category": ["a", "b", "c"], "amount": [10, 20, 30]})
+    gold_df = silver_df.groupby("category", as_index=False)["amount"].sum()
+    base = check_gold_output(gold_df, silver_df, narrative="ok")
+    assert base["severity"] == "ok"
+
+    result = append_check(
+        base,
+        {"check": "llm_review", "severity": "warning", "detail": "answers a different question"},
+    )
+
+    assert result["severity"] == "warning"
+    assert len(result["checks"]) == len(base["checks"]) + 1
