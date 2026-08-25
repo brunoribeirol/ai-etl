@@ -43,10 +43,35 @@ def log_action(
     return [*state["audit_log"], entry]
 
 
+_SENSITIVE_KEYWORDS = {
+    "key",
+    "token",
+    "secret",
+    "password",
+    "credential",
+    "authorization",
+    "bearer",
+}
+
+
+def _sanitize_value(value: Any) -> Any:
+    """Recurse into nested dicts/lists so sensitive keys are redacted at any depth."""
+    if isinstance(value, dict):
+        return _sanitize(value)
+    if isinstance(value, list):
+        return [_sanitize_value(item) for item in value]
+    return value
+
+
 def _sanitize(data: dict[str, Any]) -> dict[str, Any]:
-    """Remove sensitive values from audit details before persisting."""
-    sensitive_keywords = {"key", "token", "secret", "password", "credential"}
+    """Remove sensitive values from audit details before persisting.
+
+    Recurses into nested dicts and lists (e.g. request headers, request
+    history) so a sensitive key buried below the top level is still redacted.
+    """
     return {
-        k: "***REDACTED***" if any(kw in k.lower() for kw in sensitive_keywords) else v
+        k: "***REDACTED***"
+        if any(kw in k.lower() for kw in _SENSITIVE_KEYWORDS)
+        else _sanitize_value(v)
         for k, v in data.items()
     }
