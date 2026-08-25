@@ -141,7 +141,8 @@
     "columnModel": "Modelo",
     "columnCost": "Custo",
     "columnWhen": "Quando",
-    "emptyState": "Nenhum run ainda."
+    "emptyState": "Nenhum run ainda.",
+    "runTitleFile": "Arquivo: {name}"
   },
   "runDetailPage": {
     "notFound": "Run não encontrado.",
@@ -281,7 +282,7 @@
     "nameLabel": "Nome",
     "namePlaceholder": "Sincronização noturna de pedidos",
     "sourceTypeLabel": "Tipo de fonte",
-    "sourceTypeHint": "(apenas fontes “vivas” podem ser agendadas — ADR-016)",
+    "sourceTypeHint": "(apenas fontes que podem ser verificadas automaticamente, como banco de dados ou API, podem ser agendadas — um upload de arquivo avulso não pode ser executado novamente depois)",
     "specLabel": "Spec (linguagem natural)",
     "businessQuestionLabel": "Pergunta de negócio (opcional)",
     "businessQuestionPlaceholder": "Quais produtos vendem mais?",

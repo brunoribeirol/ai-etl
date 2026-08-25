@@ -14,6 +14,31 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
+/** True when `spec` looks like a file path rather than a natural-language
+ * business question (e.g. `"runs/uploads/926ed592042f.csv"`). */
+function isFilePath(spec: string): boolean {
+  return spec.includes("/") && /\.[a-zA-Z0-9]{1,8}$/.test(spec);
+}
+
+/** Human-readable title for a run row. A file-path spec becomes "File:
+ * <basename>"; a natural-language spec (business question) is shown as-is;
+ * an empty spec falls back to the formatted run timestamp. The raw
+ * `run_id`/`spec` stay available underneath for technical cross-referencing
+ * — this only picks what's shown first. */
+function runTitle(
+  run: Pick<RunSummary, "spec" | "timestamp">,
+  fileLabel: string,
+): string {
+  if (run.spec && isFilePath(run.spec)) {
+    const filename = run.spec.split("/").pop() || run.spec;
+    return fileLabel.replace("{name}", filename);
+  }
+  if (run.spec) {
+    return run.spec;
+  }
+  return new Date(run.timestamp).toLocaleString();
+}
+
 /**
  * "Histórico" page (Sprint 6, PR 5 → Sprint 7 redesign, ADR-011). Same
  * server-side `GET /runs` fetch (`cache: "no-store"`, tenant-scoped) — the
@@ -71,9 +96,11 @@ export default async function Historico() {
                       href={`/historico/${run.run_id}`}
                       className="flex flex-col gap-0.5 px-2 py-2"
                     >
-                      <span className="font-mono text-xs">{run.run_id}</span>
-                      <span className="text-xs text-muted-foreground truncate max-w-xs">
-                        {run.spec}
+                      <span className="text-sm truncate max-w-xs" title={run.run_id}>
+                        {runTitle(run, t("runTitleFile"))}
+                      </span>
+                      <span className="font-mono text-[10px] text-muted-foreground/70 truncate max-w-xs">
+                        {run.run_id}
                       </span>
                     </Link>
                   </TableCell>
