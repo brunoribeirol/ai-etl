@@ -1,4 +1,4 @@
-import { getTranslations } from "next-intl/server";
+import { getLocale, getTranslations } from "next-intl/server";
 import {
   Table,
   TableBody,
@@ -7,6 +7,17 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+
+/** Renders a cell value, formatting numbers via `Intl.NumberFormat` (up to 2
+ * fraction digits, no trailing zeros — e.g. `100234.0` → "100234", `3.14159`
+ * → "3.14"). Non-number values (including numeric-looking strings) keep the
+ * existing bare-string rendering. */
+function formatCell(value: unknown, formatter: Intl.NumberFormat): string {
+  if (typeof value === "number") {
+    return formatter.format(value);
+  }
+  return String(value ?? "");
+}
 
 /** Renders the first 20 rows of a DataFrame-as-records payload (matches the
  * preview-only convention `_serialize_analysis_result`/Streamlit's
@@ -18,6 +29,8 @@ export async function DataTable({ rows }: { rows: Record<string, unknown>[] }) {
     return null;
   }
   const t = await getTranslations("dataTable");
+  const locale = await getLocale();
+  const formatter = new Intl.NumberFormat(locale, { maximumFractionDigits: 2 });
 
   const columns = Object.keys(rows[0]);
 
@@ -36,7 +49,7 @@ export async function DataTable({ rows }: { rows: Record<string, unknown>[] }) {
             <TableRow key={i}>
               {columns.map((col) => (
                 <TableCell key={col} className="text-muted-foreground">
-                  {String(row[col] ?? "")}
+                  {formatCell(row[col], formatter)}
                 </TableCell>
               ))}
             </TableRow>

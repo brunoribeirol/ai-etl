@@ -141,7 +141,8 @@
     "columnModel": "Model",
     "columnCost": "Cost",
     "columnWhen": "When",
-    "emptyState": "No runs yet."
+    "emptyState": "No runs yet.",
+    "runTitleFile": "File: {name}"
   },
   "runDetailPage": {
     "notFound": "Run not found.",
@@ -281,7 +282,7 @@
     "nameLabel": "Name",
     "namePlaceholder": "Nightly order sync",
     "sourceTypeLabel": "Source type",
-    "sourceTypeHint": "(only \"live\" sources can be scheduled — ADR-016)",
+    "sourceTypeHint": "(only sources that can be re-checked automatically, like a database or API, can be scheduled — a one-off file upload can't be re-run later)",
     "specLabel": "Spec (natural language)",
     "businessQuestionLabel": "Business question (optional)",
     "businessQuestionPlaceholder": "Which products sell the most?",
