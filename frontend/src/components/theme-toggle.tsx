@@ -2,7 +2,7 @@
 
 import { Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import { Button } from "@/components/ui/button";
 
 /**
@@ -17,12 +17,27 @@ import { Button } from "@/components/ui/button";
  * first client render. Rendering a disabled placeholder for that one frame
  * avoids a hydration mismatch without needing `suppressHydrationWarning`
  * here (the `<html>` tag already carries it, see `layout.tsx`).
+ *
+ * `useSyncExternalStore` instead of the old `useState(false)` +
+ * `useEffect(() => setMounted(true), [])` pair (ESLint 10 /
+ * eslint-plugin-react-hooks@7's `react-hooks/set-state-in-effect` now
+ * flags that pattern's synchronous setState-in-effect as a cascading-render
+ * risk): subscribing to a store that never changes and only differs between
+ * the server snapshot (`false`) and the client snapshot (`true`) is the
+ * React-team-documented replacement for this exact "has the client
+ * hydrated yet" check, with no extra render-triggering state at all.
  */
+function subscribeNoop() {
+  return () => {};
+}
+
 export function ThemeToggle() {
   const { resolvedTheme, setTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => setMounted(true), []);
+  const mounted = useSyncExternalStore(
+    subscribeNoop,
+    () => true,
+    () => false,
+  );
 
   if (!mounted) {
     return (

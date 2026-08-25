@@ -136,8 +136,15 @@ export function ExecutiveSummary({ pipeline }: { pipeline: SavedPipeline }) {
 
   useEffect(() => {
     let cancelled = false;
+    // Intentional synchronous loading/error reset before a cancellable
+    // fetch, so a pipeline.id change immediately shows the loading state
+    // instead of a stale summary for one frame; same established pattern as
+    // pipeline-history.tsx and pipelines-manager.tsx. No data-fetching
+    // library (SWR/React Query) in this codebase to delegate this to.
+    /* eslint-disable react-hooks/set-state-in-effect */
     setLoading(true);
     setError(null);
+    /* eslint-enable react-hooks/set-state-in-effect */
 
     async function load() {
       try {
