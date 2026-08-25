@@ -78,11 +78,13 @@ from ai_etl.audit.db.runs import (
     save_run,
     save_stage_latencies,
 )
+from ai_etl.audit.db.tenants import TenantSummary, list_all_tenants
 
 __all__ = [
     "DEFAULT_PIPELINE_HEALTH_WINDOW",
     "DEFAULT_PIPELINE_HISTORY_LIMIT",
     "RetentionPolicy",
+    "TenantSummary",
     "claim_due_pipeline",
     "create_saved_pipeline",
     "ensure_user",
@@ -100,6 +102,7 @@ __all__ = [
     "get_saved_pipeline_llm_config",
     "get_saved_pipeline_notification_config",
     "get_saved_pipeline_notification_target",
+    "list_all_tenants",
     "list_due_pipelines",
     "list_pending_approvals",
     "list_pipeline_run_history",
