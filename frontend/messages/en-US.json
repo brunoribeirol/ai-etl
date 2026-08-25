@@ -193,6 +193,8 @@
     "specOptionalHint": "(optional if a file was attached)",
     "businessQuestionLabel": "Business question (optional)",
     "businessQuestionPlaceholder": "Which products sell the most?",
+    "modelLabel": "AI model (optional)",
+    "modelHint": "(defaults to the standard model if none is selected)",
     "submitIdle": "Analyze data",
     "submitLoading": "Running...",
     "missingApiUrl": "NEXT_PUBLIC_API_URL is not configured.",
