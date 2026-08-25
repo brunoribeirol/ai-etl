@@ -13,7 +13,8 @@
     "historico": "History",
     "pipelines": "Pipelines",
     "resumo": "Summary",
-    "admin": "Admin"
+    "admin": "Admin",
+    "aprovacoes": "Approvals"
   },
   "marketingLayout": {
     "footer": "AI-ETL — multi-agent ETL framework, auditable code."
@@ -359,5 +360,33 @@
     "columnStatus": "Status",
     "columnModel": "Model",
     "columnCost": "Cost"
+  },
+  "aprovacoesPage": {
+    "title": "Pending approvals",
+    "subtitle": "Scheduled runs with a blocked write, waiting for your review."
+  },
+  "approvalQueue": {
+    "emptyState": "No runs waiting for approval right now.",
+    "columnPipeline": "Pipeline",
+    "columnSpec": "Spec",
+    "columnWhen": "When",
+    "columnActions": "Actions",
+    "unnamedPipeline": "—",
+    "toggleDetail": "View details",
+    "approve": "Approve",
+    "confirmApprove": "Confirm approve?",
+    "reject": "Reject",
+    "confirmReject": "Confirm reject?",
+    "cancel": "Cancel",
+    "reasonPlaceholder": "Rejection reason (optional)",
+    "toastApproved": "Run approved — write completed.",
+    "toastRejected": "Run rejected — nothing was written.",
+    "loadingDetail": "Loading details...",
+    "previewHeading": "What would be written",
+    "previewDestination": "Destination",
+    "previewRows": "Rows",
+    "previewExisting": "Current state at the destination",
+    "qualitySummary": "Data quality",
+    "warningsHeading": "Consistency warnings already detected"
   }
 }

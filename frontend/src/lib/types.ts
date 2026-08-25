@@ -14,6 +14,27 @@ export type RunSummary = {
   model_name: string | null;
 };
 
+/** `GET /runs/pending-approval` (Sprint 27, ADR-028) — the operator's
+ * work-queue of gated writes, most recently created first. Mirrors
+ * `audit/db/pipelines.py::list_pending_approvals`. */
+export type PendingApproval = {
+  run_id: string;
+  spec: string;
+  timestamp: string;
+  saved_pipeline_id: string | null;
+  pipeline_name: string | null;
+};
+
+/** `PipelineState["load_preview"]` (Sprint 27, ADR-028) — what a gated
+ * write would do, computed without ever writing. `destination_type`-specific
+ * `existing` shape (mirrors `destinations/*.py::preview_*`). */
+export type LoadPreview = {
+  destination_type: "csv" | "postgres" | "s3_parquet";
+  destination: string;
+  would_write_rows: number;
+  existing: Record<string, number> | null;
+};
+
 export type TokenUsage = {
   input_tokens: number;
   output_tokens: number;
@@ -119,6 +140,9 @@ export type FullResult = {
     transformation_error?: string | null;
     pipeline_plan?: Record<string, unknown>;
     quality_report?: { checks?: QualityCheck[]; severity?: string; summary?: string };
+    /** Sprint 27 (ADR-028) — set instead of `load_result` when a write is
+     * gated; `null`/absent for an ungated or already-resolved run. */
+    load_preview?: LoadPreview | null;
     /** Wall-clock seconds per Silver LangGraph node — the field the old
      * Streamlit sidebar meant to read as `_agent_timings` (a key that was
      * never actually set on `state`, a pre-existing dead-code bug; the real
