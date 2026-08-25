@@ -8,6 +8,7 @@ import pytest
 
 from ai_etl.sources.document_source import (
     MAX_ATTEMPTS,
+    _extract_docx_text,
     _extract_text,
     _structure_text,
     load_document,
@@ -45,6 +46,44 @@ def test_extract_text_dispatches_docx(mocker) -> None:
     mock_docx = mocker.patch("ai_etl.sources.document_source._extract_docx_text", return_value="x")
     _extract_text("report.docx")
     mock_docx.assert_called_once_with("report.docx")
+
+
+def test_extract_docx_text_includes_table_cells(tmp_path) -> None:
+    """Regression test for the Data Engineer 2026-08-24 audit finding: a real
+    .docx with a heading + a real table previously vanished entirely because
+    `_extract_docx_text` only read `document.paragraphs`. Builds a real .docx
+    on disk (no mocking of python-docx) so the table-reading code path is
+    actually exercised."""
+    import docx
+
+    document = docx.Document()
+    document.add_heading("Quarterly Revenue", level=1)
+
+    table = document.add_table(rows=4, cols=4)
+    header = ["Region", "Q1", "Q2", "Q3"]
+    rows = [
+        ["North", "100", "110", "120"],
+        ["South", "200", "210", "220"],
+        ["East", "300", "310", "320"],
+    ]
+    for col_idx, header_text in enumerate(header):
+        table.cell(0, col_idx).text = header_text
+    for row_idx, row_values in enumerate(rows, start=1):
+        for col_idx, cell_value in enumerate(row_values):
+            table.cell(row_idx, col_idx).text = cell_value
+
+    docx_path = tmp_path / "report.docx"
+    document.save(str(docx_path))
+
+    text = _extract_docx_text(str(docx_path))
+
+    assert "Quarterly Revenue" in text
+    assert "Region | Q1 | Q2 | Q3" in text
+    assert "North | 100 | 110 | 120" in text
+    assert "South | 200 | 210 | 220" in text
+    assert "East | 300 | 310 | 320" in text
+    assert "[Table]" in text
+    assert "[/Table]" in text
 
 
 def test_structure_text_valid_json_returns_dataframe(mock_get_llm) -> None:
