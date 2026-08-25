@@ -12,7 +12,8 @@
     "executar": "Executar",
     "historico": "Histórico",
     "pipelines": "Pipelines",
-    "resumo": "Resumo"
+    "resumo": "Resumo",
+    "admin": "Admin"
   },
   "marketingLayout": {
     "footer": "AI-ETL — framework multiagente de ETL, código auditável."
@@ -325,5 +326,38 @@
   "modelPicker": {
     "priceLine": "${input}/${output} por 1M tokens (entrada/saída)",
     "reliabilityVerified": "Verificado — comparação real"
+  },
+  "adminPage": {
+    "title": "Painel admin",
+    "subtitle": "Acesso cross-tenant só leitura — toda consulta fica registrada no log de auditoria.",
+    "noPermission": "Você não tem permissão para acessar esta página."
+  },
+  "adminManager": {
+    "auditTab": "Log de auditoria",
+    "tenantTab": "Consultar tenant",
+    "actorFilterLabel": "Filtrar por ator (user id)",
+    "actorFilterPlaceholder": "user_xxxxx",
+    "targetTenantFilterLabel": "Filtrar por tenant-alvo",
+    "targetTenantFilterPlaceholder": "org_xxxxx ou user_xxxxx",
+    "filterButton": "Filtrar",
+    "auditEmptyState": "Nenhuma ação de admin registrada ainda.",
+    "columnAction": "Ação",
+    "columnActor": "Ator",
+    "columnTargetTenant": "Tenant-alvo",
+    "columnDetail": "Detalhe",
+    "columnWhen": "Quando",
+    "tenantSelectLabel": "Tenant",
+    "tenantSelectPlaceholder": "Selecione um tenant",
+    "budgetCap": "Teto mensal",
+    "budgetSpent": "Gasto no mês",
+    "budgetStatus": "Status",
+    "budgetExceeded": "Teto excedido",
+    "budgetNearLimit": "Perto do teto",
+    "budgetOk": "Dentro do teto",
+    "tenantRunsEmptyState": "Este tenant ainda não tem execuções.",
+    "columnRun": "Execução",
+    "columnStatus": "Status",
+    "columnModel": "Modelo",
+    "columnCost": "Custo"
   }
 }

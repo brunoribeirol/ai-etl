@@ -37,9 +37,13 @@ const NAV_LINKS = [
  * dependency. `(app)/layout.tsx` now shows the horizontal `<nav>` only at
  * `sm:` and up and swaps in this hamburger trigger below it.
  */
-export function MobileNav() {
+export function MobileNav({ isAdmin = false }: { isAdmin?: boolean }) {
   const t = useTranslations("appNav");
   const tCommon = useTranslations("common");
+
+  // Wave 6 (2026-08-25 admin panel/approval-gate UI plan) — same cosmetic-
+  // only role gate as the desktop `<nav>` in `(app)/layout.tsx`.
+  const links = isAdmin ? [...NAV_LINKS, { href: "/admin", key: "admin" } as const] : NAV_LINKS;
 
   return (
     <Sheet>
@@ -56,7 +60,7 @@ export function MobileNav() {
           <SheetTitle>{tCommon("menu")}</SheetTitle>
         </SheetHeader>
         <nav className="flex flex-col gap-1 px-4 pb-4">
-          {NAV_LINKS.map((link) => (
+          {links.map((link) => (
             <Link
               key={link.href}
               href={link.href}

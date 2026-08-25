@@ -143,9 +143,43 @@ export type TaskStatus = {
   meta: { stage: string; message: string } | null;
 };
 
-/** `GET /config` — read-only, which model every agent in a run currently uses. */
+/** `GET /config` — read-only, which model every agent in a run currently uses.
+ * `role` (Wave 6, 2026-08-25 admin panel/approval-gate UI plan) — the
+ * caller's resolved viewer/editor/admin role (`api/deps.py::AuthContext`),
+ * used only for cosmetic UI decisions (e.g. showing the "Admin" nav link);
+ * every actual admin/approval endpoint still independently enforces its own
+ * role server-side. */
 export type ApiConfig = {
   model_name: string;
+  role: "viewer" | "editor" | "admin";
+};
+
+/** `GET /admin/tenants` (ADR-032 + Wave 6 gap-closing addition) — the whole
+ * tenant directory; `tenant_id` doubles as the raw Clerk user/org id, no
+ * separate display name exists. */
+export type AdminTenantSummary = {
+  tenant_id: string;
+  created_at: string;
+};
+
+/** `GET /admin/audit-log` — mirrors `audit/admin_log.py::AdminActionRecord`. */
+export type AdminActionRecord = {
+  id: string;
+  actor_user_id: string;
+  action: string;
+  target_tenant_id: string | null;
+  detail: string | null;
+  created_at: string;
+};
+
+/** `GET /budget`, `GET /admin/tenants/{id}/budget` — mirrors
+ * `services/execution_queue.py::BudgetStatus`. */
+export type BudgetStatus = {
+  cap_usd: number | null;
+  spent_usd: number;
+  ratio: number | null;
+  near_limit: boolean;
+  exceeded: boolean;
 };
 
 /**

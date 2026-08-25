@@ -39,8 +39,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // not load-bearing — a config-fetch failure shouldn't break every page's
   // layout the way a failed page-level fetch would.
   let modelName: string | null = null;
+  // Wave 6 (2026-08-25 admin panel/approval-gate UI plan) — reuses this same
+  // best-effort fetch to decide whether to show the "Admin" nav link.
+  // Cosmetic only: `/admin` itself independently re-checks the role
+  // server-side, and every admin API route enforces `require_admin` on its
+  // own regardless of what the nav shows.
+  let isAdmin = false;
   try {
-    modelName = (await apiFetch<ApiConfig>("/config")).model_name;
+    const config = await apiFetch<ApiConfig>("/config");
+    modelName = config.model_name;
+    isAdmin = config.role === "admin";
   } catch {
     modelName = null;
   }
@@ -49,7 +57,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <>
       <header className="sticky top-0 z-10 flex justify-between items-center px-4 sm:px-6 h-16 border-b border-border/60 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="flex items-center gap-2 sm:gap-8 min-w-0">
-          <MobileNav />
+          <MobileNav isAdmin={isAdmin} />
           <Link href="/app" className="font-semibold tracking-tight text-sm shrink-0">
             {tCommon("brand")}
           </Link>
@@ -69,6 +77,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <Link href="/resumo" className="hover:text-foreground transition-colors">
               {t("resumo")}
             </Link>
+            {isAdmin && (
+              <Link href="/admin" className="hover:text-foreground transition-colors">
+                {t("admin")}
+              </Link>
+            )}
           </nav>
         </div>
         <div className="flex items-center gap-1 shrink-0">
