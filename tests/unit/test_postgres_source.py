@@ -6,7 +6,11 @@ POSTGRES_URL-missing failure path, same split `mysql_source.py`'s own test
 docstring already documents.
 
 Gap-closing (2026-08-24 QA audit, Wave 5): `load_postgres` itself (8 lines)
-previously had zero coverage, not even mocked.
+previously had zero coverage, not even mocked. Writing that coverage surfaced
+a second real gap, also closed here (2026-08-25): `load_postgres` accepted a
+custom `query` with no validation at all — sqlite_source.py/mysql_source.py
+both got `validate_select_only_query` during the Wave 0 CRITICAL SQL-
+injection fix (2026-08-24 audit), postgres_source.py was missed.
 """
 
 import pytest
@@ -55,3 +59,13 @@ def test_load_postgres_rejects_invalid_table_before_reading_env(
     monkeypatch.setenv("POSTGRES_URL", "postgresql://user:pass@localhost:5432/db")
     with pytest.raises(ValueError, match="Invalid table name"):
         load_postgres("orders; DROP TABLE orders; --")
+
+
+def test_load_postgres_rejects_destructive_query(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Gap-closing fix (2026-08-25, Wave 5) — this connector was missed when
+    # sqlite_source.py/mysql_source.py got the same check during the Wave 0
+    # CRITICAL SQL-injection fix (2026-08-24 audit). Same payload Red Team
+    # used against sqlite: {"query": "DROP TABLE orders; --"}.
+    monkeypatch.setenv("POSTGRES_URL", "postgresql://user:pass@localhost:5432/db")
+    with pytest.raises(ValueError):
+        load_postgres("orders", query="DROP TABLE orders; --")
