@@ -27,7 +27,7 @@ export function AgentProgress({
   const currentIndex = currentPhase ? PHASES.findIndex((p) => p.key === currentPhase) : -1;
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-3" role="status" aria-live="polite">
       <div className="flex items-center gap-1">
         {PHASES.map((phase, i) => {
           const isDone = done || i < currentIndex;
@@ -36,9 +36,9 @@ export function AgentProgress({
             <div key={phase.key} className="flex items-center gap-1 flex-1 last:flex-none">
               <div className="flex flex-col items-center gap-1.5 shrink-0">
                 {isDone ? (
-                  <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                  <CheckCircle2 className="h-4 w-4 text-emerald-400" aria-hidden="true" />
                 ) : isActive ? (
-                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                  <Loader2 className="h-4 w-4 animate-spin text-primary" aria-hidden="true" />
                 ) : (
                   <div className="h-4 w-4 rounded-full border border-border" />
                 )}
@@ -74,6 +74,13 @@ export function AgentProgress({
           {meta.message.replace(/\*\*/g, "")}
         </motion.p>
       )}
+
+      {/* Not shown visually (the caller renders its own final status badge/
+          message), but this text node's mount is what lets the `role="status"
+          aria-live="polite"` region above announce completion to screen
+          readers — without it, a screen-reader user gets no signal at all
+          once the last stage message disappears. */}
+      {done && <span className="sr-only">All phases complete.</span>}
     </div>
   );
 }
