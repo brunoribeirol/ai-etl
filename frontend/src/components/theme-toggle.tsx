@@ -42,7 +42,7 @@ export function ThemeToggle() {
   if (!mounted) {
     return (
       <Button variant="ghost" size="icon-sm" disabled aria-hidden>
-        <Sun />
+        <Sun aria-hidden="true" />
       </Button>
     );
   }
@@ -56,7 +56,7 @@ export function ThemeToggle() {
       onClick={() => setTheme(isDark ? "light" : "dark")}
       aria-label={isDark ? "Mudar para tema claro" : "Mudar para tema escuro"}
     >
-      {isDark ? <Sun /> : <Moon />}
+      {isDark ? <Sun aria-hidden="true" /> : <Moon aria-hidden="true" />}
       <span className="sr-only">Alternar tema claro/escuro</span>
     </Button>
   );

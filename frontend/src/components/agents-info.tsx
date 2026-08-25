@@ -43,7 +43,7 @@ export function AgentsInfo({ modelName }: { modelName: string | null }) {
       <SheetTrigger
         render={
           <Button variant="ghost" size="icon-sm">
-            <Info />
+            <Info aria-hidden="true" />
             <span className="sr-only">{t("trigger")}</span>
           </Button>
         }
