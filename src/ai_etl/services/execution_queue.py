@@ -351,6 +351,8 @@ def run_full_analysis_task(
     file_path: str | None = None,
     file_bytes_b64: str | None = None,
     saved_pipeline_id: str | None = None,
+    llm_provider_override: str | None = None,
+    llm_model_override: str | None = None,
 ) -> dict[str, Any]:
     """Celery task wrapping `pipeline_service.run_full_analysis`.
 
@@ -388,6 +390,11 @@ def run_full_analysis_task(
     run completes, to run drift detection against the pipeline's previous
     fire and, if triggered, deliver a digest — an avulso run (`None`) never
     runs drift detection at all.
+
+    `llm_provider_override`/`llm_model_override`: gap-closing fix (2026-08-25
+    audit, Wave 4) — forwarded straight through to `run_full_analysis`, which
+    forwards to `run_silver_pipeline`; only actually used there when
+    `saved_pipeline_id` doesn't already resolve a real override from the DB.
     """
     if file_path and file_bytes_b64:
         dest = Path(file_path)
@@ -410,6 +417,8 @@ def run_full_analysis_task(
             progress_callback=_report_progress,
             tenant_id=tenant_id,
             saved_pipeline_id=saved_pipeline_id,
+            llm_provider_override=llm_provider_override,
+            llm_model_override=llm_model_override,
         )
     finally:
         # Sprint 29 (ADR-019 addendum): release the per-tenant "in-flight"
@@ -548,6 +557,8 @@ def enqueue_analysis(
     file_path: str | None = None,
     file_bytes: bytes | None = None,
     saved_pipeline_id: str | None = None,
+    llm_provider_override: str | None = None,
+    llm_model_override: str | None = None,
 ) -> str:
     """Enforce the tenant's budget cap and rate limit, then enqueue the run.
 
@@ -578,6 +589,13 @@ def enqueue_analysis(
     also relies on this to gate its drift check — see
     `run_full_analysis_task`'s docstring.
 
+    `llm_provider_override`/`llm_model_override`: gap-closing fix (2026-08-25
+    audit, Wave 4) — a caller-supplied override for an avulso run (e.g.
+    `POST /runs`' `ModelPicker` selection), forwarded to `run_full_analysis_task`
+    and, from there, `pipeline_service.run_full_analysis`. Ignored whenever
+    `saved_pipeline_id` already resolves a real override from the DB — see
+    `pipeline_service.run_silver_pipeline`'s docstring.
+
     Returns the Celery task id `app.py` stores in `st.session_state` and
     polls via `get_task_status`.
     """
@@ -594,6 +612,8 @@ def enqueue_analysis(
             file_path,
             file_bytes_b64,
             saved_pipeline_id,
+            llm_provider_override,
+            llm_model_override,
         )
     except Exception:
         # The run never actually started (rate-limited, or the broker call

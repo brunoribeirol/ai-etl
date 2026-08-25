@@ -15,6 +15,7 @@ from ai_etl.api.config import RUNS_DIR, UPLOADS_DIR
 from ai_etl.api.deps import get_current_tenant_id, require_role
 from ai_etl.api.serialization import nan_to_none_records, serialize_full_result
 from ai_etl.audit.db import list_pending_approvals, load_full_result, load_history
+from ai_etl.core.llm import UnsupportedProviderOrModelError, validate_provider_and_model
 from ai_etl.services.execution_queue import (
     BudgetExceededError,
     RateLimitExceededError,
@@ -109,11 +110,35 @@ async def create_run(
     tenant_id: Annotated[str, Depends(require_role("editor"))],
     business_question: Annotated[str, Form()] = "",
     manual_spec: Annotated[str, Form()] = "",
+    llm_provider_override: Annotated[Optional[str], Form()] = None,
+    llm_model_override: Annotated[Optional[str], Form()] = None,
     file: Optional[UploadFile] = None,
 ) -> dict[str, str]:
     """Wraps `execution_queue.enqueue_analysis` — mirrors `app.py::_tab_executar`'s
     upload-vs-manual-spec branching exactly (`auto_generate_spec` for an
-    uploaded file, the raw textarea value otherwise)."""
+    uploaded file, the raw textarea value otherwise).
+
+    `llm_provider_override`/`llm_model_override`: gap-closing fix (2026-08-25
+    audit, Wave 4) — the avulso "Executar" flow's `ModelPicker` selection
+    (`frontend/src/components/executar-form.tsx`), sent under the same field
+    names as `PipelineState`'s. An avulso run has no `saved_pipeline_id` for
+    `run_silver_pipeline` to resolve a DB-stored override from (Sprint 30,
+    ADR-031 §3 only covers saved pipelines) — this is that path's equivalent.
+    Both or neither must be set (same posture as `PUT /pipelines/{id}/llm-config`),
+    and the pair must be in `core.llm.ALLOWED_MODELS_BY_PROVIDER`.
+    """
+    if (llm_provider_override is None) != (llm_model_override is None):
+        raise HTTPException(
+            status_code=400,
+            detail="llm_provider_override and llm_model_override must be set together, "
+            "or both omitted.",
+        )
+    if llm_provider_override is not None and llm_model_override is not None:
+        try:
+            validate_provider_and_model(llm_provider_override, llm_model_override)
+        except UnsupportedProviderOrModelError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
     file_path: Optional[str] = None
     file_bytes: Optional[bytes] = None
 
@@ -143,6 +168,8 @@ async def create_run(
             tenant_id=tenant_id,
             file_path=file_path,
             file_bytes=file_bytes,
+            llm_provider_override=llm_provider_override,
+            llm_model_override=llm_model_override,
         )
     except RateLimitExceededError as e:
         raise HTTPException(status_code=429, detail=str(e)) from e

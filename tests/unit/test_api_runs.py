@@ -114,6 +114,53 @@ def test_create_run_requires_file_or_spec(client: TestClient) -> None:
     assert response.status_code == 400
 
 
+def test_create_run_with_llm_override(client: TestClient, mocker) -> None:
+    """Gap-closing fix (2026-08-25 audit, Wave 4) — the avulso `POST /runs`
+    flow's `ModelPicker` selection (`llm_provider_override`/
+    `llm_model_override` form fields) must reach `enqueue_analysis`."""
+    mock_enqueue = mocker.patch("ai_etl.api.routers.runs.enqueue_analysis", return_value="task-abc")
+
+    response = client.post(
+        "/runs",
+        data={
+            "manual_spec": "load sales.csv",
+            "llm_provider_override": "anthropic",
+            "llm_model_override": "claude-sonnet-5",
+        },
+    )
+
+    assert response.status_code == 200
+    mock_enqueue.assert_called_once()
+    assert mock_enqueue.call_args.kwargs["llm_provider_override"] == "anthropic"
+    assert mock_enqueue.call_args.kwargs["llm_model_override"] == "claude-sonnet-5"
+
+
+def test_create_run_llm_override_must_be_set_together(client: TestClient, mocker) -> None:
+    mocker.patch("ai_etl.api.routers.runs.enqueue_analysis", return_value="task-abc")
+
+    response = client.post(
+        "/runs",
+        data={"manual_spec": "load sales.csv", "llm_provider_override": "anthropic"},
+    )
+
+    assert response.status_code == 400
+
+
+def test_create_run_rejects_unsupported_llm_override(client: TestClient, mocker) -> None:
+    mocker.patch("ai_etl.api.routers.runs.enqueue_analysis", return_value="task-abc")
+
+    response = client.post(
+        "/runs",
+        data={
+            "manual_spec": "load sales.csv",
+            "llm_provider_override": "anthropic",
+            "llm_model_override": "not-a-real-model",
+        },
+    )
+
+    assert response.status_code == 400
+
+
 def test_create_run_rate_limited(client: TestClient, mocker) -> None:
     mocker.patch(
         "ai_etl.api.routers.runs.enqueue_analysis",
