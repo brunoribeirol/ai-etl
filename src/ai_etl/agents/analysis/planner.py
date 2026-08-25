@@ -49,12 +49,27 @@ Rules:
 - If the question is already simple and single-purpose, return just ONE sub-task.
 - Do not invent sub-tasks the question didn't ask for.
 - Cap at {max_tasks} sub-tasks — merge closely related asks into one when needed.
+- If the question has a prescriptive/recommendation-seeking clause — "...and
+  recommend...", "...what should we do...", "...suggest an action...", "...how can we
+  improve...", or similar imperative phrasing asking what to DO about the data — DROP
+  that clause entirely. Do not turn it into a sub-task of any type. A separate Advisor
+  step already runs after every sub-task here finishes and owns that recommendation;
+  duplicating it into a "descriptive" sub-task produces a shallow, generic answer that
+  competes with the Advisor's better-contextualized one. Only decompose the
+  descriptive/diagnostic part of the question.
 - Respond ONLY with a valid JSON array. No markdown fences, no explanation.
 
 Example output (Portuguese shown, but write in the language of the instruction above):
 [
   {{"question": "Quais são os principais KPIs gerais do catálogo?", "type": "descriptive"}},
   {{"question": "Por que a avaliação média caiu em 2020?", "type": "diagnostic_or_predictive"}}
+]
+
+Example with a prescriptive clause to drop — question: "Quais foram os produtos mais
+vendidos no último trimestre, e recomende uma ação para aumentar a receita?" — the
+"recomende uma ação..." part is NOT a sub-task; only the descriptive part is planned:
+[
+  {{"question": "Quais foram os produtos mais vendidos no último trimestre?", "type": "descriptive"}}
 ]
 """
 
