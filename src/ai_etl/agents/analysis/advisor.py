@@ -10,7 +10,14 @@ from typing import Any
 
 import pandas as pd
 
-from ai_etl.core.analysis_types import AdvisorResult, GoldResult, ScienceResult, TokenUsage
+from ai_etl.agents._llm_codegen import strip_code_fences
+from ai_etl.core.analysis_types import (
+    AdvisorResult,
+    GoldResult,
+    OutputSanityCheck,
+    ScienceResult,
+    TokenUsage,
+)
 from ai_etl.core.llm import extract_token_usage, get_llm, sum_token_usage
 from ai_etl.core.locale import DEFAULT_LOCALE, narrative_language_instruction, resolve_locale
 
@@ -69,6 +76,10 @@ Rules:
   do NOT recommend "running the analysis" either — instead, only make recommendations that
   are safely grounded in the data overview alone, and say plainly in the summary that some
   recommendations are limited by missing upstream analysis.
+- If a sub-task above carries a "⚠️ Known data-consistency warning" (ADR-037), do NOT present
+  a recommendation based on the flagged number without acknowledging the warning — either
+  avoid grounding a recommendation in that specific figure, or explicitly caveat it in the
+  "rationale" and mention the uncertainty in the "summary".
 """
 
 _PRIORITY_ORDER = {"high": 0, "medium": 1, "low": 2}
@@ -90,6 +101,26 @@ def _build_data_overview(df: pd.DataFrame) -> str:
     return f"{n_rows} linhas × {n_cols} colunas\nColunas:\n" + "\n".join(col_summary) + more
 
 
+def _sanity_check_warning(sanity_check: OutputSanityCheck | None) -> str | None:
+    """Render a non-"ok" `OutputSanityCheck` (ADR-037) as prompt text, or `None` when
+    there is nothing to flag (missing entry, or every check came back "ok").
+
+    The Advisor must see this: `reviewer.py`'s ADR-037 second-pass review (and the
+    deterministic checks in `core/output_validation.py`) can catch a genuine
+    contradiction between a sub-task's narrative and its data — without this, the
+    Advisor's prompt has zero awareness of a warning the system already raised and can
+    silently act on the flagged number anyway.
+    """
+    if not sanity_check or sanity_check.get("severity") == "ok":
+        return None
+    warnings = [c["detail"] for c in sanity_check.get("checks", []) if c["severity"] != "ok"]
+    if not warnings:
+        return None
+    return "⚠️ Known data-consistency warning for this sub-task:\n" + "\n".join(
+        f"  - {w}" for w in warnings
+    )
+
+
 def _build_gold_context(gold_results: list[GoldResult]) -> str:
     """Render every completed Gold sub-task, one block per task question.
 
@@ -108,6 +139,9 @@ def _build_gold_context(gold_results: list[GoldResult]) -> str:
         gold_df = gold.get("gold_df")
         if isinstance(gold_df, pd.DataFrame) and not gold_df.empty:
             parts.append(f"Dados agregados:\n{gold_df.head(10).to_string(index=False)}")
+        warning = _sanity_check_warning(gold.get("sanity_check"))
+        if warning:
+            parts.append(warning)
         if parts:
             blocks.append("\n".join(parts))
 
@@ -138,6 +172,10 @@ def _build_science_context(science_results: list[ScienceResult]) -> str:
         pred_df = science.get("predictions_df")
         if isinstance(pred_df, pd.DataFrame) and not pred_df.empty:
             parts.append(f"Amostra de previsões:\n{pred_df.head(5).to_string(index=False)}")
+
+        warning = _sanity_check_warning(science.get("sanity_check"))
+        if warning:
+            parts.append(warning)
 
         if parts:
             blocks.append("\n".join(parts))
@@ -189,16 +227,7 @@ def run_advisor(
     for attempt in range(1, 3):
         response = llm.invoke(prompt)
         attempt_usages.append(extract_token_usage(response))
-        raw = str(response.content).strip()
-
-        # Strip markdown fences if present
-        if raw.startswith("```"):
-            lines = raw.splitlines()
-            start = 1
-            end = len(lines)
-            if lines[-1].strip() == "```":
-                end -= 1
-            raw = "\n".join(lines[start:end]).strip()
+        raw = strip_code_fences(str(response.content))
 
         try:
             parsed = json.loads(raw)
