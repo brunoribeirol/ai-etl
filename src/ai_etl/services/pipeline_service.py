@@ -96,6 +96,8 @@ def run_silver_pipeline(
     progress_callback: ProgressCallback = _noop_progress,
     tenant_id: str | None = None,
     saved_pipeline_id: str | None = None,
+    llm_provider_override: str | None = None,
+    llm_model_override: str | None = None,
 ) -> PipelineState:
     """Run the Silver LangGraph (Orchestrator -> Extractor -> Transformer -> Quality
     -> Loader) to completion and persist the resulting state via `save_run`.
@@ -116,6 +118,13 @@ def run_silver_pipeline(
             Sprint 14 (ADR-018) also relies on this to later find this run's
             predecessor for drift detection. Sprint 16 (ADR-023) also uses it
             here to look up that saved pipeline's `quality_rules`.
+        llm_provider_override/llm_model_override: gap-closing fix (2026-08-25
+            audit, Wave 4) — a caller-supplied override for an avulso run, e.g.
+            `POST /runs`' `ModelPicker` selection, which has no `saved_pipeline_id`
+            to resolve an override from the DB. Ignored (overwritten) whenever a
+            real saved-pipeline override is found below — a saved pipeline's own
+            configured override always wins over whatever a caller happened to
+            pass, matching the pre-existing behavior for that path exactly.
     """
     run_id = str(uuid.uuid4())
     # Sprint 16 (ADR-023) — a saved pipeline's own operator-defined quality rules,
@@ -139,8 +148,6 @@ def run_silver_pipeline(
     # `get_saved_pipeline`'s return shape just because a caller now wants both.
     custom_quality_rules: list[dict[str, Any]] = []
     approval_policy: Optional[dict[str, Any]] = None
-    llm_provider_override: Optional[str] = None
-    llm_model_override: Optional[str] = None
     if saved_pipeline_id is not None and tenant_id is not None:
         pipeline = get_saved_pipeline(saved_pipeline_id, tenant_id)
         if pipeline is not None:
@@ -724,6 +731,8 @@ def run_full_analysis(
     progress_callback: ProgressCallback = _noop_progress,
     tenant_id: str | None = None,
     saved_pipeline_id: str | None = None,
+    llm_provider_override: str | None = None,
+    llm_model_override: str | None = None,
 ) -> AnalysisRunResult:
     """Run the full Silver -> Planner -> Gold/Science -> Advisor pipeline for one
     business question, persisting Silver + analysis results as a side effect.
@@ -745,9 +754,19 @@ def run_full_analysis(
             caller's job (`services/execution_queue.py`, once this function
             returns with the full `gold`/`science`/`advisor` results) — this
             function only needs to keep forwarding the id.
+        llm_provider_override/llm_model_override: gap-closing fix (2026-08-25
+            audit, Wave 4) — forwarded straight to `run_silver_pipeline`, which
+            only actually uses them when `saved_pipeline_id` doesn't already
+            resolve a real override from the DB (see that function's docstring).
     """
     silver_state = run_silver_pipeline(
-        spec, run_dir, progress_callback, tenant_id=tenant_id, saved_pipeline_id=saved_pipeline_id
+        spec,
+        run_dir,
+        progress_callback,
+        tenant_id=tenant_id,
+        saved_pipeline_id=saved_pipeline_id,
+        llm_provider_override=llm_provider_override,
+        llm_model_override=llm_model_override,
     )
     silver_df = silver_state.get("transformed_data")
     # Sprint 30/gap-closing (ADR-031 §5) — reuse the override `run_silver_pipeline`

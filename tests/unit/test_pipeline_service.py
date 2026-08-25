@@ -322,6 +322,69 @@ def test_run_silver_pipeline_avulso_run_gets_no_llm_override(monkeypatch) -> Non
     assert captured_states[0]["llm_model_override"] is None
 
 
+def test_run_silver_pipeline_avulso_run_uses_caller_supplied_llm_override(monkeypatch) -> None:
+    """Gap-closing fix (2026-08-25 audit, Wave 4) — an avulso run has no
+    `saved_pipeline_id` to resolve a DB override from, but a caller (e.g.
+    `POST /runs`' `ModelPicker` selection) can still supply one directly."""
+    chunks = [{"loader": {"status": "completed"}}]
+    captured_states: list[Any] = []
+    monkeypatch.setattr(
+        pipeline_service, "build_graph", lambda: _FakeGraph(chunks, captured_states)
+    )
+    monkeypatch.setattr(pipeline_service, "save_run", lambda *a, **k: pathlib.Path("x"))
+    monkeypatch.setattr(pipeline_service, "save_stage_latencies", lambda *a, **k: None)
+
+    pipeline_service.run_silver_pipeline(
+        "read file.csv",
+        run_dir="runs",
+        tenant_id="tenant-a",
+        llm_provider_override="anthropic",
+        llm_model_override="claude-sonnet-5",
+    )
+
+    assert captured_states[0]["llm_provider_override"] == "anthropic"
+    assert captured_states[0]["llm_model_override"] == "claude-sonnet-5"
+
+
+def test_run_silver_pipeline_saved_pipeline_override_wins_over_caller_override(
+    monkeypatch,
+) -> None:
+    """A saved pipeline's own DB-configured override always wins over whatever
+    a caller happened to pass — matching `run_silver_pipeline`'s docstring."""
+    chunks = [{"loader": {"status": "completed"}}]
+    captured_states: list[Any] = []
+    monkeypatch.setattr(
+        pipeline_service, "build_graph", lambda: _FakeGraph(chunks, captured_states)
+    )
+    monkeypatch.setattr(pipeline_service, "save_run", lambda *a, **k: pathlib.Path("x"))
+    monkeypatch.setattr(pipeline_service, "save_stage_latencies", lambda *a, **k: None)
+    monkeypatch.setattr(
+        pipeline_service,
+        "get_saved_pipeline",
+        lambda pipeline_id, tenant_id: {"id": pipeline_id, "quality_rules": []},
+    )
+    monkeypatch.setattr(
+        pipeline_service,
+        "get_saved_pipeline_llm_config",
+        lambda pipeline_id, tenant_id: {
+            "llm_provider": "openai",
+            "llm_model": "gpt-4o-mini",
+        },
+    )
+
+    pipeline_service.run_silver_pipeline(
+        "read file.csv",
+        run_dir="runs",
+        tenant_id="tenant-a",
+        saved_pipeline_id="pl-1",
+        llm_provider_override="anthropic",
+        llm_model_override="claude-sonnet-5",
+    )
+
+    assert captured_states[0]["llm_provider_override"] == "openai"
+    assert captured_states[0]["llm_model_override"] == "gpt-4o-mini"
+
+
 def test_run_silver_pipeline_reports_failure(monkeypatch) -> None:
     chunks = [{"orchestrator": {"status": "failed", "error": "Orchestrator failed: bad JSON"}}]
     monkeypatch.setattr(pipeline_service, "build_graph", lambda: _FakeGraph(chunks))
@@ -735,10 +798,12 @@ def test_run_full_analysis_calls_stages_in_order_and_persists_analysis(monkeypat
     monkeypatch.setattr(
         pipeline_service,
         "run_silver_pipeline",
-        lambda spec, run_dir, progress_callback, tenant_id=None, saved_pipeline_id=None: (
-            call_order.append("silver"),
-            silver_state,
-        )[1],
+        lambda spec, run_dir, progress_callback, tenant_id=None, saved_pipeline_id=None, llm_provider_override=None, llm_model_override=None: (
+            (
+                call_order.append("silver"),
+                silver_state,
+            )[1]
+        ),
     )
     monkeypatch.setattr(
         pipeline_service,
@@ -820,10 +885,12 @@ def test_run_full_analysis_forwards_resolved_per_pipeline_model_to_save_analysis
     monkeypatch.setattr(
         pipeline_service,
         "run_silver_pipeline",
-        lambda spec, run_dir, progress_callback, tenant_id=None, saved_pipeline_id=None: (
-            call_order.append("silver"),
-            silver_state,
-        )[1],
+        lambda spec, run_dir, progress_callback, tenant_id=None, saved_pipeline_id=None, llm_provider_override=None, llm_model_override=None: (
+            (
+                call_order.append("silver"),
+                silver_state,
+            )[1]
+        ),
     )
     monkeypatch.setattr(
         pipeline_service,
@@ -870,6 +937,55 @@ def test_run_full_analysis_forwards_resolved_per_pipeline_model_to_save_analysis
     assert saved_analysis["model_name"] == "claude-opus-5"
 
 
+def test_run_full_analysis_forwards_caller_llm_override_to_silver(monkeypatch) -> None:
+    """Gap-closing fix (2026-08-25 audit, Wave 4) — an avulso run's caller-
+    supplied `llm_provider_override`/`llm_model_override` (e.g. `POST /runs`'
+    `ModelPicker` selection) must reach `run_silver_pipeline`, which only had
+    a DB-resolved override for saved-pipeline runs before this fix."""
+    captured: dict[str, Any] = {}
+    silver_state = _completed_silver_state("run-caller-override", pd.DataFrame({"a": [1]}))
+
+    def fake_run_silver_pipeline(
+        spec: str,
+        run_dir: str,
+        progress_callback: pipeline_service.ProgressCallback,
+        tenant_id: str | None = None,
+        saved_pipeline_id: str | None = None,
+        llm_provider_override: str | None = None,
+        llm_model_override: str | None = None,
+    ) -> dict[str, Any]:
+        captured["llm_provider_override"] = llm_provider_override
+        captured["llm_model_override"] = llm_model_override
+        return silver_state
+
+    monkeypatch.setattr(pipeline_service, "run_silver_pipeline", fake_run_silver_pipeline)
+    monkeypatch.setattr(
+        pipeline_service,
+        "plan_analysis_tasks",
+        lambda question, df, *a, **k: (
+            [{"question": question, "type": "descriptive"}],
+            dict(_ZERO_TOKENS),
+        ),
+    )
+    monkeypatch.setattr(pipeline_service, "run_analyst", lambda *a, **k: _gold_result(error=None))
+    monkeypatch.setattr(pipeline_service, "run_advisor", lambda *a, **k: _advisor_result())
+    monkeypatch.setattr(
+        pipeline_service, "save_analysis", lambda *a, **k: pathlib.Path("runs/x_analysis.json")
+    )
+    monkeypatch.setattr(pipeline_service, "save_stage_latencies", lambda *a, **k: None)
+
+    pipeline_service.run_full_analysis(
+        "spec",
+        "pergunta",
+        run_dir="runs",
+        llm_provider_override="anthropic",
+        llm_model_override="claude-sonnet-5",
+    )
+
+    assert captured["llm_provider_override"] == "anthropic"
+    assert captured["llm_model_override"] == "claude-sonnet-5"
+
+
 def test_run_full_analysis_short_circuits_when_silver_produces_no_data(monkeypatch) -> None:
     failed_state = initial_state(spec="spec", run_id="run-999")
     failed_state["status"] = "failed"
@@ -879,7 +995,7 @@ def test_run_full_analysis_short_circuits_when_silver_produces_no_data(monkeypat
     monkeypatch.setattr(
         pipeline_service,
         "run_silver_pipeline",
-        lambda spec, run_dir, progress_callback, tenant_id=None, saved_pipeline_id=None: (
+        lambda spec, run_dir, progress_callback, tenant_id=None, saved_pipeline_id=None, llm_provider_override=None, llm_model_override=None: (
             failed_state
         ),
     )
@@ -920,6 +1036,8 @@ def test_run_full_analysis_forwards_progress_callback_to_every_stage(monkeypatch
         progress_callback: pipeline_service.ProgressCallback,
         tenant_id: str | None = None,
         saved_pipeline_id: str | None = None,
+        llm_provider_override: str | None = None,
+        llm_model_override: str | None = None,
     ) -> dict[str, Any]:
         progress_callback("silver", "⚡ Executando pipeline Silver...")
         progress_callback("silver", "✅ Silver concluído em 1.0s")
