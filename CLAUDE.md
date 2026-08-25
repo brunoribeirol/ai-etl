@@ -133,17 +133,25 @@ Checklist específico deste projeto:
 ## Arquitetura em uma frase
 
 ```
-[spec]
+[spec]                                              (Silver — pipeline ETL, grafo LangGraph)
   → Orchestrator (LLM, plano JSON)
-  → Extractor (determinístico, CSV/PG/REST → DataFrame + schema)
+  → Extractor (determinístico, CSV/PG/REST/... → DataFrame + schema)
   → Transformer (LLM → código Python → sandbox exec → DataFrame)
   → Quality (determinístico, nulls + duplicates + outliers → severity)
-  → Loader (determinístico, DataFrame → CSV/PG)
+  → Loader (determinístico, DataFrame → CSV/PG/S3)
      └─ se severity == "error" → END (pipeline bloqueado)
+
+[pergunta de negócio]                     (Agentic BI — camada de análise, fora do grafo)
+  → Planner (LLM, decompõe a pergunta em sub-análises descritivas/analíticas)
+  → Analyst/Science (LLM → código → sandbox, uma chamada por sub-análise
+    + auto-repair; Reviewer faz segunda passada opt-in por resultado — ADR-037)
+  → Advisor (LLM, sintetiza Gold/Science em recomendações prescritivas)
 ```
 
 Todo estado compartilhado via `PipelineState` TypedDict em `src/ai_etl/core/state.py`.
 Toda ação registrada via `log_action()` → persistida em JSON + SQLite por `save_run()`.
+Orquestração ponta a ponta (Silver → Planner → Analyst/Science → Advisor) em
+`src/ai_etl/services/pipeline_service.py::run_full_analysis`.
 
 ---
 
@@ -172,11 +180,18 @@ POSTGRES_URL=postgresql://ai_etl:ai_etl@localhost:5432/ai_etl_db
 
 ```
 src/ai_etl/
-├── agents/         # orchestrator, extractor, transformer, quality, loader
-├── core/           # state.py, graph.py, sandbox.py, llm.py
-├── sources/        # csv_source, postgres_source, rest_source
-├── destinations/   # csv_dest, postgres_dest
-└── audit/          # logger.py, db.py
+├── agents/
+│   ├── pipeline/    # orchestrator, extractor, transformer, quality, loader (Silver, grafo LangGraph)
+│   └── analysis/    # planner, analyst, science, advisor, reviewer (Agentic BI, fora do grafo)
+├── api/             # FastAPI: main.py, deps.py, config.py, serialization.py
+│   └── routers/     # pipelines, runs, admin, budget, cost_estimation, llm, onboarding, secrets, tenant
+├── services/        # camada de orquestração: pipeline_service.py (run_full_analysis),
+│                     # execution_queue, scheduler, auth/secrets/tenant services, alerting, digest
+├── core/            # state.py, graph.py, sandbox.py, llm.py, pricing.py, drift.py, scheduling.py, ...
+├── sources/         # csv, postgres, mysql, mongodb, rest, sqlite, document
+├── destinations/    # csv_dest, postgres_dest, s3_parquet_dest
+└── audit/           # logger.py, models.py, storage.py, connection.py, admin_log.py
+    └── db/          # budget, health, locale, onboarding, pipelines, retention, runs
 
 tests/
 ├── unit/           # sem I/O externo — mocker para LLM e fontes
