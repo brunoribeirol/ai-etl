@@ -5,11 +5,12 @@ Production (Railway, after the Sprint 6 cutover): `uvicorn ai_etl.api.main:app -
 """
 
 import os
+from typing import Annotated
 
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from ai_etl.api.deps import get_current_tenant_id
+from ai_etl.api.deps import AuthContext, get_current_auth_context
 from ai_etl.api.routers import (
     admin,
     budget,
@@ -68,7 +69,7 @@ def health() -> dict[str, str]:
 
 
 @app.get("/config")
-def config(tenant_id: str = Depends(get_current_tenant_id)) -> dict[str, str]:
+def config(auth: Annotated[AuthContext, Depends(get_current_auth_context)]) -> dict[str, str]:
     """Sprint 7: read-only — this deployment's global model (`AI_ETL_LLM_MODEL`,
     `core/llm.py::get_model_name()`). Streamlit's sidebar showed the same thing
     (`st.caption(f"Modelo: {LLM_MODEL}")`), also read-only. A per-`saved_pipeline`
@@ -78,5 +79,14 @@ def config(tenant_id: str = Depends(get_current_tenant_id)) -> dict[str, str]:
     per-pipeline resolved value, since it takes no pipeline id. Behind the same
     auth as every other endpoint even though the value isn't sensitive, to keep
     one auth story rather than carving out a public-endpoint exception for one
-    low-stakes field."""
-    return {"model_name": get_model_name()}
+    low-stakes field.
+
+    `role` (Wave 6, 2026-08-25 admin panel/approval-gate UI plan): the
+    frontend had no way to know the caller's resolved viewer/editor/admin
+    role at all — `(app)/layout.tsx` already fetches `/config` once per page
+    load (for the model badge), so this became the single source of truth
+    for role-aware UI (e.g. showing the "Admin" nav link) instead of adding
+    a dedicated endpoint. Cosmetic only — every admin/approval route still
+    independently enforces its own role via `require_admin`/`require_role`,
+    same as before; a hidden nav link is not the security boundary."""
+    return {"model_name": get_model_name(), "role": auth["role"]}

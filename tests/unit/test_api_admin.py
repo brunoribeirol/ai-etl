@@ -44,6 +44,40 @@ def _clear_overrides() -> None:
 
 
 # ---------------------------------------------------------------------------
+# GET /admin/tenants
+# ---------------------------------------------------------------------------
+
+
+def test_admin_list_tenants_returns_directory(client: TestClient, mocker) -> None:
+    from datetime import datetime, timezone
+
+    _as_admin()
+    tenants = [
+        {"tenant_id": "tenant-a", "created_at": datetime(2026, 1, 1, tzinfo=timezone.utc)},
+        {"tenant_id": "tenant-b", "created_at": datetime(2026, 2, 1, tzinfo=timezone.utc)},
+    ]
+    mocker.patch("ai_etl.api.routers.admin.list_all_tenants", return_value=tenants)
+    mock_log = mocker.patch("ai_etl.api.routers.admin.log_admin_action")
+
+    response = client.get("/admin/tenants")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [t["tenant_id"] for t in body] == ["tenant-a", "tenant-b"]
+    mock_log.assert_called_once_with("admin-user-1", "list_tenants", detail="count=2")
+
+
+def test_admin_list_tenants_rejects_non_admin(client: TestClient, mocker) -> None:
+    _as_editor()
+    mock_list = mocker.patch("ai_etl.api.routers.admin.list_all_tenants")
+
+    response = client.get("/admin/tenants")
+
+    assert response.status_code == 403
+    mock_list.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
 # GET /admin/tenants/{tenant_id}/runs
 # ---------------------------------------------------------------------------
 

@@ -17,10 +17,23 @@ from fastapi import APIRouter, Depends
 from ai_etl.api.deps import AuthContext, require_admin
 from ai_etl.api.serialization import nan_to_none_records
 from ai_etl.audit.admin_log import AdminActionRecord, list_admin_actions, log_admin_action
-from ai_etl.audit.db import load_history
+from ai_etl.audit.db import TenantSummary, list_all_tenants, load_history
 from ai_etl.services.execution_queue import BudgetStatus, get_budget_status
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+
+
+@router.get("/tenants")
+def admin_list_tenants(
+    auth: Annotated[AuthContext, Depends(require_admin)],
+) -> list[TenantSummary]:
+    """The tenant directory itself — Wave 6 (2026-08-25 admin panel/approval-
+    gate UI plan) gap-closing addition. The 3 routes below all require a
+    `tenant_id` the caller already knows; there was previously no way to
+    discover one at all, so the frontend admin panel had no real picker."""
+    tenants = list_all_tenants()
+    log_admin_action(auth["user_id"], "list_tenants", detail=f"count={len(tenants)}")
+    return tenants
 
 
 @router.get("/tenants/{tenant_id}/runs")
