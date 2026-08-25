@@ -1,22 +1,31 @@
-import { FlatCompat } from "@eslint/eslintrc";
-import { dirname } from "path";
-import { fileURLToPath } from "url";
+import nextCoreWebVitals from "eslint-config-next/core-web-vitals";
+import nextTypescript from "eslint-config-next/typescript";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-// eslint-config-next@15.5.23 (pinned to match next@15.5.23 — see package.json
-// for why) still exports the legacy eslintrc `{extends: [...]}` shape, not a
-// flat-config-native array — FlatCompat bridges it into ESLint 9's flat
-// config format. `create-next-app@latest`'s default eslint.config.mjs
-// (direct array spread of eslint-config-next's exports) assumes a newer
-// eslint-config-next that doesn't need this bridge.
-const compat = new FlatCompat({
-  baseDirectory: __dirname,
-});
-
+// eslint-config-next@16.x ships flat-config-native arrays directly (no more
+// legacy `{extends: [...]}` shape), so the `@eslint/eslintrc` FlatCompat
+// bridge this file used under eslint-config-next@15.5.23 is no longer
+// needed — spread the two config arrays in directly, same as
+// `create-next-app@latest`'s default eslint.config.mjs.
 const eslintConfig = [
-  ...compat.extends("next/core-web-vitals", "next/typescript"),
+  ...nextCoreWebVitals,
+  ...nextTypescript,
+  {
+    settings: {
+      react: {
+        // eslint-config-next's default `settings.react.version` is
+        // "detect", which makes eslint-plugin-react@7.37.5 call
+        // `context.getFilename()` to locate the nearest `react` package —
+        // a method ESLint 10's flat-config Linter context no longer
+        // implements (`contextOrFilename.getFilename is not a function`).
+        // Pinning the version explicitly instead (kept in sync with the
+        // `react` dependency below) skips that code path entirely; this is
+        // an eslint-plugin-react/ESLint 10 compat gap, not a project rule
+        // change, so drop this override once eslint-plugin-react ships a
+        // fix upstream.
+        version: "19.2.8", // must match `react` in package.json
+      },
+    },
+  },
   {
     ignores: [".next/**", "out/**", "build/**", "next-env.d.ts"],
   },

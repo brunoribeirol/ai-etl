@@ -89,6 +89,11 @@ export function PipelinesManager() {
   }, [authedFetch]);
 
   useEffect(() => {
+    // Intentional mount-time fetch; `loadPipelines` synchronously resets
+    // loading/error before its `await`, same established pattern as
+    // executive-summary.tsx/pipeline-history.tsx. No data-fetching library
+    // (SWR/React Query) in this codebase to delegate this to.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadPipelines();
   }, [loadPipelines]);
 
