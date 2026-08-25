@@ -11,10 +11,14 @@ catch point.
 """
 
 import json
+from typing import TYPE_CHECKING
 
 import pandas as pd
 
 from ai_etl.core.llm import get_llm
+
+if TYPE_CHECKING:
+    import docx.table
 
 MAX_ATTEMPTS = 3
 
@@ -83,7 +87,28 @@ def _extract_docx_text(path: str) -> str:
     import docx
 
     document = docx.Document(path)
-    return "\n".join(paragraph.text for paragraph in document.paragraphs)
+    paragraph_text = "\n".join(paragraph.text for paragraph in document.paragraphs)
+
+    # `document.tables` is never visited by python-docx's `.paragraphs` — a
+    # heading followed by a real Word table (the most common way tabular data
+    # shows up in a .docx) would otherwise vanish silently before it ever
+    # reaches the LLM prompt below. Rendered paragraphs-then-tables (not
+    # interleaved in document order): python-docx doesn't expose an ordered
+    # walk of `document.element.body` anywhere else in this repo, and for
+    # this connector's purpose (handing the LLM enough text to spot rows) the
+    # order tables appear in relative to paragraphs doesn't matter — only
+    # that no table is dropped.
+    table_blocks = [_render_docx_table(table) for table in document.tables]
+
+    return "\n".join([paragraph_text, *table_blocks]) if table_blocks else paragraph_text
+
+
+def _render_docx_table(table: "docx.table.Table") -> str:
+    """Render a python-docx table as delimited text an LLM can parse back
+    into rows: one line per table row, cells joined with ` | `, wrapped in
+    [Table]/[/Table] markers so it reads as visually distinct from prose."""
+    rows = [" | ".join(cell.text for cell in row.cells) for row in table.rows]
+    return "\n".join(["[Table]", *rows, "[/Table]"])
 
 
 def _structure_text(
