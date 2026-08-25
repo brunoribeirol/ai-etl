@@ -17,6 +17,7 @@ import sqlalchemy
 from sqlalchemy import text
 
 from ai_etl.audit import connection, db
+from ai_etl.audit.db import ensure_user
 from ai_etl.audit.models import analysis_runs, metadata, runs
 from ai_etl.core.state import initial_state
 
@@ -60,8 +61,21 @@ def _run_id() -> str:
     return f"test-{uuid.uuid4()}"
 
 
+def _tenant_id() -> str:
+    """A real, valid `users.id` — migration 0003 (ADR-006) made
+    `runs.tenant_id`/`analysis_runs.tenant_id` `NOT NULL` foreign keys to `users.id`,
+    so every `save_run`/`save_analysis` call in this file must reference one that
+    actually exists first. Same `ensure_user` upsert `tests/e2e/conftest.py`'s
+    `test_tenant` fixture uses for the same reason.
+    """
+    tenant_id = f"test-tenant-{uuid.uuid4()}"
+    ensure_user(tenant_id)
+    return tenant_id
+
+
 def test_save_run_inserts_row_readable_via_load_history(tmp_path) -> None:
     run_id = _run_id()
+    tenant_id = _tenant_id()
     state = initial_state(spec="load sales.csv", run_id=run_id)
     state = {
         **state,
@@ -69,7 +83,7 @@ def test_save_run_inserts_row_readable_via_load_history(tmp_path) -> None:
         "load_result": {"rows_loaded": 42, "destination": "out.csv"},
     }
 
-    db.save_run(state, log_dir=str(tmp_path))
+    db.save_run(state, log_dir=str(tmp_path), tenant_id=tenant_id)
 
     history = db.load_history(limit=50)
     row = history[history["run_id"] == run_id].iloc[0]
@@ -79,16 +93,17 @@ def test_save_run_inserts_row_readable_via_load_history(tmp_path) -> None:
 
 def test_save_run_upserts_on_conflict(tmp_path) -> None:
     run_id = _run_id()
+    tenant_id = _tenant_id()
     state = initial_state(spec="load sales.csv", run_id=run_id)
     state = {**state, "status": "running", "load_result": None}
-    db.save_run(state, log_dir=str(tmp_path))
+    db.save_run(state, log_dir=str(tmp_path), tenant_id=tenant_id)
 
     updated_state = {
         **state,
         "status": "completed",
         "load_result": {"rows_loaded": 7, "destination": "out.csv"},
     }
-    db.save_run(updated_state, log_dir=str(tmp_path))
+    db.save_run(updated_state, log_dir=str(tmp_path), tenant_id=tenant_id)
 
     with connection.get_engine().connect() as conn:
         rows = conn.execute(
@@ -119,8 +134,11 @@ def test_save_analysis_aggregates_tokens_into_row(tmp_path) -> None:
         "tokens": {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15},
     }
     planner_tokens = {"input_tokens": 1, "output_tokens": 1, "total_tokens": 2}
+    tenant_id = _tenant_id()
 
-    db.save_analysis(run_id, [gold], [], advisor, planner_tokens, log_dir=str(tmp_path))
+    db.save_analysis(
+        run_id, [gold], [], advisor, planner_tokens, log_dir=str(tmp_path), tenant_id=tenant_id
+    )
 
     with connection.get_engine().connect() as conn:
         row = conn.execute(
@@ -139,9 +157,14 @@ def test_save_analysis_aggregates_tokens_into_row(tmp_path) -> None:
 
 def test_load_history_orders_most_recent_first(tmp_path) -> None:
     run_id_1, run_id_2 = _run_id(), _run_id()
+    tenant_id = _tenant_id()
     for rid in (run_id_1, run_id_2):
         state = initial_state(spec="s", run_id=rid)
-        db.save_run({**state, "status": "completed", "load_result": None}, log_dir=str(tmp_path))
+        db.save_run(
+            {**state, "status": "completed", "load_result": None},
+            log_dir=str(tmp_path),
+            tenant_id=tenant_id,
+        )
 
     history = db.load_history(limit=50)
     ids = list(history["run_id"])
