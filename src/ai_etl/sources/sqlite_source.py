@@ -16,7 +16,7 @@ name regex is stricter (no dots allowed).
 import pandas as pd
 from sqlalchemy import create_engine, text
 
-from ai_etl.core.sql_safety import validate_table_name
+from ai_etl.core.sql_safety import validate_select_only_query, validate_table_name
 
 
 def load_sqlite(path: str, table: str, query: str | None = None) -> pd.DataFrame:
@@ -27,9 +27,14 @@ def load_sqlite(path: str, table: str, query: str | None = None) -> pd.DataFrame
     (dots disallowed — SQLite has no `schema.table` notion) before being
     interpolated into the default `SELECT *` (matching `postgres_source.py`'s
     validated-identifier pattern — SQLAlchemy has no bind-parameter syntax
-    for identifiers, only values).
+    for identifiers, only values). A custom `query` (LLM-generated, from
+    `pipeline_plan`) is validated via `core.sql_safety.validate_select_only_query`
+    (Wave 0, 2026-08-24 audit) — there's no bind-parameter syntax for an
+    entire query either, so this is that path's injection defense.
     """
     validate_table_name(table, allow_dots=False)
+    if query is not None:
+        validate_select_only_query(query)
     engine = create_engine(f"sqlite:///{path}")
     sql = query or f"SELECT * FROM {table}"  # nosec B608 — table name validated above
     with engine.connect() as conn:

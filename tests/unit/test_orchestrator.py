@@ -66,6 +66,37 @@ def test_all_retries_exhausted_sets_failed(mock_get_llm) -> None:
     assert result["status"] == "failed"
 
 
+def test_plan_with_unsupported_source_type_retries_and_fails(mock_get_llm) -> None:
+    # Wave 0 (2026-08-24 audit, Red Team CRITICAL finding) — pipeline_plan is now
+    # structurally validated (PipelinePlan), not just JSON-parsed. An unexpected
+    # `type` value must be rejected the same way malformed JSON is.
+    bad_plan = {
+        "sources": [{"name": "orders", "type": "shell_exec", "path": "data/orders.csv"}],
+        "destination": {"type": "csv", "path": "output.csv"},
+        "transformations": [],
+        "quality_checks": [],
+    }
+    mock_get_llm.return_value = _mock_llm([json.dumps(bad_plan), json.dumps(bad_plan)])
+    result = orchestrator_node(_make_state())
+
+    assert result["error"] is not None
+    assert result["status"] == "failed"
+
+
+def test_plan_missing_source_name_retries_and_recovers(mock_get_llm) -> None:
+    bad_plan = {
+        "sources": [{"type": "csv", "path": "data/orders.csv"}],  # missing "name"
+        "destination": {"type": "csv", "path": "output.csv"},
+        "transformations": [],
+        "quality_checks": [],
+    }
+    mock_get_llm.return_value = _mock_llm([json.dumps(bad_plan), json.dumps(VALID_PLAN)])
+    result = orchestrator_node(_make_state())
+
+    assert result["pipeline_plan"] == VALID_PLAN
+    assert result["error"] is None
+
+
 def test_markdown_fenced_json_is_parsed(mock_get_llm) -> None:
     # Real bug found 2026-08-23 running a live model comparison: claude-haiku-4-5
     # fences its JSON on every attempt, so the old json.loads()-with-no-stripping
