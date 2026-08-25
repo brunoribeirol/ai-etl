@@ -54,11 +54,31 @@ handled `.xlsx` before this sprint) rather than becoming a new `sources/`
 module — no new architecture, so no ADR (see `docs/adr/` numbering
 convention: only decisions that add new connector infrastructure get one;
 this is hardening of validation/parsing logic in an existing one).
+
+Data-eng audit (2026-08-24) added two more fixes on top of the above:
+
+4. **Field-size-limit false positive.** A genuinely well-formed row with one
+   legitimate field over the stdlib `csv` module's 128 KiB default limit
+   raised `_csv.Error: field larger than field limit (131072)`, caught by
+   the same generic `except csv.Error` as point 3 above and mislabeled
+   "Malformed CSV quoting" — misleading, since the file isn't malformed.
+   `_validate_row_lengths()` now raises the effective limit (bounded, not
+   unlimited) and gives the residual case its own accurate message.
+
+5. **BR-locale decimal commas.** A `;`-delimited file (BR-locale export
+   convention: `;` delimiter, `,` decimal separator) with a numeric column
+   like `"80,50"` stays `object` dtype — pandas has no way to know that's a
+   locale decimal separator rather than arbitrary text.
+   `_normalize_br_decimal_commas()` converts such columns to float, but only
+   for `;`-delimited files and only when every non-null value in the column
+   matches the decimal-comma pattern, to avoid false-positive conversion of
+   legitimate `,`-containing text.
 """
 
 import csv
 import io
 import itertools
+import re
 from collections.abc import Iterable
 
 import pandas as pd
@@ -67,6 +87,12 @@ from charset_normalizer import from_bytes
 # csv.Sniffer's own default candidate set is a superset that misfires on
 # ordinary prose; restrict it to delimiters real tabular exports actually use.
 _CANDIDATE_DELIMITERS = ",;\t|"
+
+# BR-locale numeric literal: `;` field delimiter + `,` decimal separator
+# (e.g. "80,50", "-1234,56"), contrasting with the US `,` delimiter + `.`
+# decimal convention. Anchored full-string match — a column only qualifies
+# if *every* non-null value matches this exactly.
+_BR_DECIMAL_COMMA_PATTERN = re.compile(r"^-?\d+,\d+$")
 
 # How many rows of an Excel sheet to scan when looking for the real header
 # row — generous enough for a few title/spacer rows without scanning an
@@ -90,6 +116,23 @@ _MAX_HEADER_SCAN_ROWS = 20
 # pipeline rather than a second, unrelated number.
 _LARGE_FILE_ROW_THRESHOLD = 50_000
 _VALIDATION_SAMPLE_ROWS = 5_000
+
+# Data-eng audit finding (2026-08-24): the stdlib `csv` module's default
+# per-field size limit is 128 KiB (`_csv.Error: field larger than field
+# limit (131072)`) — real protection against unbounded-field-growth DoS, but
+# tight enough that a genuinely well-formed row with one large legitimate
+# field (a long free-text/JSON/description column) trips it. Before this
+# fix, that landed in the generic `except csv.Error` below and was
+# mislabeled "Malformed CSV quoting", which is actively misleading for a
+# file that isn't malformed at all. Two mitigations, both applied: this
+# multiplier raises the effective limit (still bounded, not
+# `sys.maxsize` — an unbounded limit would reopen the DoS the stdlib default
+# guards against) so only fields an order of magnitude larger than the
+# default trip it at all; and `_validate_row_lengths()` below distinguishes
+# the field-size-limit signature from a real malformed-quote `csv.Error` so
+# the rare case that still hits it gets an accurate message instead.
+_FIELD_SIZE_LIMIT_MULTIPLIER = 10
+_FIELD_SIZE_LIMIT_SIGNATURE = "field larger than field limit"
 
 
 def load_csv(
@@ -117,7 +160,10 @@ def _load_csv_file(path: str) -> pd.DataFrame:
     delimiter = _detect_delimiter(text)
     _validate_row_lengths(text, delimiter, path)
 
-    return pd.read_csv(io.StringIO(text), sep=delimiter)
+    df = pd.read_csv(io.StringIO(text), sep=delimiter)
+    if delimiter == ";":
+        df = _normalize_br_decimal_commas(df)
+    return df
 
 
 def _decode_bytes(raw: bytes, path: str) -> str:
@@ -160,6 +206,44 @@ def _detect_delimiter(text: str) -> str:
         return ","
 
 
+def _normalize_br_decimal_commas(df: pd.DataFrame) -> pd.DataFrame:
+    """Convert BR-locale decimal-comma numeric columns (object dtype) to float.
+
+    Only called for `;`-delimited files (see `_load_csv_file`) — that's the
+    realistic signal for a BR-locale export, so this never runs against an
+    ordinary `,`-delimited file where a `,`-containing text column is a much
+    more plausible explanation than a decimal separator. Data-eng audit
+    finding (2026-08-24): pandas has no way to know a `,`-containing string
+    column like `"80,50"` is actually numeric with a locale decimal
+    separator — it stays `object` dtype, silently unusable for downstream
+    numeric ops (quality checks, aggregations, etc.) without this.
+
+    Conservative by design: a column converts only if *every* non-null value
+    matches `_BR_DECIMAL_COMMA_PATTERN` and the comma-to-dot swap parses
+    cleanly. Any column with even one genuinely non-numeric value (free
+    text, an ID, a mixed column) is left exactly as pandas produced it — no
+    partial/coerced conversion that could silently corrupt real data.
+    """
+    for col in df.columns:
+        series = df[col]
+        if series.dtype != object:
+            continue
+        non_null = series.dropna().astype(str)
+        if non_null.empty or not non_null.str.match(_BR_DECIMAL_COMMA_PATTERN).all():
+            continue
+
+        candidate = series.astype(str).str.replace(",", ".", regex=False)
+        converted = pd.to_numeric(candidate, errors="coerce")
+        # Every non-null value already matched the strict pattern above, so
+        # a new NaN here would mean `to_numeric` still couldn't parse a
+        # value the regex accepted — shouldn't happen, but bail rather than
+        # risk silently dropping a value.
+        if int(converted.isna().sum()) != int(series.isna().sum()):
+            continue
+        df[col] = converted
+    return df
+
+
 def _validate_row_lengths(text: str, delimiter: str, path: str) -> None:
     """Reject a file whose data rows don't match the header's field count.
 
@@ -194,34 +278,55 @@ def _validate_row_lengths(text: str, delimiter: str, path: str) -> None:
         _VALIDATION_SAMPLE_ROWS if approx_line_count > _LARGE_FILE_ROW_THRESHOLD else None
     )
 
-    reader = csv.reader(io.StringIO(text), delimiter=delimiter)
+    # Raised (bounded, not unlimited — see constant's docstring comment)
+    # for the duration of this check only, and restored in `finally` so it
+    # doesn't leak into unrelated `csv` usage elsewhere in the process.
+    original_field_size_limit = csv.field_size_limit()
+    csv.field_size_limit(original_field_size_limit * _FIELD_SIZE_LIMIT_MULTIPLIER)
     try:
-        header = next(reader)
-    except StopIteration:
-        return  # empty file — let pandas raise its own (accurate) error
-    expected = len(header)
+        reader = csv.reader(io.StringIO(text), delimiter=delimiter)
+        try:
+            header = next(reader)
+        except StopIteration:
+            return  # empty file — let pandas raise its own (accurate) error
+        expected = len(header)
 
-    numbered_rows: Iterable[tuple[int, list[str]]] = enumerate(reader, start=2)
-    if sample_limit is not None:
-        numbered_rows = itertools.islice(numbered_rows, sample_limit)
+        numbered_rows: Iterable[tuple[int, list[str]]] = enumerate(reader, start=2)
+        if sample_limit is not None:
+            numbered_rows = itertools.islice(numbered_rows, sample_limit)
 
-    try:
-        for line_num, row in numbered_rows:
-            if not row:
-                continue
-            if len(row) != expected:
+        try:
+            for line_num, row in numbered_rows:
+                if not row:
+                    continue
+                if len(row) != expected:
+                    raise ValueError(
+                        f"Malformed CSV in '{path}' at line {line_num}: expected {expected} "
+                        f"fields (matching header {header}), found {len(row)}: {row}. This "
+                        "usually means a delimiter character appears inside an unquoted "
+                        "field, or a quoted field has a stray/malformed quote. Fix the "
+                        "source row, or re-export the file with properly quoted fields."
+                    )
+        except csv.Error as e:
+            if _FIELD_SIZE_LIMIT_SIGNATURE in str(e):
                 raise ValueError(
-                    f"Malformed CSV in '{path}' at line {line_num}: expected {expected} "
-                    f"fields (matching header {header}), found {len(row)}: {row}. This "
-                    "usually means a delimiter character appears inside an unquoted "
-                    "field, or a quoted field has a stray/malformed quote. Fix the "
-                    "source row, or re-export the file with properly quoted fields."
-                )
-    except csv.Error as e:
-        raise ValueError(
-            f"Malformed CSV quoting in '{path}' near line {reader.line_num}: {e}. "
-            "Check for an unescaped quote character inside a field."
-        ) from e
+                    f"Field too large in '{path}' near line {reader.line_num}: {e}. "
+                    "This is not malformed CSV — the file appears well-formed but has "
+                    "a field larger than the parser's size limit "
+                    f"(currently {csv.field_size_limit()} characters, raised "
+                    f"{_FIELD_SIZE_LIMIT_MULTIPLIER}x from the Python stdlib default of "
+                    "131072 for this check). If this field is legitimately this large "
+                    "(e.g. a long free-text/JSON column), raise the limit further via "
+                    "`csv.field_size_limit()` before loading; otherwise inspect the "
+                    "source row — it may be missing a delimiter or closing quote that "
+                    "caused unrelated content to be absorbed into one field."
+                ) from e
+            raise ValueError(
+                f"Malformed CSV quoting in '{path}' near line {reader.line_num}: {e}. "
+                "Check for an unescaped quote character inside a field."
+            ) from e
+    finally:
+        csv.field_size_limit(original_field_size_limit)
 
 
 def _load_excel(path: str, sheet_name: str | int | None, header_row: int | None) -> pd.DataFrame:

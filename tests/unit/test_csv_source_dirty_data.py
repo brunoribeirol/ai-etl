@@ -8,6 +8,7 @@ classes found and fixed, and this file's own module docstring in each test
 for what specifically was broken before the fix.
 """
 
+import csv
 from pathlib import Path
 
 import pandas as pd
@@ -150,20 +151,105 @@ def test_validate_row_lengths_small_file_still_fully_validated() -> None:
         _validate_row_lengths(text, ",", "small_bad_late.csv")
 
 
-def test_validate_row_lengths_wraps_csv_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    # A genuine `csv.Error` from the stdlib reader itself (not just a field
-    # count mismatch) — shrink the field-size limit so an ordinary field
-    # trips it, then confirm it surfaces as our actionable ValueError.
-    import csv as csv_module
-
-    original_limit = csv_module.field_size_limit()
-    csv_module.field_size_limit(5)
+def test_validate_row_lengths_field_size_limit_is_not_malformed_quoting(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Data-eng audit finding (2026-08-24): a `csv.Error` caused by a field
+    exceeding the size limit is not malformed CSV and must not be labeled
+    as such — shrink the limit so an ordinary field trips it, then confirm
+    it surfaces as a distinct, accurate error instead of the malformed-
+    quoting message."""
+    original_limit = csv.field_size_limit()
+    csv.field_size_limit(1)  # `_validate_row_lengths` multiplies this by 10 internally
     try:
-        text = "a,b\nlongvalue,2\n"
-        with pytest.raises(ValueError, match="Malformed CSV quoting"):
+        text = f"a,b\n{'x' * 100},2\n"  # 100 chars still exceeds the 10x-raised limit
+        with pytest.raises(ValueError, match="Field too large") as exc_info:
             _validate_row_lengths(text, ",", "toolong.csv")
+        assert "Malformed CSV quoting" not in str(exc_info.value)
     finally:
-        csv_module.field_size_limit(original_limit)
+        csv.field_size_limit(original_limit)
+    # The global limit must be restored, not left mutated by the check.
+    assert csv.field_size_limit() == original_limit
+
+
+def test_validate_row_lengths_restores_field_size_limit_on_success() -> None:
+    original_limit = csv.field_size_limit()
+    _validate_row_lengths("a,b\n1,2\n", ",", "ok.csv")
+    assert csv.field_size_limit() == original_limit
+
+
+def test_load_csv_large_legitimate_field_loads_successfully(tmp_path: Path) -> None:
+    """Data-eng audit finding (2026-08-24): a genuinely well-formed CSV with
+    one legitimate field larger than the stdlib default 128 KiB
+    `csv.field_size_limit()` must not be rejected as malformed — the
+    effective limit is raised (bounded) precisely so this loads cleanly."""
+    large_field = "x" * 200_000  # well over the 131072 stdlib default
+    path = tmp_path / "large_field.csv"
+    path.write_text(f"id,notes,valor\n1,{large_field},10.5\n", encoding="utf-8")
+
+    df = load_csv(str(path))
+
+    assert df.shape == (1, 3)
+    assert df.loc[0, "notes"] == large_field
+
+
+def test_load_csv_genuinely_malformed_quoting_still_raises_malformed_message(
+    tmp_path: Path,
+) -> None:
+    """No-regression: real malformed-quote input (row/header field-count
+    mismatch) still raises the original 'Malformed CSV' message, not the
+    new field-size-limit message."""
+    path = tmp_path / "malformed.csv"
+    path.write_text("a,b,c\n1,2,3,4\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="Malformed CSV") as exc_info:
+        load_csv(str(path))
+    assert "Field too large" not in str(exc_info.value)
+
+
+# --- BR-locale decimal comma normalization ---
+# Data-eng audit finding (2026-08-24): a `;`-delimited file with BR-locale
+# decimal commas (e.g. "80,50") in a numeric column stayed `object` dtype —
+# pandas has no way to know `,` is a decimal separator here rather than text.
+
+
+def test_load_csv_semicolon_delimiter_normalizes_br_decimal_comma(tmp_path: Path) -> None:
+    path = tmp_path / "br_decimal.csv"
+    path.write_text(
+        "nome;cidade;valor\nAna;Recife;80,50\nBruno;Salvador;1234,56\n", encoding="utf-8"
+    )
+    df = load_csv(str(path))
+    assert pd.api.types.is_float_dtype(df["valor"])
+    assert df.loc[0, "valor"] == pytest.approx(80.50)
+    assert df.loc[1, "valor"] == pytest.approx(1234.56)
+
+
+def test_load_csv_semicolon_delimiter_does_not_corrupt_non_numeric_comma_text(
+    tmp_path: Path,
+) -> None:
+    """Negative test: a genuinely non-numeric text column containing commas
+    in a `;`-delimited file must be left untouched, not force-converted."""
+    path = tmp_path / "br_text.csv"
+    path.write_text(
+        "nome;observacao;valor\n"
+        "Ana;Cliente antigo, prioridade alta;80,50\n"
+        "Bruno;Novo, aguardando contrato;1234,56\n",
+        encoding="utf-8",
+    )
+    df = load_csv(str(path))
+    assert df["observacao"].dtype == object
+    assert df.loc[0, "observacao"] == "Cliente antigo, prioridade alta"
+    assert pd.api.types.is_float_dtype(df["valor"])
+
+
+def test_load_csv_comma_delimiter_does_not_trigger_br_normalization(tmp_path: Path) -> None:
+    """Conservative-by-design: normalization only applies to `;`-delimited
+    files — a `,`-delimited file with a comma-adjacent-looking value in a
+    non-numeric context must not be touched."""
+    path = tmp_path / "not_br.csv"
+    path.write_text('nome,codigo\nAna,"80,50"\n', encoding="utf-8")
+    df = load_csv(str(path))
+    assert df["codigo"].dtype == object
+    assert df.loc[0, "codigo"] == "80,50"
 
 
 # --- No-regression: a normal, well-formed CSV is unaffected ---
