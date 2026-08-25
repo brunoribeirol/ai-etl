@@ -56,6 +56,37 @@ def test_plan_analysis_tasks_en_us_locale_instructs_english(mock_get_llm, sample
     assert "English (US)" in sent_prompt
 
 
+def test_plan_analysis_tasks_prompt_instructs_dropping_prescriptive_clause(
+    mock_get_llm, sample_df
+) -> None:
+    """Reproduced finding (LLM/Prompt Engineer audit, 2026-08-24, ALTA): a compound
+    question like "...top products, and recommend one action..." was previously
+    decomposed whole into a single "descriptive" sub-task, so the Analyst produced a
+    shallow recommendation duplicating (and competing with) the Advisor's own
+    better-contextualized one, which already runs after every Planner sub-task.
+
+    This is a prompt-level fix: whether the LLM actually follows the instruction can't
+    be asserted deterministically without a real model call, so this test only pins
+    that the instruction (and its example) is present in what gets sent to the LLM —
+    it does not simulate or assert LLM decomposition behavior.
+    """
+    response = json.dumps(
+        [{"question": "What were the top products last quarter?", "type": "descriptive"}]
+    )
+    llm = _mock_llm(response)
+    mock_get_llm.return_value = llm
+    plan_analysis_tasks(
+        "What were our top products last quarter, and recommend one action to grow revenue?",
+        sample_df,
+    )
+
+    sent_prompt = llm.invoke.call_args[0][0]
+    assert "prescriptive/recommendation-seeking clause" in sent_prompt
+    assert "Do not turn it into a sub-task of any type" in sent_prompt
+    # the prompt's own worked example — not derived from the question above
+    assert "recomende uma ação" in sent_prompt
+
+
 def test_plan_analysis_tasks_strips_markdown_fences(mock_get_llm, sample_df) -> None:
     payload = json.dumps([{"question": "X?", "type": "descriptive"}])
     mock_get_llm.return_value = _mock_llm(f"```json\n{payload}\n```")
