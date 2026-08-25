@@ -192,6 +192,8 @@
     "specOptionalHint": "(opcional se um arquivo foi anexado)",
     "businessQuestionLabel": "Pergunta de negócio (opcional)",
     "businessQuestionPlaceholder": "Quais produtos vendem mais?",
+    "modelLabel": "Modelo de IA (opcional)",
+    "modelHint": "(usa o modelo padrão se nenhum for selecionado)",
     "submitIdle": "Analisar dados",
     "submitLoading": "Executando...",
     "missingApiUrl": "NEXT_PUBLIC_API_URL não está configurada.",

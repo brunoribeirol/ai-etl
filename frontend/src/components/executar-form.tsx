@@ -8,12 +8,14 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AgentProgress } from "@/components/agent-progress";
+import { ModelPicker } from "@/components/model-picker";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/status-badge";
+import { describeSubmitError } from "@/lib/form-error";
 import type { TaskStatus } from "@/lib/types";
 
 /**
@@ -54,6 +56,12 @@ export function ExecutarForm({
   const [file, setFile] = useState<File | null>(initialFile);
   const [manualSpec, setManualSpec] = useState("");
   const [businessQuestion, setBusinessQuestion] = useState(initialBusinessQuestion);
+  // One-off runs have no saved-pipeline id to write an LLM override to
+  // immediately (unlike `pipelines-manager.tsx`'s `ModelPicker`, which PUTs
+  // to `/pipelines/{id}/llm-config` on click) — the choice is only kept in
+  // local state here and threaded into the `/runs` submit below.
+  const [llmProvider, setLlmProvider] = useState<string | null>(null);
+  const [llmModel, setLlmModel] = useState<string | null>(null);
   const [taskId, setTaskId] = useState<string | null>(null);
   const [status, setStatus] = useState<TaskStatus | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -89,8 +97,9 @@ export function ExecutarForm({
           }
         }
       } catch (err) {
-        setError(String(err));
-        toast.error(String(err));
+        const message = describeSubmitError(err);
+        setError(message);
+        toast.error(message);
         if (pollTimer.current) clearInterval(pollTimer.current);
         setSubmitting(false);
       }
@@ -119,6 +128,15 @@ export function ExecutarForm({
       if (file) formData.append("file", file);
       if (manualSpec.trim()) formData.append("manual_spec", manualSpec.trim());
       formData.append("business_question", businessQuestion);
+      // Sent under the same field names as `PipelineState["llm_provider_override"]`/
+      // `["llm_model_override"]` (`src/ai_etl/core/state.py`). NOTE: as of this
+      // change, `POST /runs` (`src/ai_etl/api/routers/runs.py::create_run`) does
+      // not yet read these fields for one-off runs — only the saved-pipeline
+      // path (`services/pipeline_service.py`) applies an LLM override today. The
+      // picker and this wiring are ready; a small backend follow-up is needed
+      // to make the selection actually take effect for `/runs`.
+      if (llmProvider) formData.append("llm_provider_override", llmProvider);
+      if (llmModel) formData.append("llm_model_override", llmModel);
 
       const response = await fetch(`${apiUrl}/runs`, {
         method: "POST",
@@ -135,8 +153,9 @@ export function ExecutarForm({
       setTaskId(task_id);
       pollStatus(task_id);
     } catch (err) {
-      setError(String(err));
-      toast.error(String(err));
+      const message = describeSubmitError(err);
+      setError(message);
+      toast.error(message);
       setSubmitting(false);
     }
   }
@@ -197,6 +216,22 @@ export function ExecutarForm({
                 disabled={submitting}
                 rows={2}
                 placeholder={t("businessQuestionPlaceholder")}
+              />
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <Label>
+                {t("modelLabel")}{" "}
+                <span className="text-muted-foreground font-normal">{t("modelHint")}</span>
+              </Label>
+              <ModelPicker
+                currentProvider={llmProvider}
+                currentModel={llmModel}
+                onSelect={async (provider, model) => {
+                  setLlmProvider(provider);
+                  setLlmModel(model);
+                }}
+                disabled={submitting}
               />
             </div>
 
