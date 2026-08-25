@@ -36,3 +36,37 @@ def test_sanitize_removes_sensitive_values() -> None:
     assert result["token"] == "***REDACTED***"
     assert result["password"] == "***REDACTED***"
     assert result["name"] == "orders"
+
+
+def test_sanitize_redacts_nested_dict_one_level_down() -> None:
+    data = {"headers": {"authorization": "Bearer xyz", "content-type": "application/json"}}
+    result = _sanitize(data)
+    assert result["headers"]["authorization"] == "***REDACTED***"
+    assert result["headers"]["content-type"] == "application/json"
+
+
+def test_sanitize_redacts_sensitive_keys_in_list_of_dicts() -> None:
+    data = {
+        "request_history": [
+            {"url": "http://x.com", "api_key": "sk-123"},
+            {"url": "http://y.com", "token": "tok-456"},
+        ]
+    }
+    result = _sanitize(data)
+    assert result["request_history"][0]["api_key"] == "***REDACTED***"
+    assert result["request_history"][0]["url"] == "http://x.com"
+    assert result["request_history"][1]["token"] == "***REDACTED***"
+
+
+def test_sanitize_redacts_authorization_and_bearer_keys() -> None:
+    data = {"Authorization": "Bearer abc", "bearer_token": "xyz", "name": "orders"}
+    result = _sanitize(data)
+    assert result["Authorization"] == "***REDACTED***"
+    assert result["bearer_token"] == "***REDACTED***"
+    assert result["name"] == "orders"
+
+
+def test_sanitize_passes_through_non_sensitive_nested_structure() -> None:
+    data = {"schema": {"columns": ["id", "name"], "rows": [{"id": 1, "name": "a"}]}}
+    result = _sanitize(data)
+    assert result == data
