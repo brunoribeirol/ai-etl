@@ -43,6 +43,7 @@ from ai_etl.audit.db import (
 from ai_etl.audit.db import locale as locale_db
 from ai_etl.audit.db import retention as retention_db
 from ai_etl.audit.db import runs as db
+from ai_etl.audit.db.runs import _write_analysis_row as _real_write_analysis_row
 from ai_etl.audit.db.runs import _write_run_row as _real_write_run_row
 from ai_etl.audit.models import analysis_runs as analysis_runs_table
 from ai_etl.audit.models import metadata as audit_metadata
@@ -292,6 +293,7 @@ def test_save_analysis_aggregates_tokens_before_writing_row(
         tokens: dict,
         tenant_id: str | None = None,
         saved_pipeline_id: str | None = None,
+        model_name: str | None = None,
     ) -> None:
         captured.update(
             run_id=run_id,
@@ -300,6 +302,7 @@ def test_save_analysis_aggregates_tokens_before_writing_row(
             tokens=tokens,
             tenant_id=tenant_id,
             saved_pipeline_id=saved_pipeline_id,
+            model_name=model_name,
         )
 
     monkeypatch.setattr(db, "_write_analysis_row", fake_write)
@@ -320,6 +323,44 @@ def test_save_analysis_aggregates_tokens_before_writing_row(
     assert captured["tokens"]["input_tokens"] == 380
     assert captured["tokens"]["output_tokens"] == 50 + 80 + 20 + 10
     assert captured["tokens"]["total_tokens"] == 150 + 280 + 70 + 40
+    # No explicit model_name passed to save_analysis -> forwarded as None,
+    # letting _write_analysis_row fall back to get_model_name() internally.
+    assert captured["model_name"] is None
+
+
+def test_save_analysis_forwards_explicit_model_name_to_write_row(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ADR-031 gap fix: `save_analysis(..., model_name=...)` — the actual
+    resolved per-pipeline model (e.g. from `llm_model_override`) — must reach
+    `_write_analysis_row` unchanged, not be silently dropped or recomputed from
+    the global `AI_ETL_LLM_MODEL` env var."""
+    captured: dict = {}
+
+    def fake_write(
+        run_id: str,
+        n_gold: int,
+        n_science: int,
+        tokens: dict,
+        tenant_id: str | None = None,
+        saved_pipeline_id: str | None = None,
+        model_name: str | None = None,
+    ) -> None:
+        captured["model_name"] = model_name
+
+    monkeypatch.setattr(db, "_write_analysis_row", fake_write)
+
+    save_analysis(
+        "run-analysis-override",
+        [_make_gold_result()],
+        [],
+        _make_advisor_result(),
+        _ZERO_TOKENS,
+        log_dir=str(tmp_path),
+        model_name="claude-opus-5",
+    )
+
+    assert captured["model_name"] == "claude-opus-5"
 
 
 def test_save_analysis_handles_empty_results(tmp_path: Path) -> None:
@@ -459,6 +500,53 @@ def test_load_history_surfaces_cost_for_analyzed_runs(monkeypatch: pytest.Monkey
     assert history.loc[history["run_id"] == "run-with-analysis", "cost_usd"].iloc[
         0
     ] == pytest.approx(0.00045)
+
+
+def test_write_analysis_row_uses_explicit_model_name_over_global_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ADR-031 gap regression guard: a run that used a per-pipeline
+    `llm_model_override` (Sprint 30) must have its `cost_usd`/`model_name`
+    persisted for the model that *actually ran* (the caller-supplied
+    `model_name` argument), not the deployment-global `AI_ETL_LLM_MODEL` env
+    var `get_model_name()` reads. Before the fix, `_write_analysis_row` always
+    called `get_model_name()` internally and ignored any override — this test
+    would have failed against that old behavior, since the persisted
+    `model_name`/`cost_usd` would have matched the global env var
+    (gpt-4o-mini pricing) instead of the passed-in override (claude-opus-5
+    pricing)."""
+    monkeypatch.setenv("AI_ETL_LLM_MODEL", "gpt-4o-mini")
+    monkeypatch.setenv("AI_ETL_LLM_PROVIDER", "openai")
+
+    engine = _make_sqlite_engine()
+    monkeypatch.setattr(db, "get_engine", lambda: engine)
+
+    tokens = {"input_tokens": 1000, "output_tokens": 1000, "total_tokens": 2000}
+    # Bypass this file's autouse `_no_db` fixture (which monkeypatches
+    # `db._write_analysis_row` to a no-op for every other test here) by calling
+    # the real function directly — this test exists specifically to exercise it.
+    _real_write_analysis_row(
+        "run-override",
+        1,
+        0,
+        tokens,
+        tenant_id="tenant-a",
+        model_name="claude-opus-5",
+    )
+
+    with engine.connect() as conn:
+        row = conn.execute(
+            sqlalchemy.text(
+                "SELECT model_name, cost_usd FROM analysis_runs WHERE run_id = :run_id"
+            ),
+            {"run_id": "run-override"},
+        ).fetchone()
+
+    assert row is not None
+    assert row.model_name == "claude-opus-5"
+    # claude-opus-5: $15/$75 per 1M tokens -> 1000*15/1e6 + 1000*75/1e6 = 0.09,
+    # not gpt-4o-mini's $0.15/$0.60 (which would give 0.00075).
+    assert row.cost_usd == pytest.approx(0.09)
 
 
 def test_runs_table_rejects_null_tenant_id() -> None:

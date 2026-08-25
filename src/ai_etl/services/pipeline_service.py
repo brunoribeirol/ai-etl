@@ -48,7 +48,7 @@ from ai_etl.core.analysis_types import (
     TokenUsage,
 )
 from ai_etl.core.graph import build_graph
-from ai_etl.core.llm import is_llm_review_enabled, sum_token_usage
+from ai_etl.core.llm import get_model_name, is_llm_review_enabled, sum_token_usage
 from ai_etl.core.locale import DEFAULT_LOCALE
 from ai_etl.core.output_validation import append_check, check_gold_output, check_science_output
 from ai_etl.core.state import PipelineState, initial_state
@@ -757,6 +757,14 @@ def run_full_analysis(
     # through as plain parameters from here on.
     llm_provider_override = silver_state.get("llm_provider_override")
     llm_model_override = silver_state.get("llm_model_override")
+    # ADR-031 gap fix: the actual resolved model name this run's `get_llm(
+    # provider=..., model=...)` calls used (`agents/analysis/*.py`, via
+    # `llm_model_override` above) — threaded into `save_analysis` below so
+    # `_write_analysis_row`'s cost tracking reflects the model that actually ran,
+    # not the deployment-global `AI_ETL_LLM_MODEL` env var `get_model_name()`
+    # reads. Mirrors `get_llm()`'s own resolution: an explicit override wins,
+    # otherwise fall back to the global default.
+    resolved_model_name = llm_model_override or get_model_name()
     # Sprint 25 (ADR-036) — same reuse rationale as the LLM override above: the
     # tenant's locale, already resolved into `PipelineState` by `run_silver_pipeline`
     # (via `audit/db.py::get_locale`), forwarded as a plain parameter from here on.
@@ -806,6 +814,7 @@ def run_full_analysis(
             tenant_id=tenant_id,
             business_question=question,
             saved_pipeline_id=saved_pipeline_id,
+            model_name=resolved_model_name,
         )
         save_stage_latencies(
             silver_state["run_id"],

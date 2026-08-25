@@ -14,6 +14,7 @@ from typing import Any
 import pandas as pd
 import pytest
 
+from ai_etl.core.llm import get_model_name
 from ai_etl.core.state import initial_state
 from ai_etl.services import pipeline_service
 
@@ -732,11 +733,13 @@ def test_run_full_analysis_calls_stages_in_order_and_persists_analysis(monkeypat
         tenant_id: str | None = None,
         business_question: str = "",
         saved_pipeline_id: str | None = None,
+        model_name: str | None = None,
     ) -> pathlib.Path:
         call_order.append("save_analysis")
         saved_analysis["run_id"] = run_id
         saved_analysis["log_dir"] = log_dir
         saved_analysis["tenant_id"] = tenant_id
+        saved_analysis["model_name"] = model_name
         return pathlib.Path(log_dir) / f"{run_id}_analysis.json"
 
     monkeypatch.setattr(pipeline_service, "run_analyst", fake_run_analyst)
@@ -751,7 +754,84 @@ def test_run_full_analysis_calls_stages_in_order_and_persists_analysis(monkeypat
     assert result["state"] is silver_state
     assert len(result["gold"]) == 1
     assert result["advisor"]["error"] is None
-    assert saved_analysis == {"run_id": "run-123", "log_dir": "runs", "tenant_id": None}
+    # No `llm_model_override` on `silver_state` here -> falls back to
+    # get_model_name() (the global AI_ETL_LLM_MODEL/AI_ETL_LLM_PROVIDER default),
+    # same as the pre-ADR-031-gap-fix behavior for a run with no per-pipeline
+    # override.
+    assert saved_analysis == {
+        "run_id": "run-123",
+        "log_dir": "runs",
+        "tenant_id": None,
+        "model_name": get_model_name(),
+    }
+
+
+def test_run_full_analysis_forwards_resolved_per_pipeline_model_to_save_analysis(
+    monkeypatch,
+) -> None:
+    """ADR-031 gap fix regression guard: a run with a per-pipeline
+    `llm_model_override` set on `PipelineState` (Sprint 30) must have that
+    *actual* resolved model — not the global `AI_ETL_LLM_MODEL` default —
+    forwarded to `save_analysis(..., model_name=...)`, so cost tracking prices
+    the model that really ran. Before the fix, `save_analysis` had no
+    `model_name` parameter at all and `_write_analysis_row` always re-derived
+    the model from the global env var, silently mispricing every override run."""
+    call_order: list[str] = []
+    silver_state = _completed_silver_state("run-override-123", pd.DataFrame({"a": [1, 2]}))
+    silver_state["llm_provider_override"] = "anthropic"
+    silver_state["llm_model_override"] = "claude-opus-5"
+
+    monkeypatch.setattr(
+        pipeline_service,
+        "run_silver_pipeline",
+        lambda spec, run_dir, progress_callback, tenant_id=None, saved_pipeline_id=None: (
+            call_order.append("silver"),
+            silver_state,
+        )[1],
+    )
+    monkeypatch.setattr(
+        pipeline_service,
+        "plan_analysis_tasks",
+        lambda question, df, *a, **k: (
+            call_order.append("planner"),
+            ([{"question": question, "type": "descriptive"}], dict(_ZERO_TOKENS)),
+        )[1],
+    )
+
+    def fake_run_analyst(df: pd.DataFrame, q: str, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        call_order.append("gold")
+        return _gold_result(error=None)
+
+    def fake_run_advisor(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        call_order.append("advisor")
+        return _advisor_result()
+
+    saved_analysis: dict[str, Any] = {}
+
+    def fake_save_analysis(
+        run_id: str,
+        gold: Any,
+        science: Any,
+        advisor: Any,
+        planner_tokens: Any,
+        log_dir: str,
+        tenant_id: str | None = None,
+        business_question: str = "",
+        saved_pipeline_id: str | None = None,
+        model_name: str | None = None,
+    ) -> pathlib.Path:
+        call_order.append("save_analysis")
+        saved_analysis["model_name"] = model_name
+        return pathlib.Path(log_dir) / f"{run_id}_analysis.json"
+
+    monkeypatch.setattr(pipeline_service, "run_analyst", fake_run_analyst)
+    monkeypatch.setattr(pipeline_service, "run_advisor", fake_run_advisor)
+    monkeypatch.setattr(pipeline_service, "save_analysis", fake_save_analysis)
+    monkeypatch.setattr(pipeline_service, "save_stage_latencies", lambda *a, **k: None)
+
+    pipeline_service.run_full_analysis("spec", "pergunta", run_dir="runs")
+
+    assert saved_analysis["model_name"] == "claude-opus-5"
 
 
 def test_run_full_analysis_short_circuits_when_silver_produces_no_data(monkeypatch) -> None:
