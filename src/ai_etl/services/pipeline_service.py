@@ -17,7 +17,7 @@ from __future__ import annotations
 import logging
 import time
 import uuid
-from typing import Any, Callable, Optional, cast
+from typing import Any, Callable, Optional, TypeVar, cast
 
 import pandas as pd
 
@@ -448,7 +448,12 @@ def run_science_analysis(
     }
 
 
-def run_gold_with_repair(
+_RepairResultT = TypeVar("_RepairResultT", GoldResult, ScienceResult)
+
+
+def _run_with_repair(
+    run_fn: Callable[..., _RepairResultT],
+    label: str,
     silver_df: pd.DataFrame,
     task_question: str,
     progress_callback: ProgressCallback = _noop_progress,
@@ -458,21 +463,27 @@ def run_gold_with_repair(
     llm_provider_override: str | None = None,
     llm_model_override: str | None = None,
     locale: str = DEFAULT_LOCALE,
-) -> GoldResult:
-    """Run a Gold sub-task; if it fails outright, try once more with a simplified
-    fallback question before giving up.
+) -> _RepairResultT:
+    """Shared auto-repair strategy behind `run_gold_with_repair`/
+    `run_science_with_repair` (Wave 5 dedup, Tech Lead 2026-08-24 audit — the two
+    were near-verbatim duplicates of this same control flow). Runs `run_fn` (either
+    `run_gold_analysis` or `run_science_analysis`) once; if it fails outright,
+    retries once with a simplified fallback question before giving up.
 
-    `run_analyst` already retries the SAME question up to 3 times internally — this is
-    a different failure mode: the question itself may be too specific/complex for the
-    LLM to translate into working code at all, so the fallback rephrases it instead of
-    repeating it verbatim.
+    `run_fn` already retries the SAME question up to 3 times internally — this is
+    a different failure mode: the question itself may be too specific/complex for
+    the LLM to translate into working code at all, so the fallback rephrases it
+    instead of repeating it verbatim.
+
+    `label`: "Gold"/"Science" — the only textual difference between the two
+    call sites' progress messages, parameterized here rather than hardcoded.
 
     `run_id`/`llm_provider_override`/`llm_model_override`: Sprint 30/gap-closing
     (ADR-031 §5) — see `run_gold_analysis`'s identical parameters.
 
     `locale`: Sprint 25 (ADR-036) — see `run_gold_analysis`'s identical parameter.
     """
-    result = run_gold_analysis(
+    result = run_fn(
         silver_df,
         task_question,
         progress_callback,
@@ -490,11 +501,11 @@ def run_gold_with_repair(
         f"Resuma de forma simples os principais números relacionados a: {task_question}"
     )
     repair_stage = f"{stage}:repair"
-    progress_callback(repair_stage, f"🔧 Gold — reparo automático: {task_question}")
+    progress_callback(repair_stage, f"🔧 {label} — reparo automático: {task_question}")
     progress_callback(
         repair_stage, "A sub-análise falhou; tentando uma versão simplificada da pergunta..."
     )
-    repaired = run_gold_analysis(
+    repaired = run_fn(
         silver_df,
         fallback_question,
         progress_callback,
@@ -517,6 +528,41 @@ def run_gold_with_repair(
     return repaired
 
 
+def run_gold_with_repair(
+    silver_df: pd.DataFrame,
+    task_question: str,
+    progress_callback: ProgressCallback = _noop_progress,
+    stage: str = "gold",
+    stage_log: "list[dict[str, Any]] | None" = None,
+    run_id: str = "",
+    llm_provider_override: str | None = None,
+    llm_model_override: str | None = None,
+    locale: str = DEFAULT_LOCALE,
+) -> GoldResult:
+    """Run a Gold sub-task; if it fails outright, try once more with a simplified
+    fallback question before giving up. See `_run_with_repair` for the shared
+    implementation.
+
+    `run_id`/`llm_provider_override`/`llm_model_override`: Sprint 30/gap-closing
+    (ADR-031 §5) — see `run_gold_analysis`'s identical parameters.
+
+    `locale`: Sprint 25 (ADR-036) — see `run_gold_analysis`'s identical parameter.
+    """
+    return _run_with_repair(
+        run_gold_analysis,
+        "Gold",
+        silver_df,
+        task_question,
+        progress_callback,
+        stage,
+        stage_log,
+        run_id,
+        llm_provider_override,
+        llm_model_override,
+        locale,
+    )
+
+
 def run_science_with_repair(
     silver_df: pd.DataFrame,
     task_question: str,
@@ -529,13 +575,16 @@ def run_science_with_repair(
     locale: str = DEFAULT_LOCALE,
 ) -> ScienceResult:
     """Same auto-repair strategy as `run_gold_with_repair`, for Science sub-tasks.
+    See `_run_with_repair` for the shared implementation.
 
     `run_id`/`llm_provider_override`/`llm_model_override`: Sprint 30/gap-closing
     (ADR-031 §5) — see `run_gold_analysis`'s identical parameters.
 
     `locale`: Sprint 25 (ADR-036) — see `run_gold_analysis`'s identical parameter.
     """
-    result = run_science_analysis(
+    return _run_with_repair(
+        run_science_analysis,
+        "Science",
         silver_df,
         task_question,
         progress_callback,
@@ -546,38 +595,6 @@ def run_science_with_repair(
         llm_model_override,
         locale,
     )
-    if not result.get("error"):
-        return result
-
-    fallback_question = (
-        f"Resuma de forma simples os principais números relacionados a: {task_question}"
-    )
-    repair_stage = f"{stage}:repair"
-    progress_callback(repair_stage, f"🔧 Science — reparo automático: {task_question}")
-    progress_callback(
-        repair_stage, "A sub-análise falhou; tentando uma versão simplificada da pergunta..."
-    )
-    repaired = run_science_analysis(
-        silver_df,
-        fallback_question,
-        progress_callback,
-        repair_stage,
-        stage_log,
-        run_id,
-        llm_provider_override,
-        llm_model_override,
-        locale,
-    )
-    progress_callback(
-        repair_stage,
-        "✅ Reparo automático funcionou" if not repaired.get("error") else "⚠️ Reparo também falhou",
-    )
-
-    if repaired.get("error"):
-        return result
-    repaired["task_question"] = task_question
-    repaired["repaired"] = True
-    return repaired
 
 
 def run_analysis_tasks(
@@ -928,7 +945,13 @@ def resume_pending_load(run_id: str, tenant_id: str, run_dir: str) -> PipelineSt
             if final_status == "completed":
                 mark_pipeline_approved(saved_pipeline_id, tenant_id)
         except Exception:  # nosec B110 — best-effort bookkeeping, never fails an
-            pass  # already-persisted, already-written approval outcome.
+            # already-persisted, already-written approval outcome.
+            logger.warning(
+                "resume_pending_load: best-effort health/approval bookkeeping failed "
+                "for saved_pipeline_id=%r (run outcome already persisted)",
+                saved_pipeline_id,
+                exc_info=True,
+            )
 
     return result_state
 
@@ -964,6 +987,12 @@ def reject_pending_load(
         try:
             record_pipeline_health(saved_pipeline_id, "failed", error_message)
         except Exception:  # nosec B110 — best-effort bookkeeping, never fails an
-            pass  # already-persisted rejection.
+            # already-persisted rejection.
+            logger.warning(
+                "reject_pending_load: best-effort health bookkeeping failed "
+                "for saved_pipeline_id=%r (rejection already persisted)",
+                saved_pipeline_id,
+                exc_info=True,
+            )
 
     return result_state

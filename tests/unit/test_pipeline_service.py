@@ -698,6 +698,47 @@ def test_run_science_with_repair_retries_on_failure(monkeypatch) -> None:
     assert result["error"] is None
 
 
+def test_run_science_with_repair_surfaces_original_error_when_both_attempts_fail(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        pipeline_service, "run_science", lambda df, q, *a, **k: _science_result(error=f"erro: {q}")
+    )
+
+    result = pipeline_service.run_science_with_repair(pd.DataFrame({"a": [1]}), "pergunta original")
+
+    assert result["error"] == "erro: pergunta original"
+    assert "repaired" not in result
+
+
+def test_run_gold_and_science_with_repair_both_delegate_to_shared_helper(monkeypatch) -> None:
+    """Wave 5 dedup — `run_gold_with_repair`/`run_science_with_repair` must both be
+    thin wrappers around the shared `_run_with_repair` helper, not independent
+    copies of the retry control flow."""
+    calls: list[tuple[Any, str]] = []
+    original = pipeline_service._run_with_repair
+
+    def spy(run_fn: Any, label: str, *args: Any, **kwargs: Any) -> Any:
+        calls.append((run_fn, label))
+        return original(run_fn, label, *args, **kwargs)
+
+    monkeypatch.setattr(pipeline_service, "_run_with_repair", spy)
+    monkeypatch.setattr(
+        pipeline_service, "run_analyst", lambda df, q, *a, **k: _gold_result(error=None)
+    )
+    monkeypatch.setattr(
+        pipeline_service, "run_science", lambda df, q, *a, **k: _science_result(error=None)
+    )
+
+    pipeline_service.run_gold_with_repair(pd.DataFrame({"a": [1]}), "pergunta")
+    pipeline_service.run_science_with_repair(pd.DataFrame({"a": [1]}), "pergunta")
+
+    assert calls == [
+        (pipeline_service.run_gold_analysis, "Gold"),
+        (pipeline_service.run_science_analysis, "Science"),
+    ]
+
+
 # ---------------------------------------------------------------------------
 # run_analysis_tasks — Planner + per-subtask routing
 # ---------------------------------------------------------------------------
@@ -1232,6 +1273,64 @@ def test_resume_pending_load_wrong_status_raises(monkeypatch) -> None:
     )
     with pytest.raises(ValueError, match="not awaiting approval"):
         pipeline_service.resume_pending_load("run-1", "tenant-a", run_dir="runs")
+
+
+def test_resume_pending_load_logs_warning_when_health_bookkeeping_raises(
+    monkeypatch, caplog
+) -> None:
+    """Finding 2 (Tech Lead 2026-08-24 audit) — the `# nosec B110` best-effort
+    bookkeeping except-block must not fail the run, but it must not be silent
+    either: a `logger.warning` should fire so a failed write is visible."""
+    _patch_reload(monkeypatch)
+    monkeypatch.setattr(
+        pipeline_service,
+        "loader_node",
+        lambda state: {**state, "status": "completed", "load_result": {"rows_loaded": 3}},
+    )
+    monkeypatch.setattr(pipeline_service, "save_run", lambda *a, **k: None)
+
+    def raising_record_pipeline_health(*args: Any, **kwargs: Any) -> None:
+        raise RuntimeError("db unavailable")
+
+    monkeypatch.setattr(pipeline_service, "record_pipeline_health", raising_record_pipeline_health)
+    monkeypatch.setattr(pipeline_service, "mark_pipeline_approved", lambda *a, **k: None)
+
+    with caplog.at_level("WARNING", logger="ai_etl.services.pipeline_service"):
+        result = pipeline_service.resume_pending_load("run-1", "tenant-a", run_dir="runs")
+
+    # the best-effort failure must not surface — the run still completes normally
+    assert result["status"] == "completed"
+    assert any(
+        "resume_pending_load" in record.message and record.exc_info is not None
+        for record in caplog.records
+    )
+
+
+def test_reject_pending_load_logs_warning_when_health_bookkeeping_raises(
+    monkeypatch, caplog
+) -> None:
+    """Finding 2 — same coverage as the resume_pending_load test above, for
+    reject_pending_load's identical best-effort except-block."""
+    _patch_reload(monkeypatch)
+    monkeypatch.setattr(pipeline_service, "save_run", lambda *a, **k: None)
+
+    def raising_record_pipeline_health(*args: Any, **kwargs: Any) -> None:
+        raise RuntimeError("db unavailable")
+
+    monkeypatch.setattr(pipeline_service, "record_pipeline_health", raising_record_pipeline_health)
+
+    with caplog.at_level("WARNING", logger="ai_etl.services.pipeline_service"):
+        result = pipeline_service.reject_pending_load(
+            "run-1", "tenant-a", run_dir="runs", reason="looks wrong"
+        )
+
+    # the best-effort failure must not surface — rejection still completes normally
+    assert result["status"] == "failed"
+    assert "looks wrong" in result["error"]
+    assert any(
+        "reject_pending_load" in record.message and record.exc_info is not None
+        for record in caplog.records
+    )
 
 
 def test_reject_pending_load_never_calls_loader_node(monkeypatch) -> None:
