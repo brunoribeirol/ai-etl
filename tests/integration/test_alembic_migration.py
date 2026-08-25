@@ -46,17 +46,30 @@ def _alembic_config() -> Config:
 
 @pytest.fixture(autouse=True)
 def _clean_slate(monkeypatch: pytest.MonkeyPatch):
+    """Drops the entire `public` schema (not an enumerated table list) before and
+    after every test.
+
+    An enumerated `DROP TABLE IF EXISTS runs/analysis_runs/alembic_version` was the
+    original approach here, but it predates migrations 0003-0020 (users,
+    stage_latencies, saved_pipelines, tenant_secrets, tenant_deletion_log,
+    admin_action_log, retention_cleanup_log) and silently stopped covering the full
+    table set those migrations create. That let one test's `upgrade(head)` leave
+    e.g. `users` behind after its own (incomplete) teardown, so the next test's
+    `upgrade(head)` — starting from a dropped `alembic_version` but a still-present
+    `users` table — failed with `DuplicateTable: relation "users" already exists`.
+    `DROP SCHEMA ... CASCADE` + recreate is the actual fix: it stays correct
+    regardless of which/how many tables a future migration adds, with no list to
+    keep in sync here.
+    """
     monkeypatch.setenv("APP_DATABASE_URL", _TEST_APP_DATABASE_URL)
     engine = sqlalchemy.create_engine(_TEST_APP_DATABASE_URL)
     with engine.begin() as conn:
-        conn.execute(text("DROP TABLE IF EXISTS analysis_runs"))
-        conn.execute(text("DROP TABLE IF EXISTS runs"))
-        conn.execute(text("DROP TABLE IF EXISTS alembic_version"))
+        conn.execute(text("DROP SCHEMA public CASCADE"))
+        conn.execute(text("CREATE SCHEMA public"))
     yield
     with engine.begin() as conn:
-        conn.execute(text("DROP TABLE IF EXISTS analysis_runs"))
-        conn.execute(text("DROP TABLE IF EXISTS runs"))
-        conn.execute(text("DROP TABLE IF EXISTS alembic_version"))
+        conn.execute(text("DROP SCHEMA public CASCADE"))
+        conn.execute(text("CREATE SCHEMA public"))
     engine.dispose()
 
 
@@ -80,7 +93,20 @@ def test_upgrade_head_creates_expected_columns() -> None:
     analysis_columns = {c["name"] for c in inspector.get_columns("analysis_runs")}
     engine.dispose()
 
-    assert run_columns == {"run_id", "spec", "status", "error", "rows_loaded", "timestamp"}
+    # Ground truth as of migration 0020 (introspected against a real Postgres
+    # after running the full chain, not just copied from models.py — see
+    # ai_etl.audit.models.runs/analysis_runs for what added each column):
+    # 0002 tenant_id, 0003 required tenant_id FK, 0007 saved_pipeline_id.
+    assert run_columns == {
+        "run_id",
+        "spec",
+        "status",
+        "error",
+        "rows_loaded",
+        "timestamp",
+        "tenant_id",
+        "saved_pipeline_id",
+    }
     assert analysis_columns == {
         "run_id",
         "gold_subtasks",
@@ -89,6 +115,10 @@ def test_upgrade_head_creates_expected_columns() -> None:
         "output_tokens",
         "total_tokens",
         "timestamp",
+        "tenant_id",
+        "model_name",
+        "cost_usd",
+        "saved_pipeline_id",
     }
 
 
