@@ -208,6 +208,7 @@ def save_analysis(
     tenant_id: str | None = None,
     business_question: str = "",
     saved_pipeline_id: str | None = None,
+    model_name: str | None = None,
 ) -> str:
     """Persist Gold/Science/Advisor sub-task results alongside the Silver run.
 
@@ -234,6 +235,15 @@ def save_analysis(
         saved_pipeline_id: Sprint 17 (ADR-017) — same linkage as `save_run`'s
             argument of the same name; threaded through to `analysis_runs` so a
             scheduled pipeline's Gold/Science KPIs can be charted over time.
+        model_name: ADR-031 gap fix — the actual resolved model name (already
+            known to the caller, which itself called `get_llm(provider=...,
+            model=...)` with any per-pipeline `llm_provider_override`/
+            `llm_model_override`) used for cost tracking below. `None` (the
+            default) preserves the previous behavior for any caller not yet
+            updated to pass this — `_write_analysis_row` then falls back to
+            `get_model_name()`, which only reflects the *global*
+            `AI_ETL_LLM_MODEL` env var and is wrong for a per-pipeline-override
+            run.
     """
     storage = get_storage_backend(log_dir, tenant_id)
 
@@ -270,6 +280,7 @@ def save_analysis(
         total_tokens,
         tenant_id,
         saved_pipeline_id=saved_pipeline_id,
+        model_name=model_name,
     )
 
     return json_key
@@ -352,14 +363,18 @@ def _write_analysis_row(
     tokens: TokenUsage,
     tenant_id: str | None = None,
     saved_pipeline_id: str | None = None,
+    model_name: str | None = None,
 ) -> None:
-    # Sprint 3 (ADR-008): model_name/cost_usd computed here, not threaded
-    # through as a caller-supplied argument — get_model_name() reads the same
-    # AI_ETL_LLM_MODEL env var every agent call in this run already used (see
-    # core/llm.py::get_llm()), so it's the correct model for this row without
-    # widening save_analysis()'s signature for every existing caller.
-    model_name = get_model_name()
-    cost_usd = compute_cost_usd(model_name, tokens)
+    # Sprint 3 (ADR-008) originally computed model_name here unconditionally via
+    # get_model_name(), which only reads the *global* AI_ETL_LLM_MODEL env var —
+    # wrong for a run that used a per-pipeline `llm_model_override` (Sprint 30,
+    # ADR-031). Fixed: `model_name` is now an optional caller-supplied parameter
+    # (the actual resolved model the run's `get_llm(provider=..., model=...)`
+    # calls used); only fall back to the global env var via get_model_name() when
+    # the caller doesn't pass one, for backward compatibility with any call site
+    # not yet updated to resolve/pass it.
+    resolved_model_name = model_name if model_name is not None else get_model_name()
+    cost_usd = compute_cost_usd(resolved_model_name, tokens)
 
     stmt = pg_insert(analysis_runs).values(
         run_id=run_id,
@@ -370,7 +385,7 @@ def _write_analysis_row(
         total_tokens=tokens.get("total_tokens", 0),
         timestamp=datetime.now(tz=timezone.utc),
         tenant_id=tenant_id,
-        model_name=model_name,
+        model_name=resolved_model_name,
         cost_usd=cost_usd,
         saved_pipeline_id=saved_pipeline_id,
     )
@@ -616,8 +631,6 @@ def _load_analysis_tokens(run_id: str) -> TokenUsage:
 
 def _make_serializable(obj: Any) -> Any:
     """Recursively convert non-serializable objects (DataFrames, etc.) to strings."""
-    import pandas as pd
-
     if isinstance(obj, pd.DataFrame):
         return f"<DataFrame shape={obj.shape}>"
     if isinstance(obj, dict):
