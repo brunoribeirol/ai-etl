@@ -478,7 +478,7 @@ def test_run_gold_analysis_appends_llm_review_entry_when_enabled(monkeypatch) ->
     }
     review_tokens = {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}
     monkeypatch.setattr(
-        pipeline_service, "review_gold_result", lambda *a, **k: (review_entry, review_tokens)
+        pipeline_service, "review_gold_result", lambda *a, **k: ([review_entry], review_tokens)
     )
 
     result = pipeline_service.run_gold_analysis(pd.DataFrame({"a": [1]}), "pergunta")
@@ -488,7 +488,7 @@ def test_run_gold_analysis_appends_llm_review_entry_when_enabled(monkeypatch) ->
     assert result["tokens"] == review_tokens  # base was all-zero, so the sum equals review_tokens
 
 
-def test_run_gold_analysis_llm_review_returning_none_still_counts_tokens(monkeypatch) -> None:
+def test_run_gold_analysis_llm_review_returning_empty_still_counts_tokens(monkeypatch) -> None:
     """A review call that fails (see reviewer.py) still folds in its (zero) tokens
     and adds no entry — never crashes the sub-task."""
     monkeypatch.setattr(pipeline_service, "is_llm_review_enabled", lambda: True)
@@ -496,7 +496,7 @@ def test_run_gold_analysis_llm_review_returning_none_still_counts_tokens(monkeyp
         pipeline_service, "run_analyst", lambda df, q, *a, **k: _gold_result(error=None)
     )
     monkeypatch.setattr(
-        pipeline_service, "review_gold_result", lambda *a, **k: (None, dict(_ZERO_TOKENS))
+        pipeline_service, "review_gold_result", lambda *a, **k: ([], dict(_ZERO_TOKENS))
     )
 
     result = pipeline_service.run_gold_analysis(pd.DataFrame({"a": [1]}), "pergunta")
@@ -513,13 +513,49 @@ def test_run_science_analysis_appends_llm_review_entry_when_enabled(monkeypatch)
     review_entry = {"check": "llm_review", "severity": "warning", "detail": "issue"}
     review_tokens = {"input_tokens": 8, "output_tokens": 4, "total_tokens": 12}
     monkeypatch.setattr(
-        pipeline_service, "review_science_result", lambda *a, **k: (review_entry, review_tokens)
+        pipeline_service,
+        "review_science_result",
+        lambda *a, **k: ([review_entry], review_tokens),
     )
 
     result = pipeline_service.run_science_analysis(pd.DataFrame({"a": [1]}), "pergunta")
 
     assert review_entry in result["sanity_check"]["checks"]
     assert result["tokens"] == review_tokens
+
+
+def test_run_gold_analysis_appends_both_llm_review_entries_when_hedging_flagged(
+    monkeypatch,
+) -> None:
+    """ADR-037 follow-up (2026-08-24 audit): a directional-hedge finding is a
+    second, independent entry alongside the factual-consistency check, not a
+    replacement for it."""
+    monkeypatch.setattr(pipeline_service, "is_llm_review_enabled", lambda: True)
+    monkeypatch.setattr(
+        pipeline_service, "run_analyst", lambda df, q, *a, **k: _gold_result(error=None)
+    )
+    consistency_entry = {
+        "check": "llm_review",
+        "severity": "ok",
+        "detail": "consistent with the data",
+    }
+    hedge_entry = {
+        "check": "llm_review_hedge",
+        "severity": "warning",
+        "detail": "narrative never commits to a direction",
+    }
+    review_tokens = {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}
+    monkeypatch.setattr(
+        pipeline_service,
+        "review_gold_result",
+        lambda *a, **k: ([consistency_entry, hedge_entry], review_tokens),
+    )
+
+    result = pipeline_service.run_gold_analysis(pd.DataFrame({"a": [1]}), "pergunta")
+
+    assert consistency_entry in result["sanity_check"]["checks"]
+    assert hedge_entry in result["sanity_check"]["checks"]
+    assert result["sanity_check"]["severity"] == "warning"
 
 
 # ---------------------------------------------------------------------------

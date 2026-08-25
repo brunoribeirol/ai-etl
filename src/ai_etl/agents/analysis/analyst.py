@@ -69,7 +69,13 @@ Write Python code that defines EXACTLY three variables:
    - Use `px` (plotly.express) for simple charts or `go` (plotly.graph_objects) for composites.
    - Choose the most appropriate chart type (bar, line, pie, scatter, etc.).
    - Set a descriptive title using the tenant's language above.
-   - Set axis labels in the tenant's language above, where applicable.
+   - Set axis labels in the tenant's language above, where applicable. Ground each label in
+     the REAL grouping/measure column it represents — never a generic placeholder term. For
+     example, if the chart groups by a column named `product_name` or `product_id` and the
+     exact column names above include no separate category-type column, label that axis with
+     the tenant-language term for "Product" (e.g. "Produto"), NOT "Category"/"Categoria" —
+     only use "Category"/"Categoria" wording when a genuinely coarser category column exists
+     among the exact column names above.
    - Use a clean color scheme (e.g. `color_discrete_sequence=px.colors.qualitative.Set2`).
 
 3. `narrative` — a 2–3 sentence string, in the tenant's language above, explaining the main

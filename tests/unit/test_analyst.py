@@ -303,3 +303,48 @@ def test_run_analyst_unsupported_locale_falls_back_to_default(
 
     sent_prompt = llm.invoke.call_args[0][0]
     assert "Portuguese (Brazil)" in sent_prompt
+
+
+# ---------------------------------------------------------------------------
+# run_analyst — chart axis label grounding (2026-08-24 LLM/Prompt-Engineer audit)
+# ---------------------------------------------------------------------------
+#
+# The Analyst's axis-label bug is a prompt-instruction gap, not deterministic
+# post-processing — the label text itself comes back embedded in `code`
+# (a Plotly call written by the LLM), so there is no separate function to unit
+# test in isolation. What IS testable and under our control: the prompt sent to
+# the LLM must (a) carry the real, exact column names from the schema, and (b)
+# explicitly instruct grounding axis labels in those real columns instead of a
+# generic "category" placeholder. We assert the prompt content, not LLM behavior
+# we cannot deterministically control — same honesty caveat as the Planner fix.
+
+
+def test_run_analyst_prompt_includes_exact_column_names(
+    mock_get_llm, sample_df: pd.DataFrame
+) -> None:
+    """The schema-grounding instruction is only useful if the real column names
+    (here `product`, not a generic "category") actually reach the prompt."""
+    llm = _make_llm_mock([HAPPY_CODE])
+    mock_get_llm.return_value = llm
+    run_analyst(sample_df, "Qual produto gerou mais receita?")
+
+    sent_prompt = llm.invoke.call_args[0][0]
+    assert "product" in sent_prompt
+    assert "region" in sent_prompt
+
+
+def test_run_analyst_prompt_instructs_grounding_axis_labels_in_real_columns(
+    mock_get_llm, sample_df: pd.DataFrame
+) -> None:
+    """Regression test for the mislabeled-axis finding: a product-level chart
+    axis was labeled "Categoria de Produto" (Product Category) when the schema
+    has no category column, only a `product` column. The prompt must instruct
+    the LLM to use the real column's semantic meaning instead of a generic
+    "category" placeholder."""
+    llm = _make_llm_mock([HAPPY_CODE])
+    mock_get_llm.return_value = llm
+    run_analyst(sample_df, "Qual produto gerou mais receita?")
+
+    sent_prompt = llm.invoke.call_args[0][0]
+    assert "category-type column" in sent_prompt
+    assert "generic placeholder term" in sent_prompt

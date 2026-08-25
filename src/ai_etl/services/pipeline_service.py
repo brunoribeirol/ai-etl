@@ -339,7 +339,7 @@ def run_gold_analysis(
     # deterministic checks above — see core.llm.is_llm_review_enabled's docstring
     # for why this is a global env var, not a per-pipeline setting.
     if is_llm_review_enabled():
-        review_entry, review_tokens = review_gold_result(
+        review_entries, review_tokens = review_gold_result(
             task_question,
             result.get("narrative", ""),
             result["gold_df"],
@@ -347,7 +347,7 @@ def run_gold_analysis(
             llm_model_override,
         )
         tokens = sum_token_usage(tokens, review_tokens)
-        if review_entry is not None:
+        for review_entry in review_entries:
             sanity_check = append_check(sanity_check, review_entry)
     if sanity_check["severity"] != "ok":
         progress_callback(stage, f"⚠️ Gold pronto com ressalva de sanity-check ({elapsed_display}s)")
@@ -413,7 +413,7 @@ def run_science_analysis(
     tokens = result["tokens"]
     # ADR-037 (Sprint 21 follow-up): see run_gold_analysis's identical block above.
     if is_llm_review_enabled():
-        review_entry, review_tokens = review_science_result(
+        review_entries, review_tokens = review_science_result(
             task_question,
             result.get("narrative", ""),
             result["predictions_df"],
@@ -422,7 +422,7 @@ def run_science_analysis(
             llm_model_override,
         )
         tokens = sum_token_usage(tokens, review_tokens)
-        if review_entry is not None:
+        for review_entry in review_entries:
             sanity_check = append_check(sanity_check, review_entry)
     model_type = model_info_dict.get("model_type", "Modelo")
     if sanity_check["severity"] != "ok":
