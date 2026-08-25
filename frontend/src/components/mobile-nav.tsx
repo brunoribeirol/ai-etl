@@ -20,6 +20,7 @@ const NAV_LINKS = [
   { href: "/app", key: "executar" },
   { href: "/historico", key: "historico" },
   { href: "/pipelines", key: "pipelines" },
+  { href: "/aprovacoes", key: "aprovacoes" },
   { href: "/resumo", key: "resumo" },
 ] as const;
 

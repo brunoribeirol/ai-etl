@@ -13,7 +13,8 @@
     "historico": "Histórico",
     "pipelines": "Pipelines",
     "resumo": "Resumo",
-    "admin": "Admin"
+    "admin": "Admin",
+    "aprovacoes": "Aprovações"
   },
   "marketingLayout": {
     "footer": "AI-ETL — framework multiagente de ETL, código auditável."
@@ -359,5 +360,33 @@
     "columnStatus": "Status",
     "columnModel": "Modelo",
     "columnCost": "Custo"
+  },
+  "aprovacoesPage": {
+    "title": "Aprovações pendentes",
+    "subtitle": "Execuções agendadas com escrita bloqueada até você revisar e aprovar."
+  },
+  "approvalQueue": {
+    "emptyState": "Nenhuma execução esperando aprovação no momento.",
+    "columnPipeline": "Pipeline",
+    "columnSpec": "Especificação",
+    "columnWhen": "Quando",
+    "columnActions": "Ações",
+    "unnamedPipeline": "—",
+    "toggleDetail": "Ver detalhes",
+    "approve": "Aprovar",
+    "confirmApprove": "Confirmar aprovação?",
+    "reject": "Rejeitar",
+    "confirmReject": "Confirmar rejeição?",
+    "cancel": "Cancelar",
+    "reasonPlaceholder": "Motivo da rejeição (opcional)",
+    "toastApproved": "Execução aprovada — escrita realizada.",
+    "toastRejected": "Execução rejeitada — nada foi escrito.",
+    "loadingDetail": "Carregando detalhes...",
+    "previewHeading": "O que seria escrito",
+    "previewDestination": "Destino",
+    "previewRows": "Linhas",
+    "previewExisting": "Estado atual no destino",
+    "qualitySummary": "Qualidade dos dados",
+    "warningsHeading": "Avisos de consistência já detectados"
   }
 }

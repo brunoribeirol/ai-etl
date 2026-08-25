@@ -74,6 +74,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <Link href="/pipelines" className="hover:text-foreground transition-colors">
               {t("pipelines")}
             </Link>
+            <Link href="/aprovacoes" className="hover:text-foreground transition-colors">
+              {t("aprovacoes")}
+            </Link>
             <Link href="/resumo" className="hover:text-foreground transition-colors">
               {t("resumo")}
             </Link>
