@@ -287,3 +287,162 @@ def test_run_advisor_forwards_llm_override(
     )
 
     mock_get_llm.assert_called_once_with(provider="anthropic", model="claude-sonnet-5")
+
+
+# ---------------------------------------------------------------------------
+# run_advisor — fence-stripping via the shared helper (Sprint 33, dedupe)
+# ---------------------------------------------------------------------------
+
+
+def test_run_advisor_strips_markdown_fences_via_shared_helper(
+    mock_get_llm, sample_df, gold_result, science_result
+) -> None:
+    fenced_response = f"```json\n{VALID_RESPONSE}\n```"
+    mock_get_llm.return_value = _mock_llm([fenced_response])
+    result = run_advisor(sample_df, "Como crescer?", gold_result, science_result)
+
+    assert result["error"] is None
+    assert len(result["recommendations"]) == 2
+
+
+def test_run_advisor_strips_markdown_fences_without_closing_fence(
+    mock_get_llm, sample_df, gold_result, science_result
+) -> None:
+    """Matches `strip_code_fences`'s tolerance for a missing closing fence."""
+    fenced_response = f"```json\n{VALID_RESPONSE}"
+    mock_get_llm.return_value = _mock_llm([fenced_response])
+    result = run_advisor(sample_df, "Como crescer?", gold_result, science_result)
+
+    assert result["error"] is None
+    assert len(result["recommendations"]) == 2
+
+
+# ---------------------------------------------------------------------------
+# run_advisor — ADR-037 sanity-check awareness (Wave 3)
+# ---------------------------------------------------------------------------
+
+
+def test_run_advisor_includes_gold_sanity_check_warning_in_prompt(
+    mock_get_llm, sample_df, science_result
+) -> None:
+    gold_with_warning = [
+        {
+            "task_question": "Qual região gerou mais receita?",
+            "narrative": "A região Sul gerou a maior receita.",
+            "gold_df": pd.DataFrame({"region": ["Sul", "Norte"], "total_revenue": [100, 300]}),
+            "error": None,
+            "sanity_check": {
+                "checks": [
+                    {
+                        "check": "llm_review",
+                        "severity": "warning",
+                        "detail": "Narrative says Sul had the highest revenue, but the data "
+                        "shows Norte with a higher total.",
+                    }
+                ],
+                "severity": "warning",
+                "summary": "1 sanity check(s): 1 warning(s)",
+            },
+        }
+    ]
+    mock_llm = _mock_llm([VALID_RESPONSE])
+    mock_get_llm.return_value = mock_llm
+    run_advisor(sample_df, "Qual região gerou mais receita?", gold_with_warning, science_result)
+
+    sent_prompt = mock_llm.invoke.call_args[0][0]
+    assert "⚠️ Known data-consistency warning" in sent_prompt
+    assert "Norte with a higher total" in sent_prompt
+
+
+def test_run_advisor_includes_science_sanity_check_warning_in_prompt(
+    mock_get_llm, sample_df, gold_result
+) -> None:
+    science_with_warning = [
+        {
+            "task_question": "Qual a previsão de receita?",
+            "narrative": "O modelo prevê crescimento de 15%.",
+            "model_info": {
+                "model_type": "LinearRegression",
+                "task": "regression",
+                "metrics": {"r2": 0.91},
+                "features": ["units"],
+                "target": "revenue",
+            },
+            "predictions_df": pd.DataFrame({"month": ["Jan"], "predicted": [320.0]}),
+            "error": None,
+            "sanity_check": {
+                "checks": [
+                    {
+                        "check": "prediction_range",
+                        "severity": "warning",
+                        "detail": "Column 'predicted': 1 value(s) fall far outside the "
+                        "historical 'revenue' range.",
+                    }
+                ],
+                "severity": "warning",
+                "summary": "1 sanity check(s): 1 warning(s)",
+            },
+        }
+    ]
+    mock_llm = _mock_llm([VALID_RESPONSE])
+    mock_get_llm.return_value = mock_llm
+    run_advisor(sample_df, "Qual a previsão de receita?", gold_result, science_with_warning)
+
+    sent_prompt = mock_llm.invoke.call_args[0][0]
+    assert "⚠️ Known data-consistency warning" in sent_prompt
+    assert "fall far outside the historical" in sent_prompt
+
+
+def test_run_advisor_prompt_instructs_to_account_for_sanity_check_warnings(
+    mock_get_llm, sample_df, gold_result, science_result
+) -> None:
+    mock_get_llm.return_value = _mock_llm([VALID_RESPONSE])
+    run_advisor(sample_df, "Como crescer?", gold_result, science_result)
+
+    sent_prompt = mock_get_llm.return_value.invoke.call_args[0][0]
+    assert "Known data-consistency warning" in sent_prompt
+    assert "do NOT present" in sent_prompt
+
+
+def test_run_advisor_ok_sanity_check_injects_no_warning(
+    mock_get_llm, sample_df, science_result
+) -> None:
+    gold_ok = [
+        {
+            "task_question": "Qual produto gerou mais receita?",
+            "narrative": "O produto C gerou 43% da receita total.",
+            "gold_df": pd.DataFrame({"product": ["C", "B", "A"], "total_revenue": [300, 200, 250]}),
+            "error": None,
+            "sanity_check": {
+                "checks": [
+                    {
+                        "check": "sum_conservation",
+                        "severity": "ok",
+                        "detail": "Column 'total_revenue': gold_df sum is within the Silver total.",
+                    }
+                ],
+                "severity": "ok",
+                "summary": "1 sanity check(s): 0 warning(s)",
+            },
+        }
+    ]
+    mock_llm = _mock_llm([VALID_RESPONSE])
+    mock_get_llm.return_value = mock_llm
+    run_advisor(sample_df, "Qual produto gerou mais receita?", gold_ok, science_result)
+
+    sent_prompt = mock_llm.invoke.call_args[0][0]
+    assert "Known data-consistency warning for this sub-task" not in sent_prompt
+
+
+def test_run_advisor_missing_sanity_check_injects_no_warning(
+    mock_get_llm, sample_df, gold_result, science_result
+) -> None:
+    """`gold_result`/`science_result` fixtures have no `sanity_check` key at all —
+    the common case for a sub-task whose deterministic checks all passed with no
+    entries appended (or ADR-037 LLM review disabled)."""
+    mock_llm = _mock_llm([VALID_RESPONSE])
+    mock_get_llm.return_value = mock_llm
+    run_advisor(sample_df, "Como crescer?", gold_result, science_result)
+
+    sent_prompt = mock_llm.invoke.call_args[0][0]
+    assert "Known data-consistency warning for this sub-task" not in sent_prompt
