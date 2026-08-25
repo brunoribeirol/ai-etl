@@ -3,9 +3,12 @@
 import json
 import uuid
 
+from pydantic import ValidationError
+
 from ai_etl.agents._llm_codegen import strip_code_fences
 from ai_etl.audit.logger import log_action
 from ai_etl.core.llm import get_llm
+from ai_etl.core.pipeline_plan_schema import PipelinePlan
 from ai_etl.core.state import PipelineState
 
 ORCHESTRATOR_PROMPT = """You are a data pipeline planner.
@@ -91,6 +94,15 @@ def orchestrator_node(state: PipelineState) -> PipelineState:
 
         try:
             pipeline_plan = json.loads(content)
+            # Wave 0 (2026-08-24 audit, Red Team CRITICAL finding) — structural gate
+            # before any downstream node reads pipeline_plan. An unexpected `type`
+            # value or a missing `name`/`type` fails here and retries with feedback,
+            # same as malformed JSON. Doesn't validate `query` content — that defense
+            # lives at the connector level (sources/sqlite_source.py,
+            # sources/mysql_source.py), so it runs regardless of caller. Validated
+            # against `PipelinePlan`, not stored — extractor_node keeps reading the
+            # original dict, plan shape downstream is unchanged.
+            PipelinePlan.model_validate(pipeline_plan)
             new_log = log_action(
                 state,
                 "orchestrator",
@@ -98,7 +110,7 @@ def orchestrator_node(state: PipelineState) -> PipelineState:
                 {"attempt": attempt, "sources": len(pipeline_plan.get("sources", []))},
             )
             return {**state, "run_id": run_id, "pipeline_plan": pipeline_plan, "audit_log": new_log}
-        except json.JSONDecodeError as e:
+        except (json.JSONDecodeError, ValidationError) as e:
             last_error = str(e)
             prompt += f"\n\nPrevious response was not valid JSON: {e}\nResponse was:\n{content}\n\nReturn ONLY valid JSON."
 

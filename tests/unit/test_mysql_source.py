@@ -54,3 +54,10 @@ def test_load_mysql_rejects_invalid_table_before_reading_env(
     monkeypatch.setenv("MYSQL_URL", "mysql+pymysql://user:pass@localhost/db")
     with pytest.raises(ValueError, match="Invalid table name"):
         load_mysql("orders; DROP TABLE orders; --")
+
+
+def test_load_mysql_rejects_destructive_query(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Red Team, 2026-08-24 audit: same unvalidated-`query` gap as sqlite_source.py.
+    monkeypatch.setenv("MYSQL_URL", "mysql+pymysql://user:pass@localhost/db")
+    with pytest.raises(ValueError):
+        load_mysql("orders", query="DROP TABLE orders; --")

@@ -88,3 +88,18 @@ def test_load_sqlite_rejects_invalid_table_before_touching_db(tmp_path: Path) ->
 
     with pytest.raises(ValueError, match="Invalid table name"):
         load_sqlite(str(db_path), "orders; DROP TABLE orders; --")
+
+
+def test_load_sqlite_rejects_destructive_query(tmp_path: Path) -> None:
+    # Red Team, 2026-08-24 audit: this exact payload was passed straight to
+    # pd.read_sql with zero validation and actually dropped the table.
+    db_path = tmp_path / "shop.db"
+    _seed_db(db_path)
+
+    with pytest.raises(ValueError):
+        load_sqlite(str(db_path), "orders", query="DROP TABLE orders; --")
+
+    with sqlite3.connect(db_path) as conn:
+        # the table must still exist — the drop must never have reached the DB
+        cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='orders'")
+        assert cursor.fetchone() is not None
