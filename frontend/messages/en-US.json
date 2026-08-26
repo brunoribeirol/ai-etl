@@ -15,7 +15,8 @@
     "resumo": "Summary",
     "admin": "Admin",
     "aprovacoes": "Approvals",
-    "orcamento": "Budget"
+    "orcamento": "Budget",
+    "segredos": "Secrets"
   },
   "marketingLayout": {
     "footer": "AI-ETL — multi-agent ETL framework, auditable code."
@@ -389,6 +390,28 @@
     "previewExisting": "Current state at the destination",
     "qualitySummary": "Data quality",
     "warningsHeading": "Consistency warnings already detected"
+  },
+  "segredosPage": {
+    "title": "Secrets",
+    "subtitle": "Your tenant's external-source credentials — the value is never shown again once saved.",
+    "noPermission": "You don't have permission to access this page."
+  },
+  "secretsManager": {
+    "formHeading": "Save or rotate a secret",
+    "nameLabel": "Name",
+    "namePlaceholder": "e.g. postgres_prod_password",
+    "valueLabel": "Value",
+    "valuePlaceholder": "Type the secret's value",
+    "valueHint": "Only shown while you type it — once saved, it never appears here again.",
+    "submitButton": "Save secret",
+    "toastStored": "Secret stored.",
+    "toastRotated": "Secret rotated.",
+    "toastDeleted": "Secret deleted.",
+    "listHeading": "Stored secrets",
+    "emptyState": "No secrets stored yet.",
+    "delete": "Delete",
+    "confirmDelete": "Confirm delete?",
+    "cancel": "Cancel"
   },
   "orcamentoPage": {
     "title": "Budget",

@@ -45,10 +45,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // server-side, and every admin API route enforces `require_admin` on its
   // own regardless of what the nav shows.
   let isAdmin = false;
+  // Secrets UI (first consumer of api/routers/secrets.py) — same cosmetic
+  // gate, but at "editor" rank (`require_role("editor")` accepts editor or
+  // admin, see `api/deps.py::_ROLE_RANK`), so a plain "viewer" never sees
+  // this link even though it independently re-checks server-side too.
+  let isEditor = false;
   try {
     const config = await apiFetch<ApiConfig>("/config");
     modelName = config.model_name;
     isAdmin = config.role === "admin";
+    isEditor = config.role === "editor" || config.role === "admin";
   } catch {
     modelName = null;
   }
@@ -57,7 +63,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <>
       <header className="sticky top-0 z-10 flex justify-between items-center px-4 sm:px-6 h-16 border-b border-border/60 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="flex items-center gap-2 sm:gap-8 min-w-0">
-          <MobileNav isAdmin={isAdmin} />
+          <MobileNav isAdmin={isAdmin} isEditor={isEditor} />
           <Link href="/app" className="font-semibold tracking-tight text-sm shrink-0">
             {tCommon("brand")}
           </Link>
@@ -83,6 +89,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <Link href="/orcamento" className="hover:text-foreground transition-colors">
               {t("orcamento")}
             </Link>
+            {isEditor && (
+              <Link href="/segredos" className="hover:text-foreground transition-colors">
+                {t("segredos")}
+              </Link>
+            )}
             {isAdmin && (
               <Link href="/admin" className="hover:text-foreground transition-colors">
                 {t("admin")}

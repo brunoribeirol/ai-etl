@@ -39,13 +39,23 @@ const NAV_LINKS = [
  * dependency. `(app)/layout.tsx` now shows the horizontal `<nav>` only at
  * `sm:` and up and swaps in this hamburger trigger below it.
  */
-export function MobileNav({ isAdmin = false }: { isAdmin?: boolean }) {
+export function MobileNav({
+  isAdmin = false,
+  isEditor = false,
+}: {
+  isAdmin?: boolean;
+  isEditor?: boolean;
+}) {
   const t = useTranslations("appNav");
   const tCommon = useTranslations("common");
 
   // Wave 6 (2026-08-25 admin panel/approval-gate UI plan) — same cosmetic-
-  // only role gate as the desktop `<nav>` in `(app)/layout.tsx`.
-  const links = isAdmin ? [...NAV_LINKS, { href: "/admin", key: "admin" } as const] : NAV_LINKS;
+  // only role gate as the desktop `<nav>` in `(app)/layout.tsx`. Secrets UI
+  // link is "editor" rank (accepts editor or admin), added before "Admin" so
+  // both extra links land in the same relative order as the desktop nav.
+  let links: readonly { href: string; key: string }[] = NAV_LINKS;
+  if (isEditor) links = [...links, { href: "/segredos", key: "segredos" }];
+  if (isAdmin) links = [...links, { href: "/admin", key: "admin" }];
 
   return (
     <Sheet>

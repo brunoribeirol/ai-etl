@@ -206,6 +206,16 @@ export type BudgetStatus = {
   exceeded: boolean;
 };
 
+/** `POST /secrets`, `DELETE /secrets/{name}` (Sprint 19, ADR-022) — mirrors
+ * `api/routers/secrets.py`'s `{"name": ..., "status": "stored" | "deleted"}`.
+ * `GET /secrets` returns `string[]` (names only) directly, no wrapper type
+ * needed. Never carries a secret's decrypted value — the router itself never
+ * returns one. */
+export type SecretMutationResult = {
+  name: string;
+  status: "stored" | "deleted";
+};
+
 /**
  * Sprint 13 (ADR-016) — `/pipelines` CRUD. Mirrors
  * `audit/db.py::_saved_pipeline_row_to_dict`. `source_type` is restricted to
