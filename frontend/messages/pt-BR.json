@@ -14,7 +14,8 @@
     "pipelines": "Pipelines",
     "resumo": "Resumo",
     "admin": "Admin",
-    "aprovacoes": "Aprovações"
+    "aprovacoes": "Aprovações",
+    "segredos": "Segredos"
   },
   "marketingLayout": {
     "footer": "AI-ETL — framework multiagente de ETL, código auditável."
@@ -388,5 +389,27 @@
     "previewExisting": "Estado atual no destino",
     "qualitySummary": "Qualidade dos dados",
     "warningsHeading": "Avisos de consistência já detectados"
+  },
+  "segredosPage": {
+    "title": "Segredos",
+    "subtitle": "Credenciais de fontes externas do seu tenant — o valor nunca é exibido depois de salvo.",
+    "noPermission": "Você não tem permissão para acessar esta página."
+  },
+  "secretsManager": {
+    "formHeading": "Salvar ou rotacionar segredo",
+    "nameLabel": "Nome",
+    "namePlaceholder": "ex: postgres_prod_password",
+    "valueLabel": "Valor",
+    "valuePlaceholder": "Digite o valor do segredo",
+    "valueHint": "Só é exibido enquanto você digita — depois de salvo, nunca mais aparece aqui.",
+    "submitButton": "Salvar segredo",
+    "toastStored": "Segredo salvo.",
+    "toastRotated": "Segredo rotacionado.",
+    "toastDeleted": "Segredo excluído.",
+    "listHeading": "Segredos salvos",
+    "emptyState": "Nenhum segredo salvo ainda.",
+    "delete": "Excluir",
+    "confirmDelete": "Confirmar exclusão?",
+    "cancel": "Cancelar"
   }
 }
