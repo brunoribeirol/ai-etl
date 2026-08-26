@@ -1,8 +1,10 @@
 # ADR-032: RLS Posture, Platform-Admin RBAC Role, Semgrep SAST, and Sandbox Bypass Risk Acceptance
 
-**Status:** Accepted (code complete for Decision 2 and 3; Decisions 1 and 4
-are conscious risk-acceptance decisions with no production code change this
-sprint — see each Decision for what "accepted" means concretely)
+**Status:** Accepted (code complete for Decision 2 and 3; Decision 1 is a
+conscious risk-acceptance decision with no production code change this
+sprint; **Decision 4 superseded 2026-08-26 by
+[ADR-038](ADR-038-docker-sandbox-migration.md)** — see each Decision for
+what "accepted"/"superseded" means concretely)
 **Date:** 2026-08-22
 **Sprint:** 31 (Phase 2 roadmap, "Segurança avançada e acesso administrativo
 auditável")
@@ -243,6 +245,23 @@ requested. Every other rule stays enabled and blocking.
 ---
 
 ## Decision 4 — Sandbox introspection bypass: accept the risk, defer real isolation
+
+> **Superseded 2026-08-26 by [ADR-038](ADR-038-docker-sandbox-migration.md).**
+> The project owner decided to migrate to a real Docker-isolated sandbox
+> ahead of this Decision's own stated trigger ("self-serve, unvetted
+> external signups"). `core/sandbox.py` now has an opt-in `"docker"` backend
+> (`core/sandbox_docker.py`) that contains the introspection bypass
+> documented below inside a network-disabled, read-only, resource-capped
+> container — demonstrated, not just asserted, by
+> `tests/integration/test_sandbox_docker.py`. The risk acceptance below is
+> kept as-written for history; it no longer reflects this project's current
+> posture. **Important caveat ADR-038 documents in full:** the `"docker"`
+> backend is dev/local-verified only — this project's Railway deployment
+> cannot run Docker-in-Docker (non-privileged containers), so the
+> `"process"` backend described below remains the actual default in every
+> deployed environment until a separate execution service ships as
+> follow-up work. The risk below is mitigated in local development and
+> designed, not yet mitigated in production.
 
 **Decision: accept the risk for the current scope, do not implement Docker/
 gVisor isolation this sprint.** `core/sandbox.py`'s documented limitation —
