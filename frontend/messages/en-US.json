@@ -14,7 +14,8 @@
     "pipelines": "Pipelines",
     "resumo": "Summary",
     "admin": "Admin",
-    "aprovacoes": "Approvals"
+    "aprovacoes": "Approvals",
+    "orcamento": "Budget"
   },
   "marketingLayout": {
     "footer": "AI-ETL — multi-agent ETL framework, auditable code."
@@ -388,5 +389,28 @@
     "previewExisting": "Current state at the destination",
     "qualitySummary": "Data quality",
     "warningsHeading": "Consistency warnings already detected"
+  },
+  "orcamentoPage": {
+    "title": "Budget",
+    "subtitle": "Monthly spend cap and consumption so far — enforced on every new run."
+  },
+  "budgetManager": {
+    "budgetCap": "Monthly cap",
+    "budgetSpent": "Spent this month",
+    "budgetStatus": "Status",
+    "budgetExceeded": "Over cap",
+    "budgetNearLimit": "Near cap",
+    "budgetOk": "Within cap",
+    "noCap": "No cap set",
+    "formHeading": "Set monthly cap",
+    "capInputLabel": "Monthly cap (USD)",
+    "capInputPlaceholder": "e.g. 50.00",
+    "invalidCap": "Enter a numeric value greater than or equal to zero.",
+    "save": "Save",
+    "clear": "Clear cap",
+    "confirmClear": "Confirm clear?",
+    "cancel": "Cancel",
+    "toastSaved": "Budget cap updated.",
+    "toastCleared": "Cap cleared — budget is now unlimited."
   }
 }

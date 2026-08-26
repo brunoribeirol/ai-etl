@@ -22,6 +22,7 @@ const NAV_LINKS = [
   { href: "/pipelines", key: "pipelines" },
   { href: "/aprovacoes", key: "aprovacoes" },
   { href: "/resumo", key: "resumo" },
+  { href: "/orcamento", key: "orcamento" },
 ] as const;
 
 /**
