@@ -127,6 +127,15 @@ Checklist específico deste projeto:
 - `.claude/skills/add-agent.md` — checklist completo para adicionar um novo agente LangGraph
 - `.claude/skills/run-pipeline.md` — como rodar e verificar um cenário do case study
 - `.claude/skills/sr-quality-check.md` — auditoria SR Big Tech antes de qualquer entrega
+- `.claude/skills/persona-audit.md` — auditoria multi-persona formalizada (origem: audit de 2026-08-24)
+- `.claude/skills/frontend-design-review.md` — convenções de frontend do projeto, incluindo a regra
+  não-negociável de nomenclatura 100% em inglês (rotas/componentes/arquivos) — PT-BR só como conteúdo
+
+## Agentes especializados disponíveis
+
+- `.claude/agents/architecture-reviewer.md` — revisor read-only do contrato LangGraph/`PipelineState`,
+  aderência a ADRs, e às regras não-negociáveis acima
+- `.claude/agents/metrics-analyst.md` — análise de resultados do case study e comparações de modelo LLM
 
 ---
 
