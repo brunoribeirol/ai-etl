@@ -31,8 +31,8 @@ import type { AdminActionRecord, AdminTenantSummary, BudgetStatus, RunSummary } 
  * stale/cached role check here is never the only thing standing between a
  * non-admin and this data.
  *
- * Two tabs: "Log de auditoria" (default — `GET /admin/audit-log`, the DoD's
- * "consultável" requirement made concrete) and "Consultar tenant" (`GET
+ * Two tabs: "Audit log" (default — `GET /admin/audit-log`, the DoD's
+ * "queryable" requirement made concrete) and "Query tenant" (`GET
  * /admin/tenants` for the picker, ADR-032's other 2 read-only routes for the
  * selected tenant's runs/budget). Clicking a `target_tenant_id` in the audit
  * log pivots into the tenant tab with that id pre-selected — the audit log

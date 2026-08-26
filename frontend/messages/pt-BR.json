@@ -8,15 +8,15 @@
     "menu": "Menu"
   },
   "appNav": {
-    "comecar": "Começar",
-    "executar": "Executar",
-    "historico": "Histórico",
+    "getStarted": "Começar",
+    "run": "Executar",
+    "history": "Histórico",
     "pipelines": "Pipelines",
-    "resumo": "Resumo",
+    "summary": "Resumo",
     "admin": "Admin",
-    "aprovacoes": "Aprovações",
-    "orcamento": "Orçamento",
-    "segredos": "Segredos"
+    "approvals": "Aprovações",
+    "budget": "Orçamento",
+    "secrets": "Segredos"
   },
   "marketingLayout": {
     "footer": "AI-ETL — framework multiagente de ETL, código auditável."
@@ -129,15 +129,15 @@
     "pyramidHeading": "Pirâmide analítica",
     "rosterHeading": "Agentes"
   },
-  "executarPage": {
+  "runPage": {
     "title": "Executar análise",
     "subtitle": "Suba um arquivo ou escreva um spec manual, opcionalmente com uma pergunta de negócio. O pipeline agente cuida do resto."
   },
-  "comecarPage": {
+  "getStartedPage": {
     "title": "Comece em poucos minutos",
     "subtitle": "Conecte uma fonte, descreva o que você quer e veja o resultado — sem precisar de instrução prévia."
   },
-  "historicoPage": {
+  "historyPage": {
     "title": "Histórico",
     "subtitle": "Runs anteriores desta conta.",
     "columnRun": "Run",
@@ -161,13 +161,13 @@
     "notFound": "Pipeline não encontrado.",
     "backLink": "← Pipelines agendados"
   },
-  "resumoIndexPage": {
+  "summaryIndexPage": {
     "title": "Resumo executivo",
     "subtitle": "O resultado dos seus pipelines, em linguagem simples — sem código, sem termos técnicos.",
     "emptyState": "Nenhum pipeline agendado ainda. Crie um em “Pipelines” para ver o resumo aqui depois da primeira execução.",
     "needsAttention": "Precisa de atenção"
   },
-  "resumoPage": {
+  "summaryPage": {
     "notFound": "Não encontramos esse pipeline. Ele pode ter sido removido.",
     "backLink": "← Resumo executivo"
   },
@@ -190,7 +190,7 @@
   "dataTable": {
     "showing": "Mostrando 20 de {count} linhas."
   },
-  "executarForm": {
+  "runForm": {
     "fileLabel": "Arquivo (CSV, Excel, JSON, PDF, DOCX)",
     "fileCta": "Clique para selecionar um arquivo",
     "specLabel": "Ou: spec manual",
@@ -307,8 +307,8 @@
     "lastRun": "Última: {when}",
     "consecutiveFailureOne": "falha seguida",
     "consecutiveFailureOther": "falhas seguidas",
-    "resumo": "Resumo",
-    "historico": "Histórico",
+    "summary": "Resumo",
+    "history": "Histórico",
     "edit": "Editar",
     "pause": "Pausar",
     "resume": "Retomar",
@@ -363,7 +363,7 @@
     "columnModel": "Modelo",
     "columnCost": "Custo"
   },
-  "aprovacoesPage": {
+  "approvalsPage": {
     "title": "Aprovações pendentes",
     "subtitle": "Execuções agendadas com escrita bloqueada até você revisar e aprovar."
   },
@@ -391,7 +391,7 @@
     "qualitySummary": "Qualidade dos dados",
     "warningsHeading": "Avisos de consistência já detectados"
   },
-  "segredosPage": {
+  "secretsPage": {
     "title": "Segredos",
     "subtitle": "Credenciais de fontes externas do seu tenant — o valor nunca é exibido depois de salvo.",
     "noPermission": "Você não tem permissão para acessar esta página."
@@ -413,7 +413,7 @@
     "confirmDelete": "Confirmar exclusão?",
     "cancel": "Cancelar"
   },
-  "orcamentoPage": {
+  "budgetPage": {
     "title": "Orçamento",
     "subtitle": "Teto de gasto mensal e consumo até agora — aplicado a cada nova execução."
   },

@@ -6,17 +6,17 @@ import { friendlyExecutiveError } from "@/lib/friendly-error";
 import type { SavedPipeline } from "@/lib/types";
 
 /**
- * Sprint 18 (ADR-024) — "Resumo" is the executive entry point, separate
- * from "/pipelines" (technical CRUD) and "/historico" (technical run list,
+ * Sprint 18 (ADR-024) — "Summary" is the executive entry point, separate
+ * from "/pipelines" (technical CRUD) and "/history" (technical run list,
  * keyed by `run_id`). Navigation here is by business question, not by
  * pipeline internals — each card leads with `business_question`, not
  * `source_type`/`cron_schedule`/`spec` the way `pipelines-manager.tsx` does.
  *
- * Scoped to saved (recurring) pipelines only — see ADR-024 for why an
- * avulso run has no business-question-first identity to navigate by.
+ * Scoped to saved (recurring) pipelines only — see ADR-024 for why a
+ * one-off run has no business-question-first identity to navigate by.
  */
-export default async function ResumoIndexPage() {
-  const t = await getTranslations("resumoIndexPage");
+export default async function SummaryIndexPage() {
+  const t = await getTranslations("summaryIndexPage");
   let pipelines: SavedPipeline[] = [];
   let error: string | null = null;
   try {
@@ -45,7 +45,7 @@ export default async function ResumoIndexPage() {
 
       <div className="flex flex-col gap-3">
         {pipelines.map((pipeline) => (
-          <Link key={pipeline.id} href={`/resumo/${pipeline.id}`}>
+          <Link key={pipeline.id} href={`/summary/${pipeline.id}`}>
             <Card className="hover:border-foreground/30 transition-colors">
               <CardContent className="flex flex-col gap-1">
                 <span className="font-medium">

@@ -17,6 +17,12 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+// NOTE (2026-08-26 English-only audit): this static `Metadata` (SEO
+// title/description) is hardcoded Portuguese and bypasses next-intl
+// entirely — a pre-existing gap outside this task's declared file list
+// (renames/route/i18n-key scope only). Making it locale-aware needs its own
+// follow-up (a `generateMetadata` per locale instead of a static export), so
+// left untouched here and flagged for the repo owner to confirm/prioritize.
 export const metadata: Metadata = {
   title: "AI-ETL — Pipelines de dados que se explicam",
   description:
@@ -26,7 +32,7 @@ export const metadata: Metadata = {
 /**
  * Root layout, deliberately thin (landing-page addition, no sprint number —
  * see docs/CURRENT_STATE.md). Previously this file *was* the whole app shell
- * (header, nav, the authenticated "Como funciona" panel) — that only makes
+ * (header, nav, the authenticated "How it works" panel) — that only makes
  * sense once a visitor is inside the product. Now `/` is a public marketing
  * page with its own layout (`(marketing)/layout.tsx`) and everything
  * previously at `/` lives at `/app` under `(app)/layout.tsx`, which owns the

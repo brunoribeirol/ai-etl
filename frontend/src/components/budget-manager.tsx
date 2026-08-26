@@ -12,7 +12,7 @@ import { useAuthedFetch } from "@/lib/authed-fetch";
 import type { BudgetStatus } from "@/lib/types";
 
 /**
- * "Orçamento" page's data + interaction layer — first frontend consumer of
+ * "Budget" page's data + interaction layer — first frontend consumer of
  * `api/routers/budget.py` (Sprint 29, ADR-019) as a *self-service* surface:
  * `admin-manager.tsx` already renders a read-only `BudgetStatus` for the
  * admin-viewing-another-tenant case (`GET /admin/tenants/{id}/budget`); this

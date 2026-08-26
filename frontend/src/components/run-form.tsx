@@ -32,12 +32,12 @@ import type { TaskStatus } from "@/lib/types";
 
 const POLL_INTERVAL_MS = 2000;
 
-type ExecutarFormProps = {
+type RunFormProps = {
   /**
-   * Sprint 26 (ADR-027) — the `/comecar` guided onboarding flow reuses this
+   * Sprint 26 (ADR-027) — the `/get-started` guided onboarding flow reuses this
    * form instead of reimplementing upload/poll/result logic. Both props are
    * optional and default to the original empty state, so `/` (`page.tsx`)
-   * renders `<ExecutarForm />` unchanged. Only meant to be set once, at
+   * renders `<RunForm />` unchanged. Only meant to be set once, at
    * mount — the onboarding page only renders this component after its
    * example file (if any) has finished loading.
    */
@@ -45,11 +45,11 @@ type ExecutarFormProps = {
   initialBusinessQuestion?: string;
 };
 
-export function ExecutarForm({
+export function RunForm({
   initialFile = null,
   initialBusinessQuestion = "",
-}: ExecutarFormProps = {}) {
-  const t = useTranslations("executarForm");
+}: RunFormProps = {}) {
+  const t = useTranslations("runForm");
   const { getToken } = useAuth();
   const apiUrl = process.env.NEXT_PUBLIC_API_URL;
 
@@ -271,7 +271,7 @@ export function ExecutarForm({
                 {status?.ready && status.result?.status === "completed" && (
                   <p className="text-emerald-400">
                     ✅ {t("completedPrefix")}{" "}
-                    <Link href={`/historico/${status.result.run_id}`} className="underline">
+                    <Link href={`/history/${status.result.run_id}`} className="underline">
                       {t("viewRun", { runId: status.result.run_id ?? "" })}
                     </Link>
                   </p>

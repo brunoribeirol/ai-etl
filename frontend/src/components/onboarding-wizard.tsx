@@ -4,7 +4,7 @@ import { FileSpreadsheet, Loader2, UploadCloud } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
-import { ExecutarForm } from "@/components/executar-form";
+import { RunForm } from "@/components/run-form";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -12,9 +12,9 @@ const EXAMPLE_CSV_URL = "/examples/sample-sales.csv";
 
 /**
  * Sprint 26 (ADR-027) — guided first-run flow. Step 1 picks a source
- * (example dataset, fetched client-side and handed to `ExecutarForm` as a
+ * (example dataset, fetched client-side and handed to `RunForm` as a
  * real `File`; or "upload your own", which just renders the plain form).
- * Once a source is chosen, `ExecutarForm` is mounted for the first time
+ * Once a source is chosen, `RunForm` is mounted for the first time
  * with the right `initialFile`/`initialBusinessQuestion` — it owns every
  * following step (spec, submit, poll, result) unchanged from `/`, so this
  * wizard never reimplements upload/poll/result logic.
@@ -50,7 +50,7 @@ export function OnboardingWizard() {
   }
 
   if (ready) {
-    return <ExecutarForm initialFile={initialFile} initialBusinessQuestion={initialBusinessQuestion} />;
+    return <RunForm initialFile={initialFile} initialBusinessQuestion={initialBusinessQuestion} />;
   }
 
   return (

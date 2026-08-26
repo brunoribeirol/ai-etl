@@ -7,7 +7,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 /**
  * Marketing route group's own layout (landing page, no sprint number — see
  * docs/CURRENT_STATE.md). Deliberately minimal — no product nav
- * (Começar/Executar/Histórico/Pipelines/Resumo), those only make sense once
+ * (Get Started/Run/History/Pipelines/Summary), those only make sense once
  * a visitor is signed in and inside `(app)`. `<AuthHeader>` still works here
  * unmodified: a signed-in visitor who lands back on `/` (e.g. via a bookmark)
  * sees their `<UserButton>`, same component `(app)/layout.tsx` uses.

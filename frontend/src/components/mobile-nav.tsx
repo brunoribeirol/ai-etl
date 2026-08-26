@@ -16,18 +16,18 @@ import {
 // `appNav` namespace (shared with the horizontal `<nav>` in
 // `(app)/layout.tsx`) — only the href/translation-key pairing stays here.
 const NAV_LINKS = [
-  { href: "/comecar", key: "comecar" },
-  { href: "/app", key: "executar" },
-  { href: "/historico", key: "historico" },
+  { href: "/get-started", key: "getStarted" },
+  { href: "/app", key: "run" },
+  { href: "/history", key: "history" },
   { href: "/pipelines", key: "pipelines" },
-  { href: "/aprovacoes", key: "aprovacoes" },
-  { href: "/resumo", key: "resumo" },
-  { href: "/orcamento", key: "orcamento" },
+  { href: "/approvals", key: "approvals" },
+  { href: "/summary", key: "summary" },
+  { href: "/budget", key: "budget" },
 ] as const;
 
 /**
  * Sprint 38 — mobile-responsiveness audit finding: `(app)/layout.tsx`'s
- * header packed logo + 5 nav links + "Como funciona" + auth into one
+ * header packed logo + 5 nav links + "How it works" + auth into one
  * non-wrapping flex row (`justify-between items-center`, no `flex-wrap`,
  * no scroll fallback). Below ~640px the 5 links alone (~310px of text
  * plus `gap-6`) don't fit next to the logo and auth chrome, and nothing in
@@ -54,7 +54,7 @@ export function MobileNav({
   // link is "editor" rank (accepts editor or admin), added before "Admin" so
   // both extra links land in the same relative order as the desktop nav.
   let links: readonly { href: string; key: string }[] = NAV_LINKS;
-  if (isEditor) links = [...links, { href: "/segredos", key: "segredos" }];
+  if (isEditor) links = [...links, { href: "/secrets", key: "secrets" }];
   if (isAdmin) links = [...links, { href: "/admin", key: "admin" }];
 
   return (

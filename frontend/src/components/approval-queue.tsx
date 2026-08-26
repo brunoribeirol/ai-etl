@@ -21,7 +21,7 @@ import type { FullResult, PendingApproval } from "@/lib/types";
 type ConfirmState = { runId: string; action: "approve" | "reject" } | null;
 
 /**
- * "Aprovações" queue (Wave 6, 2026-08-25 admin panel/approval-gate UI plan)
+ * "Approvals" queue (Wave 6, 2026-08-25 admin panel/approval-gate UI plan)
  * — first frontend consumer of the Sprint 27 (ADR-028) approval-gate routes,
  * which shipped with an explicit "Frontend is out of scope for this sprint"
  * note. Visible to every authenticated user (this app makes no viewer/editor

@@ -1,7 +1,7 @@
 /**
- * Error-language mapping for `<ExecutarForm>` (`/`, the "operador técnico"
+ * Error-language mapping for `<RunForm>` (`/`, the "technical operator"
  * screen — see `friendly-error.ts`'s own docstring for why that helper is
- * deliberately scoped to `/resumo` and not reused here). Unlike the
+ * deliberately scoped to `/summary` and not reused here). Unlike the
  * executive screens, this audience benefits from technical detail, so this
  * only normalizes the *shape* of known raw errors into clear Portuguese —
  * it still surfaces an HTTP status or backend `detail` string when useful,
@@ -9,7 +9,14 @@
  * (e.g. `"Error: Could not parse uploaded file."`) into an otherwise
  * Portuguese-language UI.
  *
- * Scoped to the error shapes `executar-form.tsx` actually produces: a
+ * NOTE (2026-08-26 English-only audit): the returned message strings below
+ * are deliberately hardcoded Portuguese regardless of the active locale —
+ * this predates the current audit, is out of this task's declared file list
+ * (renames/route/i18n-key scope only), and needs its own follow-up to route
+ * through `next-intl` if/when this screen's copy should also honor the
+ * locale toggle. Left untouched here; flagged for the repo owner to confirm.
+ *
+ * Scoped to the error shapes `run-form.tsx` actually produces: a
  * network/fetch failure, a non-OK `/runs` or `/runs/{id}/status` response
  * (body's `detail`, or a bare `HTTP {status}`), and the specific upload
  * "Could not parse uploaded file." detail raised by

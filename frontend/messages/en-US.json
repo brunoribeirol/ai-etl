@@ -8,15 +8,15 @@
     "menu": "Menu"
   },
   "appNav": {
-    "comecar": "Get started",
-    "executar": "Run",
-    "historico": "History",
+    "getStarted": "Get started",
+    "run": "Run",
+    "history": "History",
     "pipelines": "Pipelines",
-    "resumo": "Summary",
+    "summary": "Summary",
     "admin": "Admin",
-    "aprovacoes": "Approvals",
-    "orcamento": "Budget",
-    "segredos": "Secrets"
+    "approvals": "Approvals",
+    "budget": "Budget",
+    "secrets": "Secrets"
   },
   "marketingLayout": {
     "footer": "AI-ETL — multi-agent ETL framework, auditable code."
@@ -129,15 +129,15 @@
     "pyramidHeading": "Analytical pyramid",
     "rosterHeading": "Agents"
   },
-  "executarPage": {
+  "runPage": {
     "title": "Run an analysis",
     "subtitle": "Upload a file or write a manual spec, optionally with a business question. The agent pipeline handles the rest."
   },
-  "comecarPage": {
+  "getStartedPage": {
     "title": "Get started in a few minutes",
     "subtitle": "Connect a source, describe what you want, and see the result — no prior training needed."
   },
-  "historicoPage": {
+  "historyPage": {
     "title": "History",
     "subtitle": "Previous runs for this account.",
     "columnRun": "Run",
@@ -161,13 +161,13 @@
     "notFound": "Pipeline not found.",
     "backLink": "← Scheduled pipelines"
   },
-  "resumoIndexPage": {
+  "summaryIndexPage": {
     "title": "Executive summary",
     "subtitle": "Your pipelines' results, in plain language — no code, no technical jargon.",
     "emptyState": "No scheduled pipeline yet. Create one in \"Pipelines\" to see its summary here after the first run.",
     "needsAttention": "Needs attention"
   },
-  "resumoPage": {
+  "summaryPage": {
     "notFound": "We couldn't find that pipeline. It may have been removed.",
     "backLink": "← Executive summary"
   },
@@ -190,7 +190,7 @@
   "dataTable": {
     "showing": "Showing 20 of {count} rows."
   },
-  "executarForm": {
+  "runForm": {
     "fileLabel": "File (CSV, Excel, JSON, PDF, DOCX)",
     "fileCta": "Click to select a file",
     "specLabel": "Or: manual spec",
@@ -307,8 +307,8 @@
     "lastRun": "Last: {when}",
     "consecutiveFailureOne": "consecutive failure",
     "consecutiveFailureOther": "consecutive failures",
-    "resumo": "Summary",
-    "historico": "History",
+    "summary": "Summary",
+    "history": "History",
     "edit": "Edit",
     "pause": "Pause",
     "resume": "Resume",
@@ -363,7 +363,7 @@
     "columnModel": "Model",
     "columnCost": "Cost"
   },
-  "aprovacoesPage": {
+  "approvalsPage": {
     "title": "Pending approvals",
     "subtitle": "Scheduled runs with a blocked write, waiting for your review."
   },
@@ -391,7 +391,7 @@
     "qualitySummary": "Data quality",
     "warningsHeading": "Consistency warnings already detected"
   },
-  "segredosPage": {
+  "secretsPage": {
     "title": "Secrets",
     "subtitle": "Your tenant's external-source credentials — the value is never shown again once saved.",
     "noPermission": "You don't have permission to access this page."
@@ -413,7 +413,7 @@
     "confirmDelete": "Confirm delete?",
     "cancel": "Cancel"
   },
-  "orcamentoPage": {
+  "budgetPage": {
     "title": "Budget",
     "subtitle": "Monthly spend cap and consumption so far — enforced on every new run."
   },

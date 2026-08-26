@@ -3,16 +3,16 @@ import { OnboardingChecklist } from "@/components/onboarding-checklist";
 import { OnboardingWizard } from "@/components/onboarding-wizard";
 
 /**
- * "Começar" page (Sprint 26, ADR-027) — guided first-run flow, additive to
- * (not a replacement for) `/` (`ExecutarForm`), `/pipelines`, and
- * `/resumo`. See the ADR for why this route exists separately rather than
+ * "Get Started" page (Sprint 26, ADR-027) — guided first-run flow, additive to
+ * (not a replacement for) `/` (`RunForm`), `/pipelines`, and
+ * `/summary`. See the ADR for why this route exists separately rather than
  * gating those existing routes on activation status.
  *
  * Sprint 25 (ADR-036) — copy comes from `messages/{locale}.json`'s
- * `comecarPage` namespace.
+ * `getStartedPage` namespace.
  */
-export default async function ComecarPage() {
-  const t = await getTranslations("comecarPage");
+export default async function GetStartedPage() {
+  const t = await getTranslations("getStartedPage");
   return (
     <main className="flex-1 flex flex-col items-center px-6 py-16 gap-10">
       <div className="flex flex-col items-center gap-2 text-center max-w-lg">

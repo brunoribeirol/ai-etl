@@ -21,8 +21,8 @@ function agentLabel(node: string): string {
 }
 
 /**
- * Sprint 7 — replaces `app.py`'s "Execução dos Agentes Silver" + "Plano do
- * Pipeline" + "Relatório de Qualidade" sections. Reads `stage_durations`
+ * Sprint 7 — replaces `app.py`'s "Silver Agents Execution" + "Pipeline
+ * Plan" + "Quality Report" sections (originally in Portuguese). Reads `stage_durations`
  * (the real field — the old Streamlit read a `_agent_timings` key that was
  * never actually set on `PipelineState`, a pre-existing dead-code bug fixed
  * here, not reproduced), `pipeline_plan`, and `quality_report`, all already
