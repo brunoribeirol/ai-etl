@@ -14,7 +14,8 @@
     "pipelines": "Pipelines",
     "resumo": "Resumo",
     "admin": "Admin",
-    "aprovacoes": "Aprovações"
+    "aprovacoes": "Aprovações",
+    "orcamento": "Orçamento"
   },
   "marketingLayout": {
     "footer": "AI-ETL — framework multiagente de ETL, código auditável."
@@ -388,5 +389,28 @@
     "previewExisting": "Estado atual no destino",
     "qualitySummary": "Qualidade dos dados",
     "warningsHeading": "Avisos de consistência já detectados"
+  },
+  "orcamentoPage": {
+    "title": "Orçamento",
+    "subtitle": "Teto de gasto mensal e consumo até agora — aplicado a cada nova execução."
+  },
+  "budgetManager": {
+    "budgetCap": "Teto mensal",
+    "budgetSpent": "Gasto no mês",
+    "budgetStatus": "Status",
+    "budgetExceeded": "Teto excedido",
+    "budgetNearLimit": "Perto do teto",
+    "budgetOk": "Dentro do teto",
+    "noCap": "Sem teto definido",
+    "formHeading": "Definir teto mensal",
+    "capInputLabel": "Teto mensal (USD)",
+    "capInputPlaceholder": "ex: 50.00",
+    "invalidCap": "Informe um valor numérico maior ou igual a zero.",
+    "save": "Salvar",
+    "clear": "Remover teto",
+    "confirmClear": "Confirmar remoção?",
+    "cancel": "Cancelar",
+    "toastSaved": "Teto de orçamento atualizado.",
+    "toastCleared": "Teto removido — orçamento agora ilimitado."
   }
 }
