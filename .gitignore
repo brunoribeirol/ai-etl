@@ -39,6 +39,10 @@ case_study/results/sprint28/latest_run.json
 case_study/results/sprint28/_runs/
 case_study/results/sprint34/_runs/
 
+# Ad hoc live multi-provider LLM comparison runs (2026-08-23 session) — local
+# verification support, not a formal case-study scenario result.
+case_study/results/model_comparison_*/
+
 # Audit runs (gerados localmente, não versionar)
 runs/*.json
 runs/*.db
