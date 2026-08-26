@@ -15,6 +15,7 @@
     "resumo": "Summary",
     "admin": "Admin",
     "aprovacoes": "Approvals",
+    "orcamento": "Budget",
     "segredos": "Secrets"
   },
   "marketingLayout": {
@@ -411,5 +412,28 @@
     "delete": "Delete",
     "confirmDelete": "Confirm delete?",
     "cancel": "Cancel"
+  },
+  "orcamentoPage": {
+    "title": "Budget",
+    "subtitle": "Monthly spend cap and consumption so far — enforced on every new run."
+  },
+  "budgetManager": {
+    "budgetCap": "Monthly cap",
+    "budgetSpent": "Spent this month",
+    "budgetStatus": "Status",
+    "budgetExceeded": "Over cap",
+    "budgetNearLimit": "Near cap",
+    "budgetOk": "Within cap",
+    "noCap": "No cap set",
+    "formHeading": "Set monthly cap",
+    "capInputLabel": "Monthly cap (USD)",
+    "capInputPlaceholder": "e.g. 50.00",
+    "invalidCap": "Enter a numeric value greater than or equal to zero.",
+    "save": "Save",
+    "clear": "Clear cap",
+    "confirmClear": "Confirm clear?",
+    "cancel": "Cancel",
+    "toastSaved": "Budget cap updated.",
+    "toastCleared": "Cap cleared — budget is now unlimited."
   }
 }
