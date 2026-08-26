@@ -2,7 +2,107 @@
 
 > Living doc. Updated at the end of meaningful work sessions, not per-commit. Source of truth for repo/code state; the Obsidian vault (`~/Documents/Obsidian Vault/tcc/`) is the source of truth for the academic TCC narrative and product/strategy context.
 
-**Last updated:** 2026-08-24 — **Full 12-persona technical + product audit completed (execution-based, not code-reading — see `docs/work/2026-08-24-full-technical-product-audit.md` for the complete per-persona reports). No fixes applied yet — audit only, by explicit request.**
+**Last updated:** 2026-08-25 — **All CRÍTICO/ALTA findings from the 2026-08-24 audit fixed and merged (23 PRs, #123–#145), plus the admin panel and approval-gate queue UI (previously backend-only, zero frontend).**
+
+## 2026-08-25 — audit fixes (Waves 0–5) + admin panel/approval-gate UI
+
+Executed the full action plan from `docs/work/2026-08-24-full-technical-product-audit.md`,
+sequenced in waves per `~/.claude/plans/vamos-solucionar-todos-esse-snug-graham.md`. Every PR
+went through the established flow: branch → `ruff`/`mypy`/`bandit`/pytest locally → PR → CI
+green → squash-merge. Real Postgres via `docker-compose up -d app-postgres-test` for
+integration-test verification where needed.
+
+**Wave 0 (solo, critical)** — PR #123: closed the real, exploited SQL-injection finding.
+New `core/pipeline_plan_schema.py` (Pydantic gate on the Orchestrator's JSON output) +
+`core.sql_safety.validate_select_only_query()` on `sqlite_source.py`/`mysql_source.py`
+(mirrors `mongodb_source.py`'s existing connector-level pattern) + `validate_table_name()`
+now uses `re.fullmatch`. Tests reproduce the Red Team's exact `DROP TABLE` payload.
+
+**Wave 1 (3 parallel)** — #124 Railway healthcheck (`/health`), #125 `audit/logger.py::_sanitize`
+now recurses into nested dicts/lists + catches `authorization`/`bearer`, #126
+`document_source.py` now reads `document.tables` (was silently dropping every Word table).
+
+**Wave 2 (3 parallel)** — #127 fixed `tests/integration/`'s 2 real bugs (stale schema
+assertions, missing `tenant_id`), #128 threaded the actual per-pipeline resolved model into
+cost tracking (ADR-031 gap), #129 distinguished CSV field-size-limit errors from real
+malformed quoting + normalized BR decimal commas.
+
+**Wave 3 (3 parallel, Agentic BI quality)** — #130 Planner excludes prescriptive clauses from
+Analyst decomposition, #131 Advisor now accounts for ADR-037 sanity-check warnings (previously
+ignored its own system's contradiction flag) + dedupes `strip_code_fences`, #132 Reviewer
+flags hedged answers to directional questions + Analyst chart-axis labels fixed.
+
+**Real regression found and fixed mid-stream, not from the audit**: #124's Railway healthcheck
+was added to the shared `railway.json`, which broke `tranquil-appreciation`/`celery-beat`
+(Celery worker/beat, no HTTP server at all) — every deploy showed `FAILED` even though the
+processes ran fine. Fixed by #133: healthcheck moved to the `ai-etl` service's own Railway
+config via the API, removed from the shared file. Confirmed all 3 services back to `SUCCESS`.
+
+**Dependabot**: merged the 5 safe bumps (#116, #117, #119, #120, #122). #118 (eslint 9→10) and
+#121 (eslint-config-next 15→16) both failed CI — needed a coordinated migration, done as #134
+(flat-config rewrite, `eslint-plugin-react-hooks@7`'s new `set-state-in-effect` rule fixed in
+4 components, `theme-toggle.tsx` rewritten with `useSyncExternalStore`). #118 auto-closed
+itself once `main` had the version; #121 closed manually pointing at #134.
+
+**Wave 4 (sequential: ModelPicker → aria-live/icons → plain-language, then a same-day follow-up)**
+— #135 `agent-progress.tsx` stepper gained `aria-live`/`role="status"`, decorative icons got
+`aria-hidden`. #136 removed "ADR-016" jargon from `pipelines-manager.tsx`'s hint text,
+`data-table.tsx` formats numbers via `Intl.NumberFormat`, `/historico` shows human-readable
+titles. #137 added `ModelPicker` to the avulso "Executar" flow + translated raw errors — but
+the backend didn't actually apply the override for avulso runs (only saved-pipeline runs had
+it, Sprint 30/ADR-031 §5). Closed same day as #138: `create_run`/`enqueue_analysis`/
+`run_full_analysis_task`/`run_full_analysis`/`run_silver_pipeline` now all thread an explicit
+`llm_provider_override`/`llm_model_override` through for the avulso path, a saved pipeline's
+DB-configured override still wins whenever one exists.
+
+**Wave 5 (3 parallel, backend cleanup)** — #139 fixed `CLAUDE.md`'s own stale folder-structure/
+architecture sections (never mentioned `agents/{pipeline,analysis}`, the Agentic BI layer, or
+`services/`). #140 extracted `_run_with_repair()` collapsing the duplicated
+`run_gold_with_repair`/`run_science_with_repair`, added `logger.warning` inside 2 previously-
+silent `except Exception: pass` bookkeeping blocks. #141 added the first direct tests for
+`api/routers/admin.py` (100% route coverage) and `sources/postgres_source.py`.
+
+**Found while writing those tests, fixed same day**: #141's own investigation surfaced that
+`postgres_source.py::load_postgres` never got the Wave 0 query-validation fix — closed by
+#142, same `validate_select_only_query()` call as sqlite/mysql. Not currently reachable from a
+real `pipeline_plan` (`extractor.py` doesn't forward `query` for `postgres` sources), closed
+for defense-in-depth/consistency anyway.
+
+**Admin panel + approval-gate UI** (next round after the audit-fix plan closed — previously
+100% backend-only, explicitly "out of scope" per their own sprint notes): #143 backend
+(`GET /config` now returns `role`; new `GET /admin/tenants` directory, since the 3 existing
+`/admin/*` routes all required a `tenant_id` the caller had no way to discover). #144 `/admin`
+page — audit log with filters + tenant lookup (runs/budget), admin-only both via a hidden nav
+link (cosmetic) and a server-side role re-check (real). #145 `/aprovacoes` page — the Sprint 27
+approval-gate queue's first UI, expandable rows show `load_preview`/`quality_report`/sanity-
+check warnings before an operator decides; approve/reject use an inline 2-click confirm (this
+app had zero confirm-before-fire precedent anywhere, even pause/resume — a real, irreversible
+external write earned one without adding a new shadcn dependency).
+
+**Infra note**: `frontend/node_modules` under `~/Documents` (iCloud-synced) hung `eslint`/
+`next build` again (recurrence of the 2026-08-23 bug, see
+`bugs-solved/mypy-pytest-hang-agent-sandbox.md`'s 2026-08-25 update) — even an `rsync` copy
+attempt hung. Fixed with a cleaner variant than the prior workaround: `rm -rf node_modules &&
+mkdir -p /tmp/ai-etl-frontend-node_modules && ln -s /tmp/ai-etl-frontend-node_modules
+node_modules && npm install` — installs write straight to `/tmp` via the symlink, and (unlike
+the 2026-08-23 fix) the real working directory never has to be abandoned for a `/tmp` mirror.
+
+**make check equivalent, run repeatedly across all 23 PRs**: `ruff`/`mypy` (strict, 90-91
+files)/`bandit` clean every time; unit suite grew from 930 → 1013+ passed over the course of
+the day, zero regressions; `npm run lint`/`npm run build` clean on every frontend PR.
+
+**Not done, by explicit scope decision (see the plan file for full detail)**: 6 more backend-
+ready/zero-UI features (secrets, budget self-service, per-pipeline notification config, LGPD
+export/retention, plus — already closed — admin panel and approval-gate); strategic/business
+decisions (real Docker sandbox replacing `exec()`, Clerk out of dev mode, pricing); the TCC's
+own writing-draft discrepancies the Academic-evaluator persona flagged.
+
+---
+
+**Previous entry, superseded above but kept for history:** 2026-08-24 — **Full 12-persona
+technical + product audit completed (execution-based, not code-reading — see
+`docs/work/2026-08-24-full-technical-product-audit.md` for the complete per-persona reports).
+No fixes applied yet — audit only, by explicit request.**
 
 **The single most important finding: a real, exploited SQL-injection / destructive-DDL vulnerability.** `agents/pipeline/extractor.py:60,62` passes a `query` field (on `sqlite`/`mysql` sources) straight into the database with zero validation — and that field comes from the Orchestrator's LLM-generated `pipeline_plan`, which has no schema validation at all (`orchestrator.py:93`). Red Team built `{"query": "DROP TABLE users; --"}`, ran it through the real `extractor_node()` against a throwaway SQLite DB, and **the table was actually dropped**. This is exactly the anti-pattern `CLAUDE.md`'s own non-negotiable rules already name ("query de `load_postgres()` vindo de input de usuário → SQL injection em SaaS") — it just wasn't caught for the `sqlite`/`mysql` paths specifically. **Not fixed yet — this blocks calling the project production-ready until it is.**
 
