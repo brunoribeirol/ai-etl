@@ -1,4 +1,4 @@
-.PHONY: install test test-e2e lint format format-check type-check security check db-up db-down db-test-up app-db-up app-db-down app-db-test-up db-migrate run-scenario1 run-scenario2 run-scenario3 api redis-up celery-worker clean unhide-pth mysql-test-up mysql-test-down mongodb-test-up mongodb-test-down
+.PHONY: install test test-e2e lint format format-check type-check security check db-up db-down db-test-up app-db-up app-db-down app-db-test-up db-migrate run-scenario1 run-scenario2 run-scenario3 api redis-up celery-worker clean unhide-pth mysql-test-up mysql-test-down mongodb-test-up mongodb-test-down sandbox-image
 
 install:
 	uv sync --all-extras
@@ -105,6 +105,12 @@ run-scenario3:
 	uv run python -m ai_etl run \
 		--spec "$$(cat case_study/pipelines/scenario3_spec.txt)" \
 		--output case_study/results/scenario3/
+
+# ADR-038 — builds the image core/sandbox_docker.py's execute_in_sandbox()
+# runs when AI_ETL_SANDBOX_BACKEND=docker. Local/dev-verified only today;
+# not part of the Railway deploy build (top-level Dockerfile is unchanged).
+sandbox-image:
+	docker build -f docker/sandbox/Dockerfile -t ai-etl-sandbox:latest .
 
 clean:
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null; true
