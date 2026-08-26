@@ -127,6 +127,15 @@ Project-specific checklist:
 - `.claude/skills/add-agent.md` — full checklist for adding a new LangGraph agent
 - `.claude/skills/run-pipeline.md` — how to run and verify a case study scenario
 - `.claude/skills/sr-quality-check.md` — SR Big Tech audit before any delivery
+- `.claude/skills/persona-audit.md` — formalized multi-persona audit (origin: 2026-08-24 audit)
+- `.claude/skills/frontend-design-review.md` — project frontend conventions, including the
+  non-negotiable 100%-English naming rule (routes/components/files) — PT-BR only as content
+
+## Available specialized agents
+
+- `.claude/agents/architecture-reviewer.md` — read-only reviewer of the LangGraph/`PipelineState`
+  contract, ADR adherence, and the non-negotiable rules above
+- `.claude/agents/metrics-analyst.md` — analysis of case study results and LLM model comparisons
 
 ---
 
