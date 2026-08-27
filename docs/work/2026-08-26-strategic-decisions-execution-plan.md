@@ -1,6 +1,6 @@
-# 2026-08-26 — Execution plan: post-audit strategic decisions
+# 2026-08-26/27 — Execution plan: post-audit strategic decisions
 
-**Status:** All implementation work done. All 5 branches pushed, reviewed, and ready. Nothing left to build before 2026-09-01 — only waiting on the CI budget reset.
+**Status:** All implementation work done, including 2 items originally scoped as "later." All 6 branches pushed, reviewed, and ready. Nothing left to build before 2026-09-01 — only waiting on the CI budget reset.
 **Owner:** Bruno Ribeiro (decisions) + Claude (execution)
 
 ## Objective
@@ -24,9 +24,22 @@ a real English-only naming violation, and a GitHub Actions budget constraint.
    reset, explicitly chosen over risking even one more PR with $0.44 left.
    See `~/.claude/projects/.../memory/project_ci_budget_constraint.md` for
    the confirmed playbook.
+6. **(added 2026-08-27)** Sandbox production rollout — originally deferred
+   in ADR-038 as "needs a separate execution service." Owner decided to
+   resolve it now rather than leave it open: chose **Vercel Sandbox**
+   (Firecracker microVMs) over a self-hosted VPS or E2B/Modal, built as
+   ADR-039, same branch as ADR-038.
+7. **(added 2026-08-27)** RLS defense-in-depth — ADR-032 Decision 1 had
+   deferred this until the product opened to external paying tenants.
+   Owner decided to build it now, ahead of that trigger: ADR-040, real
+   non-bypass Postgres role + RLS policies, verified with real tests
+   against real Postgres.
 
-Clerk dev mode and pricing: **explicitly deferred by the user**, no work
-this round (Clerk — no domain purchase yet; pricing — after MVP validation).
+Clerk dev mode and pricing: **explicitly deferred by the user, still
+holds**, no work this round (Clerk — no domain purchase yet, though a free
+Namecheap domain from the GitHub Student Pack was found and earmarked for
+the owner's personal portfolio instead, not this project; pricing — after
+MVP validation, still the plan).
 
 ## Non-goals
 
@@ -55,7 +68,7 @@ this round (Clerk — no domain purchase yet; pricing — after MVP validation).
 | Secrets management UI | `feat/secrets-ui` | **Merged** (#149) |
 | Budget self-service UI | `feat/budget-self-service-ui` | **Merged** (#148) |
 | English-only rename (routes/i18n/`CLAUDE.md`/skills+agents) | `refactor/english-only-repo-wide` | Pushed, no PR yet |
-| Sandbox Docker migration (ADR-038) | `feat/docker-sandbox-migration` | Pushed, no PR yet — **reviewed by `architecture-reviewer`: PASS, 0 blocking findings**; 1 non-blocking hygiene note (missing `.dockerignore`) already fixed in the same branch |
+| Sandbox isolation — Docker (dev) + Vercel Sandbox (production, ADR-039) | `feat/docker-sandbox-migration` | Pushed, no PR yet — **Docker backend reviewed by `architecture-reviewer`: PASS, 0 blocking findings**; Vercel Sandbox production backend added 2026-08-27 (custom VCR image, fail-closed, cost estimated ~4-8 Active-CPU-hrs/month vs. Hobby's 5 free). **Honest gap:** no live Vercel credentials in this environment — the introspection-bypass containment test is written but self-skips, not independently verified against a real Vercel Sandbox yet. `make check` re-verified independently: 1038 passed, 93.44% coverage, 100% clean. |
 
 Housekeeping done alongside: removed 1 stray duplicate file, gitignored an
 ad hoc model-comparison results dir (#147, merged); deleted 34 merged/empty
@@ -75,6 +88,38 @@ later entries).
 Both branch off `refactor/english-only-repo-wide` correctly (not stale
 `main`) — built in `/tmp` clean clones due to the git incident below, so
 this was verified explicitly rather than assumed.
+
+## RLS defense-in-depth — status: DONE, held pending CI budget (added 2026-08-27)
+
+| Item | Branch | State |
+|---|---|---|
+| RLS tenant-isolation defense-in-depth (ADR-040, supersedes ADR-032 Decision 1) | `feat/rls-tenant-isolation` | Pushed, no PR yet. Branches off `main` (backend-only, no frontend naming dependency on the rename). |
+
+Two-role design: the original bypass role stays for the narrow admin
+cross-tenant read path; a new non-bypass role + real RLS policies
+(migration `0021`, 6 tables) now backs 26 query functions across
+`audit/db/*.py`, scoped per-request via `SET LOCAL app.tenant_id`. ADR-032's
+biggest open concern — GUC leaking across a pooled connection reused by a
+different tenant's request — now has a real test proving it doesn't
+(`pool_size=1` engine, two transactions). A second test proves the actual
+backstop: a query with **no `WHERE tenant_id` clause at all** through the
+restricted role still returns only the correct tenant's row.
+
+**Verified independently, not just trusted from the agent's report:**
+`make check` re-run from scratch — 1046 passed, 6 skipped, 95% coverage,
+100% clean.
+
+**3 honest residual gaps, documented in ADR-040:**
+1. `secrets_service.py`/`tenant_deletion_service.py`/`retention_service.py`
+   still query the bypass role directly — out of this task's scope, real
+   follow-up.
+2. **The new role's password is a local-dev-convention default set by the
+   migration — must be rotated via a real secret manager before any
+   non-local deploy uses it.** The single most important thing to not
+   forget before 2026-09-01's merge reaches a real environment.
+3. `get_previous_completed_run` gained a required `tenant_id` param (its
+   one existing caller already updated; a future caller using the old
+   2-arg form would break, by design — fail loud, not silent).
 
 ## A real local-environment incident this session — resolved
 
@@ -108,32 +153,35 @@ decide or build before the reset. The only remaining action is waiting.
 **2026-09-01, once the Actions budget resets:**
 1. Open PRs in dependency order: `refactor/english-only-repo-wide` first
    (foundation for everything else) → `feat/docker-sandbox-migration`
-   (isolated, backend-only, already reviewed clean) → `feat/notification-config-ui`
-   → `feat/data-export-retention-ui` → `docs/current-state-2026-08-26` last
-   (documents the state this whole batch produces, so merge it after
-   everything else is actually in).
+   (Docker + Vercel Sandbox, isolated from frontend, already reviewed) →
+   `feat/rls-tenant-isolation` (backend-only, independent of the others) →
+   `feat/notification-config-ui` → `feat/data-export-retention-ui` →
+   `docs/current-state-2026-08-26` last (documents the state this whole
+   batch produces, so merge it after everything else is actually in).
 2. In the **first** PR of that batch, also add
    `if: github.event.pull_request.draft == false` to every workflow in
    `.github/workflows/` — pays for that PR's CI anyway, saves money on every
    future PR held in draft.
 3. Watch CI, merge each once green, in the same order.
-4. Delete merged branches + worktrees afterward (same cleanup pattern as
+4. **Before the RLS PR reaches any non-local environment**: rotate the new
+   `ai_etl_app_tenant` role's password away from the migration's dev-default
+   via a real secret manager (Railway env var) — do not skip this.
+5. **Before relying on the Vercel Sandbox backend in production**: get real
+   `VERCEL_TOKEN`/`VERCEL_TEAM_ID`/`VERCEL_PROJECT_ID` credentials configured
+   and actually run the introspection-bypass containment test against a
+   real sandbox at least once — ADR-039's security claims are currently
+   extrapolated from Vercel's docs, not independently demonstrated.
+6. Delete merged branches + worktrees afterward (same cleanup pattern as
    this session).
 
 **After that batch lands — real remaining work, not started, no branch yet:**
-5. Sandbox Docker migration's production rollout is explicitly **deferred**,
-   not done: Railway doesn't support Docker-in-Docker (non-privileged
-   containers — confirmed against Railway's own docs, cited in ADR-038).
-   Needs a separate execution service (its own Railway service, or another
-   Docker-capable host, called over an internal API) — this is a real
-   architecture decision for Bruno to make before any further sandbox work,
-   not something to default into.
-6. Remaining backend-ready/zero-UI features not yet in this plan: none
+7. Remaining backend-ready/zero-UI features not yet in this plan: none
    currently known beyond Wave 2 — re-check `docs/CURRENT_STATE.md`'s
    "not done" list before assuming this is exhaustive.
-7. `docs/adr/ADR-032-security-posture-admin-role-sast.md` Decision 4 already
-   carries a superseded-by-ADR-038 note — no further action needed there.
-8. The project's new `metrics-analyst` agent (created 2026-08-26) hasn't
+8. `secrets_service.py`/`tenant_deletion_service.py`/`retention_service.py`
+   still bypass RLS directly (ADR-040's own documented scope gap) — a real,
+   scoped follow-up, not forgotten.
+9. The project's new `metrics-analyst` agent (created 2026-08-26) hasn't
    been used yet — no urgency, but a real gap if the TCC write-up needs a
    fresh model-comparison/case-study report at some point.
 
@@ -143,7 +191,13 @@ decide or build before the reset. The only remaining action is waiting.
   frontend surface reachable from nav, English-only naming from the start
   (no new Portuguese identifiers), role-gating follows the established
   cosmetic-client-check + real-server-check pattern.
-- All 4 pending branches: local CI-equivalent green before any push (per
+- RLS: real cross-tenant isolation test against real Postgres (no-`WHERE`
+  query still isolated), real pooled-connection GUC-leak test — both must
+  pass, not just be present. **Met** — verified independently.
+- Vercel Sandbox: fail-closed on missing credentials/package, no host env
+  forwarded, network denied. Introspection-bypass containment test **written
+  but not yet run against a real sandbox** — not fully met, tracked above.
+- All 6 pending branches: local CI-equivalent green before any push (per
   the CI-budget playbook), real CI green before merge once opened.
 
 ## Risks
