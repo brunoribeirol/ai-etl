@@ -1,6 +1,6 @@
 # 2026-08-26 — Execution plan: post-audit strategic decisions
 
-**Status:** Wave 1 done, held pending CI budget reset (2026-09-01)
+**Status:** Waves 1 and 2 done, all 4 branches pushed and ready, held pending CI budget reset (2026-09-01)
 **Owner:** Bruno Ribeiro (decisions) + Claude (execution)
 
 ## Objective
@@ -19,10 +19,11 @@ a real English-only naming violation, and a GitHub Actions budget constraint.
    route names (`historico`, `aprovacoes`, `resumo`, `comecar`, `orcamento`,
    `segredos`) and `CLAUDE.md` itself was 100% Portuguese, both predating
    this session. Full rename done.
-5. **(added mid-session)** GitHub Actions budget hit $17.34/$18 — all PR
-   opening held until the 2026-09-01 reset. See
-   `~/.claude/projects/.../memory/project_ci_budget_constraint.md` for the
-   confirmed playbook.
+5. **(added mid-session)** GitHub Actions budget hit $17.34/$18, later
+   re-checked at $17.56/$18 — all PR opening held until the 2026-09-01
+   reset, explicitly chosen over risking even one more PR with $0.44 left.
+   See `~/.claude/projects/.../memory/project_ci_budget_constraint.md` for
+   the confirmed playbook.
 
 Clerk dev mode and pricing: **explicitly deferred by the user**, no work
 this round (Clerk — no domain purchase yet; pricing — after MVP validation).
@@ -58,43 +59,57 @@ this round (Clerk — no domain purchase yet; pricing — after MVP validation).
 
 Housekeeping done alongside: removed 1 stray duplicate file, gitignored an
 ad hoc model-comparison results dir (#147, merged); deleted 34 merged/empty
-local branches + 13 orphaned `.claude/worktrees/` directories +
-`docs/session-consolidation` (confirmed-obsolete branch, 2026-08-21 CURRENT_STATE
-notes superseded by later entries) + assorted scaffolding branches; recovered
-from a real local `.git` corruption scare (iCloud-sync-related SIGBUS on
-`git push`/`checkout` — not actual repo corruption, confirmed clean by
-`git fsck --full`; worked around via a clean `/tmp` clone for the affected pushes,
-same family of workaround as the documented `node_modules` iCloud bug).
+local branches, 51 already-merged **remote** branches (this repo never had
+"auto-delete head branches" on — going back to `feat/sprint3-*`), 13 orphaned
+`.claude/worktrees/` directories, and `docs/session-consolidation`
+(confirmed-obsolete branch, 2026-08-21 CURRENT_STATE notes superseded by
+later entries).
 
-## Wave 2 — not started
+## Wave 2 — status: DONE, held pending CI budget
 
-- W2a — Per-pipeline notification config UI (wire into
-  `pipelines-manager.tsx`'s edit form, same pattern as `ModelPicker`;
-  backend fields already exist, see `api/routers/pipelines.py`'s
-  `notification_channel`/`notification_target`/`notification_active`, ADR-034).
-- W2b — LGPD export/retention UI (tenant-facing settings page; backend
-  routes `GET /tenant/export`, `GET /tenant/retention` already exist, ADR-035).
+| Item | Branch | State |
+|---|---|---|
+| Per-pipeline notification config UI | `feat/notification-config-ui` | Pushed, no PR yet. Built as its own `PUT /pipelines/{id}/notification-config` endpoint pair (not a `PATCH` field — clearing needs `channel=None,target=None` distinguishable from "omitted"), wired into `pipelines-manager.tsx` next to `ModelPicker`. |
+| LGPD export/retention UI | `feat/data-export-retention-ui` | Pushed, no PR yet. New `/data-export` page, first consumer of `GET /tenant/export`/`GET /tenant/retention` (ADR-035). **2 scope questions deliberately left open, not decided**: `DELETE /tenant` (full erasure) not surfaced anywhere in the frontend — not added; `PATCH /tenant/retention` (editing the window) not built — retention ships read-only for now. Both are real follow-up, not forgotten. |
 
-**Must branch off `refactor/english-only-repo-wide`, not `main`** — that
-branch already renamed most of the frontend files/i18n keys Wave 2 will
-touch; branching from stale `main` would repeat the merge-conflict class
-already hit once between the secrets/budget UI PRs.
+Both branch off `refactor/english-only-repo-wide` correctly (not stale
+`main`) — built in `/tmp` clean clones due to the git incident below, so
+this was verified explicitly rather than assumed.
+
+## A real local-environment incident this session — resolved
+
+Mid-Wave-2, the local checkout under `~/Documents/ai-etl` (iCloud-synced)
+started crashing with `SIGBUS` (`error: reset died of signal 10` /
+`pack-objects died of signal 10`) on `git checkout`, `git reset`, worktree
+creation, and eventually `git push` — a new variant of this project's
+recurring iCloud/git friction, not a hang this time, an explicit crash.
+Diagnosed and fixed via this project's own established recovery (confirm
+everything is pushed, `rm -rf` the local repo, fresh `git clone` from
+GitHub) — **not** by moving the project off iCloud, which was floated but
+turned out unnecessary. Zero data loss: all branches existed on GitHub
+throughout. Full writeup: vault `bugs-solved/mypy-pytest-hang-agent-sandbox.md`
+and `bugs-solved/git-object-store-corruption-parallel-worktrees.md`,
+both updated 2026-08-26.
 
 ## Next steps, in order
 
 **Now, still CI-budget-blocked (until 2026-09-01):**
-1. Build Wave 2 (W2a, W2b) locally, branched off `refactor/english-only-repo-wide`.
-   Push branches (free), hold `gh pr create`.
-2. Run the `frontend-design-review` skill checklist over all pending frontend
-   branches before they're considered done (not yet applied this session —
-   only `architecture-reviewer` has actually been used so far).
-3. Run `/sr-quality-check` formally over the full pending batch before
+1. Run the `frontend-design-review` skill checklist over all pending frontend
+   branches before they're considered fully done (not yet applied this
+   session — only `architecture-reviewer` has actually been used so far).
+2. Run `/sr-quality-check` formally over the full pending batch before
    opening anything.
+3. Resolve the 2 open scope questions from Wave 2 (`DELETE /tenant` UI,
+   `PATCH /tenant/retention` UI) — decide whether either is in scope before
+   2026-09-01, or explicitly punt them to a later round.
 
 **2026-09-01, once the Actions budget resets:**
 4. Open PRs in dependency order: `refactor/english-only-repo-wide` first
    (foundation for everything else) → `feat/docker-sandbox-migration`
-   (isolated, backend-only, already reviewed clean) → Wave 2 (W2a, W2b).
+   (isolated, backend-only, already reviewed clean) → `feat/notification-config-ui`
+   → `feat/data-export-retention-ui` → `docs/current-state-2026-08-26` last
+   (documents the state this whole batch produces, so merge it after
+   everything else is actually in).
 5. In the **first** PR of that batch, also add
    `if: github.event.pull_request.draft == false` to every workflow in
    `.github/workflows/` — pays for that PR's CI anyway, saves money on every
@@ -128,13 +143,16 @@ already hit once between the secrets/budget UI PRs.
 
 ## Risks
 
-- iCloud sync can still cause `SIGBUS`/hangs on `.git` operations
-  (checkout/push) under this project's working directory — if it recurs,
-  the fix is: `dd if=<pack> of=/dev/null` to force materialization, or a
-  clean `/tmp` clone + fetch-from-local + push, not repeated retries of the
-  same failing command. Worth a `bugs-solved/` note in the vault if it
-  recurs a 4th time (already at 3 prior `.git/objects` corruption incidents
-  per [[project_fase2_big_tech]] memory).
+- iCloud sync can still cause `SIGBUS` on `.git` operations under this
+  project's working directory (happened once this session, see the
+  incident section above) — if it recurs, the fix is: confirm everything is
+  pushed (`git status --short -uall` + `git ls-remote`), then `rm -rf` the
+  local repo and `git clone` fresh from GitHub. Don't spend time on lighter
+  workarounds first (repack, force-reading packs, force-materializing the
+  tree) — all were tried this session and none fixed it; re-clone is what
+  actually worked, both this time and the 3 prior "pack too short"
+  occurrences. Full detail in the vault's `bugs-solved/mypy-pytest-hang-agent-sandbox.md`
+  and `bugs-solved/git-object-store-corruption-parallel-worktrees.md`.
 - Wave 2 branching off `refactor/english-only-repo-wide` instead of `main`
   means its eventual PR's diff will look larger against `main` (includes
   the rename) unless `refactor/english-only-repo-wide` merges first — this
