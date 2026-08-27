@@ -109,7 +109,9 @@ def check_drift_and_notify(
     hiccup, a delivery-provider error) must never fail the pipeline run
     itself.
     """
-    previous_run = get_previous_completed_run(pipeline["id"], exclude_run_id=run_id)
+    previous_run = get_previous_completed_run(
+        pipeline["id"], exclude_run_id=run_id, tenant_id=pipeline["tenant_id"]
+    )
     if previous_run is None:
         return None
 

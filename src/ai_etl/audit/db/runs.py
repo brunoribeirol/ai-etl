@@ -17,7 +17,7 @@ import pandas as pd
 from sqlalchemy import func, insert, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from ai_etl.audit.connection import get_engine
+from ai_etl.audit.connection import scoped_connection, tenant_scope
 from ai_etl.audit.models import analysis_runs, runs, stage_latencies, users
 from ai_etl.audit.storage import StorageBackend, get_storage_backend
 from ai_etl.core.analysis_types import AdvisorResult, GoldResult, ScienceResult, TokenUsage
@@ -46,7 +46,10 @@ def ensure_user(user_id: str) -> None:
         .values(id=user_id, created_at=datetime.now(tz=timezone.utc))
         .on_conflict_do_nothing(index_elements=[users.c.id])
     )
-    with get_engine().begin() as conn:
+    # ADR-040: the restricted role's `users` RLS policy is `id = app.tenant_id` —
+    # for this specific insert, the row *being created* is its own tenant, so the
+    # GUC is set to the same `user_id` this call is provisioning.
+    with tenant_scope(user_id) as conn:
         conn.execute(stmt)
 
 
@@ -148,7 +151,12 @@ def _write_run_row(
             "saved_pipeline_id": stmt.excluded.saved_pipeline_id,
         },
     )
-    with get_engine().begin() as conn:
+    # ADR-040: `runs.tenant_id` is NOT NULL, so a real caller always passes one —
+    # `tenant_id=None` only remains possible for backward compatibility with a
+    # caller that predates ADR-006, and would fail on the NOT NULL constraint
+    # either way; `scoped_connection` falls back to the bypass engine in that case
+    # rather than opening a `tenant_scope(None)`, which cannot be a valid GUC value.
+    with scoped_connection(tenant_id) as conn:
         conn.execute(stmt)
 
 
@@ -192,7 +200,10 @@ def load_history(limit: int = 20, tenant_id: str | None = None) -> pd.DataFrame:
     if tenant_id is not None:
         stmt = stmt.where(runs.c.tenant_id == tenant_id)
     try:
-        with get_engine().connect() as conn:
+        # ADR-040: tenant-scoped (restricted engine + RLS backstop) when a
+        # tenant_id is given; unscoped callers keep the pre-ADR-040 unrestricted
+        # bypass-engine read (unchanged behavior — see docstring above).
+        with scoped_connection(tenant_id) as conn:
             return pd.read_sql(stmt, conn)
     except Exception:
         return pd.DataFrame()
@@ -404,7 +415,7 @@ def _write_analysis_row(
             "saved_pipeline_id": stmt.excluded.saved_pipeline_id,
         },
     )
-    with get_engine().begin() as conn:
+    with scoped_connection(tenant_id) as conn:
         conn.execute(stmt)
 
 
@@ -474,7 +485,7 @@ def save_stage_latencies(
             for row in rows
         ]
     )
-    with get_engine().begin() as conn:
+    with scoped_connection(tenant_id) as conn:
         conn.execute(stmt)
 
 
@@ -483,10 +494,14 @@ def _run_belongs_to_tenant(run_id: str, tenant_id: str) -> bool:
     directly rather than trusting a `run_id` the caller already claims is
     tenant-scoped. Soft-fails to `False` (i.e. "not authorized") on any DB
     error, matching this module's existing soft-fail style — a reload should
-    never leak data just because the ownership check itself couldn't run."""
+    never leak data just because the ownership check itself couldn't run.
+
+    ADR-040: runs through the restricted tenant engine — `tenant_id` is both the
+    filter bound here *and* the GUC `tenant_scope` sets, so a bug that dropped
+    this `WHERE` clause would still be caught by the RLS policy on `runs`."""
     try:
         stmt = select(runs.c.run_id).where(runs.c.run_id == run_id, runs.c.tenant_id == tenant_id)
-        with get_engine().connect() as conn:
+        with tenant_scope(tenant_id) as conn:
             return conn.execute(stmt).first() is not None
     except Exception:
         return False
@@ -573,7 +588,7 @@ def load_full_result(
         "science": science,
         "advisor": advisor,
         "question": question,
-        "tokens": _load_analysis_tokens(run_id),
+        "tokens": _load_analysis_tokens(run_id, tenant_id),
     }
 
 
@@ -604,19 +619,24 @@ def _reload_analysis_entry(
     return reloaded
 
 
-def _load_analysis_tokens(run_id: str) -> TokenUsage:
+def _load_analysis_tokens(run_id: str, tenant_id: str | None = None) -> TokenUsage:
     """Read the already-aggregated token totals back from `analysis_runs`
     (written by `_write_analysis_row`), rather than re-summing every
     sub-task's `tokens` field from the JSON manifest a second time. Soft-fails
     to all-zero on any DB error, matching `load_history`'s pattern — a reload
-    should never hard-fail just because the aggregate row is unreachable."""
+    should never hard-fail just because the aggregate row is unreachable.
+
+    ADR-040: `tenant_id` (passed through from `load_full_result`, already
+    ownership-verified by `_run_belongs_to_tenant`) scopes this read onto the
+    restricted engine when known; `None` keeps the previous unrestricted
+    bypass-engine read for a caller that hasn't been updated to pass one."""
     try:
         stmt = select(
             analysis_runs.c.input_tokens,
             analysis_runs.c.output_tokens,
             analysis_runs.c.total_tokens,
         ).where(analysis_runs.c.run_id == run_id)
-        with get_engine().connect() as conn:
+        with scoped_connection(tenant_id) as conn:
             row = conn.execute(stmt).first()
         if row is None:
             return {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}

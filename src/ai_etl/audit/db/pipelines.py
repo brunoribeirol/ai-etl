@@ -10,7 +10,7 @@ from typing import Any, Optional
 
 from sqlalchemy import insert, select, update
 
-from ai_etl.audit.connection import get_engine
+from ai_etl.audit.connection import get_engine, tenant_scope
 from ai_etl.audit.models import runs, saved_pipelines
 from ai_etl.core.scheduling import compute_next_run_at
 from ai_etl.services.secrets_service import encrypt_value
@@ -97,7 +97,7 @@ def create_saved_pipeline(
         created_at=now,
         updated_at=now,
     )
-    with get_engine().begin() as conn:
+    with tenant_scope(tenant_id) as conn:
         conn.execute(stmt)
     return {
         "id": pipeline_id,
@@ -131,7 +131,7 @@ def list_saved_pipelines(tenant_id: str) -> list[dict[str, Any]]:
         .where(saved_pipelines.c.tenant_id == tenant_id)
         .order_by(saved_pipelines.c.updated_at.desc())
     )
-    with get_engine().connect() as conn:
+    with tenant_scope(tenant_id) as conn:
         rows = conn.execute(stmt).fetchall()
     return [_saved_pipeline_row_to_dict(row) for row in rows]
 
@@ -143,7 +143,7 @@ def get_saved_pipeline(pipeline_id: str, tenant_id: str) -> Optional[dict[str, A
     stmt = select(saved_pipelines).where(
         saved_pipelines.c.id == pipeline_id, saved_pipelines.c.tenant_id == tenant_id
     )
-    with get_engine().connect() as conn:
+    with tenant_scope(tenant_id) as conn:
         row = conn.execute(stmt).first()
     return _saved_pipeline_row_to_dict(row) if row is not None else None
 
@@ -220,7 +220,7 @@ def update_saved_pipeline(
         .where(saved_pipelines.c.id == pipeline_id, saved_pipelines.c.tenant_id == tenant_id)
         .values(**values)
     )
-    with get_engine().begin() as conn:
+    with tenant_scope(tenant_id) as conn:
         conn.execute(stmt)
     return get_saved_pipeline(pipeline_id, tenant_id)
 
@@ -330,7 +330,7 @@ def mark_pipeline_approved(pipeline_id: str, tenant_id: str) -> None:
         .where(saved_pipelines.c.id == pipeline_id, saved_pipelines.c.tenant_id == tenant_id)
         .values(last_approved_at=now, updated_at=now)
     )
-    with get_engine().begin() as conn:
+    with tenant_scope(tenant_id) as conn:
         conn.execute(stmt)
 
 
@@ -344,7 +344,7 @@ def get_run_status_and_pipeline(run_id: str, tenant_id: str) -> Optional[dict[st
     stmt = select(runs.c.status, runs.c.saved_pipeline_id).where(
         runs.c.run_id == run_id, runs.c.tenant_id == tenant_id
     )
-    with get_engine().connect() as conn:
+    with tenant_scope(tenant_id) as conn:
         row = conn.execute(stmt).first()
     if row is None:
         return None
@@ -375,7 +375,7 @@ def list_pending_approvals(tenant_id: str) -> list[dict[str, Any]]:
         .where(runs.c.tenant_id == tenant_id, runs.c.status == "awaiting_approval")
         .order_by(runs.c.timestamp.desc())
     )
-    with get_engine().connect() as conn:
+    with tenant_scope(tenant_id) as conn:
         rows_ = conn.execute(stmt).fetchall()
     return [
         {
@@ -411,7 +411,7 @@ def get_saved_pipeline_llm_config(pipeline_id: str, tenant_id: str) -> Optional[
     stmt = select(saved_pipelines.c.llm_provider, saved_pipelines.c.llm_model).where(
         saved_pipelines.c.id == pipeline_id, saved_pipelines.c.tenant_id == tenant_id
     )
-    with get_engine().connect() as conn:
+    with tenant_scope(tenant_id) as conn:
         row = conn.execute(stmt).first()
     if row is None:
         return None
@@ -452,7 +452,7 @@ def set_saved_pipeline_llm_config(
             updated_at=datetime.now(tz=timezone.utc),
         )
     )
-    with get_engine().begin() as conn:
+    with tenant_scope(tenant_id) as conn:
         conn.execute(stmt)
     return {"llm_provider": llm_provider, "llm_model": llm_model}
 
@@ -485,7 +485,7 @@ def get_saved_pipeline_notification_config(
         saved_pipelines.c.notification_target_ciphertext,
         saved_pipelines.c.notification_active,
     ).where(saved_pipelines.c.id == pipeline_id, saved_pipelines.c.tenant_id == tenant_id)
-    with get_engine().connect() as conn:
+    with tenant_scope(tenant_id) as conn:
         row = conn.execute(stmt).first()
     if row is None:
         return None
@@ -514,7 +514,7 @@ def get_saved_pipeline_notification_target(
         saved_pipelines.c.notification_target_ciphertext,
         saved_pipelines.c.notification_active,
     ).where(saved_pipelines.c.id == pipeline_id, saved_pipelines.c.tenant_id == tenant_id)
-    with get_engine().connect() as conn:
+    with tenant_scope(tenant_id) as conn:
         row = conn.execute(stmt).first()
     if row is None:
         return None
@@ -576,7 +576,7 @@ def set_saved_pipeline_notification_config(
             updated_at=datetime.now(tz=timezone.utc),
         )
     )
-    with get_engine().begin() as conn:
+    with tenant_scope(tenant_id) as conn:
         conn.execute(stmt)
     return {
         "notification_channel": notification_channel,

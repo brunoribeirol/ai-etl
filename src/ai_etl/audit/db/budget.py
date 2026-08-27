@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import func, select, update
 
-from ai_etl.audit.connection import get_engine
+from ai_etl.audit.connection import get_engine, tenant_scope
 from ai_etl.audit.models import analysis_runs, users
 
 
@@ -19,7 +19,7 @@ def get_monthly_budget(tenant_id: str) -> float | None:
     block a run over a tenant row that simply hasn't been `ensure_user()`-ed
     yet; that would be a different bug, not a budget one)."""
     stmt = select(users.c.monthly_budget_usd).where(users.c.id == tenant_id)
-    with get_engine().connect() as conn:
+    with tenant_scope(tenant_id) as conn:
         row = conn.execute(stmt).first()
     return row[0] if row is not None else None
 
@@ -35,7 +35,7 @@ def set_monthly_budget(tenant_id: str, monthly_budget_usd: float | None) -> None
     stmt = (
         update(users).where(users.c.id == tenant_id).values(monthly_budget_usd=monthly_budget_usd)
     )
-    with get_engine().begin() as conn:
+    with tenant_scope(tenant_id) as conn:
         conn.execute(stmt)
 
 
@@ -56,7 +56,7 @@ def get_monthly_spend_usd(tenant_id: str) -> float:
         analysis_runs.c.tenant_id == tenant_id,
         analysis_runs.c.timestamp >= month_start,
     )
-    with get_engine().connect() as conn:
+    with tenant_scope(tenant_id) as conn:
         result = conn.execute(stmt).scalar()
     return float(result) if result is not None else 0.0
 
@@ -86,7 +86,7 @@ def get_avg_run_cost_usd(tenant_id: str, limit: int = 20) -> float | None:
         .subquery()
     )
     stmt = select(func.avg(subq.c.cost_usd))
-    with get_engine().connect() as conn:
+    with tenant_scope(tenant_id) as conn:
         result = conn.execute(stmt).scalar()
     return float(result) if result is not None else None
 
