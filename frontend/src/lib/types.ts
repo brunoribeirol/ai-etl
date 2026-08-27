@@ -300,3 +300,32 @@ export type OnboardingStatus = {
   saved_pipeline_count: number;
   has_saved_pipeline: boolean;
 };
+
+/** `GET /tenant/retention` (Sprint 36, ADR-035) — the tenant's automatic
+ * run-artifact retention window, if any. Mirrors
+ * `audit/db/retention.py::RetentionPolicy`. `retention_days: null` is the
+ * default for every tenant ("keep forever") until they opt in via
+ * `PATCH /tenant/retention`. */
+export type RetentionPolicy = {
+  tenant_id: string;
+  retention_days: number | null;
+};
+
+/** `GET /tenant/export` (Sprint 36, ADR-035) — a tenant's full self-service
+ * data-access export. Mirrors `services/tenant_export_service.py::TenantExport`.
+ * Row shapes are intentionally untyped (`Record<string, unknown>`) — this is
+ * a raw dump of DB rows for download, not data this UI renders field-by-field.
+ * `tenant_secrets` is metadata only (id/name/timestamps), never `ciphertext`.
+ * `storage_artifacts` is `{run_id, key}` pairs, never inline file bytes
+ * (ADR-035 Decision 1). */
+export type TenantExport = {
+  tenant_id: string;
+  exported_at: string;
+  user: Record<string, unknown>;
+  runs: Record<string, unknown>[];
+  analysis_runs: Record<string, unknown>[];
+  stage_latencies: Record<string, unknown>[];
+  saved_pipelines: Record<string, unknown>[];
+  tenant_secrets: Record<string, unknown>[];
+  storage_artifacts: Record<string, unknown>[];
+};

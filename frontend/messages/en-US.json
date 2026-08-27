@@ -16,6 +16,7 @@
     "admin": "Admin",
     "approvals": "Approvals",
     "budget": "Budget",
+    "dataExport": "Data & privacy",
     "secrets": "Secrets"
   },
   "marketingLayout": {
@@ -435,5 +436,23 @@
     "cancel": "Cancel",
     "toastSaved": "Budget cap updated.",
     "toastCleared": "Cap cleared — budget is now unlimited."
+  },
+  "dataExportPage": {
+    "title": "Data & privacy",
+    "subtitle": "Export your account's data (LGPD/GDPR right of access) and view the automatic retention policy applied to it."
+  },
+  "dataExportManager": {
+    "retentionHeading": "Automatic retention",
+    "retentionWindow": "Storage artifacts older than {days} days are automatically deleted",
+    "retentionKeepForever": "Kept forever — no automatic-retention window set",
+    "retentionExplainer": "Retention only removes stored run artifacts (files); run history and account records are never deleted automatically.",
+    "exportHeading": "Export your data",
+    "exportExplainer": "Downloads a JSON file with your runs, analyses, saved pipelines, secret names (never their values), and storage artifact keys — everything this account's data-access export covers.",
+    "exportButton": "Export data",
+    "confirmExport": "Confirm export?",
+    "cancel": "Cancel",
+    "exportInProgress": "Preparing your export…",
+    "exportDone": "Export downloaded.",
+    "toastExported": "Data export downloaded."
   }
 }

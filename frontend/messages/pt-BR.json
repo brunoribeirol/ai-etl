@@ -16,6 +16,7 @@
     "admin": "Admin",
     "approvals": "Aprovações",
     "budget": "Orçamento",
+    "dataExport": "Dados e privacidade",
     "secrets": "Segredos"
   },
   "marketingLayout": {
@@ -435,5 +436,23 @@
     "cancel": "Cancelar",
     "toastSaved": "Teto de orçamento atualizado.",
     "toastCleared": "Teto removido — orçamento agora ilimitado."
+  },
+  "dataExportPage": {
+    "title": "Dados e privacidade",
+    "subtitle": "Exporte os dados da sua conta (direito de acesso LGPD/GDPR) e veja a política de retenção automática aplicada a eles."
+  },
+  "dataExportManager": {
+    "retentionHeading": "Retenção automática",
+    "retentionWindow": "Artefatos de armazenamento com mais de {days} dias são excluídos automaticamente",
+    "retentionKeepForever": "Mantido para sempre — nenhuma janela de retenção automática definida",
+    "retentionExplainer": "A retenção remove apenas artefatos de execução armazenados (arquivos); o histórico de execuções e os registros da conta nunca são excluídos automaticamente.",
+    "exportHeading": "Exportar seus dados",
+    "exportExplainer": "Baixa um arquivo JSON com suas execuções, análises, pipelines salvos, nomes de segredos (nunca seus valores) e chaves de artefatos armazenados — tudo o que a exportação de acesso a dados desta conta cobre.",
+    "exportButton": "Exportar dados",
+    "confirmExport": "Confirmar exportação?",
+    "cancel": "Cancelar",
+    "exportInProgress": "Preparando sua exportação…",
+    "exportDone": "Exportação baixada.",
+    "toastExported": "Exportação de dados baixada."
   }
 }
