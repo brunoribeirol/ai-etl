@@ -15,7 +15,7 @@ import pandas as pd
 
 from ai_etl.agents._llm_codegen import strip_code_fences
 from ai_etl.core.analysis_types import AnalysisTask, TokenUsage
-from ai_etl.core.llm import extract_token_usage, get_llm
+from ai_etl.core.llm import extract_token_usage, get_llm, invoke_llm
 from ai_etl.core.locale import DEFAULT_LOCALE, narrative_language_instruction, resolve_locale
 
 logger = logging.getLogger(__name__)
@@ -107,7 +107,7 @@ def plan_analysis_tasks(
     llm = get_llm(provider=llm_provider_override, model=llm_model_override)
 
     try:
-        response = llm.invoke(prompt)
+        response = invoke_llm(llm, prompt, llm_provider_override)
         tokens = extract_token_usage(response)
         raw = strip_code_fences(str(response.content).strip())
         parsed: Any = json.loads(raw)

@@ -3,7 +3,7 @@
 import json
 
 from ai_etl.audit.logger import log_action
-from ai_etl.core.llm import get_llm
+from ai_etl.core.llm import get_llm, invoke_llm
 from ai_etl.core.locale import date_parse_hint, resolve_locale
 from ai_etl.core.sandbox import execute_in_sandbox, scale_timeout_for_rows
 from ai_etl.core.state import PipelineState
@@ -113,7 +113,7 @@ def transformer_node(state: PipelineState) -> PipelineState:
 
     for _ in range(MAX_ATTEMPTS):
         attempts += 1
-        response = llm.invoke(prompt)
+        response = invoke_llm(llm, prompt, provider_override)
         code = _clean_code(str(response.content))
 
         sandbox_result = execute_in_sandbox(

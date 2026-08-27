@@ -4,9 +4,14 @@ Supports OpenAI, Anthropic, Google (Gemini), and local models via Ollama, select
 via AI_ETL_LLM_PROVIDER (default: openai, preserving existing behavior). See
 docs/adr/ADR-014-multi-provider-llm.md for the full rationale, the env var contract,
 and what's explicitly out of scope (no automatic cross-provider fallback).
+
+Also provides `invoke_llm()`, a per-provider circuit breaker wrapping
+`BaseChatModel.invoke()` — see ADR-041 and this module's own "Circuit breaker"
+section below.
 """
 
 import os
+import threading
 import time
 from typing import Any
 
@@ -291,3 +296,122 @@ def test_provider_connectivity(provider: str, model: str) -> dict[str, Any]:
             "latency_ms": latency_ms,
             "error": str(exc),
         }
+
+
+# --- Circuit breaker (ADR-041, Wave 3 / X-PRO.ai gap analysis) ---------------------
+#
+# Narrowly scoped to LLM provider calls only, not a general resilience/bulkhead
+# framework (that broader scope was deliberately deferred — see ADR-041). Before
+# this, a provider outage (rate limit storm, regional incident) was invisible to
+# `invoke_llm()`'s callers except as N individually-slow, individually-failing
+# `.invoke()` calls — every one of Transformer/Orchestrator/Analyst/Planner/
+# Advisor/Reviewer/Science's own retry-and-repair loops would each independently
+# re-hit the same downed provider, and so would every other concurrent tenant's
+# run. This adds a fail-fast path per provider once failures repeat, without
+# touching any of those retry loops' own logic — they still see a raised
+# exception (LLMCircuitOpenError IS a RuntimeError) and behave exactly as before.
+
+_CIRCUIT_FAILURE_THRESHOLD_ENV = "AI_ETL_LLM_CIRCUIT_FAILURE_THRESHOLD"
+_CIRCUIT_COOLDOWN_SECONDS_ENV = "AI_ETL_LLM_CIRCUIT_COOLDOWN_SECONDS"
+_CIRCUIT_FAILURE_THRESHOLD_DEFAULT = 5
+_CIRCUIT_COOLDOWN_SECONDS_DEFAULT = 60.0
+
+
+class LLMCircuitOpenError(RuntimeError):
+    """Raised by `invoke_llm()` instead of making a network call, when the given
+    provider has failed `AI_ETL_LLM_CIRCUIT_FAILURE_THRESHOLD` times in a row and
+    the `AI_ETL_LLM_CIRCUIT_COOLDOWN_SECONDS` cooldown hasn't elapsed since the
+    circuit opened. A RuntimeError subclass (not a new exception family) so every
+    existing `except Exception`/`except RuntimeError` retry loop already in
+    Transformer/Orchestrator/Analyst/Planner/Advisor/Reviewer/Science keeps
+    working unmodified — this only makes those loops fail faster against a
+    provider already known to be down, it never changes what they catch.
+    """
+
+
+class _CircuitState:
+    """Per-provider mutable state. Not a dataclass/TypedDict — this is intentionally
+    mutated in place under `_circuit_lock`, never replaced wholesale."""
+
+    __slots__ = ("consecutive_failures", "opened_at")
+
+    def __init__(self) -> None:
+        self.consecutive_failures = 0
+        self.opened_at: float | None = None
+
+
+_circuit_lock = threading.Lock()
+_circuit_state: dict[str, _CircuitState] = {}
+
+
+def _circuit_failure_threshold() -> int:
+    return int(os.getenv(_CIRCUIT_FAILURE_THRESHOLD_ENV, str(_CIRCUIT_FAILURE_THRESHOLD_DEFAULT)))
+
+
+def _circuit_cooldown_seconds() -> float:
+    return float(os.getenv(_CIRCUIT_COOLDOWN_SECONDS_ENV, str(_CIRCUIT_COOLDOWN_SECONDS_DEFAULT)))
+
+
+def reset_circuit_breakers() -> None:
+    """Clear all per-provider circuit state. Test-only — module-level state would
+    otherwise leak between test cases (and between pytest-xdist workers sharing a
+    process), same reason `_clean_llm_env`'s autouse fixture resets env vars.
+    """
+    with _circuit_lock:
+        _circuit_state.clear()
+
+
+def invoke_llm(llm: BaseChatModel, prompt: str, provider: str | None = None) -> Any:
+    """Call `llm.invoke(prompt)` through a per-provider circuit breaker.
+
+    `provider` is resolved exactly like `get_llm()` resolves it (explicit override,
+    else `AI_ETL_LLM_PROVIDER`) — used only as the circuit breaker's state key, it
+    does not affect `llm` itself (already fully configured by whoever built it via
+    `get_llm()`).
+
+    Behavior:
+    - Circuit CLOSED (default): calls pass straight through. A successful call
+      resets `consecutive_failures` to 0. A failed call increments it and, once it
+      reaches the threshold, opens the circuit and re-raises the original
+      exception unchanged (callers' existing error handling/retry loops are
+      unaffected on the call that trips it).
+    - Circuit OPEN: calls fail fast with `LLMCircuitOpenError`, no network call
+      made, until the cooldown elapses.
+    - After cooldown: the next call is let through as a probe (half-open); success
+      closes the circuit, failure re-opens it and restarts the cooldown.
+
+    Deliberately NOT used by `test_provider_connectivity()` — that function exists
+    specifically to let a tenant diagnose/fix a broken provider config, so it must
+    always make a real call rather than fail fast on stale circuit state.
+    """
+    resolved_provider = provider.strip().lower() if provider else get_provider()
+
+    with _circuit_lock:
+        state = _circuit_state.setdefault(resolved_provider, _CircuitState())
+        if state.opened_at is not None:
+            elapsed = time.monotonic() - state.opened_at
+            cooldown = _circuit_cooldown_seconds()
+            if elapsed < cooldown:
+                raise LLMCircuitOpenError(
+                    f"Circuit open for LLM provider {resolved_provider!r} after "
+                    f"{state.consecutive_failures} consecutive failures. "
+                    f"Retry in {cooldown - elapsed:.0f}s."
+                )
+            # Cooldown elapsed: let this call through as a half-open probe. Outcome
+            # decides below whether the circuit closes or re-opens.
+
+    try:
+        response = llm.invoke(prompt)
+    except Exception:
+        with _circuit_lock:
+            state = _circuit_state.setdefault(resolved_provider, _CircuitState())
+            state.consecutive_failures += 1
+            if state.consecutive_failures >= _circuit_failure_threshold():
+                state.opened_at = time.monotonic()
+        raise
+    else:
+        with _circuit_lock:
+            state = _circuit_state.setdefault(resolved_provider, _CircuitState())
+            state.consecutive_failures = 0
+            state.opened_at = None
+        return response
