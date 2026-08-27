@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/status-badge";
 import { ModelPicker } from "@/components/model-picker";
+import { NotificationConfig } from "@/components/notification-config";
 import { SCHEDULABLE_SOURCE_TYPES, type QualityRule, type SavedPipeline } from "@/lib/types";
 
 /**
@@ -53,6 +54,14 @@ export function PipelinesManager() {
   // main PATCH `handleSubmit` below.
   const [llmProvider, setLlmProvider] = useState<string | null>(null);
   const [llmModel, setLlmModel] = useState<string | null>(null);
+  // Sprint 37 (ADR-034) frontend — the pipeline currently being edited's
+  // notification destination override, same "kept separate, own endpoint"
+  // reasoning as `llmProvider`/`llmModel` above. `notification_target` itself
+  // is never part of this state — see `<NotificationConfig>`'s own docstring.
+  const [notificationChannel, setNotificationChannel] = useState<string | null>(null);
+  const [notificationConfigured, setNotificationConfigured] = useState(false);
+  const [notificationActive, setNotificationActive] = useState(true);
+  const [allowedNotificationChannels, setAllowedNotificationChannels] = useState<string[]>([]);
 
   const authedFetch = useCallback(
     async (path: string, init?: RequestInit) => {
@@ -97,6 +106,16 @@ export function PipelinesManager() {
     loadPipelines();
   }, [loadPipelines]);
 
+  useEffect(() => {
+    // Sprint 37 (ADR-034) frontend — the notification channel allowlist
+    // `<NotificationConfig>` renders as `<select>` options, fetched once from
+    // `GET /pipelines/notifications/allowed-channels` (same allowlist `PUT
+    // /pipelines/{id}/notification-config` validates against server-side).
+    authedFetch("/pipelines/notifications/allowed-channels")
+      .then((data) => setAllowedNotificationChannels(data as string[]))
+      .catch(() => setAllowedNotificationChannels([]));
+  }, [authedFetch]);
+
   function resetForm() {
     setEditingId(null);
     setName("");
@@ -107,6 +126,9 @@ export function PipelinesManager() {
     setQualityRulesText("[]");
     setLlmProvider(null);
     setLlmModel(null);
+    setNotificationChannel(null);
+    setNotificationConfigured(false);
+    setNotificationActive(true);
   }
 
   function startEdit(pipeline: SavedPipeline) {
@@ -119,6 +141,9 @@ export function PipelinesManager() {
     setQualityRulesText(JSON.stringify(pipeline.quality_rules ?? [], null, 2));
     setLlmProvider(pipeline.llm_provider);
     setLlmModel(pipeline.llm_model);
+    setNotificationChannel(pipeline.notification_channel);
+    setNotificationConfigured(pipeline.notification_configured);
+    setNotificationActive(pipeline.notification_active);
   }
 
   /** Sprint 30 (ADR-031) frontend — writes a model-picker click immediately via
@@ -134,6 +159,56 @@ export function PipelinesManager() {
       setLlmProvider(provider);
       setLlmModel(model);
       toast.success(t("toastModelUpdated"));
+      await loadPipelines();
+    } catch (err) {
+      toast.error(String(err instanceof Error ? err.message : err));
+    }
+  }
+
+  /** Sprint 37 (ADR-034) frontend — writes a notification config save
+   * immediately via `PUT /pipelines/{id}/notification-config`, independent of
+   * the main form's `Save` button (see `<NotificationConfig>`'s own docstring
+   * for why). */
+  async function handleNotificationSave(channel: string, target: string, active: boolean) {
+    if (!editingId) return;
+    try {
+      await authedFetch(`/pipelines/${editingId}/notification-config`, {
+        method: "PUT",
+        body: JSON.stringify({
+          notification_channel: channel,
+          notification_target: target,
+          notification_active: active,
+        }),
+      });
+      setNotificationChannel(channel);
+      setNotificationConfigured(true);
+      setNotificationActive(active);
+      toast.success(t("toastNotificationUpdated"));
+      await loadPipelines();
+    } catch (err) {
+      toast.error(String(err instanceof Error ? err.message : err));
+    }
+  }
+
+  /** Clears a saved pipeline's notification override back to this
+   * deployment's global channel(s) — `notification_channel`/
+   * `notification_target` both `null`, same convention
+   * `SetPipelineNotificationConfigRequest` documents. */
+  async function handleNotificationClear() {
+    if (!editingId) return;
+    try {
+      await authedFetch(`/pipelines/${editingId}/notification-config`, {
+        method: "PUT",
+        body: JSON.stringify({
+          notification_channel: null,
+          notification_target: null,
+          notification_active: true,
+        }),
+      });
+      setNotificationChannel(null);
+      setNotificationConfigured(false);
+      setNotificationActive(true);
+      toast.success(t("toastNotificationCleared"));
       await loadPipelines();
     } catch (err) {
       toast.error(String(err instanceof Error ? err.message : err));
@@ -328,6 +403,25 @@ export function PipelinesManager() {
                   currentProvider={llmProvider}
                   currentModel={llmModel}
                   onSelect={handleModelSelect}
+                  disabled={submitting}
+                />
+              </div>
+            )}
+
+            {/* Sprint 37 (ADR-034) frontend — same "only while editing an
+                already-saved pipeline" reasoning as the model picker above:
+                the notification config needs a real pipeline id to call
+                `PUT /pipelines/{id}/notification-config` against. */}
+            {editingId && allowedNotificationChannels.length > 0 && (
+              <div className="flex flex-col gap-2">
+                <Label>{t("notificationLabel")}</Label>
+                <NotificationConfig
+                  currentChannel={notificationChannel}
+                  currentConfigured={notificationConfigured}
+                  currentActive={notificationActive}
+                  allowedChannels={allowedNotificationChannels}
+                  onSave={handleNotificationSave}
+                  onClear={handleNotificationClear}
                   disabled={submitting}
                 />
               </div>

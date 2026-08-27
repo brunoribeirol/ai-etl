@@ -321,7 +321,10 @@
     "missingApiUrl": "NEXT_PUBLIC_API_URL is not configured.",
     "modelLabel": "AI model",
     "modelHint": "(cost and reliability shown per model — Sprint 30/35)",
-    "toastModelUpdated": "Model updated."
+    "toastModelUpdated": "Model updated.",
+    "notificationLabel": "Notifications",
+    "toastNotificationUpdated": "Notification destination updated.",
+    "toastNotificationCleared": "Notification override cleared."
   },
   "runSections": {
     "code": "Code"
@@ -329,6 +332,25 @@
   "modelPicker": {
     "priceLine": "${input}/${output} per 1M tokens (input/output)",
     "reliabilityVerified": "Verified — real comparison run"
+  },
+  "notificationConfig": {
+    "configuredHint": "A {channel} destination is currently configured for this pipeline.",
+    "notConfiguredHint": "No override configured — this pipeline uses this deployment's default notification channel(s).",
+    "channelLabel": "Channel",
+    "channelName": {
+      "email": "Email",
+      "slack": "Slack",
+      "teams": "Microsoft Teams",
+      "google_chat": "Google Chat"
+    },
+    "targetLabelEmail": "Recipient email",
+    "targetLabelWebhook": "Webhook URL",
+    "targetPlaceholderEmail": "team@example.com",
+    "targetPlaceholderWebhook": "https://hooks.example.com/...",
+    "hint": "For security, a previously saved destination is never shown here — enter it again to replace it. This is also required to change just the toggle below, since the destination and its active state are always saved together.",
+    "activeLabel": "Active",
+    "saveButton": "Save destination",
+    "clearButton": "Clear override"
   },
   "adminPage": {
     "title": "Admin panel",
