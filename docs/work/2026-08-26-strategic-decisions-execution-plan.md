@@ -1,6 +1,6 @@
 # 2026-08-26/27 — Execution plan: post-audit strategic decisions
 
-**Status:** All implementation work done, including 2 items originally scoped as "later." All 6 branches pushed, reviewed, and ready. Nothing left to build before 2026-09-01 — only waiting on the CI budget reset.
+**Status:** All 6 branches pushed, reviewed, and ready — nothing left to build there before 2026-09-01, only waiting on the CI budget reset. **Wave 3 added 2026-08-27** (3 new small items from the X-PRO.ai gap analysis, approved, not yet started — see below) — this is real, separate next-session work, not blocked by the CI budget (all 3 are cheap enough to build and push locally in the meantime).
 **Owner:** Bruno Ribeiro (decisions) + Claude (execution)
 
 ## Objective
@@ -184,6 +184,54 @@ decide or build before the reset. The only remaining action is waiting.
 9. The project's new `metrics-analyst` agent (created 2026-08-26) hasn't
    been used yet — no urgency, but a real gap if the TCC write-up needs a
    fresh model-comparison/case-study report at some point.
+
+## Wave 3 — X-PRO.ai gap analysis, all items approved for execution (added 2026-08-27)
+
+Prof. Carlos Diego Cavalcanti Pereira's X-PRO.ai framework (`github.com/cdiegocom/xprodotai`,
+MIT) was cloned and run against a real, honest AI-ETL profile (`criticality=10 C-High,
+complexity=7 K-High`, `privacy_law` flag) — see the vault session notes for the full 2026-08-27
+analysis. Result: **AI-ETL calibrates to global Tier T3 (critical/regulated)**, driven by the
+LGPD-regulated-data override — an independent, external validation that this project's existing
+"apply the SR standard to everything, no exceptions" posture is proportionate, not
+over-engineering. Cross-referencing the generated `AI-AGENT-RULES.md` against AI-ETL's actual
+state surfaced several real gaps. Applying the framework's own "match investment to real
+demand" principle to the gaps themselves (not everything Required-at-T3 is the right priority
+*right now*, pre-launch, zero real users): **owner approved 3 for immediate execution**, 1 for
+consideration, several explicitly deferred with reasoning — not silently dropped.
+
+**Approved, to execute now:**
+1. **INFRA-04 (RTO/DR)** — write an ADR documenting the actual expected RPO/RTO and how
+   Supabase's backup capability covers it. Pure documentation, no code — cheap, closes a real
+   gap, matches this project's existing ADR discipline.
+2. **APP-10 (API versioning policy)** — document a versioning convention (e.g. `/v1` prefix or
+   equivalent) before any public-facing API surface grows further, as an ADR. Pure
+   documentation, cheap, avoids retrofitting later.
+3. **APP-05 (resilience) — scoped narrowly to LLM provider calls only, not a general resilience
+   overhaul.** A lightweight circuit breaker around the OpenAI/Anthropic/Google call sites in
+   `core/llm.py` — LLM provider outages are a real, known failure mode; a full
+   circuit-breaker/bulkhead architecture across every external dependency (what X-PRO.ai's
+   catalog literally asks for at T3) would be disproportionate for this project's actual
+   dependency graph and stage.
+
+**Considered, not yet decided to build:**
+4. **APP-08 (load testing)** — a basic load test using the case-study datasets, before any real
+   launch. Has a genuine research connection: this is literally Prof. Carlos Diego's other
+   research line (C2PF, capacity planning without historical precedent) — worth building both
+   as a real pre-launch check and as TCC material, but not yet scoped or branched.
+
+**Explicitly deferred, reasoning recorded (same "accepted risk, not silently dropped" pattern
+this project already uses in its ADRs):**
+- APP-06 (OpenTelemetry distributed tracing + SLO/error-budget alerting) — heavy to build
+  correctly, and there are no real SLOs to alert against without real traffic yet. Structured
+  logging + Sentry (already in place) is enough for this stage.
+- INFRA-08 (full IaC for the Railway deploy) — 2 services, changed rarely, manually configured
+  today; formalizing this now is disproportionate to the actual change frequency.
+- DATA-05 (OLTP/OLAP separation) — current data volume doesn't justify it.
+- APP-08 contract tests (as opposed to load tests, approved above) — no external API consumer
+  exists yet to write a contract against.
+
+**Not yet branched — next session should start here** for items 1-3 above (each is small enough
+to be its own quick branch, pushed per the CI-budget playbook, no PR until 2026-09-01).
 
 ## Acceptance criteria
 
