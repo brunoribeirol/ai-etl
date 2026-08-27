@@ -6,6 +6,7 @@ statements, no dialect-specific SQL, so the real query executes against a
 throwaway SQLite engine instead of being mocked.
 """
 
+from contextlib import contextmanager
 from datetime import datetime, timezone
 
 import pytest
@@ -25,11 +26,24 @@ def _make_sqlite_engine() -> Engine:
     return engine
 
 
+def _fake_scope(engine: Engine):
+    """Stand-in for `tenant_scope` in these unit tests (ADR-040) — see
+    `test_saved_pipelines_db.py`'s identical helper for the full rationale."""
+
+    @contextmanager
+    def _scope(tenant_id):  # noqa: ANN001, ANN202
+        with engine.begin() as conn:
+            yield conn
+
+    return _scope
+
+
 @pytest.fixture
 def engine(monkeypatch: pytest.MonkeyPatch) -> Engine:
     eng = _make_sqlite_engine()
-    monkeypatch.setattr(onboarding_db, "get_engine", lambda: eng)
+    monkeypatch.setattr(onboarding_db, "tenant_scope", _fake_scope(eng))
     monkeypatch.setattr(pipelines_db, "get_engine", lambda: eng)
+    monkeypatch.setattr(pipelines_db, "tenant_scope", _fake_scope(eng))
     return eng
 
 

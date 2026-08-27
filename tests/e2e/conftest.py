@@ -25,6 +25,7 @@ import os
 import time
 import uuid
 from collections.abc import Iterator
+from pathlib import Path
 from typing import Any, Callable
 from unittest.mock import MagicMock
 
@@ -32,6 +33,7 @@ import jwt
 import pytest
 import redis
 import sqlalchemy
+from alembic.config import Config
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, RSAPublicKey
 from sqlalchemy import text
@@ -41,15 +43,30 @@ from ai_etl.audit.db import ensure_user
 from ai_etl.audit.models import metadata
 from ai_etl.core.celery_app import celery_app
 from ai_etl.services import auth_service
+from alembic import command
 
 _TEST_APP_DATABASE_URL = os.getenv(
     "TEST_APP_DATABASE_URL",
     "postgresql://ai_etl_app_test:ai_etl_app_test@localhost:5435/ai_etl_app_test_db",
 )
+# ADR-040 — see `tests/integration/test_audit_persistence.py`'s identical rationale:
+# `ensure_user`/`save_run`/`save_analysis` now go through `tenant_scope()`, which
+# needs the restricted role migration 0021 creates.
+_TEST_APP_DATABASE_URL_TENANT = os.getenv(
+    "TEST_APP_DATABASE_URL_TENANT",
+    "postgresql://ai_etl_app_tenant:ai_etl_app_tenant@localhost:5435/ai_etl_app_test_db",
+)
+_REPO_ROOT = Path(__file__).resolve().parents[2]
 TEST_POSTGRES_URL = os.getenv("TEST_POSTGRES_URL", "postgresql://test:test@localhost:5433/testdb")
 _TEST_REDIS_URL = os.getenv("TEST_REDIS_URL", "redis://localhost:6379/0")
 _JWKS_URL = "https://example.invalid/.well-known/jwks.json"
 _ISSUER = "https://example.invalid"
+
+
+def _alembic_config() -> Config:
+    cfg = Config(str(_REPO_ROOT / "alembic.ini"))
+    cfg.set_main_option("script_location", str(_REPO_ROOT / "alembic"))
+    return cfg
 
 
 def _database_reachable(url: str) -> bool:
@@ -92,15 +109,24 @@ requires_full_stack = pytest.mark.skipif(
 @pytest.fixture(autouse=True)
 def _app_database(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     monkeypatch.setenv("APP_DATABASE_URL", _TEST_APP_DATABASE_URL)
+    monkeypatch.setenv("APP_DATABASE_URL_TENANT", _TEST_APP_DATABASE_URL_TENANT)
     monkeypatch.setenv("REDIS_URL", _TEST_REDIS_URL)
     connection.get_engine.cache_clear()
+    connection.get_tenant_engine.cache_clear()
     engine = connection.get_engine()
-    metadata.create_all(engine)
+    # ADR-040: run the real migration chain (not a bare `create_all()`) so the
+    # restricted role + RLS policies migration 0021 creates actually exist —
+    # `ensure_user`/`save_run`/`save_analysis` go through them via `tenant_scope()`.
+    with engine.begin() as conn:
+        conn.execute(text("DROP SCHEMA public CASCADE"))
+        conn.execute(text("CREATE SCHEMA public"))
+    command.upgrade(_alembic_config(), "head")
     yield
     with engine.begin() as conn:
         for table in reversed(metadata.sorted_tables):
             conn.execute(table.delete())
     connection.get_engine.cache_clear()
+    connection.get_tenant_engine.cache_clear()
 
 
 @pytest.fixture(autouse=True)
