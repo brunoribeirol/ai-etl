@@ -95,6 +95,13 @@ api = [
     "python-multipart>=0.0.12",
 ]
 
+# ADR-039 — production sandbox isolation backend (core/sandbox_vercel.py).
+# Optional: base dependencies and every other backend work without it; only
+# needed when AI_ETL_SANDBOX_BACKEND=vercel (or backend="vercel") is used.
+vercel-sandbox = [
+    "vercel>=0.10.0",
+]
+
 dev = [
     "pytest>=8.0.0",
     "pytest-mock>=3.14.0",

@@ -21,10 +21,14 @@ to contain that bypass, superseding ADR-032 Decision 4's risk acceptance.
 The `"process"` backend below remains the default (this project's Railway
 deployment cannot run Docker-in-Docker — see ADR-038's "Railway feasibility"
 section); `"docker"` is opt-in via `AI_ETL_SANDBOX_BACKEND=docker` or
-`execute_in_sandbox(..., backend="docker")`, dev/local-verified today, with
-production rollout tracked as explicit follow-up work.
+`execute_in_sandbox(..., backend="docker")`, dev/local-verified today.
+ADR-039 adds a third backend, `"vercel"` (``core/sandbox_vercel.py`` —
+Vercel Sandbox Firecracker microVMs), which resolves ADR-038's deferred
+production-rollout item: it gives the same container-isolation guarantees
+reachable from this project's Railway deployment (no Docker daemon
+required on the calling side, unlike `"docker"`).
 See SECURITY.md and docs/adr/ADR-003-exec-sandbox.md, ADR-007, ADR-032
-Decision 4, and ADR-038 for the full risk analysis and its history.
+Decision 4, ADR-038, and ADR-039 for the full risk analysis and its history.
 """
 
 import importlib
@@ -86,12 +90,13 @@ SAFE_GLOBALS: dict[str, Any] = {
 # already misbehaving; this just bounds how long that can delay the caller.
 _TERMINATE_GRACE_SECONDS = 2
 
-# ADR-038: selects execute_in_sandbox()'s isolation backend when the
+# ADR-038/ADR-039: selects execute_in_sandbox()'s isolation backend when the
 # `backend` argument isn't passed explicitly. "process" (default) is the
 # multiprocessing.Process implementation below; "docker" routes through
-# core/sandbox_docker.py instead. Left at "process" in every deployed
-# environment today (Railway) — see ADR-038 for why "docker" isn't yet the
-# production default.
+# core/sandbox_docker.py (dev/local only); "vercel" routes through
+# core/sandbox_vercel.py (the production-capable backend, ADR-039). Left at
+# "process" in every deployed environment today — flipping this to "vercel"
+# in Railway's production env vars is the actual production rollout step.
 _SANDBOX_BACKEND_ENV_VAR = "AI_ETL_SANDBOX_BACKEND"
 
 # Sprint 12 (ADR-012): real profiling against a 200k-row x 300-col benchmark
@@ -318,20 +323,23 @@ def execute_in_sandbox(
     extra_modules: Optional[dict[str, str]] = None,
     extra_builtins: Optional[dict[str, Any]] = None,
     timeout_seconds: int = 30,
-    backend: Optional[Literal["process", "docker"]] = None,
+    backend: Optional[Literal["process", "docker", "vercel"]] = None,
 ) -> SandboxResult:
     """Execute LLM-generated Python code in an isolated, time-bounded sandbox.
 
-    Two isolation backends exist (ADR-038): `"process"` (default, described
-    below — a `multiprocessing.Process` child) and `"docker"` (a
+    Three isolation backends exist (ADR-038, ADR-039): `"process"` (default,
+    described below — a `multiprocessing.Process` child), `"docker"` (a
     network-disabled, read-only, resource-capped container — see
-    `core/sandbox_docker.py` and ADR-038 for what it does and does not close
-    versus the process backend, and why it is NOT the production default on
-    this project's current Railway deployment). Selecting `"docker"` requires
-    a reachable Docker daemon and the pre-built sandbox image; it raises
-    `DockerSandboxUnavailableError` rather than silently falling back to the
-    weaker `"process"` backend if either is missing — an explicit opt-in
-    fails closed, it does not degrade quietly.
+    `core/sandbox_docker.py` and ADR-038; dev/local only, Railway cannot run
+    Docker-in-Docker), and `"vercel"` (Vercel Sandbox Firecracker microVMs —
+    see `core/sandbox_vercel.py` and ADR-039; the production-capable backend,
+    reachable from Railway over the network with no local Docker daemon
+    needed). Selecting `"docker"` or `"vercel"` requires their respective
+    dependencies (a reachable Docker daemon + built image; or the `vercel`
+    package + `VERCEL_TOKEN`/`VERCEL_TEAM_ID`/`VERCEL_PROJECT_ID`) — each
+    raises its own `*SandboxUnavailableError` rather than silently falling
+    back to the weaker `"process"` backend if unavailable — an explicit
+    opt-in fails closed, it does not degrade quietly.
 
     Backend selection is resolved in this order: the `backend` argument, then
     the `AI_ETL_SANDBOX_BACKEND` environment variable, then `"process"`. This
@@ -381,6 +389,24 @@ def execute_in_sandbox(
         from ai_etl.core.sandbox_docker import execute_in_docker_sandbox
 
         return execute_in_docker_sandbox(
+            code,
+            dfs,
+            mode=mode,
+            entry_point=entry_point,
+            result_vars=result_vars or [],
+            extra_globals=extra_globals,
+            extra_modules=extra_modules,
+            extra_builtins=extra_builtins,
+            timeout_seconds=timeout_seconds,
+        )
+    if resolved_backend == "vercel":
+        # Imported lazily, same rationale as "docker" above: the `vercel`
+        # package is an opt-in extra, not a base dependency — every existing
+        # caller still gets "process" unless AI_ETL_SANDBOX_BACKEND=vercel
+        # (or backend="vercel") is set explicitly (ADR-039).
+        from ai_etl.core.sandbox_vercel import execute_in_vercel_sandbox
+
+        return execute_in_vercel_sandbox(
             code,
             dfs,
             mode=mode,

@@ -1,19 +1,31 @@
-# ADR-038: image for the Docker-isolated sandbox backend of
-# core/sandbox.py's execute_in_sandbox(backend="docker").
+# ADR-038 / ADR-039: shared image for both sandbox backends of
+# core/sandbox.py's execute_in_sandbox() that isolate code inside a
+# container rather than a bare `multiprocessing.Process`:
+#   - backend="docker" (ADR-038): `docker run` locally/dev, driven by
+#     `run_sandboxed.py` as this image's ENTRYPOINT.
+#   - backend="vercel" (ADR-039): the same image, pushed to Vercel
+#     Container Registry (`make sandbox-vcr-image`) and booted as a
+#     Firecracker microVM by Vercel Sandbox in production. Vercel Sandbox
+#     ignores a custom image's ENTRYPOINT/CMD entirely, so that backend
+#     instead runs `run_sandboxed_vercel.py` explicitly via
+#     `box.run_process(...)` — see core/sandbox_vercel.py.
 #
 # Deliberately installs the real `ai_etl` package (same as the top-level
-# Dockerfile) so `run_sandboxed.py` can import
+# Dockerfile) so both driver scripts can import
 # `ai_etl.core.sandbox._execute_code` directly — the restricted-globals /
 # mode ("function" vs "script") dispatch logic stays defined in exactly one
 # place (core/sandbox.py), not duplicated into this image. This image only
-# plumbs a pickle payload in on stdin and a pickle result out on stdout; it
-# does not re-implement any security-relevant logic.
+# plumbs a pickle payload in (stdin for the Docker backend, a file for the
+# Vercel backend — Vercel Sandbox's Python SDK does not support piping to a
+# process's stdin) and a pickle result out; it does not re-implement any
+# security-relevant logic.
 #
 # Not used by the top-level Dockerfile/Railway deploy — see ADR-038 for why
-# (Railway containers are non-privileged; Docker-in-Docker from inside an
-# already-containerized Railway service is not supported). Built and run
-# locally via `make sandbox-image` / core/sandbox_docker.py, for
-# AI_ETL_SANDBOX_BACKEND=docker opt-in only.
+# Docker-in-Docker doesn't work from inside a Railway service. Built and run
+# locally via `make sandbox-image` / core/sandbox_docker.py for
+# AI_ETL_SANDBOX_BACKEND=docker opt-in, and pushed to VCR via `make
+# sandbox-vcr-image` for the AI_ETL_SANDBOX_BACKEND=vercel production path
+# (ADR-039).
 FROM python:3.12-slim
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
@@ -29,6 +41,7 @@ COPY src/ ./src/
 RUN uv sync --no-dev --no-editable
 
 COPY docker/sandbox/run_sandboxed.py ./run_sandboxed.py
+COPY docker/sandbox/run_sandboxed_vercel.py ./run_sandboxed_vercel.py
 
 ENV PATH="/app/.venv/bin:$PATH"
 # Belt-and-suspenders: PYTHONDONTWRITEBYTECODE avoids the interpreter trying

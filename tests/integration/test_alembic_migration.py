@@ -9,10 +9,10 @@ from pathlib import Path
 
 import pytest
 import sqlalchemy
-from alembic.config import Config
 from sqlalchemy import inspect, text
 
 from alembic import command
+from alembic.config import Config
 
 _TEST_APP_DATABASE_URL = os.getenv(
     "TEST_APP_DATABASE_URL",

@@ -2,6 +2,13 @@
 
 **Status:** Accepted — code complete and dev/local-verified; **production
 (Railway) rollout explicitly deferred**, see "Railway feasibility" below.
+**Update (2026-08-27):** the deferred production-rollout item is now
+resolved by [ADR-039](ADR-039-vercel-sandbox-production-isolation.md) —
+Vercel Sandbox (Firecracker microVMs), reachable from Railway with no
+Docker daemon required on the calling side, chosen over standing up a
+separate Docker-capable VPS. This `"docker"` backend remains as-is
+(dev/local-only, unchanged) — ADR-039 adds a third backend
+(`"vercel"`) rather than replacing this one.
 **Date:** 2026-08-26
 **Deciders:** Bruno Ribeiro (project owner decision; this ADR documents and
 executes it, it does not re-litigate whether to do it)
