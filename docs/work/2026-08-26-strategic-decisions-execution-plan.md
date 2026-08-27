@@ -1,6 +1,6 @@
 # 2026-08-26 — Execution plan: post-audit strategic decisions
 
-**Status:** Waves 1 and 2 done, all 4 branches pushed and ready, held pending CI budget reset (2026-09-01)
+**Status:** All implementation work done. All 5 branches pushed, reviewed, and ready. Nothing left to build before 2026-09-01 — only waiting on the CI budget reset.
 **Owner:** Bruno Ribeiro (decisions) + Claude (execution)
 
 ## Objective
@@ -70,7 +70,7 @@ later entries).
 | Item | Branch | State |
 |---|---|---|
 | Per-pipeline notification config UI | `feat/notification-config-ui` | Pushed, no PR yet. Built as its own `PUT /pipelines/{id}/notification-config` endpoint pair (not a `PATCH` field — clearing needs `channel=None,target=None` distinguishable from "omitted"), wired into `pipelines-manager.tsx` next to `ModelPicker`. |
-| LGPD export/retention UI | `feat/data-export-retention-ui` | Pushed, no PR yet. New `/data-export` page, first consumer of `GET /tenant/export`/`GET /tenant/retention` (ADR-035). **2 scope questions deliberately left open, not decided**: `DELETE /tenant` (full erasure) not surfaced anywhere in the frontend — not added; `PATCH /tenant/retention` (editing the window) not built — retention ships read-only for now. Both are real follow-up, not forgotten. |
+| LGPD export/retention UI | `feat/data-export-retention-ui` | Pushed, no PR yet. New `/data-export` page — first consumer of `GET/PATCH /tenant/retention`, `GET /tenant/export`, and `DELETE /tenant` (ADR-025, ADR-035). **Both scope questions from the first version resolved** (owner's decision, 2026-08-27, "follow LGPD fully"): `DELETE /tenant` now wired in, editor-gated, requires typing the literal `DELETE` to enable the button (mirrors the backend's own `confirm: "DELETE"` contract, ADR-025 Decision 4, rather than a weaker client-side gate); `PATCH /tenant/retention` now has a full save/clear form, same pattern as `budget-manager.tsx`'s cap form. |
 
 Both branch off `refactor/english-only-repo-wide` correctly (not stale
 `main`) — built in `/tmp` clean clones due to the git incident below, so
@@ -93,44 +93,49 @@ both updated 2026-08-26.
 
 ## Next steps, in order
 
-**Now, still CI-budget-blocked (until 2026-09-01):**
-1. Run the `frontend-design-review` skill checklist over all pending frontend
-   branches before they're considered fully done (not yet applied this
-   session — only `architecture-reviewer` has actually been used so far).
-2. Run `/sr-quality-check` formally over the full pending batch before
-   opening anything.
-3. Resolve the 2 open scope questions from Wave 2 (`DELETE /tenant` UI,
-   `PATCH /tenant/retention` UI) — decide whether either is in scope before
-   2026-09-01, or explicitly punt them to a later round.
+**Now, CI-budget-blocked (until 2026-09-01) — nothing left to build:**
+
+All implementation is done. `frontend-design-review` and `/sr-quality-check`
+were both run (2026-08-27) over all 3 pending frontend branches
+(`refactor/english-only-repo-wide`, `feat/notification-config-ui`,
+`feat/data-export-retention-ui`) — zero findings: no Portuguese identifiers
+in any diff, i18n key parity confirmed on both `feat/notification-config-ui`
+and `feat/data-export-retention-ui`, `npm run lint`/`npm run build` clean on
+all 3 re-verified from a fresh clone. Both Wave 2 scope questions are
+resolved (see the table above) — nothing left in this plan's own scope to
+decide or build before the reset. The only remaining action is waiting.
 
 **2026-09-01, once the Actions budget resets:**
-4. Open PRs in dependency order: `refactor/english-only-repo-wide` first
+1. Open PRs in dependency order: `refactor/english-only-repo-wide` first
    (foundation for everything else) → `feat/docker-sandbox-migration`
    (isolated, backend-only, already reviewed clean) → `feat/notification-config-ui`
    → `feat/data-export-retention-ui` → `docs/current-state-2026-08-26` last
    (documents the state this whole batch produces, so merge it after
    everything else is actually in).
-5. In the **first** PR of that batch, also add
+2. In the **first** PR of that batch, also add
    `if: github.event.pull_request.draft == false` to every workflow in
    `.github/workflows/` — pays for that PR's CI anyway, saves money on every
    future PR held in draft.
-6. Watch CI, merge each once green, in the same order.
-7. Delete merged branches + worktrees afterward (same cleanup pattern as
+3. Watch CI, merge each once green, in the same order.
+4. Delete merged branches + worktrees afterward (same cleanup pattern as
    this session).
 
-**After that batch lands — real remaining work:**
-8. Sandbox Docker migration's production rollout is explicitly **deferred**,
+**After that batch lands — real remaining work, not started, no branch yet:**
+5. Sandbox Docker migration's production rollout is explicitly **deferred**,
    not done: Railway doesn't support Docker-in-Docker (non-privileged
    containers — confirmed against Railway's own docs, cited in ADR-038).
    Needs a separate execution service (its own Railway service, or another
    Docker-capable host, called over an internal API) — this is a real
    architecture decision for Bruno to make before any further sandbox work,
    not something to default into.
-9. Remaining backend-ready/zero-UI features not yet in this plan: none
-   currently known beyond W2a/W2b — re-check `docs/CURRENT_STATE.md`'s
+6. Remaining backend-ready/zero-UI features not yet in this plan: none
+   currently known beyond Wave 2 — re-check `docs/CURRENT_STATE.md`'s
    "not done" list before assuming this is exhaustive.
-10. `docs/adr/ADR-032-security-posture-admin-role-sast.md` Decision 4 already
-    carries a superseded-by-ADR-038 note — no further action needed there.
+7. `docs/adr/ADR-032-security-posture-admin-role-sast.md` Decision 4 already
+   carries a superseded-by-ADR-038 note — no further action needed there.
+8. The project's new `metrics-analyst` agent (created 2026-08-26) hasn't
+   been used yet — no urgency, but a real gap if the TCC write-up needs a
+   fresh model-comparison/case-study report at some point.
 
 ## Acceptance criteria
 
