@@ -439,13 +439,22 @@
   },
   "dataExportPage": {
     "title": "Dados e privacidade",
-    "subtitle": "Exporte os dados da sua conta (direito de acesso LGPD/GDPR) e veja a política de retenção automática aplicada a eles."
+    "subtitle": "Exporte os dados da sua conta, gerencie a política de retenção automática, ou apague sua conta permanentemente (LGPD/GDPR)."
   },
   "dataExportManager": {
     "retentionHeading": "Retenção automática",
     "retentionWindow": "Artefatos de armazenamento com mais de {days} dias são excluídos automaticamente",
     "retentionKeepForever": "Mantido para sempre — nenhuma janela de retenção automática definida",
     "retentionExplainer": "A retenção remove apenas artefatos de execução armazenados (arquivos); o histórico de execuções e os registros da conta nunca são excluídos automaticamente.",
+    "retentionFormHeading": "Definir janela de retenção",
+    "retentionInputLabel": "Janela de retenção (dias)",
+    "retentionInputPlaceholder": "ex: 90",
+    "invalidRetention": "Informe um número inteiro de dias, maior ou igual a 1.",
+    "save": "Salvar",
+    "clearRetention": "Remover janela",
+    "confirmClearRetention": "Confirmar remoção?",
+    "toastRetentionSaved": "Janela de retenção atualizada.",
+    "toastRetentionCleared": "Janela de retenção removida — os dados agora são mantidos para sempre.",
     "exportHeading": "Exportar seus dados",
     "exportExplainer": "Baixa um arquivo JSON com suas execuções, análises, pipelines salvos, nomes de segredos (nunca seus valores) e chaves de artefatos armazenados — tudo o que a exportação de acesso a dados desta conta cobre.",
     "exportButton": "Exportar dados",
@@ -453,6 +462,18 @@
     "cancel": "Cancelar",
     "exportInProgress": "Preparando sua exportação…",
     "exportDone": "Exportação baixada.",
-    "toastExported": "Exportação de dados baixada."
+    "toastExported": "Exportação de dados baixada.",
+    "deleteHeading": "Excluir conta",
+    "deleteExplainer": "Apaga permanentemente todas as execuções, análises, pipelines salvos e segredos desta conta. Isso não pode ser desfeito. Digite DELETE abaixo para habilitar o botão.",
+    "deleteConfirmLabel": "Digite DELETE para confirmar",
+    "deleteButton": "Excluir minha conta permanentemente",
+    "toastDeleted": "Conta excluída.",
+    "deletionCompleteHeading": "Conta excluída",
+    "deletionCompleteExplainer": "Todos os registros listados abaixo foram apagados permanentemente.",
+    "deletionCountRuns": "{count} execuções excluídas",
+    "deletionCountAnalysisRuns": "{count} análises excluídas",
+    "deletionCountSavedPipelines": "{count} pipelines salvos excluídos",
+    "deletionCountSecrets": "{count} segredos excluídos",
+    "deletionCompleteBackLink": "Voltar para a página inicial"
   }
 }

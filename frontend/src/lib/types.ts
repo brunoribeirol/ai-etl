@@ -329,3 +329,21 @@ export type TenantExport = {
   tenant_secrets: Record<string, unknown>[];
   storage_artifacts: Record<string, unknown>[];
 };
+
+/** `DELETE /tenant` (Sprint 24, ADR-025) — full tenant erasure, `editor`-only.
+ * Mirrors `services/tenant_deletion_service.py::TenantDeletionSummary`.
+ * Irreversible — the caller must send `{"confirm": "DELETE"}` (a literal
+ * string match, ADR-025 Decision 4), never a soft-delete/undo path. */
+export type TenantDeletionSummary = {
+  tenant_id: string;
+  requested_at: string;
+  completed_at: string;
+  runs_deleted: number;
+  analysis_runs_deleted: number;
+  stage_latencies_deleted: number;
+  saved_pipelines_deleted: number;
+  secrets_deleted: number;
+  storage_keys_deleted: number;
+  status: string;
+  error: string | null;
+};
