@@ -1,10 +1,13 @@
 # ADR-032: RLS Posture, Platform-Admin RBAC Role, Semgrep SAST, and Sandbox Bypass Risk Acceptance
 
-**Status:** Accepted (code complete for Decision 2 and 3; Decision 1 is a
-conscious risk-acceptance decision with no production code change this
-sprint; **Decision 4 superseded 2026-08-26 by
-[ADR-038](ADR-038-docker-sandbox-migration.md)** — see each Decision for
-what "accepted"/"superseded" means concretely)
+**Status:** Accepted (code complete for Decision 2 and 3; see each Decision
+for what "accepted"/"superseded" means concretely). **Decision 1 superseded
+2026-08-27 by [ADR-040](ADR-040-rls-tenant-isolation-defense-in-depth.md)**
+— the project owner decided to build the non-bypass role + real RLS policies
+("Option B" below) ahead of this Decision's own stated trigger. **Decision 4
+superseded 2026-08-26 by [ADR-038](ADR-038-docker-sandbox-migration.md)**.
+Both Decisions' text below is kept as-written for history; neither reflects
+this project's current posture. Decisions 2-3 are unaffected.
 **Date:** 2026-08-22
 **Sprint:** 31 (Phase 2 roadmap, "Segurança avançada e acesso administrativo
 auditável")
@@ -40,6 +43,14 @@ independently readable ADR section.
 ---
 
 ## Decision 1 — RLS posture: keep `rolbypassrls=true`, documented trade-off
+
+> **Superseded 2026-08-27 by
+> [ADR-040](ADR-040-rls-tenant-isolation-defense-in-depth.md).** The project
+> owner decided to build Option B below (a second, non-bypass role + real RLS
+> policies) ahead of this Decision's own stated trigger. This section is kept
+> as-written for history; it no longer reflects this project's current
+> posture — see ADR-040 for the two-role design, the GUC-scoping mechanism,
+> and which tables now have real RLS policies.
 
 **Decision: keep the current posture.** This app's own connection role
 retains `rolbypassrls=true`. No production code or database role change

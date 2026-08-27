@@ -116,6 +116,20 @@ You will receive an acknowledgement within 72 hours.
   full alternatives analysis and the explicit trigger for revisiting it
   (opening the product to external paying tenants with real
   data-sensitivity requirements).
+- **Update (2026-08-27, ADR-040 — supersedes the above):** built ahead of
+  that trigger. A second, non-bypass role (`ai_etl_app_tenant`,
+  `NOBYPASSRLS`) now exists alongside the original bypass role — every
+  per-tenant-request read/write in `audit/db/*.py` (except the deliberate
+  admin/background-job exemptions) runs through it, scoped per-transaction
+  via `SET LOCAL`-equivalent GUC binding (`audit/connection.py::
+  tenant_scope`), with real `USING`/`WITH CHECK` policies (migration `0021`)
+  on `users`, `runs`, `stage_latencies`, `analysis_runs`, `saved_pipelines`,
+  and `tenant_secrets`. This is now a real, verified (see
+  `tests/integration/test_tenant_isolation_rls.py`) second layer of defense
+  against a future `WHERE tenant_id = :id` bug — not just the
+  anon/authenticated-role hole this section originally described. See
+  [ADR-040](docs/adr/ADR-040-rls-tenant-isolation-defense-in-depth.md) for
+  the full design and its honestly-disclosed residual risk.
 
 ### Admin / support access (Sprint 31, ADR-032 Decision 2)
 - A platform `admin` RBAC role (`api/deps.py::require_admin`) exists
