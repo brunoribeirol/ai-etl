@@ -1,0 +1,26 @@
+# Per-Dockerfile ignore file for docker/sandbox/Dockerfile (ADR-038/ADR-039) —
+# Docker resolves this automatically from its path relative to the build
+# context (repo root, `docker build -f docker/sandbox/Dockerfile .`), same
+# mechanism the root `.dockerignore` documents. This sandbox image doesn't
+# COPY `case_study/` (only the root Dockerfile does), so it's safe to exclude
+# here for a smaller build context — excluding it from the shared root
+# `.dockerignore` broke that Dockerfile's own build (see its comment).
+
+.git/
+.venv/
+venv/
+node_modules/
+frontend/
+.claude/
+docs/
+case_study/
+tests/
+.env
+.env.local
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/

@@ -141,7 +141,7 @@ def execute_in_vercel_sandbox(
     vcpus = int(os.environ.get("AI_ETL_SANDBOX_VERCEL_VCPUS", _DEFAULT_VCPUS))
     memory = int(os.environ.get("AI_ETL_SANDBOX_VERCEL_MEMORY_MB", _DEFAULT_MEMORY_MB))
 
-    payload = pickle.dumps(
+    payload = pickle.dumps(  # nosemgrep: python.lang.security.deserialization.pickle.avoid-pickle -- see note at the bottom of this file
         {
             "code": code,
             "dfs": dfs,
@@ -239,7 +239,7 @@ def execute_in_vercel_sandbox(
         ) from e
 
     try:
-        response: dict[str, Any] = pickle.loads(result_bytes)  # nosec B301 -- see note at bottom
+        response: dict[str, Any] = pickle.loads(result_bytes)  # nosec B301  # nosemgrep: python.lang.security.deserialization.pickle.avoid-pickle -- see note at bottom
     except Exception as e:
         return SandboxResult(
             values={},
