@@ -72,7 +72,7 @@ export function OnboardingChecklist() {
   return (
     <Card>
       <CardContent className="flex flex-col gap-3">
-        <span className="text-sm font-medium">O que falta para estar pronto</span>
+        <span className="text-sm font-medium">{t("heading")}</span>
         {error && (
           <p className="text-destructive text-xs" role="alert">
             {error}
