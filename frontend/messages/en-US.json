@@ -16,6 +16,7 @@
     "admin": "Admin",
     "approvals": "Approvals",
     "budget": "Budget",
+    "dataExport": "Data & privacy",
     "secrets": "Secrets"
   },
   "marketingLayout": {
@@ -457,5 +458,44 @@
     "cancel": "Cancel",
     "toastSaved": "Budget cap updated.",
     "toastCleared": "Cap cleared — budget is now unlimited."
+  },
+  "dataExportPage": {
+    "title": "Data & privacy",
+    "subtitle": "Export your account's data, manage the automatic retention policy, or permanently erase your account (LGPD/GDPR)."
+  },
+  "dataExportManager": {
+    "retentionHeading": "Automatic retention",
+    "retentionWindow": "Storage artifacts older than {days} days are automatically deleted",
+    "retentionKeepForever": "Kept forever — no automatic-retention window set",
+    "retentionExplainer": "Retention only removes stored run artifacts (files); run history and account records are never deleted automatically.",
+    "retentionFormHeading": "Set retention window",
+    "retentionInputLabel": "Retention window (days)",
+    "retentionInputPlaceholder": "e.g. 90",
+    "invalidRetention": "Enter a whole number of days, 1 or greater.",
+    "save": "Save",
+    "clearRetention": "Clear window",
+    "confirmClearRetention": "Confirm clear?",
+    "toastRetentionSaved": "Retention window updated.",
+    "toastRetentionCleared": "Retention window cleared — data is now kept forever.",
+    "exportHeading": "Export your data",
+    "exportExplainer": "Downloads a JSON file with your runs, analyses, saved pipelines, secret names (never their values), and storage artifact keys — everything this account's data-access export covers.",
+    "exportButton": "Export data",
+    "confirmExport": "Confirm export?",
+    "cancel": "Cancel",
+    "exportInProgress": "Preparing your export…",
+    "exportDone": "Export downloaded.",
+    "toastExported": "Data export downloaded.",
+    "deleteHeading": "Delete account",
+    "deleteExplainer": "Permanently erases every run, analysis, saved pipeline, and secret this account owns. This cannot be undone. Type DELETE below to enable the button.",
+    "deleteConfirmLabel": "Type DELETE to confirm",
+    "deleteButton": "Permanently delete my account",
+    "toastDeleted": "Account deleted.",
+    "deletionCompleteHeading": "Account deleted",
+    "deletionCompleteExplainer": "Every record listed below has been permanently erased.",
+    "deletionCountRuns": "{count} runs deleted",
+    "deletionCountAnalysisRuns": "{count} analysis runs deleted",
+    "deletionCountSavedPipelines": "{count} saved pipelines deleted",
+    "deletionCountSecrets": "{count} secrets deleted",
+    "deletionCompleteBackLink": "Return to the homepage"
   }
 }

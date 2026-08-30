@@ -23,6 +23,7 @@ const NAV_LINKS = [
   { href: "/approvals", key: "approvals" },
   { href: "/summary", key: "summary" },
   { href: "/budget", key: "budget" },
+  { href: "/data-export", key: "dataExport" },
 ] as const;
 
 /**

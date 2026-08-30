@@ -89,6 +89,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <Link href="/budget" className="hover:text-foreground transition-colors">
               {t("budget")}
             </Link>
+            <Link href="/data-export" className="hover:text-foreground transition-colors">
+              {t("dataExport")}
+            </Link>
             {isEditor && (
               <Link href="/secrets" className="hover:text-foreground transition-colors">
                 {t("secrets")}
