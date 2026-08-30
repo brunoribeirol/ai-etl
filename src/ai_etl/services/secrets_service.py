@@ -29,7 +29,7 @@ from cryptography.fernet import Fernet, InvalidToken
 from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from ai_etl.audit.connection import get_engine
+from ai_etl.audit.connection import tenant_scope
 from ai_etl.audit.models import tenant_secrets
 
 logger = logging.getLogger(__name__)
@@ -80,7 +80,7 @@ def set_secret(tenant_id: str, name: str, value: str) -> None:
             set_={"ciphertext": ciphertext, "updated_at": now},
         )
     )
-    with get_engine().begin() as conn:
+    with tenant_scope(tenant_id) as conn:
         conn.execute(stmt)
     logger.info(  # nosemgrep: python.lang.security.audit.logging.logger-credential-leak.python-logger-credential-disclosure -- `name` is the secret's label, never `value`; false positive on the literal word "Secret" in the message
         "Secret '%s' stored for tenant.", name
@@ -97,7 +97,7 @@ def get_secret(tenant_id: str, name: str) -> str:
     stmt = select(tenant_secrets.c.ciphertext).where(
         tenant_secrets.c.tenant_id == tenant_id, tenant_secrets.c.name == name
     )
-    with get_engine().connect() as conn:
+    with tenant_scope(tenant_id) as conn:
         row = conn.execute(stmt).fetchone()
     if row is None:
         raise SecretNotFoundError(name)
@@ -116,7 +116,7 @@ def list_secret_names(tenant_id: str) -> list[str]:
         .where(tenant_secrets.c.tenant_id == tenant_id)
         .order_by(tenant_secrets.c.name)
     )
-    with get_engine().connect() as conn:
+    with tenant_scope(tenant_id) as conn:
         return [row.name for row in conn.execute(stmt)]
 
 
@@ -125,7 +125,7 @@ def delete_secret(tenant_id: str, name: str) -> bool:
     stmt = delete(tenant_secrets).where(
         tenant_secrets.c.tenant_id == tenant_id, tenant_secrets.c.name == name
     )
-    with get_engine().begin() as conn:
+    with tenant_scope(tenant_id) as conn:
         result = conn.execute(stmt)
     deleted = result.rowcount > 0
     if deleted:

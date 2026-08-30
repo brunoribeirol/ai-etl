@@ -4,13 +4,21 @@ Same convention as `test_secrets_service.py`: a real in-memory SQLite engine
 (not a mocked `get_engine`) so the actual insert/select/delete statements
 execute for real, plus a fake in-memory `StorageBackend` (no real S3/local
 disk needed) so storage-artifact deletion is exercised for real too.
+
+ADR-040 follow-up: tenant-scoped reads/writes now go through `tenant_scope()`
+(faked here the same way `test_audit_db.py` established); `tenant_deletion_log`
+writes stay on `get_engine()` (bypass role, RLS-enabled-with-no-policy table,
+per ADR-040's documented exemption) — both are faked onto the same SQLite
+engine here since this test has no real Postgres role split to exercise.
 """
 
+from contextlib import contextmanager
 from datetime import datetime, timezone
+from typing import Iterator
 
 import pytest
 import sqlalchemy
-from sqlalchemy import Engine
+from sqlalchemy import Connection, Engine
 
 from ai_etl.audit.models import analysis_runs as analysis_runs_table
 from ai_etl.audit.models import metadata as audit_metadata
@@ -48,6 +56,15 @@ def _make_sqlite_engine() -> Engine:
     return engine
 
 
+def _fake_scope(engine: Engine):  # noqa: ANN201
+    @contextmanager
+    def _scope(tenant_id: str) -> Iterator[Connection]:
+        with engine.begin() as conn:
+            yield conn
+
+    return _scope
+
+
 @pytest.fixture
 def fake_storage() -> FakeStorageBackend:
     return FakeStorageBackend()
@@ -57,6 +74,7 @@ def fake_storage() -> FakeStorageBackend:
 def engine(monkeypatch: pytest.MonkeyPatch, fake_storage: FakeStorageBackend) -> Engine:
     eng = _make_sqlite_engine()
     monkeypatch.setattr(svc, "get_engine", lambda: eng)
+    monkeypatch.setattr(svc, "tenant_scope", _fake_scope(eng))
     monkeypatch.setattr(svc, "get_storage_backend", lambda log_dir, tenant_id: fake_storage)
 
     now = datetime.now(tz=timezone.utc)

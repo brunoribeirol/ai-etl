@@ -3,13 +3,20 @@
 Same convention as `test_tenant_deletion_service.py`: a real in-memory
 SQLite engine, a fake in-memory `StorageBackend`, and monkeypatched
 `get_engine`/`get_storage_backend` at the module's own import site.
+
+ADR-040 follow-up: expired-run reads now go through `tenant_scope()`
+(faked here, same pattern as `test_audit_db.py`); `retention_cleanup_log`
+writes stay on `get_engine()` (bypass role — RLS-enabled-with-no-policy
+table, ADR-040's documented exemption).
 """
 
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
+from typing import Iterator
 
 import pytest
 import sqlalchemy
-from sqlalchemy import Engine
+from sqlalchemy import Connection, Engine
 
 from ai_etl.audit.db import retention as retention_db
 from ai_etl.audit.models import analysis_runs as analysis_runs_table
@@ -43,6 +50,15 @@ def _make_sqlite_engine() -> Engine:
     return engine
 
 
+def _fake_scope(engine: Engine):  # noqa: ANN201
+    @contextmanager
+    def _scope(tenant_id: str) -> Iterator[Connection]:
+        with engine.begin() as conn:
+            yield conn
+
+    return _scope
+
+
 @pytest.fixture
 def fake_storage() -> FakeStorageBackend:
     return FakeStorageBackend()
@@ -52,6 +68,7 @@ def fake_storage() -> FakeStorageBackend:
 def engine(monkeypatch: pytest.MonkeyPatch, fake_storage: FakeStorageBackend) -> Engine:
     eng = _make_sqlite_engine()
     monkeypatch.setattr(svc, "get_engine", lambda: eng)
+    monkeypatch.setattr(svc, "tenant_scope", _fake_scope(eng))
     monkeypatch.setattr(retention_db, "get_engine", lambda: eng)
     monkeypatch.setattr(svc, "get_storage_backend", lambda log_dir, tenant_id: fake_storage)
 
@@ -172,6 +189,7 @@ def test_cleanup_task_is_a_noop_when_no_tenant_has_a_retention_policy(
 ) -> None:
     eng = _make_sqlite_engine()
     monkeypatch.setattr(svc, "get_engine", lambda: eng)
+    monkeypatch.setattr(svc, "tenant_scope", _fake_scope(eng))
     monkeypatch.setattr(retention_db, "get_engine", lambda: eng)
     monkeypatch.setattr(svc, "get_storage_backend", lambda log_dir, tenant_id: fake_storage)
     with eng.begin() as conn:

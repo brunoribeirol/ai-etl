@@ -21,11 +21,11 @@ import logging
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Engine, delete, select
+from sqlalchemy import Connection, Engine, delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from typing_extensions import TypedDict
 
-from ai_etl.audit.connection import get_engine
+from ai_etl.audit.connection import get_engine, tenant_scope
 from ai_etl.audit.models import (
     analysis_runs,
     runs,
@@ -90,7 +90,7 @@ def candidate_storage_keys_for_run(
     return keys
 
 
-def tenant_run_storage_candidates(engine: Engine, tenant_id: str) -> dict[str, list[str]]:
+def tenant_run_storage_candidates(conn: Connection, tenant_id: str) -> dict[str, list[str]]:
     """`{run_id: [candidate storage keys]}` for every run/analysis run a
     tenant owns — regardless of whether each key actually exists in the
     configured `StorageBackend` (callers check `exists()`/attempt
@@ -99,21 +99,26 @@ def tenant_run_storage_candidates(engine: Engine, tenant_id: str) -> dict[str, l
     Public (Sprint 36, ADR-035) so `services/tenant_export_service.py`'s
     "what artifacts does this tenant have" listing can never drift from what
     `_delete_tenant_storage` below actually deletes.
+
+    Takes an already-open `Connection` (ADR-040 follow-up) rather than an
+    `Engine`, so callers control which role/transaction it runs under —
+    `tenant_export_service.py` still opens its own bypass-engine connection
+    (its whole read path stays on the bypass role, unchanged), while
+    `_delete_tenant_storage` below opens a `tenant_scope()` connection.
     """
-    with engine.connect() as conn:
-        run_ids = {
-            row.run_id
-            for row in conn.execute(select(runs.c.run_id).where(runs.c.tenant_id == tenant_id))
-        }
-        analysis_rows = list(
-            conn.execute(
-                select(
-                    analysis_runs.c.run_id,
-                    analysis_runs.c.gold_subtasks,
-                    analysis_runs.c.science_subtasks,
-                ).where(analysis_runs.c.tenant_id == tenant_id)
-            )
+    run_ids = {
+        row.run_id
+        for row in conn.execute(select(runs.c.run_id).where(runs.c.tenant_id == tenant_id))
+    }
+    analysis_rows = list(
+        conn.execute(
+            select(
+                analysis_runs.c.run_id,
+                analysis_runs.c.gold_subtasks,
+                analysis_runs.c.science_subtasks,
+            ).where(analysis_runs.c.tenant_id == tenant_id)
         )
+    )
     analysis_by_run = {row.run_id: row for row in analysis_rows}
     run_ids |= set(analysis_by_run)
 
@@ -129,9 +134,7 @@ def tenant_run_storage_candidates(engine: Engine, tenant_id: str) -> dict[str, l
     return result
 
 
-def _delete_tenant_storage(
-    engine: Engine, tenant_id: str, storage: StorageBackend
-) -> tuple[int, list[str]]:
+def _delete_tenant_storage(tenant_id: str, storage: StorageBackend) -> tuple[int, list[str]]:
     """Best-effort deletion of every storage artifact a tenant's runs produced.
 
     Returns `(keys_deleted, errors)`. Never raises — a storage failure (e.g.
@@ -139,7 +142,8 @@ def _delete_tenant_storage(
     DB-side erasure that follows (ADR-025 Decision 3: the DB rows are the
     higher-confidence compliance signal).
     """
-    candidates_by_run = tenant_run_storage_candidates(engine, tenant_id)
+    with tenant_scope(tenant_id) as conn:
+        candidates_by_run = tenant_run_storage_candidates(conn, tenant_id)
 
     deleted = 0
     errors: list[str] = []
@@ -202,19 +206,23 @@ def delete_tenant_data(
         TenantNotFoundError: No `users` row exists for `tenant_id` — nothing
             to delete. Callers (the API router) map this to `404`.
     """
-    engine = get_engine()
+    # `tenant_deletion_log` (ADR-025 Decision 2) has RLS enabled with no
+    # policy (migration 0014) — it is bypass-engine-only by design (ADR-040's
+    # documented exemption list), so this is the one connection in this
+    # function that deliberately stays on the bypass role throughout.
+    log_engine = get_engine()
     requested_at = datetime.now(tz=timezone.utc)
 
-    with engine.connect() as conn:
+    with tenant_scope(tenant_id) as conn:
         user_row = conn.execute(select(users.c.id).where(users.c.id == tenant_id)).first()
     if user_row is None:
         raise TenantNotFoundError(tenant_id)
 
     storage = get_storage_backend(log_dir, tenant_id)
-    storage_keys_deleted, storage_errors = _delete_tenant_storage(engine, tenant_id, storage)
+    storage_keys_deleted, storage_errors = _delete_tenant_storage(tenant_id, storage)
 
     try:
-        with engine.begin() as conn:
+        with tenant_scope(tenant_id) as conn:
             stage_latencies_deleted = conn.execute(
                 delete(stage_latencies).where(stage_latencies.c.tenant_id == tenant_id)
             ).rowcount
@@ -231,7 +239,7 @@ def delete_tenant_data(
             conn.execute(delete(users).where(users.c.id == tenant_id))
     except Exception as exc:
         _write_deletion_log(
-            engine,
+            log_engine,
             tenant_id=tenant_id,
             requested_by=requested_by,
             requested_at=requested_at,
@@ -260,7 +268,7 @@ def delete_tenant_data(
         "storage_keys_deleted": storage_keys_deleted,
     }
     _write_deletion_log(
-        engine,
+        log_engine,
         tenant_id=tenant_id,
         requested_by=requested_by,
         requested_at=requested_at,

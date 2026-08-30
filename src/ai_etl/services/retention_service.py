@@ -35,7 +35,7 @@ from sqlalchemy import Engine, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from typing_extensions import TypedDict
 
-from ai_etl.audit.connection import get_engine
+from ai_etl.audit.connection import get_engine, tenant_scope
 from ai_etl.audit.db.retention import list_tenants_with_retention
 from ai_etl.audit.models import analysis_runs, retention_cleanup_log, runs
 from ai_etl.audit.storage import get_storage_backend
@@ -54,15 +54,20 @@ class TenantRetentionCleanupSummary(TypedDict):
     error: str | None
 
 
-def _expired_run_storage_candidates(
-    engine: Engine, tenant_id: str, cutoff: datetime
-) -> dict[str, list[str]]:
+def _expired_run_storage_candidates(tenant_id: str, cutoff: datetime) -> dict[str, list[str]]:
     """`{run_id: [candidate storage keys]}` for every run/analysis run of
     `tenant_id` whose `timestamp` is older than `cutoff` — same candidate-key
     derivation as `tenant_deletion_service.tenant_run_storage_candidates`,
     just scoped to expired runs instead of every run a tenant owns (a
-    retention sweep must never touch an artifact still inside its window)."""
-    with engine.connect() as conn:
+    retention sweep must never touch an artifact still inside its window).
+
+    Reads through `tenant_scope()` (ADR-040 follow-up) — same restricted,
+    RLS-backed role every other per-tenant read in this project now uses;
+    `_write_cleanup_log` below stays on the bypass engine, since
+    `retention_cleanup_log` has RLS enabled with no policy (ADR-040's
+    documented exemption list).
+    """
+    with tenant_scope(tenant_id) as conn:
         run_ids = {
             row.run_id
             for row in conn.execute(
@@ -137,11 +142,14 @@ def cleanup_expired_retention_for_tenant(
 
     Never touches `runs`/`analysis_runs` DB rows — see module docstring.
     """
-    engine = get_engine()
+    # `retention_cleanup_log` (below) is bypass-engine-only by design (ADR-040's
+    # exemption list) — `log_engine` names that connection is specifically for it,
+    # not for the tenant-scoped reads above.
+    log_engine = get_engine()
     started_at = datetime.now(tz=timezone.utc)
     cutoff = (now or started_at) - timedelta(days=retention_days)
 
-    candidates_by_run = _expired_run_storage_candidates(engine, tenant_id, cutoff)
+    candidates_by_run = _expired_run_storage_candidates(tenant_id, cutoff)
     storage = get_storage_backend(log_dir, tenant_id)
 
     deleted = 0
@@ -163,7 +171,7 @@ def cleanup_expired_retention_for_tenant(
     error = "; ".join(errors) if errors else None
     runs_scanned = len(candidates_by_run)
     _write_cleanup_log(
-        engine,
+        log_engine,
         tenant_id=tenant_id,
         retention_days=retention_days,
         started_at=started_at,

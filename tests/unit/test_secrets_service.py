@@ -3,14 +3,24 @@
 Same convention as `test_saved_pipelines_db.py`: a real in-memory SQLite
 engine (not a mocked `get_engine`) so the actual insert/select/delete
 statements execute for real.
+
+ADR-040 follow-up: this module now reads/writes through `tenant_scope()`
+(the restricted, RLS-backed role) instead of `get_engine()` (bypass role) —
+`tenant_scope` is faked the same way `test_audit_db.py` already established
+for every other ADR-040-migrated module, since its real
+`SELECT set_config(...)` GUC call is Postgres-only. Real GUC-scoping/RLS
+behavior is covered against a live Postgres in
+`tests/integration/test_tenant_isolation_rls.py`.
 """
 
+from contextlib import contextmanager
 from datetime import datetime, timezone
+from typing import Iterator
 
 import pytest
 import sqlalchemy
 from cryptography.fernet import Fernet
-from sqlalchemy import Engine
+from sqlalchemy import Connection, Engine
 
 from ai_etl.audit.models import metadata as audit_metadata
 from ai_etl.audit.models import users as users_table
@@ -23,10 +33,19 @@ def _make_sqlite_engine() -> Engine:
     return engine
 
 
+def _fake_scope(engine: Engine):  # noqa: ANN201
+    @contextmanager
+    def _scope(tenant_id: str) -> Iterator[Connection]:
+        with engine.begin() as conn:
+            yield conn
+
+    return _scope
+
+
 @pytest.fixture
 def engine(monkeypatch: pytest.MonkeyPatch) -> Engine:
     eng = _make_sqlite_engine()
-    monkeypatch.setattr(secrets_service, "get_engine", lambda: eng)
+    monkeypatch.setattr(secrets_service, "tenant_scope", _fake_scope(eng))
     with eng.begin() as conn:
         conn.execute(
             sqlalchemy.insert(users_table).values(

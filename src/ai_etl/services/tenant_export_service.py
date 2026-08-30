@@ -93,7 +93,13 @@ def export_tenant_data(tenant_id: str, log_dir: str = "./runs") -> TenantExport:
     secrets_metadata = [{k: v for k, v in row.items() if k != "ciphertext"} for row in secrets_rows]
 
     storage = get_storage_backend(log_dir, tenant_id)
-    candidates_by_run = tenant_run_storage_candidates(engine, tenant_id)
+    # Not migrated to tenant_scope() in this pass (out of scope — see ADR-040
+    # follow-up) — tenant_run_storage_candidates() now takes a Connection
+    # (ADR-040 follow-up on tenant_deletion_service.py) rather than an
+    # Engine, so this still-bypass-role call site just opens its own
+    # connection instead of passing the engine straight through.
+    with engine.connect() as conn:
+        candidates_by_run = tenant_run_storage_candidates(conn, tenant_id)
     storage_artifacts: list[dict[str, Any]] = []
     for run_id, candidates in candidates_by_run.items():
         for key in candidates:

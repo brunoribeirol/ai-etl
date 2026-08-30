@@ -42,8 +42,9 @@ GUC scoping, and real RLS policies on every tenant-scoped table.
     `audit/db/tenants.py::list_all_tenants`;
     `audit/db/budget.py::get_global_avg_run_cost_usd`.
   - `services/secrets_service.py`, `services/tenant_deletion_service.py`,
-    `services/retention_service.py`'s own direct queries — **out of this
-    ADR's scope** (see Residual risk below); still on the bypass engine.
+    `services/retention_service.py`'s own direct queries were **out of this
+    ADR's original scope** — migrated 2026-08-30, see Residual risk below
+    for what's closed and what's still deliberately bypass-only.
 - **`ai_etl_app_tenant`** (new, migration `0021`) — `NOBYPASSRLS`, granted
   `SELECT`/`INSERT`/`UPDATE`/`DELETE` on exactly the tenant-scoped tables
   listed below, nothing else. Used by every per-tenant-request read/write in
@@ -202,18 +203,35 @@ cross-tenant admin/aggregate read) — not because auditing them was skipped.**
 
 ## Residual risk — honestly not fully closed
 
-- **`services/secrets_service.py`, `tenant_deletion_service.py`,
-  `retention_service.py` still query the bypass engine directly**, not
-  `audit/db/*.py`. This ADR's scope (per the task that produced it) was
-  explicitly the 8 `audit/db/*.py` files; these three service-layer modules
-  are a real, plausible next increment — each already binds `tenant_id` as a
-  parameter in its own `WHERE` clause (same "verified by inspection" posture
-  ADR-032 Decision 1 originally described for the *whole* codebase), so the
-  residual exposure is the same narrow class ADR-032 accepted, now narrowed
-  further to three files instead of all of them.
+- ~~`services/secrets_service.py`, `tenant_deletion_service.py`,
+  `retention_service.py` still query the bypass engine directly~~ —
+  **closed 2026-08-30**: all three now route their tenant-scoped
+  reads/writes through `tenant_scope()`, the same restricted role as
+  `audit/db/*.py`. `secrets_service.py` migrated in full. The other two
+  keep one deliberate exception each: `tenant_deletion_log`/
+  `retention_cleanup_log` writes stay on the bypass engine, since both
+  tables have RLS enabled with no policy (migrations `0014`/`0018`) and
+  would deny the restricted role entirely — not an oversight, the same
+  exemption already documented above for those two tables.
+  `tenant_run_storage_candidates()` (shared with
+  `services/tenant_export_service.py`) changed from taking an `Engine` to
+  a `Connection`, so callers control which role opens it —
+  `tenant_export_service.py` itself was **not** migrated in this pass
+  (still bypass engine, out of scope; a real next increment). Verified
+  against a live local Postgres, not just unit-tested with mocks: a fresh
+  `alembic upgrade head`, then `set_secret`/`get_secret`/`list_secret_names`/
+  `delete_secret`, `cleanup_expired_retention_for_tenant`, and
+  `delete_tenant_data` all called for real through the restricted role,
+  each completing without a permission error.
 - **Password rotation for `ai_etl_app_tenant` in any non-local deployment is
   a manual, undone step** — flagged explicitly above, not automated by this
-  migration or this ADR.
+  migration or this ADR. **Update 2026-08-30**: done for the current Railway
+  production deployment — migration applied, password rotated, both
+  `ai-etl` and `tranquil-appreciation` services configured with
+  `APP_DATABASE_URL_TENANT`, verified live (no `EnvironmentError` in
+  runtime logs post-deploy). Still a manual step for any *future*
+  from-scratch deployment — this ADR doesn't automate it, the fix above was
+  operational, not a code change.
 - **`get_previous_completed_run`'s signature change** required updating its
   one call site (`services/alerting.py`) and every test calling it — done,
   but any *other*, not-yet-written caller of this function would need the
