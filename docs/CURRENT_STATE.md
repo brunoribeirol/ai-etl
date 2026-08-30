@@ -2,7 +2,67 @@
 
 > Living doc. Updated at the end of meaningful work sessions, not per-commit. Source of truth for repo/code state; the Obsidian vault (`~/Documents/Obsidian Vault/tcc/`) is the source of truth for the academic TCC narrative and product/strategy context.
 
-**Last updated:** 2026-08-30 — **All 10 branches from the 2026-08-26/27 sessions (English-only rename, Docker+Vercel sandbox, RLS defense-in-depth, notification UI, LGPD export/retention UI, Wave 3's 3 items) merged into `main` (#150–#157), plus 2 real regressions found and fixed in the same pass (#158, #159). `main` is green end to end: `CI` (Python 3.11/3.12 lint/format/type/test/security + E2E against real Postgres/Redis), `Semgrep`, and `Docker` all passing on the latest commit.**
+**Last updated:** 2026-08-30 (continued) — **Production operational gaps closed: RLS migration applied to Supabase, `ai_etl_app_tenant` password rotated, `APP_DATABASE_URL_TENANT` configured on both Railway services, ADR-040's 3-service residual risk migrated and verified (#161), celery-beat confirmed live and ticking. A real production incident (Supavisor pooler username missing its `.PROJECT_REF` suffix) found and fixed the same session via live browser verification — see below.**
+
+## 2026-08-30 (continued) — operational gaps closed, RLS-migrate-remaining-services, a real production incident found and fixed via live testing
+
+Direct continuation of this same day's merge session above. After merging all
+10 branches, went through the remaining operational gaps one at a time
+instead of leaving them as a list.
+
+**celery-beat confirmed live, not just assumed** (Railway MCP access,
+real-time). A `celery-beat` Railway service already existed (contradicting
+an older doc claim it wasn't deployed) — confirmed via live logs: `beat:
+Starting...` followed by `Scheduler: Sending due task check-scheduled-pipelines`
+firing every 60s as designed. No code or config change needed; a stale doc
+claim corrected instead.
+
+**ADR-040's residual risk closed for real (PR #161):** `secrets_service.py`,
+`tenant_deletion_service.py`, `retention_service.py` migrated from the
+bypass engine to `tenant_scope()` (the restricted RLS role) — the same 3
+services ADR-040 itself flagged as out of its original scope.
+`tenant_deletion_log`/`retention_cleanup_log` writes deliberately stay on
+the bypass engine (both tables have RLS enabled with no policy, migrations
+`0014`/`0018` — the restricted role would be denied entirely). Verified two
+ways: unit tests (SQLite-faked `tenant_scope`, same pattern already
+established for `audit/db/*.py`) and a real local Postgres — fresh
+`alembic upgrade head`, then every migrated function called for real
+through the restricted role, no permission errors.
+
+**A real production incident found by actually testing the live app, not
+by inspecting code.** Using Claude in Chrome against `ai-etl.vercel.app`
+with a real logged-in session: `/history` returned `HTTP 500`, `/pipelines`
+showed `TypeError: Failed to fetch` on the saved-pipelines list — every
+tenant-scoped page was broken in production. Railway API logs showed the
+real cause: `FATAL: (ENOIDENTIFIER) no tenant identifier provided` connecting
+to Supabase's Supavisor pooler. Root cause: Supavisor identifies which
+project's Postgres to route to *by username*, requiring
+`<role>.<PROJECT_REF>` — `APP_DATABASE_URL_TENANT` had been built by
+copying `APP_DATABASE_URL` and swapping only the role/password, dropping
+the `.PROJECT_REF` suffix that made the original work. Fixed by the owner
+correcting the Railway variable; confirmed via a second live browser pass
+that every previously-broken page (History, Pipelines, Secrets, Data &
+privacy) now loads real tenant data with no error. Full writeup: vault
+`bugs-solved/supabase-supavisor-pooler-username-missing-project-ref.md`.
+
+**Real financial/data-safety line held deliberately:** did not trigger an
+actual pipeline run during live verification (costs real LLM tokens) — every
+page checked was read-only navigation. Triggering a real run is a follow-up
+the owner can do explicitly when ready.
+
+**Session hygiene, again:** the RLS-migration branch and this doc-update
+branch both deleted locally and remotely post-merge — `main` remains the
+only branch, matching this session's earlier cleanup.
+
+**Still open, unchanged by this session:** Supabase PITR verification
+(dashboard-only, still needs the owner), Vercel Sandbox live containment
+test (needs real Vercel credentials), an actual Sentry error confirmed
+reaching the dashboard (Sentry is confirmed initializing correctly in
+production logs now, per this session's Railway log inspection — just not
+yet confirmed receiving a real error event), and `tenant_export_service.py`
+staying on the bypass engine (noted inline in code as a real next
+increment, not part of this pass's scope).
+
 
 ## 2026-08-30 — merged all 10 pending branches, found and fixed 2 real regressions
 
