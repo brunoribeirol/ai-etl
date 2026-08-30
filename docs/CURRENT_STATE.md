@@ -2,7 +2,74 @@
 
 > Living doc. Updated at the end of meaningful work sessions, not per-commit. Source of truth for repo/code state; the Obsidian vault (`~/Documents/Obsidian Vault/tcc/`) is the source of truth for the academic TCC narrative and product/strategy context.
 
-**Last updated:** 2026-08-25 — **All CRÍTICO/ALTA findings from the 2026-08-24 audit fixed and merged (23 PRs, #123–#145), plus the admin panel and approval-gate queue UI (previously backend-only, zero frontend).**
+**Last updated:** 2026-08-30 — **All 10 branches from the 2026-08-26/27 sessions (English-only rename, Docker+Vercel sandbox, RLS defense-in-depth, notification UI, LGPD export/retention UI, Wave 3's 3 items) merged into `main` (#150–#157), plus 2 real regressions found and fixed in the same pass (#158, #159). `main` is green end to end: `CI` (Python 3.11/3.12 lint/format/type/test/security + E2E against real Postgres/Redis), `Semgrep`, and `Docker` all passing on the latest commit.**
+
+## 2026-08-30 — merged all 10 pending branches, found and fixed 2 real regressions
+
+The repo was made public specifically so CI could run on GitHub's free public-repo minutes,
+removing the $18/month budget constraint that had held 9 branches (6 from 2026-08-26/27 plus
+Wave 3) unmerged since 2026-08-27. Every branch was merged this session — 8 as originally
+planned, plus 2 unplanned hotfixes.
+
+**Real dependency mapping done before touching anything.** `feat/notification-config-ui` and
+`feat/data-export-retention-ui` turned out to be built **on top of**
+`refactor/english-only-repo-wide` (not parallel to it) — sharing its rename commit as a real
+git ancestor. The execution plan doc (`docs/work/2026-08-26-strategic-decisions-execution-plan.md`)
+had also been independently maintained on that same rename branch with a *more complete* Wave 3
+section than the copy on `docs/current-state-2026-08-26`/`docs/wave3-complete` (session-log
+claims from 2026-08-27 that this section was written turned out to be true — just on a branch
+that hadn't been checked). Both branch-divergence issues were resolved by treating the rename
+branch's copy as canonical and rebasing/cherry-picking the rest on top, not by blindly merging
+both edits.
+
+**Merge order:** `refactor/english-only-repo-wide` (#150) → `docs/adr-rto-dr` (#151, ADR-042) →
+`docs/adr-api-versioning` (#152, ADR-043) → `feat/llm-circuit-breaker` (#153, ADR-041) →
+`feat/docker-sandbox-migration` (#154, ADR-038/039) → `feat/rls-tenant-isolation` (#155,
+ADR-040) → `feat/notification-config-ui` (#156) → `feat/data-export-retention-ui` (#157). One
+real content conflict (not a false alarm): `ADR-032`'s status line, edited independently by both
+the docker-sandbox and RLS branches to record their own supersession note — reconciled into one
+paragraph mentioning both (Decision 1 superseded by ADR-040, Decision 4 by ADR-038). Every merge
+verified locally (`make check`, `npm run lint`/`npm run build`) before opening its PR; every PR
+auto-merged on green required checks (`Python 3.11`/`3.12 — Lint, Format, Type, Test, Security`).
+
+**2 real regressions found — not by `make check` (doesn't cover these), by actually watching
+CI to completion instead of stopping at "PR merged":**
+
+1. **Docker build broken on `main` since #154** (`fix/dockerignore-scoped-to-sandbox-build`,
+   #158): the repo-root `.dockerignore` ADR-038 added (to keep the sandbox image build fast)
+   also excluded `case_study/`/`*.md`, which the **top-level production Dockerfile** needs
+   (`COPY case_study/ ./case_study/`, `COPY ... README.md ./`) — one `.dockerignore` applies to
+   every build using that context. Fixed with a per-Dockerfile ignore file
+   (`docker/sandbox/Dockerfile.dockerignore`, which Docker resolves automatically by path) and
+   a corrected shared root file. Verified with a real local `docker build` for both Dockerfiles,
+   not just inferred from the diff.
+2. **Semgrep blocking 5 findings on `main` since #154** (same PR #158): `sandbox_docker.py`/
+   `sandbox_vercel.py`'s existing `# nosec B301`/`B603` comments suppress Bandit, not Semgrep —
+   the exact "suppression on the wrong tool" gotcha Sprint 31 already hit once with
+   `secrets_service.py`. Added rule-specific `# nosemgrep: <rule-id>` comments alongside each
+   `# nosec`. Verified with a real local `semgrep scan` using CI's exact command — 5 findings
+   before, 0 after.
+3. **All 5 E2E scenarios failing on `main` since #155** (`fix/rls-stage-latencies-sequence-grant`,
+   #159): migration `0021` (ADR-040) granted table-level `SELECT`/`INSERT`/`UPDATE`/`DELETE` to
+   the new restricted `ai_etl_app_tenant` role, but never granted `USAGE`/`SELECT` on
+   `stage_latencies_id_seq` — the implicit sequence backing `stage_latencies.id` (a Postgres
+   `SERIAL`, migration `0004`; every other RLS-protected table uses a `String` primary key, so
+   this was the only sequence in scope). Unit tests mock the DB and never exercise a real
+   sequence, so nothing local caught it — only the E2E job against real Postgres did. Verified
+   for real: a fresh `alembic upgrade head` against a live Postgres 15 container, a direct
+   `INSERT` as `ai_etl_app_tenant` (failed before the fix, succeeded after — sequence-generated
+   `id` incremented correctly, RLS still correctly scoped the row to its own tenant), and the
+   full `pytest tests/e2e/` suite against real Postgres+Redis (5 passed, previously 5 failed in
+   CI with this exact error).
+
+**Session hygiene:** all 15 local feature/fix branches deleted post-merge, all 12 corresponding
+remote branches deleted (`delete_branch_on_merge` was `false`, so these had accumulated), one
+orphaned Docker container from a prior session's worktree removed. `main`'s only remaining
+branch locally and on GitHub.
+
+**Execution plan (`docs/work/2026-08-26-strategic-decisions-execution-plan.md`) marked
+complete** — Waves 1–3 all done, all 8 originally-planned PRs plus the 2 hotfixes accounted for.
+
 
 ## 2026-08-25 — audit fixes (Waves 0–5) + admin panel/approval-gate UI
 
