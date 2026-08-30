@@ -129,8 +129,20 @@ def upgrade() -> None:
             """
         )
 
+    # Real bug found 2026-08-30, only by the E2E job against real Postgres
+    # (unit tests mock the DB, never caught this): table-level GRANT INSERT
+    # is not enough for `stage_latencies` — its `id` is a Postgres SERIAL
+    # (`Integer, autoincrement=True`, migration 0004), which is backed by an
+    # implicit sequence (`stage_latencies_id_seq`) that needs its own,
+    # separate `USAGE`/`SELECT` grant for `nextval()`/`currval()` to work
+    # under a non-superuser role. Every other `_TENANT_TABLES` entry uses a
+    # `String` primary key (Clerk user id, `uuid4().hex`, etc. — see
+    # `audit/models.py`), so this is the only sequence in scope.
+    op.execute(f"GRANT USAGE, SELECT ON SEQUENCE stage_latencies_id_seq TO {_RESTRICTED_ROLE}")
+
 
 def downgrade() -> None:
+    op.execute(f"REVOKE USAGE, SELECT ON SEQUENCE stage_latencies_id_seq FROM {_RESTRICTED_ROLE}")
     for table, _tenant_column in reversed(_TENANT_TABLES):
         op.execute(f"DROP POLICY IF EXISTS tenant_isolation ON {table}")
         op.execute(f"ALTER TABLE {table} DISABLE ROW LEVEL SECURITY")
