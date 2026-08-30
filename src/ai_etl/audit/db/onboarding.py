@@ -8,7 +8,7 @@ from typing import Any
 
 from sqlalchemy import func, select
 
-from ai_etl.audit.connection import get_engine
+from ai_etl.audit.connection import tenant_scope
 from ai_etl.audit.models import runs, saved_pipelines
 
 
@@ -30,7 +30,7 @@ def get_onboarding_status(tenant_id: str) -> dict[str, Any]:
         runs.c.tenant_id == tenant_id, runs.c.status == "completed"
     )
     saved_pipeline_count_stmt = select(func.count()).where(saved_pipelines.c.tenant_id == tenant_id)
-    with get_engine().connect() as conn:
+    with tenant_scope(tenant_id) as conn:
         run_count = conn.execute(run_count_stmt).scalar() or 0
         completed_run_count = conn.execute(completed_run_count_stmt).scalar() or 0
         saved_pipeline_count = conn.execute(saved_pipeline_count_stmt).scalar() or 0

@@ -11,20 +11,38 @@ container before this one).
 import os
 import uuid
 from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
 import sqlalchemy
+from alembic.config import Config
 from sqlalchemy import text
 
 from ai_etl.audit import connection, db
 from ai_etl.audit.db import ensure_user
-from ai_etl.audit.models import analysis_runs, metadata, runs
+from ai_etl.audit.models import analysis_runs, runs
 from ai_etl.core.state import initial_state
+from alembic import command
 
 _TEST_APP_DATABASE_URL = os.getenv(
     "TEST_APP_DATABASE_URL",
     "postgresql://ai_etl_app_test:ai_etl_app_test@localhost:5435/ai_etl_app_test_db",
 )
+# ADR-040 — the restricted, non-bypass role migration 0021 creates, same
+# database as above. `tenant_scope()` (used by every `audit/db/*.py` function
+# this file exercises) needs this set, same as `APP_DATABASE_URL_TENANT` in
+# `.env.example`.
+_TEST_APP_DATABASE_URL_TENANT = os.getenv(
+    "TEST_APP_DATABASE_URL_TENANT",
+    "postgresql://ai_etl_app_tenant:ai_etl_app_tenant@localhost:5435/ai_etl_app_test_db",
+)
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _alembic_config() -> Config:
+    cfg = Config(str(_REPO_ROOT / "alembic.ini"))
+    cfg.set_main_option("script_location", str(_REPO_ROOT / "alembic"))
+    return cfg
 
 
 def _database_reachable() -> bool:
@@ -47,14 +65,23 @@ pytestmark = pytest.mark.skipif(
 @pytest.fixture(autouse=True)
 def _app_database(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     monkeypatch.setenv("APP_DATABASE_URL", _TEST_APP_DATABASE_URL)
+    monkeypatch.setenv("APP_DATABASE_URL_TENANT", _TEST_APP_DATABASE_URL_TENANT)
     connection.get_engine.cache_clear()
+    connection.get_tenant_engine.cache_clear()
     engine = connection.get_engine()
-    metadata.create_all(engine)
+    # ADR-040: `command.upgrade` (not `metadata.create_all`) — this file's functions
+    # now go through the restricted role + RLS policies migration 0021 creates,
+    # which a bare `create_all()` would never set up.
+    with engine.begin() as conn:
+        conn.execute(text("DROP SCHEMA public CASCADE"))
+        conn.execute(text("CREATE SCHEMA public"))
+    command.upgrade(_alembic_config(), "head")
     yield
     with engine.begin() as conn:
         conn.execute(analysis_runs.delete())
         conn.execute(runs.delete())
     connection.get_engine.cache_clear()
+    connection.get_tenant_engine.cache_clear()
 
 
 def _run_id() -> str:

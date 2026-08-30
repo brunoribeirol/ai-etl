@@ -9,7 +9,7 @@ from typing import Any, Optional
 
 from sqlalchemy import func, select, update
 
-from ai_etl.audit.connection import get_engine
+from ai_etl.audit.connection import get_engine, tenant_scope
 from ai_etl.audit.models import analysis_runs, runs, saved_pipelines, stage_latencies
 
 
@@ -82,7 +82,7 @@ def get_pipeline_health(
         .order_by(runs.c.timestamp.desc())
         .limit(window)
     )
-    with get_engine().connect() as conn:
+    with tenant_scope(tenant_id) as conn:
         recent_rows = conn.execute(recent_stmt).fetchall()
 
     sample_size = len(recent_rows)
@@ -93,6 +93,11 @@ def get_pipeline_health(
     success_rate = completed / sample_size
 
     run_ids = [row.run_id for row in recent_rows]
+    # `stage_latencies` has no `saved_pipeline_id` column of its own — `run_ids`
+    # above are already tenant-verified (came from the `runs` query, itself
+    # filtered/RLS-scoped by this same `tenant_id`), so this join-by-id stays
+    # correct under the restricted engine: RLS additionally requires
+    # `stage_latencies.tenant_id = app.tenant_id` for every row returned here.
     latency_stmt = (
         select(
             stage_latencies.c.run_id,
@@ -101,7 +106,7 @@ def get_pipeline_health(
         .where(stage_latencies.c.run_id.in_(run_ids), stage_latencies.c.run_type == "silver")
         .group_by(stage_latencies.c.run_id)
     )
-    with get_engine().connect() as conn:
+    with tenant_scope(tenant_id) as conn:
         latency_rows = conn.execute(latency_stmt).fetchall()
 
     avg_latency_seconds = (
@@ -171,7 +176,7 @@ def list_pipeline_run_history(
         .subquery()
     )
     stmt = select(base).order_by(base.c.timestamp.asc())
-    with get_engine().connect() as conn:
+    with tenant_scope(tenant_id) as conn:
         rows_ = conn.execute(stmt).fetchall()
     return [
         {
@@ -191,7 +196,7 @@ def list_pipeline_run_history(
 
 
 def get_previous_completed_run(
-    saved_pipeline_id: str, exclude_run_id: str
+    saved_pipeline_id: str, exclude_run_id: str, tenant_id: str
 ) -> Optional[dict[str, Any]]:
     """Most recent `status = "completed"` run for `saved_pipeline_id`,
     excluding `exclude_run_id` (the run currently being evaluated) — the
@@ -215,6 +220,13 @@ def get_previous_completed_run(
     pattern as `load_history` — a Silver-only scheduled run (no
     `business_question`, so `save_analysis` never ran) reads those back as
     `None`, not `0`, matching `load_history`'s "no analysis, no cost" signal.
+
+    ADR-040: `tenant_id` — the saved pipeline's own owner, already known to
+    every caller (`services/alerting.py` resolves it from the pipeline row
+    before calling this) — is a required parameter so this read goes through
+    the restricted, RLS-backed engine like every other per-tenant lookup in
+    this module, rather than staying on the bypass engine only because no
+    tenant filter happened to be in the original query.
     """
     stmt = (
         select(
@@ -229,11 +241,12 @@ def get_previous_completed_run(
             runs.c.saved_pipeline_id == saved_pipeline_id,
             runs.c.run_id != exclude_run_id,
             runs.c.status == "completed",
+            runs.c.tenant_id == tenant_id,
         )
         .order_by(runs.c.timestamp.desc())
         .limit(1)
     )
-    with get_engine().connect() as conn:
+    with tenant_scope(tenant_id) as conn:
         row = conn.execute(stmt).first()
     if row is None:
         return None

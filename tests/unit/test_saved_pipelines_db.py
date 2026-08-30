@@ -7,6 +7,7 @@ SQLite engine, not a mocked `get_engine`, so the actual `select`/`insert`/
 rewriting).
 """
 
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -29,11 +30,30 @@ def _make_sqlite_engine() -> Engine:
     return engine
 
 
+def _fake_scope(engine: Engine):
+    """Stand-in for `tenant_scope` in these unit tests (ADR-040) — ignores
+    `tenant_id` and opens a transaction on the given SQLite engine directly,
+    since the real implementation's Postgres-only `SELECT set_config(...)`
+    GUC call has no SQLite equivalent. Real GUC-scoping/RLS behavior is
+    covered against a live Postgres in
+    `tests/integration/test_tenant_isolation_rls.py`.
+    """
+
+    @contextmanager
+    def _scope(tenant_id):  # noqa: ANN001, ANN202
+        with engine.begin() as conn:
+            yield conn
+
+    return _scope
+
+
 @pytest.fixture
 def engine(monkeypatch: pytest.MonkeyPatch) -> Engine:
     eng = _make_sqlite_engine()
     monkeypatch.setattr(pipelines_db, "get_engine", lambda: eng)
+    monkeypatch.setattr(pipelines_db, "tenant_scope", _fake_scope(eng))
     monkeypatch.setattr(health_db, "get_engine", lambda: eng)
+    monkeypatch.setattr(health_db, "tenant_scope", _fake_scope(eng))
     return eng
 
 
@@ -341,7 +361,9 @@ def test_get_previous_completed_run_returns_most_recent_excluding_current(
     )
     _insert_completed_run(engine, "run-3", pipeline["id"], "tenant-a", now, 200, 0.03, 700)
 
-    previous = db.get_previous_completed_run(pipeline["id"], exclude_run_id="run-3")
+    previous = db.get_previous_completed_run(
+        pipeline["id"], exclude_run_id="run-3", tenant_id="tenant-a"
+    )
 
     assert previous is not None
     assert previous["run_id"] == "run-2"
@@ -359,7 +381,9 @@ def test_get_previous_completed_run_returns_none_for_first_fire(engine: Engine) 
     now = datetime.now(tz=timezone.utc)
     _insert_completed_run(engine, "run-1", pipeline["id"], "tenant-a", now, 100, 0.01, 500)
 
-    previous = db.get_previous_completed_run(pipeline["id"], exclude_run_id="run-1")
+    previous = db.get_previous_completed_run(
+        pipeline["id"], exclude_run_id="run-1", tenant_id="tenant-a"
+    )
 
     assert previous is None
 
@@ -375,7 +399,9 @@ def test_get_previous_completed_run_ignores_other_pipelines(engine: Engine) -> N
     _insert_completed_run(engine, "run-a1", pipeline_a["id"], "tenant-a", now, 100)
     _insert_completed_run(engine, "run-b1", pipeline_b["id"], "tenant-a", now, 999)
 
-    previous = db.get_previous_completed_run(pipeline_a["id"], exclude_run_id="run-does-not-exist")
+    previous = db.get_previous_completed_run(
+        pipeline_a["id"], exclude_run_id="run-does-not-exist", tenant_id="tenant-a"
+    )
 
     assert previous is not None
     assert previous["run_id"] == "run-a1"
@@ -392,7 +418,9 @@ def test_get_previous_completed_run_ignores_null_cost_when_no_analysis(engine: E
     now = datetime.now(tz=timezone.utc)
     _insert_completed_run(engine, "run-1", pipeline["id"], "tenant-a", now, 100)  # no analysis row
 
-    previous = db.get_previous_completed_run(pipeline["id"], exclude_run_id="run-does-not-exist")
+    previous = db.get_previous_completed_run(
+        pipeline["id"], exclude_run_id="run-does-not-exist", tenant_id="tenant-a"
+    )
 
     assert previous is not None
     assert previous["cost_usd"] is None

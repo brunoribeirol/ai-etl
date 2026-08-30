@@ -14,7 +14,7 @@ from typing import Optional
 from sqlalchemy import select, update
 from typing_extensions import TypedDict
 
-from ai_etl.audit.connection import get_engine
+from ai_etl.audit.connection import get_engine, tenant_scope
 from ai_etl.audit.models import users
 
 
@@ -29,7 +29,7 @@ def get_retention_days(tenant_id: str) -> Optional[int]:
     or does not exist yet — same "treat missing as unset" contract as
     `get_monthly_budget`."""
     stmt = select(users.c.retention_days).where(users.c.id == tenant_id)
-    with get_engine().connect() as conn:
+    with tenant_scope(tenant_id) as conn:
         row = conn.execute(stmt).first()
     return row[0] if row is not None else None
 
@@ -55,5 +55,5 @@ def set_retention_days(tenant_id: str, retention_days: Optional[int]) -> None:
     enforced at the API layer (`Field(ge=1)`), not here — this function
     trusts its caller, same as `set_monthly_budget`."""
     stmt = update(users).where(users.c.id == tenant_id).values(retention_days=retention_days)
-    with get_engine().begin() as conn:
+    with tenant_scope(tenant_id) as conn:
         conn.execute(stmt)

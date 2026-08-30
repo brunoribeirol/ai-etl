@@ -17,6 +17,7 @@ so the actual SQLAlchemy Core `select(...).where(...)` executes for real.
 """
 
 import json
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -53,6 +54,23 @@ from ai_etl.audit.models import users as users_table
 from ai_etl.core.state import initial_state
 
 _ZERO_TOKENS = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+
+
+def _fake_scope(engine: Engine):
+    """Stand-in for `tenant_scope`/`scoped_connection` in these unit tests: a
+    context manager that ignores `tenant_id` and opens a transaction on the
+    given (SQLite) engine directly, since the real implementation's
+    Postgres-only `SELECT set_config(...)` GUC call has no SQLite equivalent.
+    Real GUC-scoping/RLS behavior is covered against a live Postgres in
+    `tests/integration/test_tenant_isolation_rls.py`.
+    """
+
+    @contextmanager
+    def _scope(tenant_id):  # noqa: ANN001, ANN202
+        with engine.begin() as conn:
+            yield conn
+
+    return _scope
 
 
 @pytest.fixture(autouse=True)
@@ -428,7 +446,8 @@ def _insert_run_row(
 
 def test_load_history_filters_by_tenant_id(monkeypatch: pytest.MonkeyPatch) -> None:
     engine = _make_sqlite_engine()
-    monkeypatch.setattr(db, "get_engine", lambda: engine)
+    monkeypatch.setattr(db, "scoped_connection", _fake_scope(engine))
+    monkeypatch.setattr(db, "tenant_scope", _fake_scope(engine))
 
     _insert_run_row(engine, "run-tenant-a", tenant_id="tenant-a")
     _insert_run_row(engine, "run-tenant-b", tenant_id="tenant-b")
@@ -442,7 +461,8 @@ def test_load_history_without_tenant_id_returns_all_runs(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     engine = _make_sqlite_engine()
-    monkeypatch.setattr(db, "get_engine", lambda: engine)
+    monkeypatch.setattr(db, "scoped_connection", _fake_scope(engine))
+    monkeypatch.setattr(db, "tenant_scope", _fake_scope(engine))
 
     _insert_run_row(engine, "run-tenant-a", tenant_id="tenant-a")
     _insert_run_row(engine, "run-tenant-b", tenant_id="tenant-b")
@@ -460,7 +480,8 @@ def test_load_history_includes_null_cost_for_silver_only_runs(
     `model_name` as null via the `LEFT OUTER JOIN`, not raise or silently
     drop the row."""
     engine = _make_sqlite_engine()
-    monkeypatch.setattr(db, "get_engine", lambda: engine)
+    monkeypatch.setattr(db, "scoped_connection", _fake_scope(engine))
+    monkeypatch.setattr(db, "tenant_scope", _fake_scope(engine))
 
     _insert_run_row(engine, "run-silver-only", tenant_id="tenant-a")
 
@@ -473,7 +494,8 @@ def test_load_history_includes_null_cost_for_silver_only_runs(
 
 def test_load_history_surfaces_cost_for_analyzed_runs(monkeypatch: pytest.MonkeyPatch) -> None:
     engine = _make_sqlite_engine()
-    monkeypatch.setattr(db, "get_engine", lambda: engine)
+    monkeypatch.setattr(db, "scoped_connection", _fake_scope(engine))
+    monkeypatch.setattr(db, "tenant_scope", _fake_scope(engine))
 
     _insert_run_row(engine, "run-with-analysis", tenant_id="tenant-a")
     with engine.begin() as conn:
@@ -519,7 +541,8 @@ def test_write_analysis_row_uses_explicit_model_name_over_global_env(
     monkeypatch.setenv("AI_ETL_LLM_PROVIDER", "openai")
 
     engine = _make_sqlite_engine()
-    monkeypatch.setattr(db, "get_engine", lambda: engine)
+    monkeypatch.setattr(db, "scoped_connection", _fake_scope(engine))
+    monkeypatch.setattr(db, "tenant_scope", _fake_scope(engine))
 
     tokens = {"input_tokens": 1000, "output_tokens": 1000, "total_tokens": 2000}
     # Bypass this file's autouse `_no_db` fixture (which monkeypatches
@@ -618,7 +641,8 @@ def test_save_run_is_scoped_and_isolated_by_tenant_id(
     monkeypatch.setattr(db, "_write_run_row", _real_write_run_row)
 
     engine = _make_sqlite_engine_with_fk_enforcement()
-    monkeypatch.setattr(db, "get_engine", lambda: engine)
+    monkeypatch.setattr(db, "scoped_connection", _fake_scope(engine))
+    monkeypatch.setattr(db, "tenant_scope", _fake_scope(engine))
 
     _insert_user_row(engine, "tenant-a")
     _insert_user_row(engine, "tenant-b")
@@ -643,7 +667,8 @@ def test_save_run_rejects_tenant_id_with_no_matching_user_row(
     monkeypatch.setattr(db, "_write_run_row", _real_write_run_row)
 
     engine = _make_sqlite_engine_with_fk_enforcement()
-    monkeypatch.setattr(db, "get_engine", lambda: engine)
+    monkeypatch.setattr(db, "scoped_connection", _fake_scope(engine))
+    monkeypatch.setattr(db, "tenant_scope", _fake_scope(engine))
 
     state = _make_completed_state()
     with pytest.raises(sqlalchemy.exc.IntegrityError):
@@ -666,7 +691,8 @@ def test_ensure_user_allows_first_save_run_for_new_user(
     monkeypatch.setattr(db, "_write_run_row", _real_write_run_row)
 
     engine = _make_sqlite_engine_with_fk_enforcement()
-    monkeypatch.setattr(db, "get_engine", lambda: engine)
+    monkeypatch.setattr(db, "scoped_connection", _fake_scope(engine))
+    monkeypatch.setattr(db, "tenant_scope", _fake_scope(engine))
 
     db.ensure_user("new_user")  # no pre-existing `users` row for "new_user"
 
@@ -683,7 +709,8 @@ def test_ensure_user_is_idempotent(monkeypatch: pytest.MonkeyPatch) -> None:
     proves that: calling it twice for the same id must not raise, must not
     create a second row, and must not clobber the original `created_at`."""
     engine = _make_sqlite_engine_with_fk_enforcement()
-    monkeypatch.setattr(db, "get_engine", lambda: engine)
+    monkeypatch.setattr(db, "scoped_connection", _fake_scope(engine))
+    monkeypatch.setattr(db, "tenant_scope", _fake_scope(engine))
 
     db.ensure_user("repeat_user")
     with engine.connect() as conn:
@@ -726,7 +753,8 @@ def test_save_stage_latencies_silver_dict_form_inserts_one_row_per_stage(
     """Silver's `state["stage_durations"]` is a flat {stage: seconds} dict — one
     LangGraph node run exactly once each, so every row's `seq` is 1."""
     engine = _make_sqlite_engine_with_fk_enforcement()
-    monkeypatch.setattr(db, "get_engine", lambda: engine)
+    monkeypatch.setattr(db, "scoped_connection", _fake_scope(engine))
+    monkeypatch.setattr(db, "tenant_scope", _fake_scope(engine))
     _insert_user_row(engine, "tenant-a")
 
     durations = {"orchestrator": 0.5, "extractor": 1.2, "transformer": 3.0}
@@ -748,7 +776,8 @@ def test_save_stage_latencies_list_form_increments_seq_per_repeat_stage(
     """Analyst/Science's call-ordered list form: a repeated stage (e.g. a repair
     rerun) gets an incrementing `seq` rather than overwriting the first row."""
     engine = _make_sqlite_engine_with_fk_enforcement()
-    monkeypatch.setattr(db, "get_engine", lambda: engine)
+    monkeypatch.setattr(db, "scoped_connection", _fake_scope(engine))
+    monkeypatch.setattr(db, "tenant_scope", _fake_scope(engine))
     _insert_user_row(engine, "tenant-a")
 
     entries = [
@@ -773,7 +802,8 @@ def test_save_stage_latencies_empty_durations_is_a_noop(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     engine = _make_sqlite_engine_with_fk_enforcement()
-    monkeypatch.setattr(db, "get_engine", lambda: engine)
+    monkeypatch.setattr(db, "scoped_connection", _fake_scope(engine))
+    monkeypatch.setattr(db, "tenant_scope", _fake_scope(engine))
     _insert_user_row(engine, "tenant-a")
 
     save_stage_latencies("run-3", "silver", "tenant-a", {})
@@ -788,7 +818,8 @@ def test_save_stage_latencies_rejects_tenant_id_with_no_matching_user_row(
     """Same FK-integrity guarantee as `runs`/`analysis_runs` — `tenant_id` must
     reference a real `users` row, not just be a decorative string column."""
     engine = _make_sqlite_engine_with_fk_enforcement()
-    monkeypatch.setattr(db, "get_engine", lambda: engine)
+    monkeypatch.setattr(db, "scoped_connection", _fake_scope(engine))
+    monkeypatch.setattr(db, "tenant_scope", _fake_scope(engine))
 
     with pytest.raises(sqlalchemy.exc.IntegrityError):
         save_stage_latencies("run-4", "silver", "ghost-tenant", {"extractor": 1.0})
@@ -802,7 +833,8 @@ def test_save_stage_latencies_scoped_by_run_id_and_run_type(
     `run_id` alone doesn't disambiguate the parent table) don't bleed into
     each other's rows."""
     engine = _make_sqlite_engine_with_fk_enforcement()
-    monkeypatch.setattr(db, "get_engine", lambda: engine)
+    monkeypatch.setattr(db, "scoped_connection", _fake_scope(engine))
+    monkeypatch.setattr(db, "tenant_scope", _fake_scope(engine))
     _insert_user_row(engine, "tenant-a")
 
     save_stage_latencies("run-5", "silver", "tenant-a", {"extractor": 1.0})
@@ -847,7 +879,8 @@ def test_load_full_result_reconstructs_dataframes_and_figure(
     import plotly.graph_objects as go
 
     engine = _make_sqlite_engine()
-    monkeypatch.setattr(db, "get_engine", lambda: engine)
+    monkeypatch.setattr(db, "scoped_connection", _fake_scope(engine))
+    monkeypatch.setattr(db, "tenant_scope", _fake_scope(engine))
 
     state = _make_completed_state()
     state["transformed_data"] = pd.DataFrame({"product": ["A", "B"], "total": [10, 20]})
@@ -894,7 +927,8 @@ def test_load_full_result_rejects_wrong_tenant(
     restriction, not a data-layer one. See this project's Sprint A leak for
     why that distinction matters."""
     engine = _make_sqlite_engine()
-    monkeypatch.setattr(db, "get_engine", lambda: engine)
+    monkeypatch.setattr(db, "scoped_connection", _fake_scope(engine))
+    monkeypatch.setattr(db, "tenant_scope", _fake_scope(engine))
     monkeypatch.setattr(db, "_write_run_row", _real_write_run_row)
 
     state = _make_completed_state()
@@ -917,7 +951,8 @@ def test_load_full_result_degrades_gracefully_when_csv_missing(
     narrative/task_question — just without gold_df — rather than failing the
     whole reload."""
     engine = _make_sqlite_engine()
-    monkeypatch.setattr(db, "get_engine", lambda: engine)
+    monkeypatch.setattr(db, "scoped_connection", _fake_scope(engine))
+    monkeypatch.setattr(db, "tenant_scope", _fake_scope(engine))
 
     state = _make_completed_state()
     save_run(state, log_dir=str(tmp_path))
@@ -948,6 +983,7 @@ def test_load_full_result_degrades_gracefully_when_csv_missing(
 def test_get_monthly_budget_returns_none_when_unset(monkeypatch: pytest.MonkeyPatch) -> None:
     engine = _make_sqlite_engine()
     monkeypatch.setattr(budget_db, "get_engine", lambda: engine)
+    monkeypatch.setattr(budget_db, "tenant_scope", _fake_scope(engine))
     _insert_user_row(engine, "tenant-a")
 
     assert get_monthly_budget("tenant-a") is None
@@ -958,6 +994,7 @@ def test_get_monthly_budget_returns_none_for_unknown_tenant(
 ) -> None:
     engine = _make_sqlite_engine()
     monkeypatch.setattr(budget_db, "get_engine", lambda: engine)
+    monkeypatch.setattr(budget_db, "tenant_scope", _fake_scope(engine))
 
     assert get_monthly_budget("no-such-tenant") is None
 
@@ -965,6 +1002,7 @@ def test_get_monthly_budget_returns_none_for_unknown_tenant(
 def test_set_monthly_budget_then_get_round_trips(monkeypatch: pytest.MonkeyPatch) -> None:
     engine = _make_sqlite_engine()
     monkeypatch.setattr(budget_db, "get_engine", lambda: engine)
+    monkeypatch.setattr(budget_db, "tenant_scope", _fake_scope(engine))
     _insert_user_row(engine, "tenant-a")
 
     set_monthly_budget("tenant-a", 50.0)
@@ -977,6 +1015,7 @@ def test_set_monthly_budget_none_clears_a_previously_set_cap(
 ) -> None:
     engine = _make_sqlite_engine()
     monkeypatch.setattr(budget_db, "get_engine", lambda: engine)
+    monkeypatch.setattr(budget_db, "tenant_scope", _fake_scope(engine))
     _insert_user_row(engine, "tenant-a")
 
     set_monthly_budget("tenant-a", 50.0)
@@ -990,6 +1029,7 @@ def test_get_monthly_spend_usd_sums_only_the_current_calendar_month(
 ) -> None:
     engine = _make_sqlite_engine()
     monkeypatch.setattr(budget_db, "get_engine", lambda: engine)
+    monkeypatch.setattr(budget_db, "tenant_scope", _fake_scope(engine))
     _insert_user_row(engine, "tenant-a")
 
     now = datetime.now(tz=timezone.utc)
@@ -1031,6 +1071,7 @@ def test_get_monthly_spend_usd_sums_only_the_current_calendar_month(
 def test_get_monthly_spend_usd_is_scoped_per_tenant(monkeypatch: pytest.MonkeyPatch) -> None:
     engine = _make_sqlite_engine()
     monkeypatch.setattr(budget_db, "get_engine", lambda: engine)
+    monkeypatch.setattr(budget_db, "tenant_scope", _fake_scope(engine))
     _insert_user_row(engine, "tenant-a")
     _insert_user_row(engine, "tenant-b")
 
@@ -1072,6 +1113,7 @@ def test_get_monthly_spend_usd_is_scoped_per_tenant(monkeypatch: pytest.MonkeyPa
 def test_get_monthly_spend_usd_is_zero_with_no_runs(monkeypatch: pytest.MonkeyPatch) -> None:
     engine = _make_sqlite_engine()
     monkeypatch.setattr(budget_db, "get_engine", lambda: engine)
+    monkeypatch.setattr(budget_db, "tenant_scope", _fake_scope(engine))
     _insert_user_row(engine, "tenant-a")
 
     assert get_monthly_spend_usd("tenant-a") == 0.0
@@ -1086,6 +1128,7 @@ def test_get_monthly_spend_usd_is_zero_with_no_runs(monkeypatch: pytest.MonkeyPa
 def test_get_retention_days_returns_none_when_unset(monkeypatch: pytest.MonkeyPatch) -> None:
     engine = _make_sqlite_engine()
     monkeypatch.setattr(retention_db, "get_engine", lambda: engine)
+    monkeypatch.setattr(retention_db, "tenant_scope", _fake_scope(engine))
     _insert_user_row(engine, "tenant-a")
 
     assert get_retention_days("tenant-a") is None
@@ -1096,6 +1139,7 @@ def test_get_retention_days_returns_none_for_unknown_tenant(
 ) -> None:
     engine = _make_sqlite_engine()
     monkeypatch.setattr(retention_db, "get_engine", lambda: engine)
+    monkeypatch.setattr(retention_db, "tenant_scope", _fake_scope(engine))
 
     assert get_retention_days("no-such-tenant") is None
 
@@ -1103,6 +1147,7 @@ def test_get_retention_days_returns_none_for_unknown_tenant(
 def test_set_retention_days_then_get_round_trips(monkeypatch: pytest.MonkeyPatch) -> None:
     engine = _make_sqlite_engine()
     monkeypatch.setattr(retention_db, "get_engine", lambda: engine)
+    monkeypatch.setattr(retention_db, "tenant_scope", _fake_scope(engine))
     _insert_user_row(engine, "tenant-a")
 
     set_retention_days("tenant-a", 30)
@@ -1115,6 +1160,7 @@ def test_set_retention_days_none_clears_a_previously_set_window(
 ) -> None:
     engine = _make_sqlite_engine()
     monkeypatch.setattr(retention_db, "get_engine", lambda: engine)
+    monkeypatch.setattr(retention_db, "tenant_scope", _fake_scope(engine))
     _insert_user_row(engine, "tenant-a")
 
     set_retention_days("tenant-a", 30)
@@ -1128,6 +1174,7 @@ def test_list_tenants_with_retention_returns_only_tenants_with_a_policy_set(
 ) -> None:
     engine = _make_sqlite_engine()
     monkeypatch.setattr(retention_db, "get_engine", lambda: engine)
+    monkeypatch.setattr(retention_db, "tenant_scope", _fake_scope(engine))
     _insert_user_row(engine, "tenant-a")
     _insert_user_row(engine, "tenant-b")
 
@@ -1145,6 +1192,7 @@ def test_list_tenants_with_retention_is_empty_when_no_tenant_has_a_policy(
 ) -> None:
     engine = _make_sqlite_engine()
     monkeypatch.setattr(retention_db, "get_engine", lambda: engine)
+    monkeypatch.setattr(retention_db, "tenant_scope", _fake_scope(engine))
     _insert_user_row(engine, "tenant-a")
 
     assert list_tenants_with_retention() == []
@@ -1159,7 +1207,7 @@ def test_get_locale_defaults_to_pt_br_for_a_tenant_that_never_configured_one(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     engine = _make_sqlite_engine()
-    monkeypatch.setattr(locale_db, "get_engine", lambda: engine)
+    monkeypatch.setattr(locale_db, "tenant_scope", _fake_scope(engine))
     _insert_user_row(engine, "tenant-a")
 
     assert get_locale("tenant-a") == "pt-BR"
@@ -1169,14 +1217,14 @@ def test_get_locale_defaults_to_pt_br_for_an_unknown_tenant(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     engine = _make_sqlite_engine()
-    monkeypatch.setattr(locale_db, "get_engine", lambda: engine)
+    monkeypatch.setattr(locale_db, "tenant_scope", _fake_scope(engine))
 
     assert get_locale("no-such-tenant") == "pt-BR"
 
 
 def test_set_locale_then_get_round_trips(monkeypatch: pytest.MonkeyPatch) -> None:
     engine = _make_sqlite_engine()
-    monkeypatch.setattr(locale_db, "get_engine", lambda: engine)
+    monkeypatch.setattr(locale_db, "tenant_scope", _fake_scope(engine))
     _insert_user_row(engine, "tenant-a")
 
     set_locale("tenant-a", "en-US")
@@ -1186,7 +1234,7 @@ def test_set_locale_then_get_round_trips(monkeypatch: pytest.MonkeyPatch) -> Non
 
 def test_set_locale_does_not_affect_other_tenants(monkeypatch: pytest.MonkeyPatch) -> None:
     engine = _make_sqlite_engine()
-    monkeypatch.setattr(locale_db, "get_engine", lambda: engine)
+    monkeypatch.setattr(locale_db, "tenant_scope", _fake_scope(engine))
     _insert_user_row(engine, "tenant-a")
     _insert_user_row(engine, "tenant-b")
 
