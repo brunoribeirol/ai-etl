@@ -1,0 +1,27 @@
+# Keeps the local sandbox image build (`make sandbox-image`, docker/sandbox/Dockerfile,
+# ADR-038) from sending the whole repo as build context to the local Docker daemon —
+# the Dockerfile only COPYs pyproject.toml/uv.lock*/README.md/src/, so nothing else here
+# is ever needed inside the image, but without this file it's still transferred to the
+# daemon on every build. Flagged by the architecture-reviewer agent's 2026-08-26 review
+# of the Docker sandbox migration (non-blocking hygiene note, not a security finding —
+# .env is gitignored and was not present in the build context regardless).
+
+.git/
+.venv/
+venv/
+node_modules/
+frontend/
+.claude/
+docs/
+case_study/
+tests/
+*.md
+.env
+.env.local
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/

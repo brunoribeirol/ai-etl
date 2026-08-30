@@ -1,4 +1,4 @@
-.PHONY: install test test-e2e lint format format-check type-check security check db-up db-down db-test-up app-db-up app-db-down app-db-test-up db-migrate run-scenario1 run-scenario2 run-scenario3 api redis-up celery-worker clean unhide-pth mysql-test-up mysql-test-down mongodb-test-up mongodb-test-down
+.PHONY: install test test-e2e lint format format-check type-check security check db-up db-down db-test-up app-db-up app-db-down app-db-test-up db-migrate run-scenario1 run-scenario2 run-scenario3 api redis-up celery-worker clean unhide-pth mysql-test-up mysql-test-down mongodb-test-up mongodb-test-down sandbox-image sandbox-vcr-image
 
 install:
 	uv sync --all-extras
@@ -105,6 +105,24 @@ run-scenario3:
 	uv run python -m ai_etl run \
 		--spec "$$(cat case_study/pipelines/scenario3_spec.txt)" \
 		--output case_study/results/scenario3/
+
+# ADR-038 — builds the image core/sandbox_docker.py's execute_in_sandbox()
+# runs when AI_ETL_SANDBOX_BACKEND=docker. Local/dev-verified only today;
+# not part of the Railway deploy build (top-level Dockerfile is unchanged).
+sandbox-image:
+	docker build -f docker/sandbox/Dockerfile -t ai-etl-sandbox:latest .
+
+# ADR-039 — pushes the same image (docker/sandbox/Dockerfile; both
+# run_sandboxed.py and run_sandboxed_vercel.py ship in it) to this project's
+# Vercel Container Registry, for core/sandbox_vercel.py's
+# AI_ETL_SANDBOX_BACKEND=vercel production backend. Requires the Vercel CLI
+# authenticated and this repo linked to a Vercel project (`vercel login` +
+# `vercel link`) — not automated in CI (no live Vercel project available
+# there), a manual/deploy-time step. Re-run after any change to
+# src/ai_etl/** that sandboxed code paths depend on, or to
+# docker/sandbox/run_sandboxed*.py.
+sandbox-vcr-image:
+	vercel vcr build docker . ai-etl-sandbox:latest --push
 
 clean:
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null; true

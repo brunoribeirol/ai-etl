@@ -14,11 +14,21 @@ not. Analyst/Science layer additional globals (Plotly, sklearn, statsmodels) on
 top of this shared base via ``extra_globals``.
 
 Security note: exec() with restricted globals can be bypassed via
-introspection (e.g., ().__class__.__mro__[1].__subclasses__()).
-This is an accepted limitation for the TCC scope with controlled datasets.
-Production use would require a proper sandboxing solution (e.g., Docker).
-See SECURITY.md and docs/adr/ADR-003-exec-sandbox.md / ADR-007 for the full
-risk analysis.
+introspection (e.g., ().__class__.__mro__[1].__subclasses__()). ADR-038 adds
+a second, opt-in isolation backend (``core/sandbox_docker.py`` — a
+network-disabled, read-only, resource-capped Docker container) specifically
+to contain that bypass, superseding ADR-032 Decision 4's risk acceptance.
+The `"process"` backend below remains the default (this project's Railway
+deployment cannot run Docker-in-Docker — see ADR-038's "Railway feasibility"
+section); `"docker"` is opt-in via `AI_ETL_SANDBOX_BACKEND=docker` or
+`execute_in_sandbox(..., backend="docker")`, dev/local-verified today.
+ADR-039 adds a third backend, `"vercel"` (``core/sandbox_vercel.py`` —
+Vercel Sandbox Firecracker microVMs), which resolves ADR-038's deferred
+production-rollout item: it gives the same container-isolation guarantees
+reachable from this project's Railway deployment (no Docker daemon
+required on the calling side, unlike `"docker"`).
+See SECURITY.md and docs/adr/ADR-003-exec-sandbox.md, ADR-007, ADR-032
+Decision 4, ADR-038, and ADR-039 for the full risk analysis and its history.
 """
 
 import importlib
@@ -79,6 +89,15 @@ SAFE_GLOBALS: dict[str, Any] = {
 # escalating to SIGKILL. Short on purpose — a child that ignores SIGTERM is
 # already misbehaving; this just bounds how long that can delay the caller.
 _TERMINATE_GRACE_SECONDS = 2
+
+# ADR-038/ADR-039: selects execute_in_sandbox()'s isolation backend when the
+# `backend` argument isn't passed explicitly. "process" (default) is the
+# multiprocessing.Process implementation below; "docker" routes through
+# core/sandbox_docker.py (dev/local only); "vercel" routes through
+# core/sandbox_vercel.py (the production-capable backend, ADR-039). Left at
+# "process" in every deployed environment today — flipping this to "vercel"
+# in Railway's production env vars is the actual production rollout step.
+_SANDBOX_BACKEND_ENV_VAR = "AI_ETL_SANDBOX_BACKEND"
 
 # Sprint 12 (ADR-012): real profiling against a 200k-row x 300-col benchmark
 # (docs/work/2026-08-19-sprint12-scale-profiling.md) confirmed the fixed
@@ -188,6 +207,48 @@ def _run_script_mode(
     return {var: exec_env.get(var) for var in result_vars}, None
 
 
+def _execute_code(
+    code: str,
+    dfs: dict[str, Any],
+    mode: str,
+    entry_point: str,
+    result_vars: list[str],
+    extra_globals: Optional[dict[str, Any]],
+    extra_modules: Optional[dict[str, str]],
+    extra_builtins: Optional[dict[str, Any]],
+) -> tuple[dict[str, Any], Optional[str]]:
+    """Build the restricted globals and run `code` in the current process.
+
+    Pulled out of `_sandbox_worker` (ADR-038) so the exact same, single
+    reviewed logic runs regardless of *which* isolation boundary calls it —
+    the `multiprocessing` child below, or the Docker sandbox driver script
+    (`docker/sandbox/run_sandboxed.py`), which imports this function directly
+    rather than re-implementing the restricted-globals/mode dispatch a second
+    time. This function assumes whatever isolation boundary the caller
+    provides (process, container, ...) already exists; it does not create one
+    itself.
+    """
+    builtins_ = {**SAFE_BUILTINS, **(extra_builtins or {})}
+    imported = {
+        name: importlib.import_module(dotted_path)
+        for name, dotted_path in (extra_modules or {}).items()
+    }
+    sandbox_globals: dict[str, Any] = {
+        "__builtins__": builtins_,
+        "pd": pd,
+        "np": np,
+        **imported,
+        **(extra_globals or {}),
+    }
+
+    if mode == "function":
+        result_df, error = _run_function_mode(code, dfs, entry_point, sandbox_globals)
+        values = {} if error is not None else {"result": result_df}
+        return values, error
+    else:  # mode == "script"
+        return _run_script_mode(code, dfs, result_vars, sandbox_globals)
+
+
 def _sandbox_worker(
     code: str,
     dfs: dict[str, Any],
@@ -241,26 +302,10 @@ def _sandbox_worker(
     os.environ.clear()
 
     try:
-        builtins_ = {**SAFE_BUILTINS, **(extra_builtins or {})}
-        imported = {
-            name: importlib.import_module(dotted_path)
-            for name, dotted_path in (extra_modules or {}).items()
-        }
-        sandbox_globals: dict[str, Any] = {
-            "__builtins__": builtins_,
-            "pd": pd,
-            "np": np,
-            **imported,
-            **(extra_globals or {}),
-        }
-
-        if mode == "function":
-            result_df, error = _run_function_mode(code, dfs, entry_point, sandbox_globals)
-            values = {} if error is not None else {"result": result_df}
-            result_queue.put({"values": values, "error": error})
-        else:  # mode == "script"
-            values, error = _run_script_mode(code, dfs, result_vars, sandbox_globals)
-            result_queue.put({"values": values, "error": error})
+        values, error = _execute_code(
+            code, dfs, mode, entry_point, result_vars, extra_globals, extra_modules, extra_builtins
+        )
+        result_queue.put({"values": values, "error": error})
     except Exception as e:  # noqa: BLE001 — must never let the child crash silently
         result_queue.put(
             {"values": {}, "error": f"Unexpected sandbox error: {e}\n{traceback.format_exc()}"}
@@ -278,8 +323,30 @@ def execute_in_sandbox(
     extra_modules: Optional[dict[str, str]] = None,
     extra_builtins: Optional[dict[str, Any]] = None,
     timeout_seconds: int = 30,
+    backend: Optional[Literal["process", "docker", "vercel"]] = None,
 ) -> SandboxResult:
-    """Execute LLM-generated Python code in an isolated, time-bounded child process.
+    """Execute LLM-generated Python code in an isolated, time-bounded sandbox.
+
+    Three isolation backends exist (ADR-038, ADR-039): `"process"` (default,
+    described below — a `multiprocessing.Process` child), `"docker"` (a
+    network-disabled, read-only, resource-capped container — see
+    `core/sandbox_docker.py` and ADR-038; dev/local only, Railway cannot run
+    Docker-in-Docker), and `"vercel"` (Vercel Sandbox Firecracker microVMs —
+    see `core/sandbox_vercel.py` and ADR-039; the production-capable backend,
+    reachable from Railway over the network with no local Docker daemon
+    needed). Selecting `"docker"` or `"vercel"` requires their respective
+    dependencies (a reachable Docker daemon + built image; or the `vercel`
+    package + `VERCEL_TOKEN`/`VERCEL_TEAM_ID`/`VERCEL_PROJECT_ID`) — each
+    raises its own `*SandboxUnavailableError` rather than silently falling
+    back to the weaker `"process"` backend if unavailable — an explicit
+    opt-in fails closed, it does not degrade quietly.
+
+    Backend selection is resolved in this order: the `backend` argument, then
+    the `AI_ETL_SANDBOX_BACKEND` environment variable, then `"process"`. This
+    keeps the function's signature backward-compatible for every existing
+    caller (Transformer, Analyst, Science) — none of them pass `backend`, so
+    none of them change behavior unless `AI_ETL_SANDBOX_BACKEND=docker` is set
+    in their environment.
 
     `mode="function"` preserves the Transformer's existing transform(dfs) -> pd.DataFrame
     contract: `code` must define a function named `entry_point` (default "transform"),
@@ -312,6 +379,45 @@ def execute_in_sandbox(
     SandboxResult(timed_out=True, values={}, error="Execution exceeded {N}s — simplify
     the computation").
     """
+    resolved_backend = backend or os.environ.get(_SANDBOX_BACKEND_ENV_VAR, "process")
+    if resolved_backend == "docker":
+        # Imported lazily so the `docker` CLI / subprocess dependency is only
+        # ever touched by call sites that actually opt into it — every
+        # existing caller (Transformer, Analyst, Science) still gets the
+        # "process" backend below unless AI_ETL_SANDBOX_BACKEND=docker (or
+        # backend="docker") is set explicitly.
+        from ai_etl.core.sandbox_docker import execute_in_docker_sandbox
+
+        return execute_in_docker_sandbox(
+            code,
+            dfs,
+            mode=mode,
+            entry_point=entry_point,
+            result_vars=result_vars or [],
+            extra_globals=extra_globals,
+            extra_modules=extra_modules,
+            extra_builtins=extra_builtins,
+            timeout_seconds=timeout_seconds,
+        )
+    if resolved_backend == "vercel":
+        # Imported lazily, same rationale as "docker" above: the `vercel`
+        # package is an opt-in extra, not a base dependency — every existing
+        # caller still gets "process" unless AI_ETL_SANDBOX_BACKEND=vercel
+        # (or backend="vercel") is set explicitly (ADR-039).
+        from ai_etl.core.sandbox_vercel import execute_in_vercel_sandbox
+
+        return execute_in_vercel_sandbox(
+            code,
+            dfs,
+            mode=mode,
+            entry_point=entry_point,
+            result_vars=result_vars or [],
+            extra_globals=extra_globals,
+            extra_modules=extra_modules,
+            extra_builtins=extra_builtins,
+            timeout_seconds=timeout_seconds,
+        )
+
     ctx = multiprocessing.get_context("spawn")
     result_queue: "multiprocessing.Queue[dict[str, Any]]" = ctx.Queue()
 
