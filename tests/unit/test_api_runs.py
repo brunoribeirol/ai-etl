@@ -203,6 +203,88 @@ def test_create_run_with_uploaded_csv(client: TestClient, mocker) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Real bug found 2026-08-30, live testing: `.pdf`/`.docx` uploads had no
+# branch in `_dataframe_from_upload()` at all and always 400'd with "Could
+# not parse uploaded file." — despite the upload UI advertising both and
+# `sources/document_source.py` existing specifically to handle them.
+# ---------------------------------------------------------------------------
+
+
+def test_create_run_with_uploaded_pdf(client: TestClient, mocker) -> None:
+    mock_enqueue = mocker.patch("ai_etl.api.routers.runs.enqueue_analysis", return_value="task-pdf")
+    mocker.patch(
+        "ai_etl.api.routers.runs.extract_document_text",
+        return_value="Sales Notes - Q3\nWidget A sold best in North.",
+    )
+
+    response = client.post(
+        "/runs",
+        data={"business_question": "Which region sold best?"},
+        files={"file": ("notes.pdf", b"%PDF-1.4 fake bytes", "application/pdf")},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"task_id": "task-pdf"}
+    mock_enqueue.assert_called_once()
+    spec = mock_enqueue.call_args.args[0]
+    assert "Widget A sold best in North" in spec
+    assert "Which region sold best?" in spec
+
+
+def test_create_run_with_uploaded_docx(client: TestClient, mocker) -> None:
+    mock_enqueue = mocker.patch(
+        "ai_etl.api.routers.runs.enqueue_analysis", return_value="task-docx"
+    )
+    mocker.patch(
+        "ai_etl.api.routers.runs.extract_document_text",
+        return_value="[Table]\nproduct | units\nWidget A | 5\n[/Table]",
+    )
+
+    response = client.post(
+        "/runs",
+        files={
+            "file": (
+                "returns.docx",
+                b"fake docx bytes",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    mock_enqueue.assert_called_once()
+    spec = mock_enqueue.call_args.args[0]
+    assert "[Table]" in spec
+
+
+def test_create_run_with_unreadable_pdf_returns_400(client: TestClient, mocker) -> None:
+    mocker.patch(
+        "ai_etl.api.routers.runs.extract_document_text",
+        side_effect=ValueError("corrupted PDF"),
+    )
+
+    response = client.post(
+        "/runs",
+        files={"file": ("notes.pdf", b"not actually a pdf", "application/pdf")},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Could not parse uploaded file."
+
+
+def test_create_run_with_empty_extracted_pdf_text_returns_400(client: TestClient, mocker) -> None:
+    mocker.patch("ai_etl.api.routers.runs.extract_document_text", return_value="   ")
+
+    response = client.post(
+        "/runs",
+        files={"file": ("notes.pdf", b"%PDF-1.4 fake bytes", "application/pdf")},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Could not parse uploaded file."
+
+
+# ---------------------------------------------------------------------------
 # Sprint 27 (ADR-028) — write-approval gate
 # ---------------------------------------------------------------------------
 

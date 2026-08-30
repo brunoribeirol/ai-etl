@@ -9,8 +9,8 @@ import pytest
 from ai_etl.sources.document_source import (
     MAX_ATTEMPTS,
     _extract_docx_text,
-    _extract_text,
     _structure_text,
+    extract_document_text,
     load_document,
 )
 
@@ -31,20 +31,20 @@ def mock_get_llm(mocker):
     return mocker.patch("ai_etl.sources.document_source.get_llm")
 
 
-def test_extract_text_rejects_unsupported_extension() -> None:
+def test_extract_document_text_rejects_unsupported_extension() -> None:
     with pytest.raises(ValueError, match="Unsupported document type"):
-        _extract_text("report.txt")
+        extract_document_text("report.txt")
 
 
-def test_extract_text_dispatches_pdf(mocker) -> None:
+def test_extract_document_text_dispatches_pdf(mocker) -> None:
     mock_pdf = mocker.patch("ai_etl.sources.document_source._extract_pdf_text", return_value="x")
-    _extract_text("report.pdf")
+    extract_document_text("report.pdf")
     mock_pdf.assert_called_once_with("report.pdf")
 
 
-def test_extract_text_dispatches_docx(mocker) -> None:
+def test_extract_document_text_dispatches_docx(mocker) -> None:
     mock_docx = mocker.patch("ai_etl.sources.document_source._extract_docx_text", return_value="x")
-    _extract_text("report.docx")
+    extract_document_text("report.docx")
     mock_docx.assert_called_once_with("report.docx")
 
 
@@ -121,7 +121,7 @@ def test_structure_text_exhausts_retries_and_raises(mock_get_llm) -> None:
 
 
 def test_load_document_composes_extract_and_structure(mocker) -> None:
-    mocker.patch("ai_etl.sources.document_source._extract_text", return_value="raw text")
+    mocker.patch("ai_etl.sources.document_source.extract_document_text", return_value="raw text")
     mock_structure = mocker.patch(
         "ai_etl.sources.document_source._structure_text",
         return_value=pd.DataFrame(VALID_ROWS),
@@ -137,7 +137,7 @@ def test_load_document_forwards_llm_override(mocker) -> None:
     """Sprint 30/gap-closing (ADR-031 §5) — a per-pipeline LLM override reaches
     document_source.py's own get_llm() call the same way it reaches every other
     call site."""
-    mocker.patch("ai_etl.sources.document_source._extract_text", return_value="raw text")
+    mocker.patch("ai_etl.sources.document_source.extract_document_text", return_value="raw text")
     mock_structure = mocker.patch(
         "ai_etl.sources.document_source._structure_text",
         return_value=pd.DataFrame(VALID_ROWS),
