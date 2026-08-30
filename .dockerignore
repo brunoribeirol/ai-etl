@@ -1,10 +1,19 @@
-# Keeps the local sandbox image build (`make sandbox-image`, docker/sandbox/Dockerfile,
-# ADR-038) from sending the whole repo as build context to the local Docker daemon —
-# the Dockerfile only COPYs pyproject.toml/uv.lock*/README.md/src/, so nothing else here
-# is ever needed inside the image, but without this file it's still transferred to the
-# daemon on every build. Flagged by the architecture-reviewer agent's 2026-08-26 review
-# of the Docker sandbox migration (non-blocking hygiene note, not a security finding —
-# .env is gitignored and was not present in the build context regardless).
+# Keeps the top-level Dockerfile build (Railway deploy image) from sending the
+# whole repo as build context to the daemon — that Dockerfile only COPYs
+# pyproject.toml/uv.lock*/README.md/src/case_study/.env.example, so nothing
+# else here is ever needed inside the image.
+#
+# Real bug found 2026-08-30: an earlier version of this file also excluded
+# `case_study/` and `*.md`, which broke THIS build (`COPY case_study/
+# ./case_study/` and `COPY ... README.md ./` both failed with "not found") —
+# confirmed failing on `main`'s own `docker.yml` CI run after that version
+# merged. `.dockerignore` at the repo root applies to every Docker build
+# using this context (both this Dockerfile and `docker/sandbox/Dockerfile`),
+# so it must only exclude what NEITHER build needs. The sandbox image's own
+# narrower, safe-for-it-but-not-for-this-one exclusions
+# (`case_study/`) live in `docker/sandbox/Dockerfile.dockerignore` instead —
+# Docker resolves a per-Dockerfile ignore file named
+# `<path-to-dockerfile-relative-to-context>.dockerignore` automatically.
 
 .git/
 .venv/
@@ -13,9 +22,7 @@ node_modules/
 frontend/
 .claude/
 docs/
-case_study/
 tests/
-*.md
 .env
 .env.local
 __pycache__/

@@ -120,7 +120,7 @@ def execute_in_docker_sandbox(
     memory_limit = os.environ.get("AI_ETL_SANDBOX_DOCKER_MEMORY", _DEFAULT_MEMORY_LIMIT)
     cpu_limit = os.environ.get("AI_ETL_SANDBOX_DOCKER_CPUS", _DEFAULT_CPU_LIMIT)
 
-    payload = pickle.dumps(
+    payload = pickle.dumps(  # nosemgrep: python.lang.security.deserialization.pickle.avoid-pickle -- see note at the bottom of this file
         {
             "code": code,
             "dfs": dfs,
@@ -174,7 +174,7 @@ def execute_in_docker_sandbox(
 
     start = time.monotonic()
     process = subprocess.Popen(  # nosec B603 — fixed argv built above, no shell, no user input
-        cmd,
+        cmd,  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-tainted-env-args.dangerous-subprocess-use-tainted-env-args -- cmd is a fixed argv list built above from a hardcoded "docker run ..." template + this project's own resource-limit env vars, never external/attacker-controlled input
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -222,7 +222,7 @@ def execute_in_docker_sandbox(
         )
 
     try:
-        result: dict[str, Any] = pickle.loads(stdout)  # nosec B301 — see note at the bottom of this file
+        result: dict[str, Any] = pickle.loads(stdout)  # nosec B301  # nosemgrep: python.lang.security.deserialization.pickle.avoid-pickle -- see note at the bottom of this file
     except Exception as e:
         return SandboxResult(
             values={},
