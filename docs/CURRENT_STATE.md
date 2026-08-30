@@ -2,7 +2,75 @@
 
 > Living doc. Updated at the end of meaningful work sessions, not per-commit. Source of truth for repo/code state; the Obsidian vault (`~/Documents/Obsidian Vault/tcc/`) is the source of truth for the academic TCC narrative and product/strategy context.
 
-**Last updated:** 2026-08-30 (continued) — **Production operational gaps closed: RLS migration applied to Supabase, `ai_etl_app_tenant` password rotated, `APP_DATABASE_URL_TENANT` configured on both Railway services, ADR-040's 3-service residual risk migrated and verified (#161), celery-beat confirmed live and ticking. A real production incident (Supavisor pooler username missing its `.PROJECT_REF` suffix) found and fixed the same session via live browser verification — see below.**
+**Last updated:** 2026-08-30 (continued again) — **Full live functionality sweep against production (Claude in Chrome, real Clerk session, gpt-4o-mini only): 2 previously-broken upload paths found and fixed (JSON uploads #164, PDF/DOCX uploads #165 — the latter broken since inception), 2 frontend bugs fixed (#163), plus live-verified Budget/Secrets/Data-export/Notification-config/retention all working end-to-end. One real performance finding not yet fixed: `GET /tenant/export` takes ~75s in production.**
+
+## 2026-08-30 (continued again) — full live functionality sweep, JSON + PDF/DOCX upload bugs found and fixed, export latency finding
+
+Direct continuation of the operational-gaps session below. Per the owner's explicit
+request ("teste TODAS AS FUNCIONALIDADES... com prints... para que corrigirmos os
+erros se necessário"), tested every reachable feature live against
+`ai-etl.vercel.app` with a real Clerk session, restricted to `gpt-4o-mini` to
+control cost. Database-source testing (Postgres/MySQL/MongoDB) was explicitly
+skipped — no publicly-reachable test database exists — by the owner's own choice.
+
+**4 real bugs found and fixed, each shipped as its own branch → PR → CI-gated merge:**
+
+- **PR #163** (`fix/frontend-locale-bugs`) — `locale-toggle.tsx` awaited the backend
+  `PATCH /tenant/locale` sync *inside* the same transition that disabled the button,
+  contradicting its own "best-effort, never blocks" docstring — this was the reported
+  "language switch feels slow" bug. Fixed by firing the sync independently. Also fixed
+  `onboarding-checklist.tsx` hardcoding a Portuguese string instead of using its own
+  existing `t("heading")` i18n key.
+- **PR #164** (`fix/json-upload-source-support`) — JSON file uploads were completely
+  broken: the Orchestrator's source-type enum has no `"json"` value (guesses `"csv"`),
+  and `csv_source.py` had no `.json` branch, so every JSON upload failed with a
+  "Malformed CSV" error. Fixed by adding a dedicated `_load_json()` path dispatched by
+  file extension, independent of the LLM-assigned type.
+- **PR #165** (`fix/pdf-docx-upload-support`) — more severe, broken since inception:
+  `_dataframe_from_upload()` in `api/routers/runs.py` had no branch for `.pdf`/`.docx`
+  at all, so every PDF/DOCX upload hit a generic 400 before a Celery task was ever
+  created. Fixed by adding a document-specific spec path that reuses
+  `document_source.py`'s newly-public `extract_document_text()` (cheap, deterministic
+  text extraction, no LLM call) to build the pipeline spec without double-paying for
+  LLM structuring.
+- **PR #161** (already covered in the entry below, same session family).
+
+**Live-verified working end-to-end, no bugs found:**
+DOCX upload through the real upload UI (confirmed post-fix, full Silver → Planner →
+Gold/Science → Advisor run completed); Budget cap set/save + live spend tracking
+($0.01 shown correctly for the DOCX test run); Secrets create/list/delete (values
+never re-displayed, as designed); Data & Privacy retention window set/clear (inline
+2-click confirm pattern, consistent across the page); Data & Privacy account-data
+export (JSON download confirmed structurally correct — `tenant_id`, `runs`,
+`analysis_runs`, `stage_latencies`, `saved_pipelines`, `tenant_secrets`,
+`storage_artifacts`); per-pipeline notification-channel override set/clear on a
+saved scheduled pipeline.
+
+**Real, unfixed finding: `GET /tenant/export` is slow in production (~75s).**
+Confirmed via Railway logs — `OPTIONS /tenant/export` at T+0, `GET /tenant/export
+200 OK` at T+75s, reproduced twice. The endpoint does eventually return correct
+data (not hanging forever), so this is a performance issue, not a correctness bug —
+worth profiling later (likely N+1 queries across `runs`/`analysis_runs`/
+`stage_latencies`/`storage_artifacts`), not committed to this session.
+
+**Tooling note, not a product bug:** the Claude-in-Chrome `computer` tool's simulated
+click intermittently failed to trigger the Export button's `onClick` (confirmed by
+successfully triggering the identical code path via a direct DOM `.click()` call) —
+attributed to the extension's tab occasionally being discarded/reloaded by Chrome
+mid-session (observed independently, e.g. `chrome://newtab` sleep icon appearing on
+idle tabs), not to the button's own code, which is byte-for-byte the same confirm
+pattern already verified working on Budget/Secrets/Retention.
+
+**Branch hygiene:** `fix/frontend-locale-bugs`, `fix/json-upload-source-support`,
+`fix/pdf-docx-upload-support` all merged and deleted locally + remotely; `main` is
+the only branch again.
+
+**Still open:** the `/tenant/export` latency; `app/layout.tsx`'s hardcoded PT
+`<title>`/meta description (pre-existing, flagged again, needs `generateMetadata`
+per locale); `frontend/src/lib/form-error.ts`'s hardcoded PT error strings (same
+class of pre-existing gap); database-source (Postgres/MySQL/MongoDB) live testing,
+deferred by the owner's own choice.
+
 
 ## 2026-08-30 (continued) — operational gaps closed, RLS-migrate-remaining-services, a real production incident found and fixed via live testing
 
