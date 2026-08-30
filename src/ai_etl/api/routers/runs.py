@@ -24,6 +24,7 @@ from ai_etl.services.execution_queue import (
 )
 from ai_etl.services.pipeline_service import reject_pending_load, resume_pending_load
 from ai_etl.services.spec_builder import auto_generate_spec
+from ai_etl.sources.document_source import extract_document_text
 
 router = APIRouter(prefix="/runs", tags=["runs"])
 
@@ -34,6 +35,55 @@ class RejectRunRequest(BaseModel):
     given is still a valid, explicit rejection)."""
 
     reason: str = ""
+
+
+_DOCUMENT_EXTENSIONS = (".pdf", ".docx")
+
+
+def _document_spec(path: Path, output_csv: Path, business_question: str) -> Optional[str]:
+    """Spec text for a PDF/DOCX upload — the document-connector equivalent of
+    `auto_generate_spec()`, whose signature needs a pre-parsed DataFrame a
+    document doesn't have yet.
+
+    Real bug found 2026-08-30, live testing: `_dataframe_from_upload()` below
+    never had a `.pdf`/`.docx` branch at all — despite the upload UI
+    advertising both and `sources/document_source.py` existing specifically
+    to handle them — so every PDF/DOCX upload hit `create_run`'s generic
+    "Could not parse uploaded file." 400 before ever reaching the pipeline.
+
+    Deliberately does NOT call `document_source.load_document()` (which
+    structures text into rows via an LLM call) — that would pay for the
+    same LLM extraction twice: once here just to preview, once for real
+    inside the pipeline's own Extractor -> `load_document()` call. Instead
+    uses `extract_document_text()` (no LLM, deterministic) for a cheap
+    validity check and a short excerpt for the spec text, and lets the real
+    row-structuring happen exactly once, where it already happens.
+
+    Returns `None` (never raises) if the document can't even be read as
+    text — `create_run` then reports the same "Could not parse uploaded
+    file." error as every other unreadable upload, not a different message
+    for this one source type.
+    """
+    try:
+        text = extract_document_text(str(path))
+    except Exception:
+        return None
+    if not text.strip():
+        return None
+
+    question_hint = (
+        f" The analysis should answer: {business_question}." if business_question else ""
+    )
+    preview = text[:1000]
+    return (
+        f"Read the document at {path}.{question_hint} "
+        f'Excerpt of its extracted text, for context:\n"""\n{preview}\n"""\n'
+        f"Extract the tabular data in this document (a table, a list of records, "
+        f"or structured line items) into rows. "
+        f"Clean the data: remove completely duplicate rows, standardize column names "
+        f"to snake_case. "
+        f"Save the cleaned result to {output_csv}."
+    )
 
 
 def _dataframe_from_upload(filename: str, contents: bytes) -> Optional[pd.DataFrame]:
@@ -144,15 +194,24 @@ async def create_run(
 
     if file is not None and file.filename:
         contents = await file.read()
-        df_bronze = _dataframe_from_upload(file.filename, contents)
-        if df_bronze is None:
-            raise HTTPException(status_code=400, detail="Could not parse uploaded file.")
-
+        name = file.filename.lower()
         suffix = Path(file.filename).suffix
         saved_path = UPLOADS_DIR / f"{uuid.uuid4().hex[:12]}{suffix}"
-        saved_path.write_bytes(contents)
         output_csv = RUNS_DIR / f"{uuid.uuid4()}_silver.csv"
-        spec = auto_generate_spec(saved_path, df_bronze, output_csv, business_question.strip())
+
+        if name.endswith(_DOCUMENT_EXTENSIONS):
+            saved_path.write_bytes(contents)
+            spec = _document_spec(saved_path, output_csv, business_question.strip())
+            if spec is None:
+                saved_path.unlink(missing_ok=True)
+                raise HTTPException(status_code=400, detail="Could not parse uploaded file.")
+        else:
+            df_bronze = _dataframe_from_upload(file.filename, contents)
+            if df_bronze is None:
+                raise HTTPException(status_code=400, detail="Could not parse uploaded file.")
+            saved_path.write_bytes(contents)
+            spec = auto_generate_spec(saved_path, df_bronze, output_csv, business_question.strip())
+
         file_path = str(saved_path)
         file_bytes = contents
     elif manual_spec.strip():

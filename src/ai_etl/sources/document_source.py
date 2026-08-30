@@ -64,11 +64,21 @@ def load_document(
             it. `None` (the default) for every caller that doesn't pass it —
             unchanged behavior.
     """
-    text = _extract_text(path)
+    text = extract_document_text(path)
     return _structure_text(text, llm_provider_override, llm_model_override)
 
 
-def _extract_text(path: str) -> str:
+def extract_document_text(path: str) -> str:
+    """Raw text extraction only — no LLM call, deterministic and cheap.
+
+    Public (2026-08-30 gap fix) so `api/routers/runs.py::create_run` can
+    validate a PDF/DOCX upload and build its spec-preview text without
+    paying for `_structure_text()`'s LLM call twice: once here just to
+    preview, once for real inside the pipeline's own Extractor ->
+    `load_document()` call. `load_document()` above still does exactly what
+    it always did (extract, then structure) — this just gives the raw first
+    half a name callers outside this module can use on its own.
+    """
     if path.endswith(".pdf"):
         return _extract_pdf_text(path)
     if path.endswith(".docx"):
