@@ -38,23 +38,31 @@ export function LocaleToggle({ syncBackend = false }: { syncBackend?: boolean })
   const nextLocale: Locale = locale === "pt-BR" ? "en-US" : "pt-BR";
 
   function handleClick() {
-    startTransition(async () => {
-      await setLocaleCookie(nextLocale);
-      if (syncBackend && apiUrl) {
-        try {
-          const token = await getToken();
-          await fetch(`${apiUrl}/tenant/locale`, {
+    // Real bug found 2026-08-30: the backend sync used to be awaited inside
+    // this same transition, ahead of router.refresh() — the button stayed
+    // disabled for a full round-trip to the Railway API on every click, on
+    // top of the cookie-set round-trip, contradicting this component's own
+    // "best-effort, never blocks the UI toggle" docstring above. The PATCH
+    // now fires independently of the transition — the UI updates as soon as
+    // the cookie is set, exactly the intended behavior.
+    if (syncBackend && apiUrl) {
+      getToken()
+        .then((token) =>
+          fetch(`${apiUrl}/tenant/locale`, {
             method: "PATCH",
             headers: {
               Authorization: `Bearer ${token}`,
               "Content-Type": "application/json",
             },
             body: JSON.stringify({ locale: nextLocale }),
-          });
-        } catch {
+          }),
+        )
+        .catch(() => {
           // Best-effort — see docstring above.
-        }
-      }
+        });
+    }
+    startTransition(async () => {
+      await setLocaleCookie(nextLocale);
       router.refresh();
     });
   }
