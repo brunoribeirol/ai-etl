@@ -140,16 +140,50 @@ def load_csv(
     sheet_name: str | int | None = None,
     header_row: int | None = None,
 ) -> pd.DataFrame:
-    """Load a CSV or Excel file into a DataFrame.
+    """Load a CSV, Excel, or flat-records JSON file into a DataFrame.
 
     `sheet_name`/`header_row` are Excel-only and optional — omitting them
     preserves auto-detection (see module docstring); passing them lets a
     caller resolve an ambiguity explicitly instead of relying on the
-    heuristics. Ignored for CSV.
+    heuristics. Ignored for CSV/JSON.
+
+    Real bug found 2026-08-30, live testing: the Orchestrator's source-type
+    enum (`agents/pipeline/orchestrator.py::ORCHESTRATOR_PROMPT`) has no
+    `"json"` value — a `.json` upload plans as `"csv"` (the closest fit,
+    same as this module already handles `.xlsx`/`.xls` under `"csv"`), so
+    it must actually work here rather than fail with a "malformed CSV"
+    error from trying to parse JSON text as delimited text.
     """
     if path.endswith((".xlsx", ".xls")):
         return _load_excel(path, sheet_name, header_row)
+    if path.endswith(".json"):
+        return _load_json(path)
     return _load_csv_file(path)
+
+
+def _load_json(path: str) -> pd.DataFrame:
+    """Load a flat JSON array-of-records file (`df.to_json(orient="records")`
+    shape — the common case for a tabular JSON export). A top-level JSON
+    object or a deeply nested structure raises a clear, specific error
+    rather than `pandas` silently producing a one-row/one-column DataFrame
+    that doesn't match what the source data actually looks like — same
+    "loud, specific failure over a silently wrong DataFrame" posture this
+    module's CSV path already takes (see module docstring, failure class 3).
+    """
+    try:
+        df = pd.read_json(path, orient="records")
+    except ValueError as exc:
+        raise ValueError(
+            f"Could not read '{path}' as a flat JSON array of records: {exc}. "
+            f"Expected a top-level JSON array of objects (e.g. "
+            f'[{{"col1": 1, "col2": "a"}}, ...]) — a top-level object or a '
+            f"deeply nested structure isn't supported by this source type."
+        ) from exc
+    if df.empty or len(df.columns) == 0:
+        raise ValueError(
+            f"'{path}' parsed to an empty table — expected a non-empty JSON array of row objects."
+        )
+    return df
 
 
 def _load_csv_file(path: str) -> pd.DataFrame:

@@ -310,3 +310,41 @@ def test_load_excel_no_confident_header_row_raises(tmp_path: Path) -> None:
     df.to_excel(path, index=False, header=False)
     with pytest.raises(ValueError, match="Could not locate a header row"):
         load_csv(str(path))
+
+
+# --- JSON ---
+# Real bug found 2026-08-30, live testing against the deployed app: a
+# `.json` upload plans as source type "csv" (the Orchestrator's own type
+# enum has no "json" value — the same "closest fit" treatment `.xlsx`/`.xls`
+# already get above), but `load_csv` had no `.json` branch, so it tried to
+# parse the JSON text as delimited CSV text and failed with a "malformed
+# CSV" error instead of actually loading the data.
+
+
+def test_load_json_array_of_records(tmp_path: Path) -> None:
+    path = tmp_path / "sales.json"
+    pd.DataFrame({"product": ["Widget A", "Widget B"], "units_sold": [120, 85]}).to_json(
+        path, orient="records", indent=2
+    )
+
+    df = load_csv(str(path))
+
+    assert list(df.columns) == ["product", "units_sold"]
+    assert df.shape == (2, 2)
+    assert df.loc[0, "product"] == "Widget A"
+
+
+def test_load_json_top_level_object_raises_actionable_error(tmp_path: Path) -> None:
+    path = tmp_path / "not_records.json"
+    path.write_text('{"product": "Widget A", "units_sold": 120}')
+
+    with pytest.raises(ValueError, match="flat JSON array of records"):
+        load_csv(str(path))
+
+
+def test_load_json_empty_array_raises(tmp_path: Path) -> None:
+    path = tmp_path / "empty.json"
+    path.write_text("[]")
+
+    with pytest.raises(ValueError, match="parsed to an empty table"):
+        load_csv(str(path))
