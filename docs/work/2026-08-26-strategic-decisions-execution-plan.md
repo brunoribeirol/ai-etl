@@ -1,6 +1,11 @@
 # 2026-08-26/27 — Execution plan: post-audit strategic decisions
 
-**Status:** All 6 branches pushed, reviewed, and ready — nothing left to build there before 2026-09-01, only waiting on the CI budget reset. **Wave 3 added 2026-08-27** (3 new small items from the X-PRO.ai gap analysis, approved, not yet started — see below) — this is real, separate next-session work, not blocked by the CI budget (all 3 are cheap enough to build and push locally in the meantime).
+**Status: COMPLETE (2026-08-30).** All 8 planned PRs (Waves 1–3) merged into `main`
+(#150–#157), plus 2 unplanned hotfixes for real regressions found while merging (#158, #159) —
+see `docs/CURRENT_STATE.md`'s 2026-08-30 entry for the full account. The repo was made public
+mid-session specifically to remove the GitHub Actions budget constraint that had held these
+branches unmerged since 2026-08-27 — the 2026-09-01 reset this doc originally waited for was
+never needed. This plan is kept for history; no further action against it.
 **Owner:** Bruno Ribeiro (decisions) + Claude (execution)
 
 ## Objective
