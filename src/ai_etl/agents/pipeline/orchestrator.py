@@ -7,7 +7,7 @@ from pydantic import ValidationError
 
 from ai_etl.agents._llm_codegen import strip_code_fences
 from ai_etl.audit.logger import log_action
-from ai_etl.core.llm import get_llm
+from ai_etl.core.llm import get_llm, invoke_llm
 from ai_etl.core.pipeline_plan_schema import PipelinePlan
 from ai_etl.core.state import PipelineState
 
@@ -81,7 +81,7 @@ def orchestrator_node(state: PipelineState) -> PipelineState:
     last_error: str | None = None
 
     for attempt in range(1, 3):
-        response = llm.invoke(prompt)
+        response = invoke_llm(llm, prompt, provider_override)
         # Real bug found 2026-08-23 running a live model comparison: unlike every
         # other agent that parses an LLM response (Transformer/Analyst/Science/
         # Advisor, via this same strip_code_fences), the Orchestrator used to call

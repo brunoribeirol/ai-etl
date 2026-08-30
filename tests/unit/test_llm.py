@@ -13,10 +13,12 @@ from langchain_openai import ChatOpenAI
 
 from ai_etl.core.llm import (
     ALLOWED_MODELS_BY_PROVIDER,
+    LLMCircuitOpenError,
     UnsupportedProviderOrModelError,
     get_llm,
     get_model_name,
     get_provider,
+    invoke_llm,
     is_llm_review_enabled,
     validate_provider_and_model,
 )
@@ -288,6 +290,132 @@ class TestProviderConnectivity:
 
         assert result["ok"] is False
         assert result["error"] is not None
+
+
+class _FakeLLM:
+    """Minimal `BaseChatModel`-shaped stand-in — `invoke_llm()` only ever calls
+    `.invoke(prompt)` on whatever it's given, so a real LangChain client isn't
+    needed to test the breaker logic itself (provider construction is already
+    covered by TestGetLlmProviderSelection above).
+    """
+
+    def __init__(self, responses: list[object]) -> None:
+        self._responses = iter(responses)
+        self.call_count = 0
+
+    def invoke(self, prompt: str) -> object:
+        self.call_count += 1
+        result = next(self._responses)
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+
+class _FakeResponse:
+    content = "ok"
+
+
+class TestInvokeLlmCircuitBreaker:
+    """ADR-041 (Wave 3 / X-PRO.ai gap analysis) — the per-provider circuit breaker
+    wrapping `.invoke()`. Threshold/cooldown are set to small explicit values per
+    test rather than relying on the module defaults, so these tests don't depend
+    on (or need to change alongside) whatever the defaults happen to be.
+    """
+
+    def test_success_passes_through_and_returns_response(self) -> None:
+        expected = _FakeResponse()
+        llm = _FakeLLM([expected])
+        response = invoke_llm(llm, "prompt", "openai")
+        assert response is expected
+        assert llm.call_count == 1
+
+    def test_single_failure_does_not_open_circuit(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("AI_ETL_LLM_CIRCUIT_FAILURE_THRESHOLD", "3")
+        llm = _FakeLLM([ConnectionError("boom"), _FakeResponse()])
+        with pytest.raises(ConnectionError):
+            invoke_llm(llm, "prompt", "openai")
+        # Circuit still closed — the next call reaches the (now-succeeding) LLM.
+        response = invoke_llm(llm, "prompt", "openai")
+        assert response.content == "ok"
+        assert llm.call_count == 2
+
+    def test_reaching_threshold_opens_circuit_and_fails_fast(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("AI_ETL_LLM_CIRCUIT_FAILURE_THRESHOLD", "2")
+        monkeypatch.setenv("AI_ETL_LLM_CIRCUIT_COOLDOWN_SECONDS", "60")
+        llm = _FakeLLM([ConnectionError("boom"), ConnectionError("boom"), _FakeResponse()])
+
+        with pytest.raises(ConnectionError):
+            invoke_llm(llm, "prompt", "openai")
+        with pytest.raises(ConnectionError):
+            invoke_llm(llm, "prompt", "openai")
+
+        # Threshold reached (2 consecutive failures) — the 3rd call must fail fast
+        # WITHOUT reaching the LLM (call_count stays at 2, not 3).
+        with pytest.raises(LLMCircuitOpenError, match="openai"):
+            invoke_llm(llm, "prompt", "openai")
+        assert llm.call_count == 2
+
+    def test_success_resets_consecutive_failure_count(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("AI_ETL_LLM_CIRCUIT_FAILURE_THRESHOLD", "2")
+        llm = _FakeLLM(
+            [ConnectionError("boom"), _FakeResponse(), ConnectionError("boom"), _FakeResponse()]
+        )
+        with pytest.raises(ConnectionError):
+            invoke_llm(llm, "prompt", "openai")
+        invoke_llm(llm, "prompt", "openai")  # success resets the counter to 0
+        with pytest.raises(ConnectionError):
+            invoke_llm(llm, "prompt", "openai")
+        # Only 1 consecutive failure since the reset — threshold (2) not reached,
+        # so this 4th call must still reach the LLM instead of failing fast.
+        response = invoke_llm(llm, "prompt", "openai")
+        assert response.content == "ok"
+        assert llm.call_count == 4
+
+    def test_circuit_closes_after_cooldown_probe_succeeds(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("AI_ETL_LLM_CIRCUIT_FAILURE_THRESHOLD", "1")
+        monkeypatch.setenv("AI_ETL_LLM_CIRCUIT_COOLDOWN_SECONDS", "0")
+        llm = _FakeLLM([ConnectionError("boom"), _FakeResponse()])
+
+        with pytest.raises(ConnectionError):
+            invoke_llm(llm, "prompt", "openai")  # opens the circuit
+        # Cooldown is 0s, so the very next call is let through as a half-open probe.
+        response = invoke_llm(llm, "prompt", "openai")
+        assert response.content == "ok"
+        assert llm.call_count == 2
+
+    def test_providers_have_independent_circuits(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("AI_ETL_LLM_CIRCUIT_FAILURE_THRESHOLD", "1")
+        monkeypatch.setenv("AI_ETL_LLM_CIRCUIT_COOLDOWN_SECONDS", "60")
+        openai_llm = _FakeLLM([ConnectionError("boom")])
+        anthropic_llm = _FakeLLM([_FakeResponse()])
+
+        with pytest.raises(ConnectionError):
+            invoke_llm(openai_llm, "prompt", "openai")  # opens ONLY openai's circuit
+
+        # anthropic's circuit is untouched — this call must reach its LLM.
+        response = invoke_llm(anthropic_llm, "prompt", "anthropic")
+        assert response.content == "ok"
+        assert anthropic_llm.call_count == 1
+
+    def test_provider_none_resolves_via_get_provider_env_var(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("AI_ETL_LLM_PROVIDER", "Anthropic")
+        monkeypatch.setenv("AI_ETL_LLM_CIRCUIT_FAILURE_THRESHOLD", "1")
+        monkeypatch.setenv("AI_ETL_LLM_CIRCUIT_COOLDOWN_SECONDS", "60")
+        llm = _FakeLLM([ConnectionError("boom")])
+        with pytest.raises(ConnectionError):
+            invoke_llm(llm, "prompt")  # no explicit provider → falls back to env var
+
+        # Case-insensitive: the circuit opened under the lowercased key "anthropic".
+        with pytest.raises(LLMCircuitOpenError, match="anthropic"):
+            invoke_llm(_FakeLLM([_FakeResponse()]), "prompt", "anthropic")
 
 
 class TestIsLlmReviewEnabled:
