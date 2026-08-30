@@ -17,13 +17,13 @@ import { SCHEDULABLE_SOURCE_TYPES, type QualityRule, type SavedPipeline } from "
 
 /**
  * Sprint 13 (ADR-016) — minimal CRUD UI for saved (recurring) pipelines,
- * distinct from the "Executar" page's one-off `POST /runs`. Client
+ * distinct from the "Run" page's one-off `POST /runs`. Client
  * Component (needs `useAuth().getToken()` fresh per request, same pattern
- * `executar-form.tsx` already established) — no server-side prefetch, since
+ * `run-form.tsx` already established) — no server-side prefetch, since
  * every action here (create/pause/resume/edit) needs a token anyway.
  *
- * Deliberately minimal per the sprint's own scope ("não precisa ser bonita,
- * precisa funcionar"): a plain list + inline edit, no separate route per
+ * Deliberately minimal per the sprint's own scope ("doesn't need to be
+ * pretty, needs to work"): a plain list + inline edit, no separate route per
  * pipeline, native `<select>` for source_type rather than pulling in a new
  * shadcn Select component for one dropdown.
  */
@@ -44,7 +44,7 @@ export function PipelinesManager() {
   const [cronSchedule, setCronSchedule] = useState("0 3 * * *");
   // Sprint 16 (ADR-023) — operator-defined quality rules, edited as raw JSON: a
   // plain textarea rather than a per-field rule builder, matching this manager's
-  // own Sprint 13 precedent ("não precisa ser bonita, precisa funcionar").
+  // own Sprint 13 precedent ("doesn't need to be pretty, needs to work").
   const [qualityRulesText, setQualityRulesText] = useState("[]");
   const [submitting, setSubmitting] = useState(false);
   // Sprint 30 (ADR-031) frontend — the pipeline currently being edited's LLM
@@ -409,10 +409,10 @@ export function PipelinesManager() {
                   variant="outline"
                   render={
                     // Sprint 18 (ADR-024) — plain-language view for a
-                    // non-technical stakeholder, separate from "Histórico"
-                    // (run-by-run technical detail, Pipeline/Código tabs).
-                    <Link href={`/resumo/${pipeline.id}`}>
-                      <FileText className="h-4 w-4" /> {t("resumo")}
+                    // non-technical stakeholder, separate from "History"
+                    // (run-by-run technical detail, Pipeline/Code tabs).
+                    <Link href={`/summary/${pipeline.id}`}>
+                      <FileText className="h-4 w-4" /> {t("summary")}
                     </Link>
                   }
                 />
@@ -420,8 +420,8 @@ export function PipelinesManager() {
                   size="sm"
                   variant="outline"
                   render={
-                    <Link href={`/pipelines/${pipeline.id}/historico`}>
-                      <LineChart className="h-4 w-4" /> {t("historico")}
+                    <Link href={`/pipelines/${pipeline.id}/history`}>
+                      <LineChart className="h-4 w-4" /> {t("history")}
                     </Link>
                   }
                 />

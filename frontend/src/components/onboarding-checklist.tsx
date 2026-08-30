@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 import type { OnboardingStatus } from "@/lib/types";
 
 /**
- * Sprint 26 (ADR-027) — activation checklist for `/comecar`. Fetches
+ * Sprint 26 (ADR-027) — activation checklist for `/get-started`. Fetches
  * `GET /onboarding/status`, a read-only aggregate over `runs`/
  * `saved_pipelines` (no dedicated table, see the ADR). Deliberately scoped
  * to this one page rather than repeated in the header on every route — a
@@ -65,7 +65,7 @@ export function OnboardingChecklist() {
       done: status?.has_saved_pipeline ?? false,
       label: t("item3Label"),
       hint: t("item3Hint"),
-      href: "/resumo",
+      href: "/summary",
     },
   ];
 

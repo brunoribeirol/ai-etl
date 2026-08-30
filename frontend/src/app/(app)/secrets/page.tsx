@@ -5,7 +5,7 @@ import { apiFetch } from "@/lib/api";
 import type { ApiConfig } from "@/lib/types";
 
 /**
- * "Segredos" page — first frontend consumer of `api/routers/secrets.py`
+ * "Secrets" page — first frontend consumer of `api/routers/secrets.py`
  * (Sprint 19, ADR-022), tenant-scoped external-source credential storage
  * that shipped 100% backend with no UI until now.
  *
@@ -20,8 +20,8 @@ import type { ApiConfig } from "@/lib/types";
  * `"admin"` both pass here since `require_role("editor")` accepts either
  * (`api/deps.py::_ROLE_RANK`).
  */
-export default async function SegredosPage() {
-  const t = await getTranslations("segredosPage");
+export default async function SecretsPage() {
+  const t = await getTranslations("secretsPage");
 
   let role: string | null = null;
   try {

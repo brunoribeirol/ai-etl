@@ -12,7 +12,7 @@ import { useAuthedFetch } from "@/lib/authed-fetch";
 import type { SecretMutationResult } from "@/lib/types";
 
 /**
- * `/segredos` page's data + interaction layer — first frontend consumer of
+ * `/secrets` page's data + interaction layer — first frontend consumer of
  * `api/routers/secrets.py` (Sprint 19, ADR-022), previously 100% backend
  * with zero UI. `GET /secrets` returns names only (`list_secret_names`); no
  * endpoint here — nor anywhere in this router — ever returns a decrypted

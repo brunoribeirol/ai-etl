@@ -3,9 +3,9 @@ import { auth } from "@clerk/nextjs/server";
 /**
  * Server-side fetch helper for `src/ai_etl/api/` (ADR-011) — the same
  * auth()/getToken()/fetch shape PR 3's smoke-test page proved works, shared
- * now that "/" and "/historico" both need it. Client Components needing
+ * now that "/" and "/history" both need it. Client Components needing
  * fresh-per-request tokens (e.g. polling) use `useAuth().getToken()` from
- * `@clerk/nextjs` directly instead — see `executar-form.tsx`.
+ * `@clerk/nextjs` directly instead — see `run-form.tsx`.
  */
 export async function apiFetch<T>(path: string): Promise<T> {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL;

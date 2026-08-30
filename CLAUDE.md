@@ -1,156 +1,165 @@
 # CLAUDE.md — AI-ETL Framework
 
-## O que é este projeto
+## What this project is
 
-AI-ETL é um framework multiagente baseado em LLMs para automatizar pipelines ETL end-to-end.
-O usuário fornece uma especificação em linguagem natural; 5 agentes especializados orquestrados
-via LangGraph executam extração, transformação, qualidade e carga, gerando código Python auditável.
+AI-ETL is a multi-agent framework based on LLMs to automate end-to-end ETL pipelines.
+The user provides a natural language specification; 5 specialized agents orchestrated
+via LangGraph perform extraction, transformation, quality, and loading, generating auditable Python code.
 
-**Contexto:** TCC de Ciência da Computação — CESAR School, 2026.
+**Context:** Computer Science capstone project (TCC) — CESAR School, 2026.
 
-**Fonte canônica de contexto (decisões, requisitos, pesquisa):**
+**Canonical source of context (decisions, requirements, research):**
 `~/Documents/Obsidian Vault/tcc/`
 
 ---
 
-## Antes de qualquer tarefa — leia nesta ordem
+## Before any task — read in this order
 
-| O que mudou? | O que ler primeiro |
+| What changed? | What to read first |
 |---|---|
-| Um agente | `src/ai_etl/agents/<nome>.py` → vault: `artefact/architecture.md` |
-| Estado do pipeline | `src/ai_etl/core/state.py` |
-| Topologia do grafo | `src/ai_etl/core/graph.py` |
-| Source ou destination | `src/ai_etl/sources/` ou `destinations/` |
+| An agent | `src/ai_etl/agents/<name>.py` → vault: `artefact/architecture.md` |
+| Pipeline state | `src/ai_etl/core/state.py` |
+| Graph topology | `src/ai_etl/core/graph.py` |
+| Source or destination | `src/ai_etl/sources/` or `destinations/` |
 | Audit/logging | `src/ai_etl/audit/logger.py` + `src/ai_etl/audit/db.py` |
-| Sandbox de execução | `src/ai_etl/core/sandbox.py` + `docs/adr/ADR-003-exec-sandbox.md` |
-| Decisão de arquitetura | `docs/adr/` → vault: `artefact/decisions.md` |
-| Contexto geral do TCC | vault: `CONTEXT.md` |
+| Execution sandbox | `src/ai_etl/core/sandbox.py` + `docs/adr/ADR-003-exec-sandbox.md` |
+| Architecture decision | `docs/adr/` → vault: `artefact/decisions.md` |
+| General TCC context | vault: `CONTEXT.md` |
 
-**Fonte canônica — vault Obsidian (`~/Documents/Obsidian Vault/tcc/`):**
-- `artefact/architecture.md` — spec técnica autoritativa dos 5 agentes
-- `artefact/decisions.md` — por que as escolhas foram feitas
-- `artefact/requirements.md` — RFs e RNFs por agente
-- `artefact/case-study.md` — protocolo dos 3 cenários
-- `artefact/security.md` — riscos e mitigações
-- `artefact/testing.md` — estratégia de testes
-- `CONTEXT.md` — estado geral do TCC e próximos passos
+**Canonical source — Obsidian vault (`~/Documents/Obsidian Vault/tcc/`):**
+- `artefact/architecture.md` — authoritative technical spec of the 5 agents
+- `artefact/decisions.md` — why the choices were made
+- `artefact/requirements.md` — functional/non-functional requirements per agent
+- `artefact/case-study.md` — protocol for the 3 scenarios
+- `artefact/security.md` — risks and mitigations
+- `artefact/testing.md` — testing strategy
+- `CONTEXT.md` — overall TCC state and next steps
 
-> Os arquivos em `docs/adr/` são a exceção: ADRs ficam no repo porque são decisões de implementação, não documentação de pesquisa.
+> Files under `docs/adr/` are the exception: ADRs live in the repo because they are implementation decisions, not research documentation.
 
 ---
 
-## Comandos disponíveis
+## Available commands
 
 ```bash
-make install       # uv sync --all-extras + instala pacote editável
+make install       # uv sync --all-extras + installs the package in editable mode
 make test          # pytest unit + integration, cov >80%
 make lint          # ruff check
 make format        # ruff format + fix
 make format-check  # ruff format --check (CI)
 make type-check    # mypy src/
 make security      # bandit + pip-audit
-make check         # tudo acima em sequência
+make check         # all of the above in sequence
 make db-up         # PostgreSQL via docker-compose
-make run-scenario1 # executa cenário 1 do estudo de caso
+make run-scenario1 # runs scenario 1 of the case study
 make run-scenario2
 make run-scenario3
 ```
 
 ---
 
-## Regras não-negociáveis (violação = revert imediato)
+## Non-negotiable rules (violation = immediate revert)
 
-**Nunca faça:**
-- f-strings para queries SQL — use SQLAlchemy parâmetros bindados (`text("... WHERE id = :id")`)
-- `exec()` fora de `src/ai_etl/core/sandbox.py`
-- Commitar `.env` — use apenas `.env.example`
-- API keys em logs — o logger já redacta automaticamente campos "key", "token", "secret"
-- Quebrar a assinatura dos nodes LangGraph — todo node: `(state: PipelineState) -> PipelineState`
-- Mutar o estado in-place — sempre `{**state, "campo": novo_valor}`
-- Commitar direto em `main`
+**Never do:**
+- f-strings for SQL queries — use SQLAlchemy bound parameters (`text("... WHERE id = :id")`)
+- `exec()` outside `src/ai_etl/core/sandbox.py`
+- Commit `.env` — use only `.env.example`
+- API keys in logs — the logger already auto-redacts "key", "token", "secret" fields
+- Break the LangGraph node signature — every node: `(state: PipelineState) -> PipelineState`
+- Mutate state in-place — always `{**state, "field": new_value}`
+- Commit directly to `main`
 
-**Sempre faça:**
-- Usar `log_action()` de `src/ai_etl/audit/logger.py` para cada ação relevante de cada agente
-- Type hints em todo código — rodar `make type-check` antes de commitar
-- Escrever testes para novos módulos em `tests/unit/` ou `tests/integration/`
-- Rodar `make check` antes de abrir qualquer PR
+**Always do:**
+- Use `log_action()` from `src/ai_etl/audit/logger.py` for every relevant action of every agent
+- Type hints on all code — run `make type-check` before committing
+- Write tests for new modules in `tests/unit/` or `tests/integration/`
+- Run `make check` before opening any PR
 
 ---
 
-## Padrão SR Big Tech — aplicado automaticamente em toda sessão
+## SR Big Tech standard — applied automatically in every session
 
-**Este padrão se aplica a TODO trabalho neste projeto, sem exceção.**
-Spec completa: `.claude/specs/sr-standard.md`
-Checklist de execução: `.claude/skills/sr-quality-check.md` (invoke via `/sr-quality-check`)
+**This standard applies to ALL work in this project, without exception.**
+Full spec: `.claude/specs/sr-standard.md`
+Execution checklist: `.claude/skills/sr-quality-check.md` (invoke via `/sr-quality-check`)
 
-### Antes de marcar qualquer tarefa como concluída
+### Before marking any task as complete
 
 ```bash
-make check  # lint + format-check + type-check + test + security — deve passar 100%
+make check  # lint + format-check + type-check + test + security — must pass 100%
 ```
 
-Checklist específico deste projeto:
-- Todo node LangGraph: assinatura `(state: PipelineState) -> PipelineState`, retorno `{**state, ...}`
-- `log_action()` chamado em toda ação relevante de cada agente
-- Short-circuit `if state.get("error"): return state` em todo node
-- `exec()` apenas em `core/sandbox.py`
-- SQL apenas via `SQLAlchemy text()` com parâmetros — nunca f-string
-- `sqlite3.connect()` sempre com `contextlib.closing()`
-- Nenhum `print()` em produção — usar `log_action()`
-- Testes cobrindo: happy path + short-circuit + audit log + error
-- Cobertura ≥ 80% mantida
-- Nenhum `# type: ignore` novo sem comentário explicando o motivo
+Project-specific checklist:
+- Every LangGraph node: signature `(state: PipelineState) -> PipelineState`, returns `{**state, ...}`
+- `log_action()` called for every relevant action of every agent
+- Short-circuit `if state.get("error"): return state` in every node
+- `exec()` only in `core/sandbox.py`
+- SQL only via SQLAlchemy `text()` with parameters — never f-strings
+- `sqlite3.connect()` always wrapped with `contextlib.closing()`
+- No `print()` in production — use `log_action()`
+- Tests covering: happy path + short-circuit + audit log + error
+- Coverage ≥ 80% maintained
+- No new `# type: ignore` without a comment explaining why
 
-### Anti-patterns críticos deste projeto
+### Critical anti-patterns for this project
 
-| Anti-pattern | Consequência |
+| Anti-pattern | Consequence |
 |---|---|
-| `state["campo"] = valor` | Mutação in-place — quebra o contrato LangGraph |
-| `exec()` fora do sandbox | Sem restrição de builtins — risco de segurança |
-| `conn = sqlite3.connect(); ...; conn.close()` | Connection leak se exceção ocorrer |
-| `f"SELECT * FROM {table}"` direto | SQL injection |
-| `query` de `load_postgres()` vindo de input de usuário | SQL injection em SaaS |
-| `# type: ignore` sem comentário | Dívida técnica invisível |
-| Integration tests que duplicam unit tests | Não testa integração real |
+| `state["field"] = value` | In-place mutation — breaks the LangGraph contract |
+| `exec()` outside the sandbox | No builtins restriction — security risk |
+| `conn = sqlite3.connect(); ...; conn.close()` | Connection leak if an exception occurs |
+| `f"SELECT * FROM {table}"` directly | SQL injection |
+| `query` from `load_postgres()` coming from user input | SQL injection in SaaS |
+| `# type: ignore` without a comment | Invisible technical debt |
+| Integration tests that duplicate unit tests | Doesn't test real integration |
 
-### Convenções Git obrigatórias a partir de agora
+### Mandatory Git conventions from now on
 
-- Branch: `feat/<nome>`, `fix/<nome>`, `chore/<nome>`, `docs/<nome>`, `test/<nome>`
-- Commits: Conventional Commits em inglês (`feat: ...`, `fix: ...`, `test: ...`)
-- Nunca commitar direto em `main`
-- Tags: Semantic Versioning `vMAJOR.MINOR.PATCH` a cada milestone
-
----
-
-## Skills disponíveis
-
-- `.claude/skills/add-agent.md` — checklist completo para adicionar um novo agente LangGraph
-- `.claude/skills/run-pipeline.md` — como rodar e verificar um cenário do case study
-- `.claude/skills/sr-quality-check.md` — auditoria SR Big Tech antes de qualquer entrega
+- Branch: `feat/<name>`, `fix/<name>`, `chore/<name>`, `docs/<name>`, `test/<name>`
+- Commits: Conventional Commits in English (`feat: ...`, `fix: ...`, `test: ...`)
+- Never commit directly to `main`
+- Tags: Semantic Versioning `vMAJOR.MINOR.PATCH` at every milestone
 
 ---
 
-## Arquitetura em uma frase
+## Available skills
+
+- `.claude/skills/add-agent.md` — full checklist for adding a new LangGraph agent
+- `.claude/skills/run-pipeline.md` — how to run and verify a case study scenario
+- `.claude/skills/sr-quality-check.md` — SR Big Tech audit before any delivery
+- `.claude/skills/persona-audit.md` — formalized multi-persona audit (origin: 2026-08-24 audit)
+- `.claude/skills/frontend-design-review.md` — project frontend conventions, including the
+  non-negotiable 100%-English naming rule (routes/components/files) — PT-BR only as content
+
+## Available specialized agents
+
+- `.claude/agents/architecture-reviewer.md` — read-only reviewer of the LangGraph/`PipelineState`
+  contract, ADR adherence, and the non-negotiable rules above
+- `.claude/agents/metrics-analyst.md` — analysis of case study results and LLM model comparisons
+
+---
+
+## Architecture in one sentence
 
 ```
-[spec]                                              (Silver — pipeline ETL, grafo LangGraph)
-  → Orchestrator (LLM, plano JSON)
-  → Extractor (determinístico, CSV/PG/REST/... → DataFrame + schema)
-  → Transformer (LLM → código Python → sandbox exec → DataFrame)
-  → Quality (determinístico, nulls + duplicates + outliers → severity)
-  → Loader (determinístico, DataFrame → CSV/PG/S3)
-     └─ se severity == "error" → END (pipeline bloqueado)
+[spec]                                              (Silver — ETL pipeline, LangGraph graph)
+  → Orchestrator (LLM, JSON plan)
+  → Extractor (deterministic, CSV/PG/REST/... → DataFrame + schema)
+  → Transformer (LLM → Python code → sandbox exec → DataFrame)
+  → Quality (deterministic, nulls + duplicates + outliers → severity)
+  → Loader (deterministic, DataFrame → CSV/PG/S3)
+     └─ if severity == "error" → END (pipeline blocked)
 
-[pergunta de negócio]                     (Agentic BI — camada de análise, fora do grafo)
-  → Planner (LLM, decompõe a pergunta em sub-análises descritivas/analíticas)
-  → Analyst/Science (LLM → código → sandbox, uma chamada por sub-análise
-    + auto-repair; Reviewer faz segunda passada opt-in por resultado — ADR-037)
-  → Advisor (LLM, sintetiza Gold/Science em recomendações prescritivas)
+[business question]                       (Agentic BI — analysis layer, outside the graph)
+  → Planner (LLM, decomposes the question into descriptive/analytical sub-analyses)
+  → Analyst/Science (LLM → code → sandbox, one call per sub-analysis
+    + auto-repair; Reviewer does an opt-in second pass per result — ADR-037)
+  → Advisor (LLM, synthesizes Gold/Science into prescriptive recommendations)
 ```
 
-Todo estado compartilhado via `PipelineState` TypedDict em `src/ai_etl/core/state.py`.
-Toda ação registrada via `log_action()` → persistida em JSON + SQLite por `save_run()`.
-Orquestração ponta a ponta (Silver → Planner → Analyst/Science → Advisor) em
+All shared state via the `PipelineState` TypedDict in `src/ai_etl/core/state.py`.
+Every action logged via `log_action()` → persisted to JSON + SQLite by `save_run()`.
+End-to-end orchestration (Silver → Planner → Analyst/Science → Advisor) in
 `src/ai_etl/services/pipeline_service.py::run_full_analysis`.
 
 ---
@@ -166,26 +175,26 @@ Dev: `ruff` | `mypy` (strict, 3.12) | `bandit` | `pip-audit` | `pytest-cov` | `p
 
 ---
 
-## Variáveis de ambiente
+## Environment variables
 
 ```bash
 OPENAI_API_KEY=sk-...
-AI_ETL_LLM_MODEL=gpt-4o-mini   # gpt-4o para case study final
+AI_ETL_LLM_MODEL=gpt-4o-mini   # gpt-4o for the final case study
 POSTGRES_URL=postgresql://ai_etl:ai_etl@localhost:5432/ai_etl_db
 ```
 
 ---
 
-## Estrutura de pastas
+## Folder structure
 
 ```
 src/ai_etl/
 ├── agents/
-│   ├── pipeline/    # orchestrator, extractor, transformer, quality, loader (Silver, grafo LangGraph)
-│   └── analysis/    # planner, analyst, science, advisor, reviewer (Agentic BI, fora do grafo)
+│   ├── pipeline/    # orchestrator, extractor, transformer, quality, loader (Silver, LangGraph graph)
+│   └── analysis/    # planner, analyst, science, advisor, reviewer (Agentic BI, outside the graph)
 ├── api/             # FastAPI: main.py, deps.py, config.py, serialization.py
 │   └── routers/     # pipelines, runs, admin, budget, cost_estimation, llm, onboarding, secrets, tenant
-├── services/        # camada de orquestração: pipeline_service.py (run_full_analysis),
+├── services/        # orchestration layer: pipeline_service.py (run_full_analysis),
 │                     # execution_queue, scheduler, auth/secrets/tenant services, alerting, digest
 ├── core/            # state.py, graph.py, sandbox.py, llm.py, pricing.py, drift.py, scheduling.py, ...
 ├── sources/         # csv, postgres, mysql, mongodb, rest, sqlite, document
@@ -194,17 +203,17 @@ src/ai_etl/
     └── db/          # budget, health, locale, onboarding, pipelines, retention, runs
 
 tests/
-├── unit/           # sem I/O externo — mocker para LLM e fontes
-├── integration/    # agentes com mocks de LLM, fontes reais
-└── e2e/            # 3 cenários completos
+├── unit/           # no external I/O — mocker for LLM and sources
+├── integration/    # agents with LLM mocks, real sources
+└── e2e/            # 3 full scenarios
 
 docs/
 ├── architecture.md
-├── adr/            # ADR-001 a ADR-004 (e futuros)
+├── adr/            # ADR-001 to ADR-004 (and future ones)
 └── case-study.md
 
 case_study/
 ├── pipelines/      # scenario1_spec.txt, scenario2_spec.txt, scenario3_spec.txt
 ├── data/           # datasets (gitignored)
-└── results/        # JSONs dos runs (scenario1/, 2/, 3/)
+└── results/        # run JSONs (scenario1/, 2/, 3/)
 ```

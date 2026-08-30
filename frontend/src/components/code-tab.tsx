@@ -3,7 +3,7 @@ import { CodeBlock } from "@/components/code-block";
 import type { AnalysisEntry } from "@/lib/types";
 
 /**
- * Sprint 7 — replaces `app.py`'s "Código" tab. Silver's `transformation_code`
+ * Sprint 7 — replaces `app.py`'s "Code" tab (originally in Portuguese). Silver's `transformation_code`
  * was already returned by `GET /runs/{run_id}` (just unused by the frontend);
  * Gold/Science `code` is a Sprint 7 backend addition (`audit/db.py`'s
  * `_serialize_analysis_result` — see PR description) so older runs saved

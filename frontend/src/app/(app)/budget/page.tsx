@@ -4,20 +4,20 @@ import { apiFetch } from "@/lib/api";
 import type { ApiConfig } from "@/lib/types";
 
 /**
- * "Orçamento" page — first frontend consumer of `api/routers/budget.py`
+ * "Budget" page — first frontend consumer of `api/routers/budget.py`
  * (Sprint 29, ADR-019) as a tenant self-service surface: the tenant's own
  * monthly spend cap, distinct from `/admin`'s read-only cross-tenant budget
  * lookup (`GET /admin/tenants/{id}/budget`), which stays admin-only.
  *
- * Visible to every authenticated user, same as `/aprovacoes` — `GET /budget`
+ * Visible to every authenticated user, same as `/approvals` — `GET /budget`
  * has no role requirement, only `PATCH /budget` does. Role is read here
  * (server-side `/config`, same cosmetic pattern `(app)/layout.tsx` uses for
  * the admin nav link) purely to decide whether `<BudgetManager>` renders the
  * edit form; `PATCH /budget` independently enforces
  * `require_role("editor")` server-side regardless of what this page shows.
  */
-export default async function OrcamentoPage() {
-  const t = await getTranslations("orcamentoPage");
+export default async function BudgetPage() {
+  const t = await getTranslations("budgetPage");
 
   let canEdit = false;
   try {

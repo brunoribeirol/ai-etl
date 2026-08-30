@@ -40,13 +40,13 @@ function runTitle(
 }
 
 /**
- * "Histórico" page (Sprint 6, PR 5 → Sprint 7 redesign, ADR-011). Same
+ * "History" page (Sprint 6, PR 5 → Sprint 7 redesign, ADR-011). Same
  * server-side `GET /runs` fetch (`cache: "no-store"`, tenant-scoped) — the
  * card-list markup is replaced with a shadcn Table, same data, same link
  * target per row.
  */
-export default async function Historico() {
-  const t = await getTranslations("historicoPage");
+export default async function History() {
+  const t = await getTranslations("historyPage");
   let runs: RunSummary[] = [];
   let error: string | null = null;
 
@@ -93,7 +93,7 @@ export default async function Historico() {
                 <TableRow key={run.run_id} className="cursor-pointer">
                   <TableCell className="p-0">
                     <Link
-                      href={`/historico/${run.run_id}`}
+                      href={`/history/${run.run_id}`}
                       className="flex flex-col gap-0.5 px-2 py-2"
                     >
                       <span className="text-sm truncate max-w-xs" title={run.run_id}>
@@ -105,22 +105,22 @@ export default async function Historico() {
                     </Link>
                   </TableCell>
                   <TableCell>
-                    <Link href={`/historico/${run.run_id}`} className="block">
+                    <Link href={`/history/${run.run_id}`} className="block">
                       <StatusBadge status={run.status} />
                     </Link>
                   </TableCell>
                   <TableCell className="text-muted-foreground">
-                    <Link href={`/historico/${run.run_id}`} className="block">
+                    <Link href={`/history/${run.run_id}`} className="block">
                       {run.model_name ?? "—"}
                     </Link>
                   </TableCell>
                   <TableCell className="text-right font-mono text-xs">
-                    <Link href={`/historico/${run.run_id}`} className="block">
+                    <Link href={`/history/${run.run_id}`} className="block">
                       {run.cost_usd != null ? `$${run.cost_usd.toFixed(6)}` : "—"}
                     </Link>
                   </TableCell>
                   <TableCell className="text-right text-muted-foreground text-xs">
-                    <Link href={`/historico/${run.run_id}`} className="block">
+                    <Link href={`/history/${run.run_id}`} className="block">
                       {new Date(run.timestamp).toLocaleString()}
                     </Link>
                   </TableCell>

@@ -10,7 +10,7 @@ import type { FullResult, PipelineRunHistoryEntry, SavedPipeline } from "@/lib/t
 
 /**
  * Sprint 18 (ADR-024) — the executive-facing counterpart to the technical
- * run-detail page (`historico/[runId]/page.tsx`'s Pipeline/Código tabs).
+ * run-detail page (`history/[runId]/page.tsx`'s Pipeline/Code tabs).
  * Deliberately does not render either tab: this component only shows what a
  * non-technical stakeholder needs — plain-language status, the KPIs that
  * changed since the last run, and the Advisor's existing narrative/
@@ -212,7 +212,7 @@ export function ExecutiveSummary({ pipeline }: { pipeline: SavedPipeline }) {
             {/* Sprint 38 — previously interpolated `latest.error` (a raw
                 backend exception message, e.g. stack-trace-adjacent Python
                 text) straight into this executive-facing sentence. That
-                detail belongs on the technical "Histórico" page, not here —
+                detail belongs on the technical "History" page, not here —
                 this card now just says what happened and what to expect,
                 in plain language. */}
             <p className="text-sm text-red-400">{t("failedNotice")}</p>

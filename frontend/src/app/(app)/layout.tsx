@@ -13,7 +13,7 @@ import type { ApiConfig } from "@/lib/types";
  * mode by default, shadcn Card header nav, moved verbatim from the old root
  * `layout.tsx` into this `(app)` route group's own layout when the landing
  * page (no sprint number, see docs/CURRENT_STATE.md) split marketing (`/`)
- * from product (`/app`, `/pipelines`, `/historico`, `/resumo`, `/comecar`) —
+ * from product (`/app`, `/pipelines`, `/history`, `/summary`, `/get-started`) —
  * every route in this group is still Clerk-protected by `proxy.ts`, same as
  * before the split.
  *
@@ -35,7 +35,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const t = await getTranslations("appNav");
   const tCommon = await getTranslations("common");
 
-  // Best-effort: the model badge / "Como funciona" panel is informational,
+  // Best-effort: the model badge / "How it works" panel is informational,
   // not load-bearing — a config-fetch failure shouldn't break every page's
   // layout the way a failed page-level fetch would.
   let modelName: string | null = null;
@@ -68,30 +68,30 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             {tCommon("brand")}
           </Link>
           <nav className="hidden sm:flex gap-6 text-sm text-muted-foreground">
-            <Link href="/comecar" className="hover:text-foreground transition-colors">
-              {t("comecar")}
+            <Link href="/get-started" className="hover:text-foreground transition-colors">
+              {t("getStarted")}
             </Link>
             <Link href="/app" className="hover:text-foreground transition-colors">
-              {t("executar")}
+              {t("run")}
             </Link>
-            <Link href="/historico" className="hover:text-foreground transition-colors">
-              {t("historico")}
+            <Link href="/history" className="hover:text-foreground transition-colors">
+              {t("history")}
             </Link>
             <Link href="/pipelines" className="hover:text-foreground transition-colors">
               {t("pipelines")}
             </Link>
-            <Link href="/aprovacoes" className="hover:text-foreground transition-colors">
-              {t("aprovacoes")}
+            <Link href="/approvals" className="hover:text-foreground transition-colors">
+              {t("approvals")}
             </Link>
-            <Link href="/resumo" className="hover:text-foreground transition-colors">
-              {t("resumo")}
+            <Link href="/summary" className="hover:text-foreground transition-colors">
+              {t("summary")}
             </Link>
-            <Link href="/orcamento" className="hover:text-foreground transition-colors">
-              {t("orcamento")}
+            <Link href="/budget" className="hover:text-foreground transition-colors">
+              {t("budget")}
             </Link>
             {isEditor && (
-              <Link href="/segredos" className="hover:text-foreground transition-colors">
-                {t("segredos")}
+              <Link href="/secrets" className="hover:text-foreground transition-colors">
+                {t("secrets")}
               </Link>
             )}
             {isAdmin && (
