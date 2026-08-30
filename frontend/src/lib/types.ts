@@ -263,6 +263,13 @@ export type SavedPipeline = {
   // Both `null` means "no override, uses this deployment's global default".
   llm_provider: string | null;
   llm_model: string | null;
+  // Sprint 37 (ADR-034) — per-pipeline notification destination override,
+  // merged onto every `saved_pipeline` dict the same way as `llm_provider`/
+  // `llm_model` above. `notification_configured` is whether a target is set
+  // (never the target value itself — it's never returned by any endpoint).
+  notification_channel: string | null;
+  notification_configured: boolean;
+  notification_active: boolean;
   created_at: string;
   updated_at: string;
 };

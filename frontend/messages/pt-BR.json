@@ -321,7 +321,10 @@
     "missingApiUrl": "NEXT_PUBLIC_API_URL não está configurada.",
     "modelLabel": "Modelo de IA",
     "modelHint": "(custo e confiabilidade por modelo — Sprint 30/35)",
-    "toastModelUpdated": "Modelo atualizado."
+    "toastModelUpdated": "Modelo atualizado.",
+    "notificationLabel": "Notificações",
+    "toastNotificationUpdated": "Destino de notificação atualizado.",
+    "toastNotificationCleared": "Override de notificação removido."
   },
   "runSections": {
     "code": "Código"
@@ -329,6 +332,25 @@
   "modelPicker": {
     "priceLine": "${input}/${output} por 1M tokens (entrada/saída)",
     "reliabilityVerified": "Verificado — comparação real"
+  },
+  "notificationConfig": {
+    "configuredHint": "Um destino do tipo {channel} está configurado para este pipeline.",
+    "notConfiguredHint": "Nenhum override configurado — este pipeline usa o(s) canal(is) de notificação padrão deste ambiente.",
+    "channelLabel": "Canal",
+    "channelName": {
+      "email": "Email",
+      "slack": "Slack",
+      "teams": "Microsoft Teams",
+      "google_chat": "Google Chat"
+    },
+    "targetLabelEmail": "Email do destinatário",
+    "targetLabelWebhook": "URL do webhook",
+    "targetPlaceholderEmail": "time@exemplo.com",
+    "targetPlaceholderWebhook": "https://hooks.exemplo.com/...",
+    "hint": "Por segurança, um destino salvo anteriormente nunca é exibido aqui — digite-o novamente para substituí-lo. Isso também é necessário para alterar só o toggle abaixo, já que o destino e seu estado ativo são sempre salvos juntos.",
+    "activeLabel": "Ativo",
+    "saveButton": "Salvar destino",
+    "clearButton": "Remover override"
   },
   "adminPage": {
     "title": "Painel admin",
