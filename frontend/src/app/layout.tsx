@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { NextIntlClientProvider } from "next-intl";
-import { getLocale } from "next-intl/server";
+import { getLocale, getTranslations } from "next-intl/server";
 import { ClerkProvider } from "@clerk/nextjs";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
@@ -17,17 +17,21 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-// NOTE (2026-08-26 English-only audit): this static `Metadata` (SEO
-// title/description) is hardcoded Portuguese and bypasses next-intl
-// entirely — a pre-existing gap outside this task's declared file list
-// (renames/route/i18n-key scope only). Making it locale-aware needs its own
-// follow-up (a `generateMetadata` per locale instead of a static export), so
-// left untouched here and flagged for the repo owner to confirm/prioritize.
-export const metadata: Metadata = {
-  title: "AI-ETL — Pipelines de dados que se explicam",
-  description:
-    "Descreva o pipeline em linguagem natural. Agentes de IA extraem, limpam e carregam seus dados heterogêneos gerando código Python auditável — não uma resposta de chat que some quando você fecha a aba.",
-};
+// Fixed 2026-08-31 (live functionality sweep follow-up) — was a static
+// `Metadata` export, hardcoded Portuguese, bypassing next-intl entirely
+// (flagged since the 2026-08-26 English-only audit, left as a known gap).
+// `generateMetadata` reads the same locale `RootLayout` below resolves
+// (cookie-based, not URL — see `next.config.ts`), so the browser tab title
+// and any search/social preview now match whichever language the visitor's
+// cookie/toggle has selected, same as every other localized string in the
+// app.
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("metadata");
+  return {
+    title: t("title"),
+    description: t("description"),
+  };
+}
 
 /**
  * Root layout, deliberately thin (landing-page addition, no sprint number —
