@@ -47,6 +47,15 @@ export function PipelinesManager() {
   // plain textarea rather than a per-field rule builder, matching this manager's
   // own Sprint 13 precedent ("doesn't need to be pretty, needs to work").
   const [qualityRulesText, setQualityRulesText] = useState("[]");
+  // Sprint 27 (ADR-028) — gate this pipeline's writes behind manual approval.
+  // Previously backend-only (`require_approval`/`approval_threshold_rows` on
+  // `POST`/`PATCH /pipelines`) with no UI to set it — found during the
+  // 2026-08-30 live functionality sweep: `/approvals` could never show
+  // anything because no saved pipeline could ever be configured to need
+  // approval. Threshold left blank (`null`) means "always gate, no
+  // row-count exemption" — the same default the backend model already uses.
+  const [requireApproval, setRequireApproval] = useState(false);
+  const [approvalThresholdRows, setApprovalThresholdRows] = useState("");
   const [submitting, setSubmitting] = useState(false);
   // Sprint 30 (ADR-031) frontend — the pipeline currently being edited's LLM
   // provider/model override, kept separate from the fields above since it
@@ -124,6 +133,8 @@ export function PipelinesManager() {
     setBusinessQuestion("");
     setCronSchedule("0 3 * * *");
     setQualityRulesText("[]");
+    setRequireApproval(false);
+    setApprovalThresholdRows("");
     setLlmProvider(null);
     setLlmModel(null);
     setNotificationChannel(null);
@@ -139,6 +150,10 @@ export function PipelinesManager() {
     setBusinessQuestion(pipeline.business_question);
     setCronSchedule(pipeline.cron_schedule);
     setQualityRulesText(JSON.stringify(pipeline.quality_rules ?? [], null, 2));
+    setRequireApproval(pipeline.require_approval ?? false);
+    setApprovalThresholdRows(
+      pipeline.approval_threshold_rows != null ? String(pipeline.approval_threshold_rows) : "",
+    );
     setLlmProvider(pipeline.llm_provider);
     setLlmModel(pipeline.llm_model);
     setNotificationChannel(pipeline.notification_channel);
@@ -233,11 +248,26 @@ export function PipelinesManager() {
     return parsed as QualityRule[];
   }
 
+  /** Same "fail loud before the network call" posture as `parseQualityRules`
+   * above — an empty field means "no threshold" (`null`, always gate),
+   * anything else must be a non-negative integer, matching the backend's own
+   * `Field(default=None, ge=0)` on `approval_threshold_rows`. */
+  function parseApprovalThresholdRows(): number | null {
+    const trimmed = approvalThresholdRows.trim();
+    if (trimmed === "") return null;
+    const parsed = Number(trimmed);
+    if (!Number.isInteger(parsed) || parsed < 0) {
+      throw new Error(t("invalidApprovalThreshold"));
+    }
+    return parsed;
+  }
+
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     setSubmitting(true);
     try {
       const qualityRules = parseQualityRules();
+      const approvalThresholdValue = parseApprovalThresholdRows();
       if (editingId) {
         await authedFetch(`/pipelines/${editingId}`, {
           method: "PATCH",
@@ -248,6 +278,8 @@ export function PipelinesManager() {
             business_question: businessQuestion,
             cron_schedule: cronSchedule,
             quality_rules: qualityRules,
+            require_approval: requireApproval,
+            approval_threshold_rows: approvalThresholdValue,
           }),
         });
         toast.success(t("toastUpdated"));
@@ -261,6 +293,8 @@ export function PipelinesManager() {
             business_question: businessQuestion,
             cron_schedule: cronSchedule,
             quality_rules: qualityRules,
+            require_approval: requireApproval,
+            approval_threshold_rows: approvalThresholdValue,
           }),
         });
         toast.success(t("toastCreated"));
@@ -387,6 +421,44 @@ export function PipelinesManager() {
                 placeholder='[{"column": "customer_id", "operator": "not_null"}]'
               />
               <p className="text-xs text-muted-foreground">{t("qualityRulesHelp")}</p>
+            </div>
+
+            {/* Sprint 27 (ADR-028) — require-approval gate. Previously
+                backend-only, no UI control; added 2026-08-30 (live
+                functionality sweep) since `/approvals` could never receive
+                anything otherwise. */}
+            <div className="flex flex-col gap-2">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={requireApproval}
+                  onChange={(e) => setRequireApproval(e.target.checked)}
+                  disabled={submitting}
+                  className="h-4 w-4 rounded border-input"
+                />
+                {t("requireApprovalLabel")}
+              </label>
+              <p className="text-xs text-muted-foreground">{t("requireApprovalHelp")}</p>
+              {requireApproval && (
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="approvalThresholdRows">
+                    {t("approvalThresholdLabel")}{" "}
+                    <span className="text-muted-foreground font-normal">
+                      {t("approvalThresholdHint")}
+                    </span>
+                  </Label>
+                  <Input
+                    id="approvalThresholdRows"
+                    type="number"
+                    min={0}
+                    value={approvalThresholdRows}
+                    onChange={(e) => setApprovalThresholdRows(e.target.value)}
+                    disabled={submitting}
+                    className="font-mono text-sm"
+                    placeholder={t("approvalThresholdPlaceholder")}
+                  />
+                </div>
+              )}
             </div>
 
             {/* Sprint 30 (ADR-031) frontend — only shown while editing an

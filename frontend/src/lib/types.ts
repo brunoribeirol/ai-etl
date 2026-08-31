@@ -258,6 +258,14 @@ export type SavedPipeline = {
   // Sprint 16 (ADR-023) — operator-defined quality rules, run on every subsequent
   // execution of this pipeline alongside the fixed checks.
   quality_rules: QualityRule[];
+  // Sprint 27 (ADR-028) — require-approval gate for this pipeline's writes.
+  // `approval_threshold_rows: null` means "always gate, no row-count
+  // exemption"; `last_approved_at` is set the first time an operator
+  // approves a write, which is what lets a later write under the threshold
+  // skip the gate (ADR-028 Decision 2).
+  require_approval: boolean;
+  approval_threshold_rows: number | null;
+  last_approved_at: string | null;
   // Sprint 30 (ADR-031) — per-pipeline LLM provider/model override, merged onto
   // every `saved_pipeline` dict by `api/routers/pipelines.py::_with_health`.
   // Both `null` means "no override, uses this deployment's global default".
