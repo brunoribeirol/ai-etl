@@ -14,11 +14,18 @@ COPY pyproject.toml uv.lock* README.md ./
 COPY src/ ./src/
 
 # Install production dependencies + the `api` extra (fastapi/uvicorn,
-# required to run ai_etl.api.main, Sprint 6/ADR-011). This one shared image
-# serves all Railway services (FastAPI web, Celery worker). Streamlit's
-# `app` extra was retired in Sprint 6's PR 6 cutover — app.py is gone.
-# No dev extras (pytest, mypy, ruff, ...) in the runtime image.
-RUN uv sync --no-dev --no-editable --extra api
+# required to run ai_etl.api.main, Sprint 6/ADR-011) + the `vercel-sandbox`
+# extra (the `vercel` package, ADR-039) — this one shared image serves all
+# Railway services (FastAPI web, Celery worker, Celery beat), and it's the
+# worker that actually executes core/sandbox_vercel.py when
+# AI_ETL_SANDBOX_BACKEND=vercel, not the API. Found 2026-08-31: this image
+# wasn't even being built for the worker service (Railway had it on the
+# RAILPACK builder instead — separately fixed on the Railway side), and the
+# `vercel-sandbox` extra was missing here regardless, so the worker raised
+# VercelSandboxUnavailableError on every sandboxed run. Streamlit's `app`
+# extra was retired in Sprint 6's PR 6 cutover — app.py is gone. No dev
+# extras (pytest, mypy, ruff, ...) in the runtime image.
+RUN uv sync --no-dev --no-editable --extra api --extra vercel-sandbox
 
 # Copy remaining files
 COPY case_study/ ./case_study/
