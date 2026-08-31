@@ -2,7 +2,142 @@
 
 > Living doc. Updated at the end of meaningful work sessions, not per-commit. Source of truth for repo/code state; the Obsidian vault (`~/Documents/Obsidian Vault/tcc/`) is the source of truth for the academic TCC narrative and product/strategy context.
 
-**Last updated:** 2026-08-30 (continued again) — **Full live functionality sweep against production (Claude in Chrome, real Clerk session, gpt-4o-mini only): 2 previously-broken upload paths found and fixed (JSON uploads #164, PDF/DOCX uploads #165 — the latter broken since inception), 2 frontend bugs fixed (#163), plus live-verified Budget/Secrets/Data-export/Notification-config/retention all working end-to-end. One real performance finding not yet fixed: `GET /tenant/export` takes ~75s in production.**
+**Last updated:** 2026-08-31 — **Continuation of the functionality sweep: require_approval/approval_threshold_rows exposed in the pipeline UI (#167), homepage/app `<title>`/meta description localized (#168), Vercel Sandbox project created and image pushed but only half-configured (env vars set on the `ai-etl` API service, NOT on the `tranquil-appreciation` Celery worker that actually executes sandboxed code), a disposable test Postgres provisioned on Railway for DB-source testing (still running, not yet cleaned up). Real architecture gap found: DB sources (Postgres/MySQL/MongoDB) all read a single shared env var, not a per-tenant credential — the Secrets feature stores values nothing in the pipeline actually reads. See "Next session" below for the exact resume state.**
+
+## 2026-08-31 — require_approval UI, homepage i18n metadata fix, Vercel Sandbox setup (half-done), DB-source architecture gap found
+
+Direct continuation of 2026-08-30's functionality sweep, per the owner's
+follow-up requests: close the Approvals/Slack/Teams/Google Chat/database
+gaps, fix the homepage's PT-only `<title>`, and finish the Vercel Sandbox
+token setup that was left pending.
+
+**PR #167 — `require_approval`/`approval_threshold_rows` exposed in the
+pipeline form.** Real gap found while trying to live-test `/approvals`:
+the backend has supported per-pipeline write-approval gating since Sprint
+27 (ADR-028) — `POST`/`PATCH /pipelines` already accepted the fields,
+`/runs/{id}/approve|reject` already existed — but the frontend never
+exposed a checkbox for it. No saved pipeline could ever be configured to
+require approval, so `/approvals` could never show anything, for any
+tenant, ever. Added the missing form fields; no backend change needed.
+
+**PR #168 — homepage/app `<title>` and meta description localized.**
+Previously flagged (2026-08-26 English-only audit) and left as a known
+gap: a static `Metadata` export, hardcoded Portuguese, bypassing
+next-intl entirely — the visible page body was already correctly
+localized via `useTranslations`, only the browser-tab title and SEO
+description weren't. Switched to `generateMetadata()` reading a new
+`metadata` i18n namespace. Verified with a full `next build`.
+
+**Vercel Sandbox (ADR-039) — infrastructure created, only half wired.**
+- Created the `ai-etl-sandbox` Vercel project (didn't exist before —
+  `VERCEL_PROJECT_ID` in `.env.example` documents a project that has to
+  exist first; it doesn't get auto-created).
+- Built and pushed the sandbox image (`vercel vcr login docker` then
+  `make sandbox-vcr-image`) — succeeded.
+- Retrieved `VERCEL_TEAM_ID` (`team_wx1SSlKVYgN0uACa4ab9MxBH`) and
+  `VERCEL_PROJECT_ID` (`prj_p1qdN94fzlMfptKdoxGnbkb3ZI43`) via the Vercel
+  MCP — non-secret identifiers, safe to read directly.
+- The owner generated `VERCEL_TOKEN` himself and pasted all 3 vars plus
+  `AI_ETL_SANDBOX_BACKEND=vercel` into Railway — but **only on the
+  `ai-etl` service** (the API). A real test run (CSV upload, gpt-4o-mini)
+  completed successfully in 61s, but via the default `"process"` backend,
+  not Vercel Sandbox — confirmed by checking `tranquil-appreciation` (the
+  separate Railway service running the Celery worker, which is what
+  actually executes `core/sandbox.py`/`sandbox_vercel.py`): none of the 5
+  new variables exist there. **Not yet actually exercised end-to-end.**
+
+**DB-source testing — real architecture gap found, more than a config
+gap.** Investigating what "test a database" even means in this app
+surfaced that `load_postgres()`/`load_mysql()`/`load_mongodb()` all read
+a single shared env var (`POSTGRES_URL`/`MYSQL_URL`/`MONGODB_URI`,
+documented in `docs/PHASE_2_APP_POSTGRES.md` as "the user's own data") —
+**not** anything per-tenant. Confirmed nothing in `agents/pipeline/
+extractor.py` or anywhere else reads `tenant_secrets` to build a
+connection string. This means the Secrets feature (tested working
+mechanically — create/list/delete, values never re-shown) is currently
+**disconnected from the pipeline**: a tenant can save
+`postgres_prod_password`, but no code path ever uses it for extraction.
+This is a pre-existing, deliberate-looking single-tenant-core-under-a-
+multi-tenant-shell design, not a bug to silently patch — flagged for the
+owner to decide direction on (a real "bring your own database" feature
+would need per-tenant credential resolution wired through the extractor).
+
+Provisioned a disposable Postgres (`qa-test-postgres`, Railway service id
+`3d49c0fb-a566-4092-9aee-b16e59fa3683`) to still exercise the *mechanical*
+postgres-source code path once wired up: seeded a 5-row `orders` table,
+exposed via a public TCP proxy (`altaria.proxy.rlwy.net:13749`) with the
+owner's explicit confirmation. `POSTGRES_URL` on the `ai-etl` service was
+swapped to point at it — the *original* value was
+`postgresql://ai_etl:ai_etl@localhost:5432/ai_etl_db` (confirmed with the
+owner: the local-dev default, never actually configured for production —
+so the postgres source type was already dead in production before this
+session touched anything). **Not yet swapped on `tranquil-appreciation`**
+— the actual DB-source test hasn't run yet.
+
+**Notification channels — mechanics verified, real delivery not
+verified.** Slack/Microsoft Teams/Google Chat webhook fields (plus Email)
+all save/clear correctly through the per-pipeline override UI — confirmed
+via direct API reads (`notification_channel` persisted correctly for each
+channel). All 4 tests used placeholder/fake webhook URLs, so no message
+was expected to arrive anywhere — confirmed with the owner this is why
+nothing showed up in Slack/email, not a bug. Separately discovered a real
+`SLACK_WEBHOOK_URL`/`RESEND_API_KEY` already configured as this
+deployment's *default* channel (used when a pipeline has no override) —
+never triggered this session (no real scheduled-pipeline digest/failure
+fired), so still unconfirmed whether it actually delivers.
+
+**`delete account` (`DELETE /tenant`, ADR-025) — code-reviewed, not
+executed against the real account.** Owner explicitly declined a live
+test (irreversible, would erase real production data) — verified instead
+via the 6 existing unit tests (`test_tenant_deletion_service.py`, all
+passing: full deletion, cross-tenant isolation, storage cleanup, unknown-
+tenant error, audit-log-survives-deletion) and confirmed the API's
+`confirm: Literal["DELETE"]` guard matches the UI's own text-match gate.
+
+**S3 storage — confirmed in active use**, not just configured: the
+`/tenant/export` JSON fetched during the previous session's testing
+listed 83 real `storage_artifacts` keys.
+
+**Sentry — confirmed initializing** on this session's fresh deploys
+(`Sentry initialized (component=worker)`/`(component=api)` in Railway
+logs). Not separately re-confirmed capturing a fresh event this session
+(a real captured event was already confirmed in the prior 2026-08-30
+session).
+
+### Next session — exact resume state (2026-09-01)
+
+1. **Finish the Vercel Sandbox / DB-source setup**: add the same 5
+   variables already on `ai-etl` to `tranquil-appreciation` too —
+   `VERCEL_TOKEN`, `VERCEL_TEAM_ID`, `VERCEL_PROJECT_ID`,
+   `AI_ETL_SANDBOX_BACKEND=vercel`, and the test `POSTGRES_URL`
+   (`postgresql://qa_test:...@altaria.proxy.rlwy.net:13749/qa_test_db?sslmode=disable`
+   — full value is in this session's chat history, not repeated here).
+   Then re-run a real analysis and confirm via Railway worker logs that
+   it actually executed inside Vercel Sandbox, not the `"process"`
+   fallback.
+2. **Run the actual DB-source + Approvals test**: create a scheduled
+   pipeline (source type `postgres`, table `orders`) with the new
+   `require_approval` checkbox on, wait for celery-beat to pick it up,
+   confirm it lands on `/approvals`, approve it, confirm the write
+   completes.
+3. **Clean up afterward — do not skip**: revert `POSTGRES_URL` on both
+   Railway services back to `postgresql://ai_etl:ai_etl@localhost:5432/ai_etl_db`,
+   then delete the `qa-test-postgres` Railway service entirely (it's
+   currently exposed to the public internet with a generated password —
+   no reason to leave it running once the DB-source test is done).
+4. **Decide the DB-source architecture direction** (see gap above,
+   flagged, not fixed): does "bring your own database" per tenant matter
+   for this product's actual scope, or is the single shared
+   `POSTGRES_URL`/`MYSQL_URL`/`MONGODB_URI` an acceptable TCC-era
+   simplification to keep as-is? This changes what "fixing" the Secrets↔
+   pipeline disconnect would even mean.
+5. **Real Slack delivery test** — trigger something that actually calls
+   `send_slack_digest()` against the deployment-default `SLACK_WEBHOOK_URL`
+   (a real scheduled-pipeline digest or failure alert) and confirm a
+   message lands in the real workspace.
+6. Lower priority, already flagged, not blocking: `GET /tenant/export`'s
+   ~75s latency (2026-08-30 finding); `frontend/src/lib/form-error.ts`'s
+   hardcoded PT error strings (pre-existing, flagged again).
 
 ## 2026-08-30 (continued again) — full live functionality sweep, JSON + PDF/DOCX upload bugs found and fixed, export latency finding
 
