@@ -7,6 +7,7 @@ import pandas as pd
 from sqlalchemy import create_engine, text
 
 from ai_etl.core.sql_safety import validate_table_name
+from ai_etl.core.tenant_context import get_connection_override
 
 
 def save_postgres(
@@ -16,10 +17,13 @@ def save_postgres(
 ) -> dict[str, Any]:
     """Save DataFrame to a PostgreSQL table. Validates row count after load.
 
-    Never uses f-strings in SQL queries — table name is passed to pandas
-    which uses SQLAlchemy's parameterized execution path.
+    Uses the current run's tenant-supplied connection string (ADR-044,
+    `core/tenant_context.py`) if one is set, otherwise falls back to the
+    shared POSTGRES_URL env var. Never uses f-strings in SQL queries — table
+    name is passed to pandas which uses SQLAlchemy's parameterized execution
+    path.
     """
-    url = os.getenv("POSTGRES_URL")
+    url = get_connection_override("postgres") or os.getenv("POSTGRES_URL")
     if not url:
         raise EnvironmentError("POSTGRES_URL environment variable is not set.")
 
@@ -53,7 +57,7 @@ def preview_postgres(df: pd.DataFrame, table: str) -> dict[str, Any]:
     from "0 existing rows" (a real, empty table) so the preview doesn't claim
     certainty it doesn't have.
     """
-    url = os.getenv("POSTGRES_URL")
+    url = get_connection_override("postgres") or os.getenv("POSTGRES_URL")
     if not url:
         raise EnvironmentError("POSTGRES_URL environment variable is not set.")
 

@@ -29,6 +29,8 @@ from typing import Any
 import pandas as pd
 from pymongo import MongoClient
 
+from ai_etl.core.tenant_context import get_connection_override
+
 # Ceiling on documents fetched per `load_mongodb` call when the caller
 # doesn't pass an explicit `limit` — MongoDB collections have no inherent
 # size bound the way a `pipeline_plan`-scoped CSV/SQL query implicitly does,
@@ -62,13 +64,15 @@ def load_mongodb(
 ) -> pd.DataFrame:
     """Load documents from a MongoDB collection into a DataFrame.
 
-    Uses MONGODB_URI from environment. `query` is an optional MongoDB filter
-    dict (e.g. `{"status": "active"}`); server-side-JS operators are
-    rejected. `limit` bounds how many documents are fetched (and therefore
-    how the union-of-keys schema is inferred), defaulting to
-    `DEFAULT_SAMPLE_LIMIT`.
+    Uses the current run's tenant-supplied connection string (ADR-044,
+    `core/tenant_context.py`) if one is set, otherwise falls back to the
+    shared MONGODB_URI env var (ADR-012's original, still-default behavior).
+    `query` is an optional MongoDB filter dict (e.g. `{"status": "active"}`);
+    server-side-JS operators are rejected. `limit` bounds how many documents
+    are fetched (and therefore how the union-of-keys schema is inferred),
+    defaulting to `DEFAULT_SAMPLE_LIMIT`.
     """
-    uri = os.getenv("MONGODB_URI")
+    uri = get_connection_override("mongodb") or os.getenv("MONGODB_URI")
     if not uri:
         raise EnvironmentError("MONGODB_URI environment variable is not set.")
 

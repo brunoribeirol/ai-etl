@@ -135,6 +135,7 @@ export function SecretsManager() {
                 placeholder={t("namePlaceholder")}
                 className="font-mono text-sm"
               />
+              <p className="text-xs text-muted-foreground">{t("nameHint")}</p>
             </div>
 
             <div className="flex flex-col gap-2">

@@ -52,6 +52,7 @@ from ai_etl.core.llm import get_model_name, is_llm_review_enabled, sum_token_usa
 from ai_etl.core.locale import DEFAULT_LOCALE
 from ai_etl.core.output_validation import append_check, check_gold_output, check_science_output
 from ai_etl.core.state import PipelineState, initial_state
+from ai_etl.core.tenant_context import resolve_tenant_overrides, tenant_connections
 
 logger = logging.getLogger(__name__)
 
@@ -195,18 +196,29 @@ def run_silver_pipeline(
     final_state: dict[str, Any] = dict(state)
     agent_timings: dict[str, float] = {}
 
+    # ADR-044: resolve this tenant's own DB connection strings (if any were
+    # saved via `POST /secrets`) once, here — this is the one place in the
+    # call chain that has both `tenant_id` and is about to invoke the graph.
+    # Never added to `state`/`PipelineState`: see `core/tenant_context.py`'s
+    # module docstring for why (the whole state gets serialized into the
+    # run's JSON snapshot by `save_run`, with no per-key redaction). Visible
+    # only to `sources/*.py`/`destinations/postgres_dest.py` calls made while
+    # this graph run is executing, via the `ContextVar` the `with` block sets.
+    tenant_overrides = resolve_tenant_overrides(tenant_id)
+
     progress_callback("silver", "⚡ Executando pipeline Silver...")
     t_total = time.time()
-    for chunk in graph.stream(state):
-        node_name = list(chunk.keys())[0]
-        partial = chunk[node_name]
-        t_node = time.time()
-        final_state.update(partial)
+    with tenant_connections(tenant_overrides):
+        for chunk in graph.stream(state):
+            node_name = list(chunk.keys())[0]
+            partial = chunk[node_name]
+            t_node = time.time()
+            final_state.update(partial)
 
-        emoji, label, desc = AGENT_STEPS.get(node_name, ("⚡", node_name, "Processando..."))
-        agent_timings[node_name] = round(time.time() - t_node, 2)
-        elapsed = round(time.time() - t_total, 1)
-        progress_callback("silver", f"{emoji} **{label}** — {desc} *({elapsed}s)*")
+            emoji, label, desc = AGENT_STEPS.get(node_name, ("⚡", node_name, "Processando..."))
+            agent_timings[node_name] = round(time.time() - t_node, 2)
+            elapsed = round(time.time() - t_total, 1)
+            progress_callback("silver", f"{emoji} **{label}** — {desc} *({elapsed}s)*")
 
     overall = final_state.get("status", "unknown")
     total_time = round(time.time() - t_total, 1)
@@ -932,7 +944,12 @@ def resume_pending_load(run_id: str, tenant_id: str, run_dir: str) -> PipelineSt
     state, saved_pipeline_id = _reload_awaiting_state(run_id, tenant_id, run_dir)
 
     granted_state: PipelineState = {**state, "approval_granted": True}
-    result_state = loader_node(granted_state)
+    # ADR-044: this is the *other* place a DB connector actually opens a
+    # connection outside `run_silver_pipeline`'s own graph run — the deferred
+    # write after an operator approves a gated run (ADR-028). Same tenant,
+    # same override resolution, same transient-only scope.
+    with tenant_connections(resolve_tenant_overrides(tenant_id)):
+        result_state = loader_node(granted_state)
 
     save_run(
         result_state, log_dir=run_dir, tenant_id=tenant_id, saved_pipeline_id=saved_pipeline_id

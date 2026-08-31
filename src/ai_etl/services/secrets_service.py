@@ -12,10 +12,18 @@ value — only `name` and outcome are ever passed to `logger` calls, matching
 the "API keys em logs" non-negotiable rule the same way the logger's
 automatic redaction already covers everything else.
 
-ADR-022 Decision 4 scopes this sprint to storage/API only — no source
-connector consumes a stored secret yet (see the ADR for why: `tenant_id` is
-not available inside a LangGraph node without breaking the node-signature
-contract or widening `PipelineState`, both deliberately avoided here).
+ADR-022 Decision 4 originally scoped this sprint to storage/API only — no
+source connector consumed a stored secret (see the ADR for why: `tenant_id`
+is not available inside a LangGraph node without breaking the node-signature
+contract or widening `PipelineState`, both deliberately avoided). As of
+ADR-044 (2026-08-31), `postgres_source.py`/`mysql_source.py`/
+`mongodb_source.py`/`postgres_dest.py` now read a tenant's own connection
+string (stored here under a fixed name, e.g. `postgres_connection_string`)
+via `core/tenant_context.py` — a `contextvars`-based resolution done in
+`services/pipeline_service.py`, never inside a node itself and never added
+to `PipelineState`, so the node-signature contract this docstring describes
+is still exactly as intact as it was before. REST's `_build_auth`
+`secret_ref` integration remains unwired.
 """
 
 from __future__ import annotations

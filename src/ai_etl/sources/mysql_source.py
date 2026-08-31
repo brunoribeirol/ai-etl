@@ -22,6 +22,7 @@ import pandas as pd
 from sqlalchemy import create_engine, text
 
 from ai_etl.core.sql_safety import validate_select_only_query, validate_table_name
+from ai_etl.core.tenant_context import get_connection_override
 
 # Unlike sqlite_source.py, MySQL supports `database.table` — pass
 # allow_dots=True to core.sql_safety.validate_table_name below.
@@ -30,14 +31,16 @@ from ai_etl.core.sql_safety import validate_select_only_query, validate_table_na
 def load_mysql(table: str, query: str | None = None) -> pd.DataFrame:
     """Load a MySQL/MariaDB table (or custom query) into a DataFrame.
 
-    Uses MYSQL_URL from environment (e.g.
-    `mysql+pymysql://user:pass@host:3306/db`). Always uses parameterized
+    Uses the current run's tenant-supplied connection string (ADR-044,
+    `core/tenant_context.py`) if one is set, otherwise falls back to the
+    shared MYSQL_URL env var (e.g. `mysql+pymysql://user:pass@host:3306/db`,
+    ADR-012's original, still-default behavior). Always uses parameterized
     queries. A custom `query` (LLM-generated, from `pipeline_plan`) is
     validated via `core.sql_safety.validate_select_only_query` (Wave 0,
     2026-08-24 audit) — there's no bind-parameter syntax for an entire query,
     so this is that path's injection defense.
     """
-    url = os.getenv("MYSQL_URL")
+    url = get_connection_override("mysql") or os.getenv("MYSQL_URL")
     if not url:
         raise EnvironmentError("MYSQL_URL environment variable is not set.")
 
