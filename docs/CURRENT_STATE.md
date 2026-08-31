@@ -65,9 +65,12 @@ would need per-tenant credential resolution wired through the extractor).
 Provisioned a disposable Postgres (`qa-test-postgres`, Railway service id
 `3d49c0fb-a566-4092-9aee-b16e59fa3683`) to still exercise the *mechanical*
 postgres-source code path once wired up: seeded a 5-row `orders` table,
-exposed via a public TCP proxy (`altaria.proxy.rlwy.net:13749`) with the
-owner's explicit confirmation. `POSTGRES_URL` on the `ai-etl` service was
-swapped to point at it — the *original* value was
+exposed via a public TCP proxy with the owner's explicit confirmation
+(host/port and password deliberately not recorded here — reachable via the
+Railway dashboard for `qa-test-postgres` while it still exists; delete the
+whole service once the DB-source test is done rather than reusing it).
+`POSTGRES_URL` on the `ai-etl` service was swapped to point at it — the
+*original* value was
 `postgresql://ai_etl:ai_etl@localhost:5432/ai_etl_db` (confirmed with the
 owner: the local-dev default, never actually configured for production —
 so the postgres source type was already dead in production before this
@@ -109,11 +112,11 @@ session).
 1. **Finish the Vercel Sandbox / DB-source setup**: add the same 5
    variables already on `ai-etl` to `tranquil-appreciation` too —
    `VERCEL_TOKEN`, `VERCEL_TEAM_ID`, `VERCEL_PROJECT_ID`,
-   `AI_ETL_SANDBOX_BACKEND=vercel`, and the test `POSTGRES_URL`
-   (`postgresql://qa_test:...@altaria.proxy.rlwy.net:13749/qa_test_db?sslmode=disable`
-   — full value is in this session's chat history, not repeated here).
-   Then re-run a real analysis and confirm via Railway worker logs that
-   it actually executed inside Vercel Sandbox, not the `"process"`
+   `AI_ETL_SANDBOX_BACKEND=vercel`, and the test `POSTGRES_URL` (copy the
+   exact value already set on `ai-etl`'s Variables tab in Railway — not
+   repeated in this doc on purpose, see the note above). Then re-run a
+   real analysis and confirm via Railway worker logs that it actually
+   executed inside Vercel Sandbox, not the `"process"`
    fallback.
 2. **Run the actual DB-source + Approvals test**: create a scheduled
    pipeline (source type `postgres`, table `orders`) with the new
