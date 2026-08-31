@@ -1,4 +1,8 @@
 {
+  "metadata": {
+    "title": "AI-ETL — Data pipelines that explain themselves",
+    "description": "Describe the pipeline in natural language. AI agents extract, clean, and load your heterogeneous data, generating auditable Python code — not a chat answer that disappears when you close the tab."
+  },
   "localeToggle": {
     "switchTo": "Switch to {locale, select, en-US {English} other {Portuguese}}"
   },
