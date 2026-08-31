@@ -16,6 +16,7 @@ import pytest
 
 from ai_etl.core.llm import get_model_name
 from ai_etl.core.state import initial_state
+from ai_etl.core.tenant_context import get_connection_override
 from ai_etl.services import pipeline_service
 
 _ZERO_TOKENS = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
@@ -29,6 +30,19 @@ def _default_locale(monkeypatch: pytest.MonkeyPatch) -> None:
     caring about locale) doesn't need a real `users` table. Tests that specifically
     exercise locale resolution override this with their own `monkeypatch.setattr`."""
     monkeypatch.setattr(pipeline_service, "get_locale", lambda tenant_id: "pt-BR")
+
+
+@pytest.fixture(autouse=True)
+def _no_tenant_connection_overrides_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    """ADR-044: same rationale as `_default_locale` above — `run_silver_pipeline`/
+    `resume_pending_load` now call `resolve_tenant_overrides(tenant_id)` for every
+    run with a real `tenant_id`, which hits `secrets_service.get_secret` ->
+    `tenant_scope` -> a real Postgres engine. Default it to `{}` (today's
+    exact pre-ADR-044 behavior: every connector falls back to its shared env
+    var) so every existing test in this module doesn't need
+    `APP_DATABASE_URL_TENANT` set. Tests that specifically exercise tenant
+    connection overrides replace this with their own `monkeypatch.setattr`."""
+    monkeypatch.setattr(pipeline_service, "resolve_tenant_overrides", lambda tenant_id: {})
 
 
 def _recorder() -> tuple[list[tuple[str, str]], pipeline_service.ProgressCallback]:
@@ -151,6 +165,82 @@ def test_run_silver_pipeline_emits_progress_and_persists(monkeypatch) -> None:
     assert stages == {"silver"}
     assert events[0][1] == "⚡ Executando pipeline Silver..."
     assert events[-1][1].startswith("✅ Silver concluído em")
+
+
+def test_run_silver_pipeline_makes_tenant_overrides_visible_during_the_graph_run(
+    monkeypatch,
+) -> None:
+    """ADR-044: `resolve_tenant_overrides(tenant_id)` result must be visible
+    to connectors (via `get_connection_override`) for exactly the duration of
+    the graph run — checked from *inside* a fake node, not just asserted
+    against a mocked call."""
+    monkeypatch.setattr(
+        pipeline_service,
+        "resolve_tenant_overrides",
+        lambda tenant_id: {"postgres": "postgresql://tenant/db"} if tenant_id else {},
+    )
+    seen: dict[str, Any] = {}
+
+    class _ProbeGraph:
+        def stream(self, state: dict[str, Any]) -> Any:
+            seen["during_run"] = get_connection_override("postgres")
+            yield {"loader": {"status": "completed"}}
+
+    monkeypatch.setattr(pipeline_service, "build_graph", lambda: _ProbeGraph())
+    monkeypatch.setattr(pipeline_service, "save_run", lambda *a, **kw: None)
+    monkeypatch.setattr(pipeline_service, "save_stage_latencies", lambda *a, **kw: None)
+
+    pipeline_service.run_silver_pipeline("read file.csv", run_dir="runs", tenant_id="tenant-a")
+
+    assert seen["during_run"] == "postgresql://tenant/db"
+    # Restored after the run — no leakage into whatever runs next in this worker.
+    assert get_connection_override("postgres") is None
+
+
+def test_run_silver_pipeline_avulso_run_gets_no_tenant_connection_overrides(monkeypatch) -> None:
+    calls: list[str | None] = []
+    monkeypatch.setattr(
+        pipeline_service,
+        "resolve_tenant_overrides",
+        lambda tenant_id: (calls.append(tenant_id), {})[1],
+    )
+    monkeypatch.setattr(
+        pipeline_service, "build_graph", lambda: _FakeGraph([{"loader": {"status": "completed"}}])
+    )
+    monkeypatch.setattr(pipeline_service, "save_run", lambda *a, **kw: None)
+    monkeypatch.setattr(pipeline_service, "save_stage_latencies", lambda *a, **kw: None)
+
+    pipeline_service.run_silver_pipeline("read file.csv", run_dir="runs")
+
+    assert calls == [None]
+
+
+def test_run_silver_pipeline_never_persists_tenant_connection_string_in_saved_state(
+    monkeypatch,
+) -> None:
+    """Security regression guard (ADR-044): the whole point of resolving
+    overrides through a `ContextVar` instead of `PipelineState` is that
+    `save_run` serializes the *entire* state to the run's JSON snapshot with
+    no per-key redaction (`audit/db/runs.py::_make_serializable`) — a tenant's
+    decrypted connection string must never show up there."""
+    secret_url = "postgresql://tenant:supersecret@tenant-host/db"
+    monkeypatch.setattr(
+        pipeline_service, "resolve_tenant_overrides", lambda tenant_id: {"postgres": secret_url}
+    )
+    monkeypatch.setattr(
+        pipeline_service, "build_graph", lambda: _FakeGraph([{"loader": {"status": "completed"}}])
+    )
+    saved: dict[str, Any] = {}
+    monkeypatch.setattr(
+        pipeline_service,
+        "save_run",
+        lambda state, log_dir, tenant_id=None, saved_pipeline_id=None: saved.update(state=state),
+    )
+    monkeypatch.setattr(pipeline_service, "save_stage_latencies", lambda *a, **kw: None)
+
+    pipeline_service.run_silver_pipeline("read file.csv", run_dir="runs", tenant_id="tenant-a")
+
+    assert secret_url not in repr(saved["state"])
 
 
 def test_run_silver_pipeline_forwards_saved_pipeline_id_to_save_run(monkeypatch) -> None:
@@ -1227,6 +1317,33 @@ def test_resume_pending_load_writes_and_marks_approved(monkeypatch) -> None:
     assert saved["saved_pipeline_id"] == "pl-1"
     assert health_calls == [("pl-1", "completed", None)]
     assert approved_calls == [("pl-1", "tenant-a")]
+
+
+def test_resume_pending_load_makes_tenant_overrides_visible_to_loader_node(monkeypatch) -> None:
+    """ADR-044: the deferred write after an approval also needs the tenant's
+    own connection string available — checked from inside `loader_node`
+    itself, the same way the graph-run equivalent test does."""
+    _patch_reload(monkeypatch)
+    monkeypatch.setattr(
+        pipeline_service,
+        "resolve_tenant_overrides",
+        lambda tenant_id: {"postgres": "postgresql://tenant/db"},
+    )
+    seen: dict[str, Any] = {}
+
+    def fake_loader_node(state: dict[str, Any]) -> dict[str, Any]:
+        seen["during_load"] = get_connection_override("postgres")
+        return {**state, "status": "completed", "load_result": {"rows_loaded": 3}, "error": None}
+
+    monkeypatch.setattr(pipeline_service, "loader_node", fake_loader_node)
+    monkeypatch.setattr(pipeline_service, "save_run", lambda *a, **kw: None)
+    monkeypatch.setattr(pipeline_service, "record_pipeline_health", lambda *a, **kw: None)
+    monkeypatch.setattr(pipeline_service, "mark_pipeline_approved", lambda *a, **kw: None)
+
+    pipeline_service.resume_pending_load("run-1", "tenant-a", run_dir="runs")
+
+    assert seen["during_load"] == "postgresql://tenant/db"
+    assert get_connection_override("postgres") is None
 
 
 def test_resume_pending_load_write_failure_does_not_mark_approved(monkeypatch) -> None:

@@ -8,9 +8,11 @@ coverage already uses (`tests/unit/test_sources.py` covers only its
 validation function directly).
 """
 
+import pandas as pd
 import pytest
 
 from ai_etl.core.sql_safety import validate_table_name
+from ai_etl.core.tenant_context import tenant_connections
 from ai_etl.sources.mysql_source import load_mysql
 
 
@@ -61,3 +63,32 @@ def test_load_mysql_rejects_destructive_query(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setenv("MYSQL_URL", "mysql+pymysql://user:pass@localhost/db")
     with pytest.raises(ValueError):
         load_mysql("orders", query="DROP TABLE orders; --")
+
+
+def test_load_mysql_uses_tenant_override_over_shared_env(monkeypatch, mocker) -> None:
+    # ADR-044: a tenant's own stored connection string must win over the
+    # deployment-wide MYSQL_URL, even when the latter is set.
+    monkeypatch.setenv("MYSQL_URL", "mysql+pymysql://shared:pass@shared-host/db")
+    mock_engine = mocker.MagicMock()
+    create_engine_mock = mocker.patch(
+        "ai_etl.sources.mysql_source.create_engine", return_value=mock_engine
+    )
+    mocker.patch("ai_etl.sources.mysql_source.pd.read_sql", return_value=pd.DataFrame({"x": [1]}))
+
+    with tenant_connections({"mysql": "mysql+pymysql://tenant:pass@tenant-host/db"}):
+        load_mysql("orders")
+
+    create_engine_mock.assert_called_once_with("mysql+pymysql://tenant:pass@tenant-host/db")
+
+
+def test_load_mysql_falls_back_to_shared_env_with_no_override(monkeypatch, mocker) -> None:
+    monkeypatch.setenv("MYSQL_URL", "mysql+pymysql://shared:pass@shared-host/db")
+    mock_engine = mocker.MagicMock()
+    create_engine_mock = mocker.patch(
+        "ai_etl.sources.mysql_source.create_engine", return_value=mock_engine
+    )
+    mocker.patch("ai_etl.sources.mysql_source.pd.read_sql", return_value=pd.DataFrame({"x": [1]}))
+
+    load_mysql("orders")
+
+    create_engine_mock.assert_called_once_with("mysql+pymysql://shared:pass@shared-host/db")

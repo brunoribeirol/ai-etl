@@ -13,9 +13,11 @@ both got `validate_select_only_query` during the Wave 0 CRITICAL SQL-
 injection fix (2026-08-24 audit), postgres_source.py was missed.
 """
 
+import pandas as pd
 import pytest
 
 from ai_etl.core.sql_safety import validate_table_name
+from ai_etl.core.tenant_context import tenant_connections
 from ai_etl.sources.postgres_source import load_postgres
 
 
@@ -69,3 +71,40 @@ def test_load_postgres_rejects_destructive_query(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setenv("POSTGRES_URL", "postgresql://user:pass@localhost:5432/db")
     with pytest.raises(ValueError):
         load_postgres("orders", query="DROP TABLE orders; --")
+
+
+def test_load_postgres_uses_tenant_override_over_shared_env(monkeypatch, mocker) -> None:
+    # ADR-044: a tenant's own stored connection string (resolved by
+    # `services/pipeline_service.py` into a `tenant_connections` block) must
+    # win over the deployment-wide POSTGRES_URL, even when the latter is set.
+    monkeypatch.setenv("POSTGRES_URL", "postgresql://shared:pass@shared-host/db")
+    mock_engine = mocker.MagicMock()
+    create_engine_mock = mocker.patch(
+        "ai_etl.sources.postgres_source.create_engine", return_value=mock_engine
+    )
+    mocker.patch(
+        "ai_etl.sources.postgres_source.pd.read_sql", return_value=pd.DataFrame({"x": [1]})
+    )
+
+    with tenant_connections({"postgres": "postgresql://tenant:pass@tenant-host/db"}):
+        load_postgres("orders")
+
+    create_engine_mock.assert_called_once_with("postgresql://tenant:pass@tenant-host/db")
+
+
+def test_load_postgres_falls_back_to_shared_env_with_no_override(monkeypatch, mocker) -> None:
+    # No active tenant_connections block (the default, e.g. an avulso run
+    # with no tenant_id, or a tenant that never configured this secret) —
+    # behavior must be identical to before ADR-044.
+    monkeypatch.setenv("POSTGRES_URL", "postgresql://shared:pass@shared-host/db")
+    mock_engine = mocker.MagicMock()
+    create_engine_mock = mocker.patch(
+        "ai_etl.sources.postgres_source.create_engine", return_value=mock_engine
+    )
+    mocker.patch(
+        "ai_etl.sources.postgres_source.pd.read_sql", return_value=pd.DataFrame({"x": [1]})
+    )
+
+    load_postgres("orders")
+
+    create_engine_mock.assert_called_once_with("postgresql://shared:pass@shared-host/db")

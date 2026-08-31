@@ -13,10 +13,16 @@ from unittest.mock import MagicMock
 import pandas as pd
 import pytest
 
+from ai_etl.core.tenant_context import tenant_connections
 from ai_etl.sources.mongodb_source import DEFAULT_SAMPLE_LIMIT, _validate_query, load_mongodb
 
 
-def _mock_client(mocker, documents: list[dict]) -> MagicMock:
+def _mock_client_from(mongo_client_mock: MagicMock, documents: list[dict]) -> MagicMock:
+    """Configure an already-patched `MongoClient` mock's return value — split
+    out of `_mock_client` (ADR-044) so a test can hold onto the constructor
+    mock itself (e.g. to assert which connection string it was called with),
+    not just the collection it ultimately returns.
+    """
     mock_cursor = MagicMock()
     mock_cursor.limit.return_value = documents
 
@@ -31,8 +37,13 @@ def _mock_client(mocker, documents: list[dict]) -> MagicMock:
     mock_client_instance.__enter__.return_value = mock_client_instance
     mock_client_instance.__exit__.return_value = False
 
-    mocker.patch("ai_etl.sources.mongodb_source.MongoClient", return_value=mock_client_instance)
+    mongo_client_mock.return_value = mock_client_instance
     return mock_collection
+
+
+def _mock_client(mocker, documents: list[dict]) -> MagicMock:
+    mongo_client_mock = mocker.patch("ai_etl.sources.mongodb_source.MongoClient")
+    return _mock_client_from(mongo_client_mock, documents)
 
 
 # --- _validate_query() ---
@@ -55,6 +66,33 @@ def test_load_mongodb_missing_uri_raises(monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.delenv("MONGODB_URI", raising=False)
     with pytest.raises(EnvironmentError, match="MONGODB_URI"):
         load_mongodb("db", "orders")
+
+
+def test_load_mongodb_uses_tenant_override_over_shared_env(
+    mocker, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # ADR-044: a tenant's own stored connection string must win over the
+    # deployment-wide MONGODB_URI, even when the latter is set.
+    monkeypatch.setenv("MONGODB_URI", "mongodb://shared-host:27017")
+    mongo_client_mock = mocker.patch("ai_etl.sources.mongodb_source.MongoClient")
+    _mock_client_from(mongo_client_mock, [{"_id": "abc123", "product": "A"}])
+
+    with tenant_connections({"mongodb": "mongodb://tenant-host:27017"}):
+        load_mongodb("shop", "orders")
+
+    mongo_client_mock.assert_called_once_with("mongodb://tenant-host:27017")
+
+
+def test_load_mongodb_falls_back_to_shared_env_with_no_override(
+    mocker, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("MONGODB_URI", "mongodb://shared-host:27017")
+    mongo_client_mock = mocker.patch("ai_etl.sources.mongodb_source.MongoClient")
+    _mock_client_from(mongo_client_mock, [{"_id": "abc123", "product": "A"}])
+
+    load_mongodb("shop", "orders")
+
+    mongo_client_mock.assert_called_once_with("mongodb://shared-host:27017")
 
 
 def test_load_mongodb_reads_documents(mocker, monkeypatch: pytest.MonkeyPatch) -> None:

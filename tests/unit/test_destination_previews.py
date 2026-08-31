@@ -10,6 +10,7 @@ import pandas as pd
 import pytest
 from botocore.exceptions import ClientError
 
+from ai_etl.core.tenant_context import tenant_connections
 from ai_etl.destinations.csv_dest import preview_csv
 from ai_etl.destinations.postgres_dest import preview_postgres
 from ai_etl.destinations.s3_parquet_dest import preview_s3_parquet
@@ -83,6 +84,26 @@ def test_preview_postgres_existing_table_reports_row_count(monkeypatch, tmp_path
 
     assert result["would_write_rows"] == 3
     assert result["existing"]["existing_rows"] == 2
+
+
+def test_preview_postgres_uses_tenant_override_over_shared_env(monkeypatch, tmp_path) -> None:
+    # ADR-044: point the shared env var at one (empty) sqlite file and the
+    # tenant override at a different one with a real table — the override
+    # must be the one actually read from.
+    monkeypatch.setenv("POSTGRES_URL", f"sqlite:///{tmp_path}/shared.sqlite")
+    tenant_db_url = f"sqlite:///{tmp_path}/tenant.sqlite"
+
+    import sqlalchemy
+
+    engine = sqlalchemy.create_engine(tenant_db_url)
+    with engine.begin() as conn:
+        conn.execute(sqlalchemy.text("CREATE TABLE output (a INTEGER)"))
+        conn.execute(sqlalchemy.text("INSERT INTO output (a) VALUES (1), (2), (3)"))
+
+    with tenant_connections({"postgres": tenant_db_url}):
+        result = preview_postgres(_DF, "output")
+
+    assert result["existing"]["existing_rows"] == 3
 
 
 # ---------------------------------------------------------------------------

@@ -433,6 +433,7 @@
     "formHeading": "Salvar ou rotacionar segredo",
     "nameLabel": "Nome",
     "namePlaceholder": "ex: postgres_prod_password",
+    "nameHint": "Para usar seu próprio banco de dados em um pipeline em vez do padrão compartilhado, nomeie o segredo exatamente como postgres_connection_string, mysql_connection_string ou mongodb_connection_string — o valor é a connection string completa.",
     "valueLabel": "Valor",
     "valuePlaceholder": "Digite o valor do segredo",
     "valueHint": "Só é exibido enquanto você digita — depois de salvo, nunca mais aparece aqui.",

@@ -184,11 +184,18 @@ also deferred.
   storage/API infrastructure only; no pipeline connector actually
   *consumes* a tenant secret yet. A tenant can store a credential safely but
   cannot yet point a running pipeline at it. Flagged, not silently implied
-  as done.
+  as done. **Superseded 2026-08-31 for DB connectors by
+  [ADR-044](ADR-044-tenant-scoped-db-source-credentials.md)** — Postgres/
+  MySQL/MongoDB now consume a tenant's own stored connection string when
+  one exists. REST's `_build_auth` remains unwired, per ADR-044's own scope
+  note.
 - **Negative — accepted, explicit**: Postgres/MySQL/MongoDB source
   connectors remain on the single shared `POSTGRES_URL`-style env var
   pattern; only REST source has an integration path designed (and not yet
-  wired).
+  wired). **Superseded 2026-08-31 by [ADR-044](ADR-044-tenant-scoped-db-source-credentials.md)**
+  for Postgres/MySQL/MongoDB — see that ADR for why the naive approach
+  (threading `tenant_id` through `PipelineState`) was rejected in favor of a
+  `contextvars`-based resolution.
 - **Negative**: the `"admin"`-substring org-role mapping is a heuristic
   tied to Clerk's default role-key conventions; a deployment using fully
   custom Clerk role keys needs this revisited (see Decision 1).

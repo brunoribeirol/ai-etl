@@ -433,6 +433,7 @@
     "formHeading": "Save or rotate a secret",
     "nameLabel": "Name",
     "namePlaceholder": "e.g. postgres_prod_password",
+    "nameHint": "To use your own database in a pipeline instead of the shared default, name the secret exactly postgres_connection_string, mysql_connection_string, or mongodb_connection_string — the value is the full connection string.",
     "valueLabel": "Value",
     "valuePlaceholder": "Type the secret's value",
     "valueHint": "Only shown while you type it — once saved, it never appears here again.",
