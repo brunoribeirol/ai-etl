@@ -2,7 +2,124 @@
 
 > Living doc. Updated at the end of meaningful work sessions, not per-commit. Source of truth for repo/code state; the Obsidian vault (`~/Documents/Obsidian Vault/tcc/`) is the source of truth for the academic TCC narrative and product/strategy context.
 
-**Last updated:** 2026-08-31 — **Continuation of the functionality sweep: require_approval/approval_threshold_rows exposed in the pipeline UI (#167), homepage/app `<title>`/meta description localized (#168), Vercel Sandbox project created and image pushed but only half-configured (env vars set on the `ai-etl` API service, NOT on the `tranquil-appreciation` Celery worker that actually executes sandboxed code), a disposable test Postgres provisioned on Railway for DB-source testing (still running, not yet cleaned up). Real architecture gap found: DB sources (Postgres/MySQL/MongoDB) all read a single shared env var, not a per-tenant credential — the Secrets feature stores values nothing in the pipeline actually reads. See "Next session" below for the exact resume state.**
+**Last updated:** 2026-08-31 (session 2) — **Vercel Sandbox end-to-end test blocked by a real billing wall (403 Forbidden — the Vercel team is on the Hobby plan, which does not permit creating Sandboxes; owner decided not to upgrade for now), so the worker was reverted to the `"process"` backend. Along the way, found and fixed a real bug (PR #171): the shared Dockerfile never installed the `vercel-sandbox` extra, so the `vercel` package was missing regardless of billing. DB-source + require_approval test **succeeded for real** against a disposable test Postgres: a scheduled pipeline landed in `/approvals`, was approved, and the write was confirmed — then all disposable test infrastructure was cleaned up (`qa-test-postgres` deleted, `POSTGRES_URL` reverted on both Railway services). The architecture gap flagged in session 1 (DB sources reading a single shared env var, Secrets feature disconnected from execution) was **closed** (PR #172, ADR-044): Postgres/MySQL/MongoDB source connectors and the Postgres destination now consume a tenant's own stored connection string via a `contextvars`-based resolution, never persisted to `PipelineState` or any run's JSON snapshot. Real Slack delivery confirmed working end-to-end in production. See "Next session" below for what's still open.**
+
+## 2026-08-31 (session 2) — Vercel Sandbox billing-blocked, DB-source+approval test passed for real, tenant-scoped DB credentials shipped
+
+Direct continuation of session 1's exact resume checklist (below), same day.
+
+**Vercel Sandbox (ADR-039) — root-caused, then blocked by a real billing
+decision, not a bug.** Copied the 5 pending env vars from `ai-etl` to
+`tranquil-appreciation` (the actual Celery worker) via a Railway CLI
+service-to-service pipe that never surfaced a secret value into this
+session's context. Redeployed and ran a real analysis: the worker raised
+`VercelSandboxUnavailableError("... requires the 'vercel' Python
+package")` — a real bug, not the billing wall yet. Root cause: the shared
+`Dockerfile` only ever ran `uv sync --extra api`, never `--extra
+vercel-sandbox`; separately confirmed (by reading the actual BuildKit log,
+not just Railway's `builder` config field) that the worker *does* build
+from this Dockerfile despite the config field saying `RAILPACK` — that
+field is just Railway's auto-detecting meta-builder. Fixed in PR #171
+(`fix/worker-vercel-sandbox-extra`, merged). Re-ran the test: the worker
+now called the real Vercel Sandbox API and got `HTTP 403: You don't have
+permission to create the vercel sandbox (code=forbidden)`. Confirmed via
+Vercel MCP: the team (`bruno-ribeiros-projects-7f728e3d`) is on the
+**Hobby plan** — Sandbox creation appears to require Pro. Presented the
+owner the trade-off (upgrade to Pro, a recurring paid subscription, vs.
+stay on the `"process"` backend); **owner decided not to pay for Pro**.
+Reverted `AI_ETL_SANDBOX_BACKEND` to `process` on both `ai-etl` and
+`tranquil-appreciation`. **Decision, not a bug**: Vercel Sandbox (ADR-039)
+stays unused in production until/unless the owner revisits the Pro
+upgrade. No further action planned unless he asks.
+
+**DB-source + require_approval — tested for real, not just mechanically.**
+Created a scheduled pipeline (`postgres`, table `orders`, cron
+`* * * * *` for a fast test cycle, `require_approval` on) against the
+disposable `qa-test-postgres` from session 1. It fired for real via
+`check_scheduled_pipelines`/`run_full_analysis`, landed on `/approvals`
+with `status: awaiting_approval`, was approved through the real UI (`POST
+/runs/{id}/approve` → `200 OK`, toast "Run approved — write completed."),
+confirming a real write against the test database. Two duplicate runs
+(fired before the pipeline was paused, since the cron ran every minute)
+were rejected rather than approved, to avoid redundant writes. This is the
+first time this exact require_approval + DB-source path has been verified
+end-to-end against a real database, not just unit-tested.
+
+**Cleanup completed, not deferred.** `POSTGRES_URL` reverted to
+`postgresql://ai_etl:ai_etl@localhost:5432/ai_etl_db` on both `ai-etl` and
+`tranquil-appreciation`; the `qa-test-postgres` Railway service (publicly
+exposed, generated password) deleted entirely and confirmed gone from
+`railway service list`.
+
+**Tenant-scoped DB credentials — the architecture gap from session 1,
+closed (PR #172, ADR-044).** Owner decided this was worth doing now
+(no cost — pure engineering work, unlike the Sandbox Pro upgrade).
+Investigated why ADR-022 (Sprint 19) had deferred this: `tenant_id` isn't
+available inside a LangGraph node without breaking the node-signature
+contract, and — the sharper finding from actually reading
+`audit/db/runs.py::save_run` — the *entire* `PipelineState` gets
+serialized into each run's JSON snapshot with no per-key redaction, so
+naively adding a resolved connection string to state would write a
+tenant's real DB password to disk/S3 in plaintext on every run. Solved
+with a new `core/tenant_context.py`: a `contextvars.ContextVar`-based
+resolution set by `pipeline_service.py` (which already has `tenant_id`)
+for the duration of one graph run or one deferred-approval write — never
+part of `PipelineState`, no node signature changed. A tenant now points a
+pipeline at their own Postgres/MySQL/MongoDB by saving a secret named
+exactly `postgres_connection_string`/`mysql_connection_string`/
+`mongodb_connection_string` via the existing `/secrets` page (UI hint
+added). Falls back to the shared env var for every tenant who hasn't
+configured one — zero behavior change for the existing single-tenant-core
+deployment. Includes an explicit regression test asserting the decrypted
+value never appears in what gets passed to `save_run`. REST source's own
+`secret_ref` integration (already designed in ADR-022) is intentionally
+left for a separate follow-up.
+
+**Backlog items from session 1, tested as requested:**
+- **Slack real delivery — confirmed working.** Called
+  `send_slack_digest()` directly (via `railway run --service
+  tranquil-appreciation`, since `SLACK_WEBHOOK_URL` is only configured on
+  the worker, not the API — this itself was worth learning) with a
+  clearly-labeled test message. Delivered successfully to the real
+  production Slack workspace.
+- **`GET /tenant/export` latency — still slow, re-measured, not fixed.**
+  43.2s for a real call (down from session 1's ~75s finding, likely normal
+  variance, not a fix). Measured via a direct authenticated `fetch` from
+  the browser session, response body discarded immediately, nothing
+  downloaded or persisted.
+- **`frontend/src/lib/form-error.ts` PT-BR hardcoding — still present,
+  confirmed, not fixed.** The file's own code comment already flags this
+  as needing its own follow-up (2026-08-26 audit); re-read and confirmed
+  still true — every error message ignores the active locale.
+
+**Unrelated but real: local `.venv` was corrupted by the same iCloud
+duplicate-file issue previously seen for `.git`** (see
+`feedback_git_icloud_recovery` in this project's Claude memory) —
+`.venv/lib/.../site-packages/_editable_impl_ai_etl 2.pth`/`3.pth`/`4.pth`
+conflicting with the real one broke `import ai_etl` entirely, blocking the
+Slack test above until found. Fixed by deleting and recreating `.venv`
+(`make install`) — much cheaper than the `.git` playbook's full re-clone,
+did not touch git history or uncommitted work. The wider repo still has
+~47 other iCloud-duplicated untracked files (`docs/adr/ADR-041... 2.md`,
+`frontend/src/components/secrets-manager 2.tsx`, etc., visible in `git
+status`) — flagged for the owner, not touched (out of scope, and deleting
+untracked files needs explicit confirmation per this session's own safety
+rules).
+
+### Next session — exact resume state
+
+1. **Vercel Sandbox stays off** (`AI_ETL_SANDBOX_BACKEND=process` on both
+   Railway services) until/unless the owner decides to upgrade the Vercel
+   team to Pro. Not a task to pick back up without his explicit go-ahead.
+2. **Clean up the iCloud-duplicated untracked files** across the repo
+   (~47 files, `git status` shows them all) — needs the owner's
+   confirmation before deleting anything untracked.
+3. Lower priority, flagged again, still not fixed: `GET /tenant/export`'s
+   latency (~43s), `frontend/src/lib/form-error.ts`'s hardcoded PT-BR
+   error strings (ignores locale).
+4. REST source's `secret_ref` tenant-credential wiring (ADR-022's original
+   design, ADR-044 left it out of scope) — a natural, small follow-up to
+   ADR-044 if a tenant ever needs a per-tenant REST API credential.
 
 ## 2026-08-31 — require_approval UI, homepage i18n metadata fix, Vercel Sandbox setup (half-done), DB-source architecture gap found
 
