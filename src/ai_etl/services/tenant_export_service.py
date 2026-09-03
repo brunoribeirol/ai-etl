@@ -100,10 +100,15 @@ def export_tenant_data(tenant_id: str, log_dir: str = "./runs") -> TenantExport:
     # connection instead of passing the engine straight through.
     with engine.connect() as conn:
         candidates_by_run = tenant_run_storage_candidates(conn, tenant_id)
+    # Perf fix (2026-09-03): one `list_existing_keys()` call instead of one
+    # `storage.exists()` per candidate — see `StorageBackend`'s protocol
+    # docstring. This was the root cause of GET /tenant/export taking 40-75s
+    # in production; confirmed via a real timed call before/after this fix.
+    existing_keys = storage.list_existing_keys()
     storage_artifacts: list[dict[str, Any]] = []
     for run_id, candidates in candidates_by_run.items():
         for key in candidates:
-            if storage.exists(key):
+            if key in existing_keys:
                 storage_artifacts.append({"run_id": run_id, "key": key})
 
     return TenantExport(

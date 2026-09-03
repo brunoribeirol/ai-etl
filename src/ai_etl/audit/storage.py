@@ -20,13 +20,29 @@ from typing import Protocol, cast
 
 
 class StorageBackend(Protocol):
-    """Minimal key/bytes storage interface `audit/db.py` writes/reads artifacts through."""
+    """Minimal key/bytes storage interface `audit/db.py` writes/reads artifacts through.
+
+    `list_existing_keys()` (2026-09-03 perf fix) exists specifically so a caller
+    checking *many* candidate keys at once (`tenant_export_service.py::export_tenant_data`,
+    `tenant_deletion_service.py::_delete_tenant_storage`) can do it with one backend
+    call instead of one `exists()` call per candidate. On `S3StorageBackend` this is
+    the difference between a single (paginated) `list_objects_v2` request and dozens
+    of sequential `head_object` round-trips — confirmed as the root cause of
+    `GET /tenant/export` taking 40-75s in production (2026-08-30/31 sessions) with as
+    few as ~30 runs' worth of candidate keys, each `head_object` call paying a real
+    cross-region network round-trip (Railway `ams` -> S3 `sa-east-1`). Returns keys
+    *relative* to this backend instance's own root/prefix, matching what `exists(key)`
+    already takes — a caller does `key in list_existing_keys()` instead of
+    `exists(key)` in a loop.
+    """
 
     def write_bytes(self, key: str, data: bytes) -> None: ...
 
     def read_bytes(self, key: str) -> bytes: ...
 
     def exists(self, key: str) -> bool: ...
+
+    def list_existing_keys(self) -> set[str]: ...
 
     def delete_bytes(self, key: str) -> None:
         """Delete `key` if it exists; a no-op if it doesn't (ADR-025).
@@ -56,6 +72,17 @@ class LocalStorageBackend:
 
     def exists(self, key: str) -> bool:
         return (self.base_dir / key).exists()
+
+    def list_existing_keys(self) -> set[str]:
+        # Local disk I/O is cheap per-call (unlike S3's network round-trip),
+        # so this is a straightforward walk rather than a perf-motivated
+        # batch — kept for interface parity with S3StorageBackend so callers
+        # never need to branch on which backend they're talking to.
+        return {
+            str(path.relative_to(self.base_dir))
+            for path in self.base_dir.rglob("*")
+            if path.is_file()
+        }
 
     def delete_bytes(self, key: str) -> None:
         path = self.base_dir / key
@@ -106,6 +133,20 @@ class S3StorageBackend:
         # S3's delete_object is already idempotent — deleting a missing key
         # returns 204, not an error, so no existence check is needed first.
         self._client.delete_object(Bucket=self.bucket, Key=self._full_key(key))
+
+    def list_existing_keys(self) -> set[str]:
+        """One paginated `list_objects_v2` under this instance's own prefix
+        (already tenant-scoped — `self.prefix` is `{environment}/{tenant_id}`)
+        instead of one `head_object` per candidate key. See the `StorageBackend`
+        protocol docstring for the production latency this replaces.
+        """
+        paginator = self._client.get_paginator("list_objects_v2")
+        prefix_with_slash = f"{self.prefix}/"
+        keys: set[str] = set()
+        for page in paginator.paginate(Bucket=self.bucket, Prefix=prefix_with_slash):
+            for obj in page.get("Contents", []):
+                keys.add(obj["Key"][len(prefix_with_slash) :])
+        return keys
 
 
 def get_storage_backend(log_dir: str, tenant_id: str | None) -> StorageBackend:
