@@ -26,6 +26,7 @@ export default async function SummaryPage({
 }) {
   const { id } = await params;
   const t = await getTranslations("summaryPage");
+  const tErrors = await getTranslations("executiveErrors");
 
   let pipeline: SavedPipeline | null = null;
   let error: string | null = null;
@@ -40,10 +41,7 @@ export default async function SummaryPage({
       <main className="flex-1 px-6 py-12 max-w-3xl mx-auto w-full">
         <Alert variant="destructive">
           <AlertDescription>
-            {/* Sprint 38 — friendlyExecutiveError still returns hardcoded
-                Portuguese text regardless of locale; out of this task's file
-                list (lib/friendly-error.ts), left untouched. */}
-            {error ? friendlyExecutiveError(error) : t("notFound")}
+            {error ? friendlyExecutiveError(error, tErrors) : t("notFound")}
           </AlertDescription>
         </Alert>
       </main>

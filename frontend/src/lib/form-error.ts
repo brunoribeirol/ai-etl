@@ -1,20 +1,25 @@
+import type { useTranslations } from "next-intl";
+
+type Translator = ReturnType<typeof useTranslations<"runForm">>;
+
 /**
  * Error-language mapping for `<RunForm>` (`/`, the "technical operator"
  * screen — see `friendly-error.ts`'s own docstring for why that helper is
  * deliberately scoped to `/summary` and not reused here). Unlike the
  * executive screens, this audience benefits from technical detail, so this
- * only normalizes the *shape* of known raw errors into clear Portuguese —
+ * only normalizes the *shape* of known raw errors into a clear message —
  * it still surfaces an HTTP status or backend `detail` string when useful,
  * it just stops leaking a raw `Error: ...`/English exception string verbatim
- * (e.g. `"Error: Could not parse uploaded file."`) into an otherwise
- * Portuguese-language UI.
+ * (e.g. `"Error: Could not parse uploaded file."`) into the UI unstyled.
  *
- * NOTE (2026-08-26 English-only audit): the returned message strings below
- * are deliberately hardcoded Portuguese regardless of the active locale —
- * this predates the current audit, is out of this task's declared file list
- * (renames/route/i18n-key scope only), and needs its own follow-up to route
- * through `next-intl` if/when this screen's copy should also honor the
- * locale toggle. Left untouched here; flagged for the repo owner to confirm.
+ * Fixed 2026-09-03 (previously flagged in the 2026-08-26 English-only audit
+ * and left as known debt): the returned messages used to be hardcoded
+ * Portuguese regardless of the active locale, bypassing `next-intl`
+ * entirely — an EN-US visitor would still see Portuguese error text. Now
+ * takes the caller's own `useTranslations("runForm")` translator (the
+ * `errors.*` keys live under that namespace in `messages/*.json`) instead
+ * of returning a literal string, since this is a plain function, not a
+ * component/hook, and can't call `useTranslations` itself.
  *
  * Scoped to the error shapes `run-form.tsx` actually produces: a
  * network/fetch failure, a non-OK `/runs` or `/runs/{id}/status` response
@@ -22,22 +27,22 @@
  * "Could not parse uploaded file." detail raised by
  * `src/ai_etl/api/routers/runs.py::create_run`.
  */
-export function describeSubmitError(err: unknown): string {
+export function describeSubmitError(err: unknown, t: Translator): string {
   const raw = err instanceof Error ? err.message : String(err);
 
   if (/could not parse uploaded file/i.test(raw)) {
-    return "Não foi possível processar o arquivo enviado. Verifique o formato (CSV, Excel, JSON, PDF ou DOCX) e tente novamente.";
+    return t("errors.parseFailed");
   }
 
   if (/failed to fetch|networkerror|load failed|network request failed/i.test(raw)) {
-    return "Falha de conexão com o servidor. Verifique sua internet e tente novamente.";
+    return t("errors.network");
   }
 
   const httpMatch = raw.match(/HTTP (\d{3})/);
   if (httpMatch) {
-    return `Erro ao comunicar com o servidor (HTTP ${httpMatch[1]}). Tente novamente em instantes.`;
+    return t("errors.http", { status: httpMatch[1] });
   }
 
   const detail = raw.replace(/^Error:\s*/i, "").trim();
-  return `Ocorreu um erro ao processar a solicitação. Detalhe técnico: ${detail}`;
+  return t("errors.generic", { detail });
 }

@@ -45,8 +45,17 @@ jobs:
       # PR the way pip-audit's stricter default does for a much smaller,
       # backend-only dependency tree; revisit the threshold if this proves
       # too loose in practice.
+      #
+      # `--omit=dev` (2026-09-03, real CI failure): `npm audit` audits every
+      # dependency by default, dev-only tools included — this step failed on
+      # `fast-uri`/`qs` advisories that only exist because `shadcn` (the
+      # scaffolding CLI, `bin`-only, never imported by app code) pulls in
+      # `@modelcontextprotocol/sdk` -> `express`/`ajv`. Moved `shadcn` to
+      # `devDependencies` (its correct category) at the same time — neither
+      # package ever reaches the deployed app, so auditing them here was
+      # noise, not signal, exactly the gap `--omit=dev` closes.
       - name: Security — npm audit
-        run: npm audit --audit-level=high
+        run: npm audit --omit=dev --audit-level=high
 
       # `next build` runs its own TypeScript check as part of the build
       # (visible as a "Running TypeScript ..." step in its own output) — a

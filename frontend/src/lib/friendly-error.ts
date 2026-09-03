@@ -5,31 +5,39 @@
  * non-technical audience — raw strings like `"Error: HTTP 404"` or
  * `"Error: NEXT_PUBLIC_API_URL is not configured."`. This maps the error
  * shapes those call sites actually throw (see `lib/api.ts` and
- * `executive-summary.tsx`) to plain-language Portuguese; anything
- * unrecognized falls back to one honest, jargon-free message instead of
- * leaking an HTTP status code or an env var name.
+ * `executive-summary.tsx`) to plain-language text; anything unrecognized
+ * falls back to one honest, jargon-free message instead of leaking an HTTP
+ * status code or an env var name.
  *
  * Deliberately narrow in scope — the technical screens (`/`, `/pipelines`,
  * `/history`) keep showing the raw `String(err)` they already did; that
  * audience is the "technical operator" persona (see the landing page's own
  * copy) who benefits from the precise detail.
  *
- * NOTE (2026-08-26 English-only audit): the returned message strings below
- * are deliberately hardcoded Portuguese regardless of the active locale —
- * this predates the current audit, is out of this task's declared file list
- * (renames/route/i18n-key scope only), and needs its own follow-up to route
- * through `next-intl` if/when this screen's copy should also honor the
- * locale toggle. Left untouched here; flagged for the repo owner to confirm.
+ * Fixed 2026-09-03 (previously flagged in the 2026-08-26 English-only audit
+ * and left as known debt, same bug as `form-error.ts` had): the returned
+ * messages used to be hardcoded Portuguese regardless of the active locale.
+ * Now takes a translator scoped to the shared `executiveErrors` namespace
+ * (`messages/*.json`) — one copy of these 4 strings per language, reused by
+ * all three call sites (`summary/page.tsx`, `summary/[id]/page.tsx` via
+ * `next-intl/server`'s `getTranslations`, and `executive-summary.tsx` via
+ * the client `useTranslations`) rather than one per call site's own
+ * namespace, so the two don't drift out of sync. Typed as a plain
+ * `(key: string) => string` rather than `ReturnType<typeof useTranslations>`
+ * specifically so both the server and client translator shapes satisfy it
+ * without a cast.
  */
-export function friendlyExecutiveError(raw: string): string {
+type Translator = (key: string) => string;
+
+export function friendlyExecutiveError(raw: string, t: Translator): string {
   if (/HTTP 404/i.test(raw)) {
-    return "Não encontramos esse pipeline. Ele pode ter sido removido ou o link estar incorreto.";
+    return t("notFound");
   }
   if (/HTTP 401|HTTP 403/i.test(raw)) {
-    return "Você não tem permissão para ver este conteúdo. Fale com quem administra a conta.";
+    return t("forbidden");
   }
   if (/NEXT_PUBLIC_API_URL/i.test(raw)) {
-    return "O sistema está com um problema de configuração no momento. Avise o time técnico.";
+    return t("misconfigured");
   }
-  return "Não conseguimos carregar essas informações agora. Tente novamente em alguns instantes.";
+  return t("generic");
 }
