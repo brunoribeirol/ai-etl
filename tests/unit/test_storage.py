@@ -65,6 +65,20 @@ def test_local_backend_delete_bytes_is_a_noop_for_missing_key(tmp_path: Path) ->
     backend.delete_bytes("no-such-key.json")  # must not raise
 
 
+def test_local_backend_list_existing_keys_returns_relative_paths(tmp_path: Path) -> None:
+    backend = LocalStorageBackend(str(tmp_path))
+    backend.write_bytes("run-1.json", b"{}")
+    backend.write_bytes("sub/dir/run-2.json", b"{}")
+
+    assert backend.list_existing_keys() == {"run-1.json", "sub/dir/run-2.json"}
+
+
+def test_local_backend_list_existing_keys_empty_when_nothing_written(tmp_path: Path) -> None:
+    backend = LocalStorageBackend(str(tmp_path))
+
+    assert backend.list_existing_keys() == set()
+
+
 # ---------------------------------------------------------------------------
 # S3StorageBackend — mocked boto3 client
 # ---------------------------------------------------------------------------
@@ -130,6 +144,57 @@ def test_s3_backend_exists_reraises_non_404_errors() -> None:
 
     with pytest.raises(ClientError):
         backend.exists("run-1.json")
+
+
+def test_s3_backend_list_existing_keys_strips_the_prefix() -> None:
+    """Perf fix (2026-09-03): `list_existing_keys` must return keys the same
+    shape `exists(key)` takes (relative to this instance's own prefix), not
+    the raw S3 object keys, so a caller can do `key in list_existing_keys()`
+    as a drop-in replacement for `exists(key)`."""
+    backend, mock_client = _make_backend_with_mock_client()
+    mock_paginator = MagicMock()
+    mock_paginator.paginate.return_value = [
+        {
+            "Contents": [
+                {"Key": "prod/tenant-a/run-1.json"},
+                {"Key": "prod/tenant-a/run-1_transform.py"},
+            ]
+        }
+    ]
+    mock_client.get_paginator.return_value = mock_paginator
+
+    keys = backend.list_existing_keys()
+
+    mock_client.get_paginator.assert_called_once_with("list_objects_v2")
+    mock_paginator.paginate.assert_called_once_with(
+        Bucket="ai-etl-artifacts-brlla", Prefix="prod/tenant-a/"
+    )
+    assert keys == {"run-1.json", "run-1_transform.py"}
+
+
+def test_s3_backend_list_existing_keys_paginates_across_multiple_pages() -> None:
+    backend, mock_client = _make_backend_with_mock_client()
+    mock_paginator = MagicMock()
+    mock_paginator.paginate.return_value = [
+        {"Contents": [{"Key": "prod/tenant-a/run-1.json"}]},
+        {"Contents": [{"Key": "prod/tenant-a/run-2.json"}]},
+    ]
+    mock_client.get_paginator.return_value = mock_paginator
+
+    keys = backend.list_existing_keys()
+
+    assert keys == {"run-1.json", "run-2.json"}
+
+
+def test_s3_backend_list_existing_keys_empty_bucket_returns_empty_set() -> None:
+    """A page with no `Contents` key at all (S3's actual shape for an empty
+    prefix, not an empty list) must not raise a `KeyError`."""
+    backend, mock_client = _make_backend_with_mock_client()
+    mock_paginator = MagicMock()
+    mock_paginator.paginate.return_value = [{}]
+    mock_client.get_paginator.return_value = mock_paginator
+
+    assert backend.list_existing_keys() == set()
 
 
 def test_s3_backend_delete_bytes_deletes_object_under_prefixed_key() -> None:

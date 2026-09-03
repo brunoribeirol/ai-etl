@@ -38,6 +38,9 @@ class FakeStorageBackend:
     def exists(self, key: str) -> bool:
         return key in self._objects
 
+    def list_existing_keys(self) -> set[str]:
+        return set(self._objects)
+
     def delete_bytes(self, key: str) -> None:
         self._objects.pop(key, None)
 

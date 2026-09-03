@@ -46,6 +46,9 @@ class FakeStorageBackend:
     def exists(self, key: str) -> bool:
         return key in self._objects
 
+    def list_existing_keys(self) -> set[str]:
+        return set(self._objects)
+
     def delete_bytes(self, key: str) -> None:
         self._objects.pop(key, None)
 
@@ -205,6 +208,26 @@ def test_deletes_storage_artifacts(engine: Engine, fake_storage: FakeStorageBack
     assert fake_storage.exists("run-1.json") is False
     assert fake_storage.exists("run-1_silver.csv") is False
     assert fake_storage.exists("run-1_gold_0.csv") is False
+
+
+def test_deletes_storage_artifacts_falls_back_to_per_key_exists_when_listing_fails(
+    engine: Engine, fake_storage: FakeStorageBackend
+) -> None:
+    """Perf fix (2026-09-03) added a `list_existing_keys()` fast path — this
+    pins down the fallback: a listing failure must not inflate the
+    compliance-log deletion count by blindly calling the idempotent
+    `delete_bytes` on every candidate. `deleted` must come out identical to
+    the pre-fix, per-key-`exists()` behavior (see `test_deletes_storage_artifacts`)."""
+
+    def _boom() -> set[str]:
+        raise RuntimeError("S3 list_objects_v2 unavailable")
+
+    fake_storage.list_existing_keys = _boom  # type: ignore[method-assign]
+
+    summary = svc.delete_tenant_data("tenant-a", requested_by="tenant-a")
+
+    assert summary["storage_keys_deleted"] == 6
+    assert fake_storage.exists("run-1.json") is False
 
 
 def test_raises_for_unknown_tenant(engine: Engine) -> None:

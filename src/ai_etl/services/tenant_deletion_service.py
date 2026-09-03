@@ -145,12 +145,35 @@ def _delete_tenant_storage(tenant_id: str, storage: StorageBackend) -> tuple[int
     with tenant_scope(tenant_id) as conn:
         candidates_by_run = tenant_run_storage_candidates(conn, tenant_id)
 
+    # Perf fix (2026-09-03): same `list_existing_keys()` batch lookup
+    # `tenant_export_service.py::export_tenant_data` now uses, instead of one
+    # `storage.exists()` round-trip per candidate key — see `StorageBackend`'s
+    # protocol docstring. If the listing call itself fails, falls back to the
+    # original per-key `exists()` check (not "delete everything regardless")
+    # — this function's `deleted` count feeds the LGPD/GDPR erasure log
+    # (`_write_deletion_log` below), so an inflated count from blindly
+    # calling the idempotent `delete_bytes` on nonexistent keys would be a
+    # real compliance-record accuracy regression, not just a perf detail.
+    try:
+        existing_keys: set[str] | None = storage.list_existing_keys()
+    except Exception as exc:  # noqa: BLE001 - best-effort, see docstring
+        existing_keys = None
+        errors: list[str] = [f"list_existing_keys: {exc}"]
+        logger.warning(
+            "tenant_deletion_storage_list_error",
+            extra={"tenant_id": tenant_id, "error": str(exc)},
+        )
+    else:
+        errors = []
+
     deleted = 0
-    errors: list[str] = []
     for run_id, candidates in candidates_by_run.items():
         for key in candidates:
             try:
-                if storage.exists(key):
+                key_exists = (
+                    key in existing_keys if existing_keys is not None else storage.exists(key)
+                )
+                if key_exists:
                     storage.delete_bytes(key)
                     deleted += 1
             except Exception as exc:  # noqa: BLE001 - best-effort, see docstring
