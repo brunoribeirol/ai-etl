@@ -64,7 +64,14 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   const locale = await getLocale();
 
   return (
-    <ClerkProvider>
+    // `telemetry={false}` (2026-09-03 perf fix): a real page-load audit found
+    // every authenticated page firing a `clerk-telemetry.com/v1/event` beacon
+    // that took 800ms+ on its own, on top of Clerk's already-heavy client JS.
+    // Purely an anonymous usage-metrics beacon back to Clerk (their own docs:
+    // https://clerk.com/docs/guides/how-clerk-works/security/clerk-telemetry)
+    // — disabling it changes nothing about auth/session behavior, only
+    // removes one non-essential network call from the critical path.
+    <ClerkProvider telemetry={false}>
       <html
         lang={locale}
         className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}

@@ -17,6 +17,7 @@ import type { SavedPipeline } from "@/lib/types";
  */
 export default async function SummaryIndexPage() {
   const t = await getTranslations("summaryIndexPage");
+  const tErrors = await getTranslations("executiveErrors");
   let pipelines: SavedPipeline[] = [];
   let error: string | null = null;
   try {
@@ -34,10 +35,7 @@ export default async function SummaryIndexPage() {
 
       {error && (
         <p className="text-destructive text-sm" role="alert">
-          {/* Sprint 38 — friendlyExecutiveError still returns hardcoded
-              Portuguese text regardless of locale; out of this task's file
-              list (lib/friendly-error.ts), left untouched. */}
-          {friendlyExecutiveError(error)}
+          {friendlyExecutiveError(error, tErrors)}
         </p>
       )}
 

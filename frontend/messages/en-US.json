@@ -212,7 +212,13 @@
     "taskLabel": "Task",
     "statusLabel": "Status",
     "completedPrefix": "Completed —",
-    "viewRun": "view run {runId}"
+    "viewRun": "view run {runId}",
+    "errors": {
+      "parseFailed": "Couldn't process the uploaded file. Check the format (CSV, Excel, JSON, PDF, or DOCX) and try again.",
+      "network": "Connection to the server failed. Check your internet and try again.",
+      "http": "Error communicating with the server (HTTP {status}). Try again in a moment.",
+      "generic": "An error occurred while processing the request. Technical detail: {detail}"
+    }
   },
   "onboardingWizard": {
     "step1Title": "Step 1 — choose a source",
@@ -231,6 +237,12 @@
     "item2Hint": "Connect a live source (Postgres, REST...) to run on its own on the right schedule.",
     "item3Label": "Check the executive summary",
     "item3Hint": "Available as soon as a scheduled pipeline has at least one run."
+  },
+  "executiveErrors": {
+    "notFound": "We couldn't find that pipeline. It may have been removed, or the link is incorrect.",
+    "forbidden": "You don't have permission to view this content. Contact whoever manages the account.",
+    "misconfigured": "The system currently has a configuration problem. Let the technical team know.",
+    "generic": "We couldn't load this information right now. Try again in a few moments."
   },
   "executiveSummary": {
     "statusCompleted": "Completed successfully",

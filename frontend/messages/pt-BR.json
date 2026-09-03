@@ -212,7 +212,13 @@
     "taskLabel": "Task",
     "statusLabel": "Status",
     "completedPrefix": "Concluído —",
-    "viewRun": "ver run {runId}"
+    "viewRun": "ver run {runId}",
+    "errors": {
+      "parseFailed": "Não foi possível processar o arquivo enviado. Verifique o formato (CSV, Excel, JSON, PDF ou DOCX) e tente novamente.",
+      "network": "Falha de conexão com o servidor. Verifique sua internet e tente novamente.",
+      "http": "Erro ao comunicar com o servidor (HTTP {status}). Tente novamente em instantes.",
+      "generic": "Ocorreu um erro ao processar a solicitação. Detalhe técnico: {detail}"
+    }
   },
   "onboardingWizard": {
     "step1Title": "Passo 1 — escolha uma fonte",
@@ -231,6 +237,12 @@
     "item2Hint": "Conecte uma fonte viva (Postgres, REST...) para rodar sozinho no horário certo.",
     "item3Label": "Veja o resumo executivo",
     "item3Hint": "Disponível assim que um pipeline agendado tiver ao menos uma execução."
+  },
+  "executiveErrors": {
+    "notFound": "Não encontramos esse pipeline. Ele pode ter sido removido ou o link estar incorreto.",
+    "forbidden": "Você não tem permissão para ver este conteúdo. Fale com quem administra a conta.",
+    "misconfigured": "O sistema está com um problema de configuração no momento. Avise o time técnico.",
+    "generic": "Não conseguimos carregar essas informações agora. Tente novamente em alguns instantes."
   },
   "executiveSummary": {
     "statusCompleted": "Concluído com sucesso",

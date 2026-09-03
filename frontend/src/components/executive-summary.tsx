@@ -108,6 +108,7 @@ function KpiCard({
 
 export function ExecutiveSummary({ pipeline }: { pipeline: SavedPipeline }) {
   const t = useTranslations("executiveSummary");
+  const tErrors = useTranslations("executiveErrors");
   const statusLabels = buildStatusLabels(t);
   const statusLabel = (status: string) => statusLabels[status.toLowerCase()] ?? status;
   const { getToken } = useAuth();
@@ -181,10 +182,7 @@ export function ExecutiveSummary({ pipeline }: { pipeline: SavedPipeline }) {
   if (error) {
     return (
       <p className="text-destructive text-sm" role="alert">
-        {/* Sprint 38 — friendlyExecutiveError still returns hardcoded
-            Portuguese text regardless of locale; out of this task's file
-            list (lib/friendly-error.ts), left untouched. */}
-        {friendlyExecutiveError(error)}
+        {friendlyExecutiveError(error, tErrors)}
       </p>
     );
   }

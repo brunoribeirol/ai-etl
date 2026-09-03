@@ -97,7 +97,7 @@ export function RunForm({
           }
         }
       } catch (err) {
-        const message = describeSubmitError(err);
+        const message = describeSubmitError(err, t);
         setError(message);
         toast.error(message);
         if (pollTimer.current) clearInterval(pollTimer.current);
@@ -153,7 +153,7 @@ export function RunForm({
       setTaskId(task_id);
       pollStatus(task_id);
     } catch (err) {
-      const message = describeSubmitError(err);
+      const message = describeSubmitError(err, t);
       setError(message);
       toast.error(message);
       setSubmitting(false);
