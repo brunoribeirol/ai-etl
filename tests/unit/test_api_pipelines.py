@@ -583,6 +583,43 @@ def test_patch_pipeline_rejects_non_live_source_type(client: TestClient, mocker)
     mock_update.assert_not_called()
 
 
+def test_delete_pipeline_happy_path(client: TestClient, mocker) -> None:
+    """2026-09-04 gap-closing feature: until now, PATCH is_active=False (pause)
+    was the only way to stop a saved pipeline — no way to actually remove one."""
+    mock_delete = mocker.patch(
+        "ai_etl.api.routers.pipelines.delete_saved_pipeline", return_value=True
+    )
+
+    response = client.delete("/pipelines/pl-1")
+
+    assert response.status_code == 204
+    assert response.content == b""
+    mock_delete.assert_called_once_with("pl-1", "tenant-a")
+
+
+def test_delete_pipeline_404_when_unknown(client: TestClient, mocker) -> None:
+    mocker.patch("ai_etl.api.routers.pipelines.delete_saved_pipeline", return_value=False)
+
+    response = client.delete("/pipelines/no-such-id")
+
+    assert response.status_code == 404
+
+
+def test_viewer_role_cannot_delete_pipeline(client: TestClient, mocker) -> None:
+    """Same RBAC posture as create/patch (Sprint 19, ADR-022) — deleting a
+    saved pipeline is an `editor`-only mutation."""
+    app.dependency_overrides[get_current_auth_context] = lambda: {
+        "tenant_id": "tenant-a",
+        "role": "viewer",
+    }
+    mock_delete = mocker.patch("ai_etl.api.routers.pipelines.delete_saved_pipeline")
+
+    response = client.delete("/pipelines/pl-1")
+
+    assert response.status_code == 403
+    mock_delete.assert_not_called()
+
+
 def test_viewer_role_cannot_create_pipeline(client: TestClient, mocker) -> None:
     """RBAC (Sprint 19, ADR-022): a `viewer` cannot configure a pipeline —
     only `editor` can, even though both roles share the same tenant_id."""

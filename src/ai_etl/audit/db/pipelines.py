@@ -225,6 +225,32 @@ def update_saved_pipeline(
     return get_saved_pipeline(pipeline_id, tenant_id)
 
 
+def delete_saved_pipeline(pipeline_id: str, tenant_id: str) -> bool:
+    """Permanently delete one saved pipeline, scoped to `tenant_id` (2026-09-04
+    gap-closing feature — previously the only way to stop a saved pipeline was
+    `update_saved_pipeline(..., is_active=False)`, which pauses it but leaves it
+    listed forever; there was no way to actually remove a mistaken or test entry).
+
+    Ownership-checked the same way as `update_saved_pipeline` — a row belonging
+    to another tenant, or an unknown id, is a no-op (`False`), never a 404-shaped
+    exception raised from this layer (the router turns that into the HTTP
+    response).
+
+    Safe by design at the schema level: `runs.saved_pipeline_id` and
+    `analysis_runs.saved_pipeline_id` are both `ForeignKey(..., ondelete="SET
+    NULL")` (`audit/models.py`) — deleting a saved pipeline never cascades into
+    deleting run history, it only detaches those runs from this pipeline (they
+    become ordinary avulso-looking runs in `/history`, same as they'd look if
+    they had never been linked to a saved pipeline at all).
+    """
+    stmt = saved_pipelines.delete().where(
+        saved_pipelines.c.id == pipeline_id, saved_pipelines.c.tenant_id == tenant_id
+    )
+    with tenant_scope(tenant_id) as conn:
+        result = conn.execute(stmt)
+        return result.rowcount > 0
+
+
 def list_due_pipelines(now: Optional[datetime] = None) -> list[dict[str, Any]]:
     """Return every active saved pipeline (across all tenants) whose
     `next_run_at` has passed — the query `services/scheduler.py`'s Celery

@@ -92,6 +92,65 @@ def test_get_saved_pipeline_returns_none_for_other_tenant(engine: Engine) -> Non
     assert db.get_saved_pipeline(created["id"], "tenant-a") is not None
 
 
+def test_delete_saved_pipeline_removes_the_row(engine: Engine) -> None:
+    """2026-09-04 gap-closing feature: until now, `is_active=False` (pause) was
+    the only way to stop a saved pipeline — no way to actually remove one."""
+    created = db.create_saved_pipeline("tenant-a", "A", "postgres", "spec a", "0 3 * * *")
+
+    assert db.delete_saved_pipeline(created["id"], "tenant-a") is True
+    assert db.get_saved_pipeline(created["id"], "tenant-a") is None
+
+
+def test_delete_saved_pipeline_returns_false_for_unknown_id(engine: Engine) -> None:
+    assert db.delete_saved_pipeline("no-such-id", "tenant-a") is False
+
+
+def test_delete_saved_pipeline_does_not_delete_another_tenants_pipeline(engine: Engine) -> None:
+    created = db.create_saved_pipeline("tenant-a", "A", "postgres", "spec a", "0 3 * * *")
+
+    assert db.delete_saved_pipeline(created["id"], "tenant-b") is False
+    assert db.get_saved_pipeline(created["id"], "tenant-a") is not None
+
+
+def test_delete_saved_pipeline_detaches_run_history_instead_of_deleting_it(engine: Engine) -> None:
+    """Regression guard for the `ON DELETE SET NULL` FK on
+    `runs.saved_pipeline_id` (`audit/models.py`) — deleting a saved pipeline
+    must never cascade into deleting the runs it produced.
+
+    SQLite ignores FK actions entirely unless `PRAGMA foreign_keys=ON` is set
+    on the connection (unlike Postgres, where it's always enforced) — this
+    fixture's engine reuses a single underlying connection (`SingletonThreadPool`,
+    SQLAlchemy's default for `sqlite:///:memory:`), so setting it once here
+    applies for the rest of this test, matching the real `ON DELETE SET NULL`
+    behavior this test is actually guarding.
+    """
+    created = db.create_saved_pipeline("tenant-a", "A", "postgres", "spec a", "0 3 * * *")
+    with engine.begin() as conn:
+        conn.execute(sqlalchemy.text("PRAGMA foreign_keys=ON"))
+        conn.execute(
+            users_table.insert().values(id="tenant-a", created_at=datetime.now(tz=timezone.utc))
+        )
+        conn.execute(
+            runs_table.insert().values(
+                run_id="run-1",
+                tenant_id="tenant-a",
+                saved_pipeline_id=created["id"],
+                spec="spec a",
+                status="completed",
+                timestamp=datetime.now(tz=timezone.utc),
+            )
+        )
+
+    assert db.delete_saved_pipeline(created["id"], "tenant-a") is True
+
+    with engine.begin() as conn:
+        row = conn.execute(
+            sqlalchemy.select(runs_table.c.saved_pipeline_id).where(runs_table.c.run_id == "run-1")
+        ).first()
+    assert row is not None  # the run itself survives
+    assert row.saved_pipeline_id is None  # detached, not left dangling
+
+
 def test_update_saved_pipeline_partial_update_only_touches_given_fields(engine: Engine) -> None:
     created = db.create_saved_pipeline("tenant-a", "A", "postgres", "spec a", "0 3 * * *")
 
