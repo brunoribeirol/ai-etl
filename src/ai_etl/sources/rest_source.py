@@ -2,11 +2,13 @@
 
 Sprint 11 (ADR-012) adds an optional `auth` argument on top of the original
 no-auth, public-endpoint-only connector (e.g. the Open-Meteo call in
-scenario 3). `auth` never carries a literal secret — it references an
-*environment variable name* the secret is read from at call time (same
-convention as `postgres_source.py`'s `POSTGRES_URL` lookup), so a
+scenario 3). `auth` never carries a literal secret — each field references
+either an *environment variable name* the secret is read from at call time
+(same convention as `postgres_source.py`'s `POSTGRES_URL` lookup), or —
+since ADR-045 — a tenant's own stored secret *name*, resolved lazily via
+`core/tenant_context.py::get_rest_secret` at call time and tried first. So a
 `pipeline_plan` — whether LLM-produced by `agents/pipeline/orchestrator.py` or
-supplied directly — never embeds credentials.
+supplied directly — never embeds credentials either way.
 
 `oauth2_client_credentials` (added in this same sprint, on top of the
 original `api_key`/`bearer`/`basic`) fetches a real access token from a
@@ -23,6 +25,8 @@ from typing import Any
 
 import httpx
 import pandas as pd
+
+from ai_etl.core.tenant_context import get_rest_secret
 
 _SUPPORTED_AUTH_TYPES = {"api_key", "bearer", "basic", "oauth2_client_credentials"}
 
@@ -48,6 +52,34 @@ def _read_env(var_name: str) -> str:
             f"Environment variable '{var_name}' is not set (required for REST auth)."
         )
     return value
+
+
+def _read_secret(auth: dict[str, Any], env_key: str, ref_key: str) -> str:
+    """Resolve one auth field: `auth[ref_key]` (ADR-045, a tenant's own
+    stored secret, looked up by name at call time) if present, else
+    `auth[env_key]` (the original, still-default shared-env-var behavior).
+
+    A `ref_key` that doesn't resolve for the current tenant (no active
+    tenant context, or no secret saved under that name) falls back to
+    `env_key` if the plan also set one, same "the tenant just hasn't
+    configured this yet" posture `core/tenant_context.py`'s DB overrides
+    already have — but raises a clear error rather than a `KeyError` if
+    there's no `env_key` to fall back to at all, so a plan that deliberately
+    only sets `ref_key` fails with an actionable message, not a stack trace.
+    A plan with no `ref_key` at all preserves the exact original behavior:
+    `auth[env_key]` must exist.
+    """
+    secret_ref = auth.get(ref_key)
+    if secret_ref is not None:
+        value = get_rest_secret(secret_ref)
+        if value is not None:
+            return value
+        if env_key not in auth:
+            raise EnvironmentError(  # noqa: UP024
+                f"REST auth secret_ref {secret_ref!r} ({ref_key}) has no value for this "
+                f"tenant, and no {env_key!r} fallback was configured."
+            )
+    return _read_env(auth[env_key])
 
 
 def _fetch_oauth2_token(
@@ -89,13 +121,17 @@ def _build_auth(
 ) -> tuple[dict[str, str], httpx.BasicAuth | None]:
     """Turn an `auth` config dict into httpx headers/auth kwargs.
 
-    Supported shapes:
+    Supported shapes (each `*_env_var` field has an ADR-045 `*_secret_ref`
+    counterpart — a tenant's own stored secret, resolved by name at call
+    time, tried first and falling back to the env var):
     - `{"type": "api_key", "header": "X-API-Key", "env_var": "NAME"}`
-      (`header` defaults to `"X-API-Key"` if omitted)
-    - `{"type": "bearer", "env_var": "NAME"}`
+      (`header` defaults to `"X-API-Key"` if omitted; secret ref: `secret_ref`)
+    - `{"type": "bearer", "env_var": "NAME"}` (secret ref: `secret_ref`)
     - `{"type": "basic", "username_env_var": "NAME", "password_env_var": "NAME"}`
+      (secret refs: `username_secret_ref`, `password_secret_ref`)
     - `{"type": "oauth2_client_credentials", "token_url": "...", \
 "client_id_env_var": "NAME", "client_secret_env_var": "NAME", "scope": "..." (optional)}`
+      (secret refs: `client_id_secret_ref`, `client_secret_ref`)
     """
     if not auth:
         return {}, None
@@ -103,18 +139,18 @@ def _build_auth(
     auth_type = auth.get("type")
     if auth_type == "api_key":
         header = auth.get("header", "X-API-Key")
-        value = _read_env(auth["env_var"])
+        value = _read_secret(auth, "env_var", "secret_ref")
         return {header: value}, None
     if auth_type == "bearer":
-        token = _read_env(auth["env_var"])
+        token = _read_secret(auth, "env_var", "secret_ref")
         return {"Authorization": f"Bearer {token}"}, None
     if auth_type == "basic":
-        username = _read_env(auth["username_env_var"])
-        password = _read_env(auth["password_env_var"])
+        username = _read_secret(auth, "username_env_var", "username_secret_ref")
+        password = _read_secret(auth, "password_env_var", "password_secret_ref")
         return {}, httpx.BasicAuth(username, password)
     if auth_type == "oauth2_client_credentials":
-        client_id = _read_env(auth["client_id_env_var"])
-        client_secret = _read_env(auth["client_secret_env_var"])
+        client_id = _read_secret(auth, "client_id_env_var", "client_id_secret_ref")
+        client_secret = _read_secret(auth, "client_secret_env_var", "client_secret_ref")
         token = _fetch_oauth2_token(auth["token_url"], client_id, client_secret, auth.get("scope"))
         return {"Authorization": f"Bearer {token}"}, None
 

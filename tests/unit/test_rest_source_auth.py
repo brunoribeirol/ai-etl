@@ -89,6 +89,112 @@ def test_build_auth_unsupported_type_raises() -> None:
         _build_auth({"type": "digest"})
 
 
+# --- secret_ref (ADR-045) ---
+
+
+def test_build_auth_bearer_secret_ref_wins_over_env_var(
+    monkeypatch: pytest.MonkeyPatch, mocker
+) -> None:
+    # Even when both are set, the tenant's own stored secret must win —
+    # same precedence core/tenant_context.py's DB overrides already have.
+    monkeypatch.setenv("MY_API_TOKEN", "shared-env-token")
+    mocker.patch("ai_etl.sources.rest_source.get_rest_secret", return_value="tenant-token")
+
+    headers, _ = _build_auth({"type": "bearer", "env_var": "MY_API_TOKEN", "secret_ref": "my_api"})
+
+    assert headers == {"Authorization": "Bearer tenant-token"}
+
+
+def test_build_auth_bearer_falls_back_to_env_var_when_secret_ref_unresolved(
+    monkeypatch: pytest.MonkeyPatch, mocker
+) -> None:
+    # No active tenant context, or the tenant never saved this secret —
+    # get_rest_secret returns None, not an exception.
+    monkeypatch.setenv("MY_API_TOKEN", "shared-env-token")
+    mocker.patch("ai_etl.sources.rest_source.get_rest_secret", return_value=None)
+
+    headers, _ = _build_auth({"type": "bearer", "env_var": "MY_API_TOKEN", "secret_ref": "my_api"})
+
+    assert headers == {"Authorization": "Bearer shared-env-token"}
+
+
+def test_build_auth_bearer_secret_ref_unresolved_with_no_env_var_raises_clear_error(mocker) -> None:
+    mocker.patch("ai_etl.sources.rest_source.get_rest_secret", return_value=None)
+
+    with pytest.raises(EnvironmentError, match="my_api"):
+        _build_auth({"type": "bearer", "secret_ref": "my_api"})
+
+
+def test_build_auth_api_key_secret_ref(mocker) -> None:
+    mocker.patch("ai_etl.sources.rest_source.get_rest_secret", return_value="tenant-key")
+
+    headers, _ = _build_auth({"type": "api_key", "secret_ref": "shop_api_key"})
+
+    assert headers == {"X-API-Key": "tenant-key"}
+
+
+def test_build_auth_basic_secret_refs_for_both_fields(mocker) -> None:
+    resolved_by_ref = {
+        "basic_auth_username": "tenant-alice",
+        "basic_auth_secret": "resolved-from-tenant-vault",
+    }
+    mocker.patch(
+        "ai_etl.sources.rest_source.get_rest_secret", side_effect=lambda name: resolved_by_ref[name]
+    )
+
+    headers, auth = _build_auth(
+        {
+            "type": "basic",
+            "username_secret_ref": "basic_auth_username",
+            "password_secret_ref": "basic_auth_secret",
+        }
+    )
+
+    assert headers == {}
+    assert isinstance(auth, httpx.BasicAuth)
+
+
+def test_build_auth_oauth2_secret_refs_for_client_id_and_secret(mocker) -> None:
+    mocker.patch(
+        "ai_etl.sources.rest_source.get_rest_secret",
+        side_effect=lambda name: {
+            "id_ref": "tenant-client-id",
+            "secret_ref_name": "tenant-client-secret",
+        }[name],
+    )
+    mock_fetch = mocker.patch(
+        "ai_etl.sources.rest_source._fetch_oauth2_token", return_value="fetched-token"
+    )
+
+    headers, _ = _build_auth(
+        {
+            "type": "oauth2_client_credentials",
+            "token_url": "https://auth.example.com/token",
+            "client_id_secret_ref": "id_ref",
+            "client_secret_ref": "secret_ref_name",
+        }
+    )
+
+    assert headers == {"Authorization": "Bearer fetched-token"}
+    mock_fetch.assert_called_once_with(
+        "https://auth.example.com/token", "tenant-client-id", "tenant-client-secret", None
+    )
+
+
+def test_build_auth_secret_ref_lookup_failure_falls_back_to_env_var(
+    monkeypatch: pytest.MonkeyPatch, mocker
+) -> None:
+    # get_rest_secret itself already swallows lookup errors and returns
+    # None (see core/tenant_context.py) — this pins down that rest_source.py
+    # treats that None exactly like "not configured", not a special case.
+    monkeypatch.setenv("MY_API_TOKEN", "shared-env-token")
+    mocker.patch("ai_etl.sources.rest_source.get_rest_secret", return_value=None)
+
+    headers, _ = _build_auth({"type": "bearer", "env_var": "MY_API_TOKEN", "secret_ref": "my_api"})
+
+    assert headers == {"Authorization": "Bearer shared-env-token"}
+
+
 # --- load_rest() with auth, network mocked ---
 
 

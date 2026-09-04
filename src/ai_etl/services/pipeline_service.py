@@ -208,7 +208,7 @@ def run_silver_pipeline(
 
     progress_callback("silver", "⚡ Executando pipeline Silver...")
     t_total = time.time()
-    with tenant_connections(tenant_overrides):
+    with tenant_connections(tenant_overrides, tenant_id=tenant_id):
         for chunk in graph.stream(state):
             node_name = list(chunk.keys())[0]
             partial = chunk[node_name]
@@ -948,7 +948,7 @@ def resume_pending_load(run_id: str, tenant_id: str, run_dir: str) -> PipelineSt
     # connection outside `run_silver_pipeline`'s own graph run — the deferred
     # write after an operator approves a gated run (ADR-028). Same tenant,
     # same override resolution, same transient-only scope.
-    with tenant_connections(resolve_tenant_overrides(tenant_id)):
+    with tenant_connections(resolve_tenant_overrides(tenant_id), tenant_id=tenant_id):
         result_state = loader_node(granted_state)
 
     save_run(

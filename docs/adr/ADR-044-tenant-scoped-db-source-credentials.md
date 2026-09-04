@@ -129,7 +129,9 @@ env var was already being read.
   actually needs more than one DB source of the same type in one pipeline.
 - **Negative — accepted**: `rest_source.py` remains on its original
   env-var-name indirection; REST secret wiring is a separate follow-up, not
-  bundled here.
+  bundled here. **Closed 2026-09-03 by
+  [ADR-045](ADR-045-rest-source-tenant-secret-ref.md)** — REST now supports
+  a lazily-resolved `secret_ref` per auth field.
 - **Negative — accepted**: `Sandbox.create()`-style destination-side
   connectors other than Postgres (there is no `mysql_dest.py`/
   `mongodb_dest.py` — see `destinations/` folder structure in `CLAUDE.md`)

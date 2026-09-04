@@ -18,6 +18,7 @@ from ai_etl.core.tenant_context import (
     MYSQL_SECRET_NAME,
     POSTGRES_SECRET_NAME,
     get_connection_override,
+    get_rest_secret,
     resolve_tenant_overrides,
     tenant_connections,
 )
@@ -28,6 +29,38 @@ def test_no_active_context_returns_none_for_every_source_type() -> None:
     assert get_connection_override("postgres") is None
     assert get_connection_override("mysql") is None
     assert get_connection_override("mongodb") is None
+
+
+def test_get_rest_secret_returns_none_with_no_active_tenant(mocker) -> None:
+    get_secret_mock = mocker.patch("ai_etl.core.tenant_context.get_secret")
+    assert get_rest_secret("shop_api_key") is None
+    get_secret_mock.assert_not_called()
+
+
+def test_get_rest_secret_resolves_for_the_active_tenant(mocker) -> None:
+    mocker.patch("ai_etl.core.tenant_context.get_secret", return_value="tenant-secret-value")
+
+    with tenant_connections({}, tenant_id="tenant-a"):
+        assert get_rest_secret("shop_api_key") == "tenant-secret-value"
+
+    # Restored after the block — no leakage into an unscoped call.
+    assert get_rest_secret("shop_api_key") is None
+
+
+def test_get_rest_secret_returns_none_when_tenant_never_saved_it(mocker) -> None:
+    mocker.patch(
+        "ai_etl.core.tenant_context.get_secret", side_effect=SecretNotFoundError("shop_api_key")
+    )
+
+    with tenant_connections({}, tenant_id="tenant-a"):
+        assert get_rest_secret("shop_api_key") is None
+
+
+def test_get_rest_secret_returns_none_and_does_not_raise_on_lookup_failure(mocker) -> None:
+    mocker.patch("ai_etl.core.tenant_context.get_secret", side_effect=RuntimeError("db down"))
+
+    with tenant_connections({}, tenant_id="tenant-a"):
+        assert get_rest_secret("shop_api_key") is None
 
 
 def test_tenant_connections_makes_overrides_visible_inside_the_block() -> None:
