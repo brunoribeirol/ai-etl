@@ -37,15 +37,17 @@ credential — never invent a literal secret value): \
 "scope": "optional scope string"}}
     - For document: path (PDF or DOCX file path)
 - destination: target output, with:
-    - type: "csv" | "postgres" | "s3_parquet"
+    - type: "csv" | "postgres" | "mysql" | "mongodb" | "s3_parquet"
     - For csv: path (output file path)
     - For postgres: table (schema.table)
+    - For mysql: table (database.table) — MySQL and MariaDB both use this type
+    - For mongodb: database (database name), collection (collection name)
     - For s3_parquet: bucket (S3 bucket name), key (S3 object key, e.g. "warehouse/sales/2026.parquet")
 - transformations: list of transformation descriptions in plain English
 - quality_checks: list of quality checks to apply (infer from spec, default to: null_check, duplicate_check)
 
 Available source types: csv, postgres, sqlite, mysql, mongodb, rest, document
-Available destination types: csv, postgres, s3_parquet
+Available destination types: csv, postgres, mysql, mongodb, s3_parquet
 
 Respond ONLY with valid JSON. No explanation, no markdown code fences.
 """
