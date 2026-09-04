@@ -2,7 +2,36 @@
 
 > Living doc. Updated at the end of meaningful work sessions, not per-commit. Source of truth for repo/code state; the Obsidian vault (`~/Documents/Obsidian Vault/tcc/`) is the source of truth for the academic TCC narrative and product/strategy context.
 
-**Last updated:** 2026-09-04 — **Raised coverage on 3 real, previously-untested modules (`api/serialization.py`, `audit/db/budget.py`, `audit/db/tenants.py`) to 100%, deliberately without chasing the sandbox backends (see "2026-09-04 (session 4)" below).** Previous entry (session 3): closed the small technical/polish backlog from session 2's honest assessment — added the previously-missing `DELETE /pipelines/{id}` (saved pipelines could only be paused, never removed), commented the remaining unexplained `# type: ignore`s, corrected a stale "pip outdated" finding. Session 2: fixed 2 real gaps found via live end-to-end testing that the 2026-09-03/04 audit did not catch — a silent data-corruption bug where unambiguous ISO dates got day/month-swapped for pt-BR tenants, and the manual-spec textarea being fully discarded whenever a file was also attached. See "2026-09-04 (session 3)"/"(session 2)" below for that detail, and the "2026-09-04" section further down for the original audit-implementation session.
+**Last updated:** 2026-09-04 — **Session 4 closed the coverage gap on 3 real modules; see "Owner's next steps" immediately below for where the project actually stands as of today.** Session 3 added `DELETE /pipelines/{id}` + explained remaining `# type: ignore`s. Session 2 fixed 2 real gaps a live end-to-end test found that the 2026-09-03/04 audit missed (pt-BR date corruption, manual-spec-discarded-with-file-upload). Full detail in each dated section below; the "2026-09-04" section further down is the original audit-implementation session.
+
+## Owner's next steps (as of 2026-09-04, end of session 4)
+
+**Prototype is functionally done.** Every gap found across this session's honest
+assessment (2 real product bugs) and its 2 follow-up rounds (4 technical/coverage
+items) is closed, merged to `main`, CI green. `make check` clean; 1168 tests,
+95.3% coverage; a real end-to-end pipeline run and a page-by-page sweep of
+`ai-etl.vercel.app` both came back clean post-fix. Nothing technical is known to
+be outstanding — see [[2026-09-04-honest-assessment-real-bugs-and-delete-feature|
+this session's own vault log]] for the full trail (that's *this session's*
+finding, not a guarantee no future live use turns up something new — every real
+bug found this round was found by actually using the product, not by re-reading
+code).
+
+**What's actually left is not code:**
+1. **Billing top-ups, owner's own action, not a code task.** Railway plan is
+   close to its usage cap; OpenAI/Anthropic API credit will need topping up too.
+   Not a blocker on anything technical — the app itself has no code dependency on
+   which billing tier is active (`services/execution_queue.py`'s budget-cap logic
+   is per-tenant application-level, unrelated to the provider account's own
+   balance).
+2. **2 unchanged owner-decision items** (see the "2026-09-04" audit-implementation
+   section below for original context): Vercel Sandbox Pro upgrade (declined,
+   `"process"` backend stays default), and whether to re-run the TCC case study
+   before writing the results chapter — those numbers are from 2026-06-23, before
+   Clerk/RLS/approvals/multi-source and everything shipped since.
+3. **TCC monograph writing** — redação final (resultados/discussão/conclusão),
+   due December. Lives only in the Obsidian vault, out of this repo's scope by
+   the owner's own standing instruction.
 
 ## 2026-09-04 (session 4) — raised coverage on 3 real gaps, left the sandbox backends alone on purpose
 
