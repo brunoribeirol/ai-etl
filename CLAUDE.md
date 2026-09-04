@@ -198,7 +198,7 @@ src/ai_etl/
 │                     # execution_queue, scheduler, auth/secrets/tenant services, alerting, digest
 ├── core/            # state.py, graph.py, sandbox.py, llm.py, pricing.py, drift.py, scheduling.py, ...
 ├── sources/         # csv, postgres, mysql, mongodb, rest, sqlite, document
-├── destinations/    # csv_dest, postgres_dest, s3_parquet_dest
+├── destinations/    # csv_dest, postgres_dest, mysql_dest, mongodb_dest, s3_parquet_dest
 └── audit/           # logger.py, models.py, storage.py, connection.py, admin_log.py
     └── db/          # budget, health, locale, onboarding, pipelines, retention, runs
 

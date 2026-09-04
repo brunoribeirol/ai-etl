@@ -29,7 +29,7 @@ export type PendingApproval = {
  * write would do, computed without ever writing. `destination_type`-specific
  * `existing` shape (mirrors `destinations/*.py::preview_*`). */
 export type LoadPreview = {
-  destination_type: "csv" | "postgres" | "s3_parquet";
+  destination_type: "csv" | "postgres" | "mysql" | "mongodb" | "s3_parquet";
   destination: string;
   would_write_rows: number;
   existing: Record<string, number> | null;

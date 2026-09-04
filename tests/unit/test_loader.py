@@ -15,6 +15,8 @@ def _make_state(
         destination = {"type": dest_type, "path": dest_path}
     elif dest_type == "s3_parquet":
         destination = {"type": dest_type, "bucket": "my-bucket", "key": "warehouse/out.parquet"}
+    elif dest_type == "mongodb":
+        destination = {"type": dest_type, "database": "shop", "collection": "output"}
     else:
         destination = {"type": dest_type, "table": "public.output"}
     return {
@@ -70,6 +72,32 @@ def test_s3_parquet_load_succeeds(mocker) -> None:
     assert result["load_result"]["rows_loaded"] == 3
     assert result["load_result"]["destination"] == "s3://my-bucket/warehouse/out.parquet"
     assert "timestamp" in result["load_result"]
+    assert result["status"] == "completed"
+    assert result["error"] is None
+
+
+def test_mysql_load_succeeds(mocker) -> None:
+    mock_save = mocker.patch(
+        "ai_etl.agents.pipeline.loader.save_mysql",
+        return_value={"rows_loaded": 3, "destination": "public.output"},
+    )
+    result = loader_node(_make_state(dest_type="mysql"))
+
+    mock_save.assert_called_once_with(mocker.ANY, "public.output")
+    assert result["load_result"]["rows_loaded"] == 3
+    assert result["status"] == "completed"
+    assert result["error"] is None
+
+
+def test_mongodb_load_succeeds(mocker) -> None:
+    mock_save = mocker.patch(
+        "ai_etl.agents.pipeline.loader.save_mongodb",
+        return_value={"rows_loaded": 3, "destination": "shop.output"},
+    )
+    result = loader_node(_make_state(dest_type="mongodb"))
+
+    mock_save.assert_called_once_with(mocker.ANY, "shop", "output")
+    assert result["load_result"]["rows_loaded"] == 3
     assert result["status"] == "completed"
     assert result["error"] is None
 

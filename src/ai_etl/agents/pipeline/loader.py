@@ -8,6 +8,8 @@ import pandas as pd
 from ai_etl.audit.logger import log_action
 from ai_etl.core.state import PipelineState
 from ai_etl.destinations.csv_dest import preview_csv, save_csv
+from ai_etl.destinations.mongodb_dest import preview_mongodb, save_mongodb
+from ai_etl.destinations.mysql_dest import preview_mysql, save_mysql
 from ai_etl.destinations.postgres_dest import preview_postgres, save_postgres
 from ai_etl.destinations.s3_parquet_dest import preview_s3_parquet, save_s3_parquet
 
@@ -45,6 +47,10 @@ def _build_preview(dest_type: str, destination: dict[str, Any], df: pd.DataFrame
         return preview_csv(df, destination["path"])
     if dest_type == "postgres":
         return preview_postgres(df, destination["table"])
+    if dest_type == "mysql":
+        return preview_mysql(df, destination["table"])
+    if dest_type == "mongodb":
+        return preview_mongodb(df, destination["database"], destination["collection"])
     if dest_type == "s3_parquet":
         return preview_s3_parquet(df, destination["bucket"], destination["key"])
     raise ValueError(f"Unsupported destination type: {dest_type}")
@@ -97,6 +103,10 @@ def loader_node(state: PipelineState) -> PipelineState:
             load_result = save_csv(df, destination["path"])
         elif dest_type == "postgres":
             load_result = save_postgres(df, destination["table"])
+        elif dest_type == "mysql":
+            load_result = save_mysql(df, destination["table"])
+        elif dest_type == "mongodb":
+            load_result = save_mongodb(df, destination["database"], destination["collection"])
         elif dest_type == "s3_parquet":
             load_result = save_s3_parquet(df, destination["bucket"], destination["key"])
         else:

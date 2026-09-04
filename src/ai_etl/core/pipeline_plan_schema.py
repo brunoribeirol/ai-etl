@@ -23,7 +23,7 @@ from typing import Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 _SourceType = Literal["csv", "postgres", "sqlite", "mysql", "mongodb", "rest", "document"]
-_DestinationType = Literal["csv", "postgres", "s3_parquet"]
+_DestinationType = Literal["csv", "postgres", "mysql", "mongodb", "s3_parquet"]
 
 
 class PipelinePlanSource(BaseModel):
