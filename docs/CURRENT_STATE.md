@@ -2,7 +2,44 @@
 
 > Living doc. Updated at the end of meaningful work sessions, not per-commit. Source of truth for repo/code state; the Obsidian vault (`~/Documents/Obsidian Vault/tcc/`) is the source of truth for the academic TCC narrative and product/strategy context.
 
-**Last updated:** 2026-09-04 — **Closed the small technical/polish backlog from session 2's honest assessment (see "2026-09-04 (session 3)" below): added the previously-missing `DELETE /pipelines/{id}` (saved pipelines could only be paused, never removed), commented the remaining unexplained `# type: ignore`s, corrected a stale "pip outdated" finding.** Previous entry (session 2): fixed 2 real gaps found via live end-to-end testing that the 2026-09-03/04 audit did not catch — a silent data-corruption bug where unambiguous ISO dates got day/month-swapped for pt-BR tenants, and the manual-spec textarea being fully discarded whenever a file was also attached. See "2026-09-04 (session 2)" below for that detail, and the "2026-09-04" section further down for the original audit-implementation session.
+**Last updated:** 2026-09-04 — **Raised coverage on 3 real, previously-untested modules (`api/serialization.py`, `audit/db/budget.py`, `audit/db/tenants.py`) to 100%, deliberately without chasing the sandbox backends (see "2026-09-04 (session 4)" below).** Previous entry (session 3): closed the small technical/polish backlog from session 2's honest assessment — added the previously-missing `DELETE /pipelines/{id}` (saved pipelines could only be paused, never removed), commented the remaining unexplained `# type: ignore`s, corrected a stale "pip outdated" finding. Session 2: fixed 2 real gaps found via live end-to-end testing that the 2026-09-03/04 audit did not catch — a silent data-corruption bug where unambiguous ISO dates got day/month-swapped for pt-BR tenants, and the manual-spec textarea being fully discarded whenever a file was also attached. See "2026-09-04 (session 3)"/"(session 2)" below for that detail, and the "2026-09-04" section further down for the original audit-implementation session.
+
+## 2026-09-04 (session 4) — raised coverage on 3 real gaps, left the sandbox backends alone on purpose
+
+Direct follow-up to session 3 (owner: "Vamos fazer a opção 2" — of the 3 options
+presented for closing the coverage gap between 94.7% and 100%). Explicitly *not*
+a "reach 100%" pass — a look at what the missing 213 lines actually were showed
+~40% of them (85 lines) concentrated in `core/sandbox_vercel.py` (44% covered,
+the Vercel Sandbox backend disabled by the owner's own billing decision) and
+`core/sandbox.py`/`core/sandbox_docker.py` (process-kill/timeout error paths,
+expensive to test without real flakiness). Chasing those to 100% would have been
+testing a disabled feature and low-value error branches, not reducing real risk
+— so only the 3 files that were genuinely untested *active* code got new tests:
+
+- **`api/serialization.py` (65% → 100%).** `_serialize_figure`/
+  `_serialize_analysis_entry` — the functions that convert every Gold/Science
+  DataFrame and Plotly Figure into the JSON `GET /runs/{id}` actually returns —
+  had zero direct unit tests; only exercised indirectly through
+  `test_api_runs.py`'s mocked results, none of which happened to carry a real
+  Figure. New `tests/unit/test_serialization.py` (10 tests) covers the DataFrame/
+  Figure/NaN conversion paths and the "entry with neither, don't crash" case
+  (a failed sub-task's error-only entry).
+- **`audit/db/budget.py` (68% → 100%).** `get_avg_run_cost_usd`/
+  `get_global_avg_run_cost_usd` (Sprint 35 FinOps cost estimation) were never
+  exercised by a real query — only mocked out in `test_cost_estimation_service.py`.
+  New tests in `test_audit_db.py` cover averaging, the `cost_usd IS NOT NULL`
+  filter (an unpriced-model run must not corrupt the average), per-tenant scoping,
+  the `limit` window, and the global (non-tenant-scoped) fallback variant.
+- **`audit/db/tenants.py` (71% → 100%).** `list_all_tenants` (the platform-admin
+  directory read) had never run against a real query either — `test_api_admin.py`/
+  `test_admin_log.py` only mock it at the router boundary. New
+  `tests/unit/test_tenants_db.py` covers the empty case, oldest-first ordering
+  (inserted out of order on purpose to prove the `ORDER BY`, not insertion order),
+  and the returned shape.
+
+Total coverage: 94.7% → 95.3% (1148 → 1168 tests, +20). `make check` clean.
+`sandbox_vercel.py`/`sandbox.py`/`sandbox_docker.py` deliberately left as-is —
+see the reasoning above; revisit only if Vercel Sandbox itself gets turned back on.
 
 ## 2026-09-04 (session 3) — closed the small technical backlog from session 2's assessment
 
