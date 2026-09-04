@@ -1119,6 +1119,131 @@ def test_get_monthly_spend_usd_is_zero_with_no_runs(monkeypatch: pytest.MonkeyPa
     assert get_monthly_spend_usd("tenant-a") == 0.0
 
 
+# Sprint 35 (FinOps: pre-run cost estimation) — get_avg_run_cost_usd,
+# get_global_avg_run_cost_usd. Previously untested (2026-09-04 coverage
+# gap-closing pass): unlike get_monthly_spend_usd above, these two were never
+# exercised by any unit test, only indirectly (if at all) through
+# test_cost_estimation_service.py's mocked calls.
+
+
+def _insert_priced_run(
+    engine: sqlalchemy.Engine,
+    run_id: str,
+    tenant_id: str,
+    cost_usd: float | None,
+    timestamp: datetime,
+) -> None:
+    with engine.begin() as conn:
+        conn.execute(
+            analysis_runs_table.insert().values(
+                run_id=run_id,
+                gold_subtasks=1,
+                science_subtasks=0,
+                input_tokens=100,
+                output_tokens=50,
+                total_tokens=150,
+                timestamp=timestamp,
+                tenant_id=tenant_id,
+                model_name="gpt-4o-mini",
+                cost_usd=cost_usd,
+            )
+        )
+
+
+def test_get_avg_run_cost_usd_averages_this_tenants_priced_runs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = _make_sqlite_engine()
+    monkeypatch.setattr(budget_db, "get_engine", lambda: engine)
+    monkeypatch.setattr(budget_db, "tenant_scope", _fake_scope(engine))
+    _insert_user_row(engine, "tenant-a")
+    now = datetime.now(tz=timezone.utc)
+    _insert_priced_run(engine, "run-1", "tenant-a", 1.0, now)
+    _insert_priced_run(engine, "run-2", "tenant-a", 3.0, now)
+
+    assert budget_db.get_avg_run_cost_usd("tenant-a") == pytest.approx(2.0)
+
+
+def test_get_avg_run_cost_usd_ignores_unpriced_runs(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`cost_usd IS NOT NULL` filter — a run made with an unpriced model
+    (`core.pricing.compute_cost_usd`'s docstring) must not drag the average
+    toward zero or blow up the SQL average with a NULL."""
+    engine = _make_sqlite_engine()
+    monkeypatch.setattr(budget_db, "get_engine", lambda: engine)
+    monkeypatch.setattr(budget_db, "tenant_scope", _fake_scope(engine))
+    _insert_user_row(engine, "tenant-a")
+    now = datetime.now(tz=timezone.utc)
+    _insert_priced_run(engine, "run-priced", "tenant-a", 4.0, now)
+    _insert_priced_run(engine, "run-unpriced", "tenant-a", None, now)
+
+    assert budget_db.get_avg_run_cost_usd("tenant-a") == pytest.approx(4.0)
+
+
+def test_get_avg_run_cost_usd_returns_none_with_zero_priced_runs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = _make_sqlite_engine()
+    monkeypatch.setattr(budget_db, "get_engine", lambda: engine)
+    monkeypatch.setattr(budget_db, "tenant_scope", _fake_scope(engine))
+    _insert_user_row(engine, "tenant-a")
+
+    assert budget_db.get_avg_run_cost_usd("tenant-a") is None
+
+
+def test_get_avg_run_cost_usd_is_scoped_per_tenant(monkeypatch: pytest.MonkeyPatch) -> None:
+    engine = _make_sqlite_engine()
+    monkeypatch.setattr(budget_db, "get_engine", lambda: engine)
+    monkeypatch.setattr(budget_db, "tenant_scope", _fake_scope(engine))
+    _insert_user_row(engine, "tenant-a")
+    _insert_user_row(engine, "tenant-b")
+    now = datetime.now(tz=timezone.utc)
+    _insert_priced_run(engine, "run-a", "tenant-a", 2.0, now)
+    _insert_priced_run(engine, "run-b", "tenant-b", 8.0, now)
+
+    assert budget_db.get_avg_run_cost_usd("tenant-a") == pytest.approx(2.0)
+    assert budget_db.get_avg_run_cost_usd("tenant-b") == pytest.approx(8.0)
+
+
+def test_get_avg_run_cost_usd_respects_the_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Only the most recent `limit` priced runs count — an old, cheap run
+    outside the window must not pull the average down."""
+    engine = _make_sqlite_engine()
+    monkeypatch.setattr(budget_db, "get_engine", lambda: engine)
+    monkeypatch.setattr(budget_db, "tenant_scope", _fake_scope(engine))
+    _insert_user_row(engine, "tenant-a")
+    now = datetime.now(tz=timezone.utc)
+    _insert_priced_run(engine, "run-old", "tenant-a", 0.0, now - timedelta(days=30))
+    _insert_priced_run(engine, "run-recent", "tenant-a", 6.0, now)
+
+    assert budget_db.get_avg_run_cost_usd("tenant-a", limit=1) == pytest.approx(6.0)
+
+
+def test_get_global_avg_run_cost_usd_averages_across_tenants(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Unlike get_avg_run_cost_usd, this one reads through get_engine()
+    directly (no tenant_scope) — it is deliberately not tenant-scoped, the
+    fallback signal for a brand-new tenant with no run history of its own."""
+    engine = _make_sqlite_engine()
+    monkeypatch.setattr(budget_db, "get_engine", lambda: engine)
+    _insert_user_row(engine, "tenant-a")
+    _insert_user_row(engine, "tenant-b")
+    now = datetime.now(tz=timezone.utc)
+    _insert_priced_run(engine, "run-a", "tenant-a", 2.0, now)
+    _insert_priced_run(engine, "run-b", "tenant-b", 6.0, now)
+
+    assert budget_db.get_global_avg_run_cost_usd() == pytest.approx(4.0)
+
+
+def test_get_global_avg_run_cost_usd_returns_none_with_zero_priced_runs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = _make_sqlite_engine()
+    monkeypatch.setattr(budget_db, "get_engine", lambda: engine)
+
+    assert budget_db.get_global_avg_run_cost_usd() is None
+
+
 # ---------------------------------------------------------------------------
 # Sprint 36 (ADR-035): per-tenant retention policy — get/set_retention_days,
 # list_tenants_with_retention. Same pattern as the budget-cap tests above.
