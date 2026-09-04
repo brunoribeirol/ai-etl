@@ -1,4 +1,5 @@
-"""Transient, never-persisted per-run tenant connection overrides (ADR-044).
+"""Transient, never-persisted per-run tenant connection overrides (ADR-044,
+ADR-045).
 
 ADR-022 Decision 4 shipped tenant-scoped secret storage (`services/
 secrets_service.py`) but deliberately left every DB source/destination
@@ -22,6 +23,20 @@ or anything a LangGraph node returns — and it doesn't widen any node's
 signature (ADR-002/ADR-006's constraint that kept `tenant_id` itself out of
 `PipelineState`) since connectors already take no `tenant_id` parameter
 before or after this change.
+
+ADR-045 extends the same context with the raw `tenant_id` itself (not just
+the 3 pre-resolved DB overrides above), for `sources/rest_source.py`'s
+`secret_ref` auth fields. Unlike Postgres/MySQL/MongoDB, a REST source's
+credential isn't one fixed secret name per source type — the LLM-produced
+`pipeline_plan` names whichever secret a given REST source's `auth` should
+use, and that plan is only known *during* the graph run (the Orchestrator
+node builds it), not beforehand like `resolve_tenant_overrides` needs to
+resolve DB overrides. So REST resolution is lazy: `get_rest_secret(name)`
+looks up `name` for the current run's tenant at call time, inside
+`rest_source.py`, rather than being pre-resolved into a dict up front. This
+still satisfies the same non-negotiable this whole module exists for: the
+decrypted value only ever exists in this `ContextVar` and the connector's
+local stack, never in `PipelineState`/`pipeline_plan`/a run's JSON snapshot.
 """
 
 from __future__ import annotations
@@ -58,6 +73,11 @@ _SECRET_NAMES_BY_SOURCE_TYPE = {
 _connection_overrides: ContextVar[dict[str, str]] = ContextVar(
     "tenant_connection_overrides", default={}
 )
+# ADR-045 — the raw tenant_id for this run, so `get_rest_secret` can resolve
+# an arbitrary secret name lazily. Separate from `_connection_overrides`
+# (pre-resolved, fixed names) since REST secret names are plan-dependent,
+# not known until the Orchestrator node runs.
+_current_tenant_id: ContextVar[str | None] = ContextVar("current_tenant_id", default=None)
 
 
 def resolve_tenant_overrides(tenant_id: str | None) -> dict[str, str]:
@@ -102,10 +122,11 @@ def resolve_tenant_overrides(tenant_id: str | None) -> dict[str, str]:
 
 
 @contextmanager
-def tenant_connections(overrides: dict[str, str]) -> Iterator[None]:
-    """Make `overrides` (source_type -> connection string) visible to
-    connectors called anywhere below this `with` block, for this
-    asyncio/thread context only, then restore the previous value.
+def tenant_connections(overrides: dict[str, str], tenant_id: str | None = None) -> Iterator[None]:
+    """Make `overrides` (source_type -> connection string) and `tenant_id`
+    (ADR-045, for lazy REST `secret_ref` lookups) visible to connectors
+    called anywhere below this `with` block, for this asyncio/thread context
+    only, then restore the previous values.
 
     Safe under Celery's thread-pool worker (`--pool=threads`, see
     `Dockerfile`/service start commands): `ContextVar` is per-context, not
@@ -113,11 +134,13 @@ def tenant_connections(overrides: dict[str, str]) -> Iterator[None]:
     here is awaited across a context switch that would leak one task's
     overrides into another's.
     """
-    token = _connection_overrides.set(overrides)
+    overrides_token = _connection_overrides.set(overrides)
+    tenant_token = _current_tenant_id.set(tenant_id)
     try:
         yield
     finally:
-        _connection_overrides.reset(token)
+        _connection_overrides.reset(overrides_token)
+        _current_tenant_id.reset(tenant_token)
 
 
 def get_connection_override(source_type: str) -> str | None:
@@ -129,11 +152,36 @@ def get_connection_override(source_type: str) -> str | None:
     return _connection_overrides.get().get(source_type)
 
 
+def get_rest_secret(secret_ref: str) -> str | None:
+    """ADR-045 — resolve `secret_ref` (an arbitrary name a `pipeline_plan`'s
+    REST `auth` block references) for the current run's tenant, or `None` if
+    there's no active tenant in context, the tenant never saved a secret by
+    that name, or the lookup itself fails — `rest_source.py` falls back to
+    its existing `env_var` field in every one of those cases, mirroring
+    `resolve_tenant_overrides`'s "never block a run over this" posture.
+    """
+    tenant_id = _current_tenant_id.get()
+    if tenant_id is None:
+        return None
+    try:
+        return get_secret(tenant_id, secret_ref)
+    except SecretNotFoundError:
+        return None
+    except Exception:  # noqa: BLE001 — see docstring: never block a run over this
+        logger.warning(
+            "get_rest_secret: failed to resolve %r for tenant, falling back to env_var",
+            secret_ref,
+            exc_info=True,
+        )
+        return None
+
+
 __all__ = [
     "MONGODB_SECRET_NAME",
     "MYSQL_SECRET_NAME",
     "POSTGRES_SECRET_NAME",
     "get_connection_override",
+    "get_rest_secret",
     "resolve_tenant_overrides",
     "tenant_connections",
 ]
