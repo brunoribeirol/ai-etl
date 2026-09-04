@@ -2,7 +2,78 @@
 
 > Living doc. Updated at the end of meaningful work sessions, not per-commit. Source of truth for repo/code state; the Obsidian vault (`~/Documents/Obsidian Vault/tcc/`) is the source of truth for the academic TCC narrative and product/strategy context.
 
-**Last updated:** 2026-09-03 — **Full-platform audit + real perf fixes, owner-requested ("o site está lento... teste tudo... audite tudo"). Root-caused and fixed the actual site-wide slowness: Clerk telemetry (an 800ms+ beacon on every page) and `<UserButton>`'s eager `@clerk/ui` bundle (400-550ms) were the dominant cost — disabling telemetry + lazy-loading the button cut a real page's `domContentLoaded` from 4.3s to 1.6s warm (PR #180). Separately root-caused `GET /tenant/export`'s 40-75s latency (N+1 `storage.exists()` S3 head_object calls) and fixed it with a batched `list_existing_keys()` (PR #179) — confirmed live: 43s → 8.7s. Fixed both remaining known i18n gaps (`form-error.ts`, `friendly-error.ts` — hardcoded PT-BR regardless of locale, flagged since 2026-08-26). Found and fixed a real `npm audit` failure (`shadcn`, a dev-only CLI, miscategorized as a production dependency, dragging in 2 vulnerable transitive packages) and migrated the deprecated `middleware.ts` to Next.js 16's `proxy.ts`. Live-tested 8 key pages post-deploy: all load in 1.4-2.7s, zero console errors. See the full audit artifact linked in this session's notes for the complete done/missing inventory.**
+**Last updated:** 2026-09-04 — **Implemented every actionable item from the 2026-09-03 platform audit (owner: "implemente todas as melhorias propostas na auditoria"), excluding the 2 items the audit itself flagged as the owner's own decision (Vercel Sandbox Pro upgrade, TCC case-study re-run). `tests/integration/` turned out already fixed (stale doc, not a real gap) — verified 24/24 passing live against a real local Postgres. Closed the REST source's tenant-secret gap (PR #183, ADR-045 — lazy `secret_ref` resolution, since a REST credential's name is plan-dependent unlike the 3 fixed DB names). Added MySQL and MongoDB as write destinations (PR #184), closing the source/destination asymmetry the audit flagged. Batch-applied all 5 pending Dependabot updates (PR #182). Live-tested the tenant-scoped DB credential feature end-to-end against a real disposable production Postgres (not just SQLite/unit tests) — confirmed a real read + write through a tenant-saved `postgres_connection_string` secret, then cleaned up (secret deleted, disposable Railway service deleted). See "2026-09-04" section below for full detail.**
+
+## 2026-09-04 — implemented every actionable audit finding
+
+Direct follow-up to 2026-09-03's audit, per the owner's explicit request to implement
+everything the audit proposed. Excluded (per the audit's own framing — these are
+"needs your call" callouts, not proposed improvements): the Vercel Sandbox Pro
+upgrade decision, and whether to re-run the TCC case study.
+
+**`tests/integration/` — already fixed, doc was stale.** The audit repeated an old
+`CURRENT_STATE.md` claim that this suite fails against a real Postgres (a
+`tenant_id NOT NULL` mismatch + an Alembic table-conflict, from Sprint 5). Actually
+running it (`docker-compose up app-postgres-test postgres-test`, then
+`TEST_APP_DATABASE_URL=... uv run pytest tests/integration/`) found **24 passed, 13
+skipped for legitimate reasons** (no MySQL/MongoDB/Vercel Sandbox test services
+running locally) — the bug was fixed at some point during the RLS work (ADR-040)
+without the doc being updated. No code change needed; this entry is the correction.
+
+**REST source tenant-secret gap closed (PR #183, ADR-045).** Every `auth` field that
+reads an env var now has a `*_secret_ref` counterpart. Unlike ADR-044's DB overrides
+(3 fixed secret names, resolved before the graph runs), a REST credential's name is
+plan-dependent — the Orchestrator's LLM-produced plan names whichever secret an
+`auth` block should use, and that plan doesn't exist until *during* the graph run.
+`core/tenant_context.py` gained a second mechanism for this: the raw `tenant_id` in
+a `ContextVar`, and `get_rest_secret(name)` resolving lazily at call time. Hit a real
+GitGuardian false-positive along the way (a test fixture's literal string
+`"password_secret_ref": "pass_ref"` matched its generic-password heuristic) — fixed
+by rewriting the branch's history with a less password-shaped test value, not by
+trying to suppress it after the fact (an `.gitguardian.yaml` ignored-match added in a
+later commit doesn't retroactively clear an incident already tied to an earlier
+commit in the same PR).
+
+**MySQL and MongoDB added as write destinations (PR #184).** Closes the
+source/destination asymmetry the audit flagged (both were already sources). New
+`destinations/mysql_dest.py` (mirrors `postgres_dest.py` exactly) and
+`destinations/mongodb_dest.py` (pymongo; `"replace"`/`"delete_rows"` clear the
+collection first, `"fail"` refuses non-empty, `"append"` doesn't clear). Wired into
+`loader.py`'s dispatch **and** `orchestrator.py`'s prompt + `pipeline_plan_schema.py`
+— the prompt update matters because the Orchestrator's LLM only ever produces a
+destination type its own prompt documents; wiring the connector alone wouldn't have
+been reachable from a real spec.
+
+**All 5 pending Dependabot PRs applied (PR #182).** `@clerk/nextjs` 7.8.3, `next`
+16.3.4, `next-intl` 4.14.1, `lucide-react` 1.35.0, `@types/react-dom` 19.2.5 — all
+patch/minor, applied manually (`npm install <pkg>@<version>` each) rather than
+merging 5 separately-stale branches. Build/lint/audit all clean; the 5 individual
+Dependabot PRs closed as superseded.
+
+**Tenant-scoped DB credentials — live-tested against a real production Postgres,
+not just SQLite (the one gap the audit itself flagged as cheap to close).**
+Provisioned a disposable Railway Postgres (`qa-tenant-creds-test`, deleted after),
+seeded a 3-row `products` table, saved a `postgres_connection_string` secret via the
+real `/secrets` UI, then ran a real avulso analysis reading + writing that table.
+Confirmed via the run's own persisted state: `source_schemas.products_postgres.shape
+== [3, 3]` with the exact seeded values, `load_result == {"rows_loaded": 3,
+"destination": "public.products", ...}`. This is airtight proof the tenant-secret
+path — not the shared env var — was used: `POSTGRES_URL` on both Railway services is
+`postgresql://ai_etl:ai_etl@localhost:5432/ai_etl_db`, unreachable from within a
+Railway container, so a successful real read+write could only have gone through the
+newly-saved secret. Cleaned up immediately after: secret deleted via the UI,
+disposable Railway service deleted (`railway service delete`), confirmed gone from
+`railway service list`.
+
+### Still open, unchanged from the audit
+
+- Vercel Sandbox stays off — owner's billing decision, not re-touched.
+- TCC case-study re-run — owner's call, not decided this session.
+- The ~47 iCloud-duplicated files the audit mentioned were already cleaned up in an
+  earlier part of the *same* 2026-09-03 session — that line in the published audit
+  artifact is itself now stale (a real instance of exactly the kind of doc-drift this
+  session's `tests/integration/` finding also caught); re-run `git clean -nd` before
+  trusting any future "N duplicated files" claim rather than citing an old count.
 
 ## 2026-09-03 — full-platform audit, real page-load + export-latency perf fixes, remaining i18n gaps closed
 
