@@ -76,24 +76,37 @@ def narrative_language_instruction(locale: str) -> str:
 
 
 def date_parse_hint(locale: str) -> str:
-    """Transformer prompt block: which `pd.to_datetime` reading to try first for this
-    tenant's locale, mirroring (and inverting, when day-first) the existing
-    NaT-count tie-break fallback described in `agents/pipeline/transformer.py`."""
+    """Transformer prompt block: which `pd.to_datetime` reading to *prefer* for this
+    tenant's locale when the two readings genuinely disagree.
+
+    Real, live-verified bug found 2026-09-04: the original version of this hint (and
+    the matching example in `agents/pipeline/transformer.py`'s prompt) picked between
+    the two readings purely by comparing `NaT` counts. For an unambiguous ISO date
+    column (`2026-01-02`), BOTH `dayfirst=True` and the default reading parse every
+    row successfully (0 `NaT` either way) — the NaT-count tie-break never triggers,
+    so whichever reading was tried first silently won, even though it was wrong for a
+    pt-BR tenant (dayfirst=True swapped day and month on a format that was never
+    ambiguous to begin with). The fix: only let locale preference decide anything
+    when the two readings actually *disagree* on some row where both succeeded — that
+    disagreement is the actual signature of day/month ambiguity (DD/MM/YYYY vs.
+    MM/DD/YYYY). When they agree (ISO dates, or every day > 12), the readings are
+    equivalent and locale preference is moot; NaT count only matters as the final
+    tie-break, not the primary signal."""
     meta = get_locale_metadata(locale)
     if meta["dayfirst"]:
         return (
             f"This tenant's locale is {locale} ({meta['date_format_hint']}, day-first). When "
-            "parsing a date/datetime column with `pd.to_datetime`, try dayfirst=True FIRST. "
-            "Only fall back to the default (month-first) parse if it produces fewer NaT values "
-            "than the dayfirst=True attempt — keep whichever attempt produced fewer NaT, same "
-            "tie-break rule as before, just with the two attempts' priority order swapped for "
-            "this tenant."
+            "the two readings disagree on a genuinely ambiguous date, prefer the dayfirst=True "
+            "reading for this tenant — but only after confirming the readings actually "
+            "disagree (see the agreement-check pattern above); an unambiguous format (e.g. "
+            "ISO YYYY-MM-DD, or any day > 12) must NOT be forced into dayfirst=True just "
+            "because this tenant's locale is day-first."
         )
     return (
         f"This tenant's locale is {locale} ({meta['date_format_hint']}, month-first — pandas' "
-        "own default). When parsing a date/datetime column with `pd.to_datetime`, try the "
-        "default (month-first) parse FIRST, falling back to `dayfirst=True` only if it produces "
-        "more than 5% NaT — keep whichever attempt produced fewer NaT."
+        "own default). When the two readings disagree on a genuinely ambiguous date, prefer "
+        "the default (month-first) reading for this tenant — but only after confirming the "
+        "readings actually disagree (see the agreement-check pattern above)."
     )
 
 

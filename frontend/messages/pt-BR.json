@@ -199,7 +199,7 @@
     "fileLabel": "Arquivo (CSV, Excel, JSON, PDF, DOCX)",
     "fileCta": "Clique para selecionar um arquivo",
     "specLabel": "Ou: spec manual",
-    "specOptionalHint": "(opcional se um arquivo foi anexado)",
+    "specOptionalHint": "(opcional se um arquivo foi anexado — ainda é seguida como instrução extra além do arquivo)",
     "businessQuestionLabel": "Pergunta de negócio (opcional)",
     "businessQuestionPlaceholder": "Quais produtos vendem mais?",
     "modelLabel": "Modelo de IA (opcional)",
