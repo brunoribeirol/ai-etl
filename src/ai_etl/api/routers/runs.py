@@ -40,7 +40,12 @@ class RejectRunRequest(BaseModel):
 _DOCUMENT_EXTENSIONS = (".pdf", ".docx")
 
 
-def _document_spec(path: Path, output_csv: Path, business_question: str) -> Optional[str]:
+def _document_spec(
+    path: Path,
+    output_csv: Path,
+    business_question: str,
+    additional_instructions: str = "",
+) -> Optional[str]:
     """Spec text for a PDF/DOCX upload — the document-connector equivalent of
     `auto_generate_spec()`, whose signature needs a pre-parsed DataFrame a
     document doesn't have yet.
@@ -74,9 +79,19 @@ def _document_spec(path: Path, output_csv: Path, business_question: str) -> Opti
     question_hint = (
         f" The analysis should answer: {business_question}." if business_question else ""
     )
+    # 2026-09-04 gap-closing fix — see `spec_builder.auto_generate_spec`'s identical
+    # `additional_instructions` param and docstring for why this exists.
+    user_hint = (
+        f"The user also gave these specific instructions — follow them, and where "
+        f"they conflict with the generic cleaning steps below, the user's instructions "
+        f"win: {additional_instructions}\n"
+        if additional_instructions
+        else ""
+    )
     preview = text[:1000]
     return (
-        f"Read the document at {path}.{question_hint} "
+        f"Read the document at {path}.{question_hint}\n"
+        f"{user_hint}"
         f'Excerpt of its extracted text, for context:\n"""\n{preview}\n"""\n'
         f"Extract the tabular data in this document (a table, a list of records, "
         f"or structured line items) into rows. "
@@ -164,9 +179,17 @@ async def create_run(
     llm_model_override: Annotated[Optional[str], Form()] = None,
     file: Optional[UploadFile] = None,
 ) -> dict[str, str]:
-    """Wraps `execution_queue.enqueue_analysis` — mirrors `app.py::_tab_executar`'s
-    upload-vs-manual-spec branching exactly (`auto_generate_spec` for an
-    uploaded file, the raw textarea value otherwise).
+    """Wraps `execution_queue.enqueue_analysis`. Originally mirrored `app.py::_tab_executar`'s
+    upload-vs-manual-spec branching exactly (`auto_generate_spec` for an uploaded file, the
+    raw textarea value otherwise) — but that branching silently discarded whatever the user
+    typed in `manual_spec` whenever a file was also attached, even though the UI's "optional
+    if a file was attached" label implied it would still be taken into account. Real,
+    live-verified gap found 2026-09-04: typed "rename dt to date, filter active rows" was
+    never seen by the Orchestrator at all when a file was uploaded alongside it. Fixed by
+    threading `manual_spec` through as `additional_instructions` to both
+    `auto_generate_spec`/`_document_spec` instead of dropping it — the file-derived spec is
+    still primary (columns/rows/dtypes the Orchestrator needs), the user's typed text is now
+    layered on top and explicitly marked as taking priority on conflict.
 
     `llm_provider_override`/`llm_model_override`: gap-closing fix (2026-08-25
     audit, Wave 4) — the avulso "Executar" flow's `ModelPicker` selection
@@ -201,7 +224,12 @@ async def create_run(
 
         if name.endswith(_DOCUMENT_EXTENSIONS):
             saved_path.write_bytes(contents)
-            spec = _document_spec(saved_path, output_csv, business_question.strip())
+            spec = _document_spec(
+                saved_path,
+                output_csv,
+                business_question.strip(),
+                additional_instructions=manual_spec.strip(),
+            )
             if spec is None:
                 saved_path.unlink(missing_ok=True)
                 raise HTTPException(status_code=400, detail="Could not parse uploaded file.")
@@ -210,7 +238,13 @@ async def create_run(
             if df_bronze is None:
                 raise HTTPException(status_code=400, detail="Could not parse uploaded file.")
             saved_path.write_bytes(contents)
-            spec = auto_generate_spec(saved_path, df_bronze, output_csv, business_question.strip())
+            spec = auto_generate_spec(
+                saved_path,
+                df_bronze,
+                output_csv,
+                business_question.strip(),
+                additional_instructions=manual_spec.strip(),
+            )
 
         file_path = str(saved_path)
         file_bytes = contents

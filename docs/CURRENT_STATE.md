@@ -2,7 +2,46 @@
 
 > Living doc. Updated at the end of meaningful work sessions, not per-commit. Source of truth for repo/code state; the Obsidian vault (`~/Documents/Obsidian Vault/tcc/`) is the source of truth for the academic TCC narrative and product/strategy context.
 
-**Last updated:** 2026-09-04 — **Implemented every actionable item from the 2026-09-03 platform audit (owner: "implemente todas as melhorias propostas na auditoria"), excluding the 2 items the audit itself flagged as the owner's own decision (Vercel Sandbox Pro upgrade, TCC case-study re-run). `tests/integration/` turned out already fixed (stale doc, not a real gap) — verified 24/24 passing live against a real local Postgres. Closed the REST source's tenant-secret gap (PR #183, ADR-045 — lazy `secret_ref` resolution, since a REST credential's name is plan-dependent unlike the 3 fixed DB names). Added MySQL and MongoDB as write destinations (PR #184), closing the source/destination asymmetry the audit flagged. Batch-applied all 5 pending Dependabot updates (PR #182). Live-tested the tenant-scoped DB credential feature end-to-end against a real disposable production Postgres (not just SQLite/unit tests) — confirmed a real read + write through a tenant-saved `postgres_connection_string` secret, then cleaned up (secret deleted, disposable Railway service deleted). See "2026-09-04" section below for full detail.**
+**Last updated:** 2026-09-04 — **Fixed 2 real gaps found via live end-to-end testing that the 2026-09-03/04 audit did not catch (see "2026-09-04 (session 2)" below): a silent data-corruption bug where unambiguous ISO dates got day/month-swapped for pt-BR tenants, and the manual-spec textarea being fully discarded whenever a file was also attached.** Previous entry: implemented every actionable item from the 2026-09-03 platform audit (owner: "implemente todas as melhorias propostas na auditoria"), excluding the 2 items the audit itself flagged as the owner's own decision (Vercel Sandbox Pro upgrade, TCC case-study re-run). `tests/integration/` turned out already fixed (stale doc, not a real gap) — verified 24/24 passing live against a real local Postgres. Closed the REST source's tenant-secret gap (PR #183, ADR-045 — lazy `secret_ref` resolution, since a REST credential's name is plan-dependent unlike the 3 fixed DB names). Added MySQL and MongoDB as write destinations (PR #184), closing the source/destination asymmetry the audit flagged. Batch-applied all 5 pending Dependabot updates (PR #182). Live-tested the tenant-scoped DB credential feature end-to-end against a real disposable production Postgres (not just SQLite/unit tests) — confirmed a real read + write through a tenant-saved `postgres_connection_string` secret, then cleaned up (secret deleted, disposable Railway service deleted). See "2026-09-04" section below for full detail.
+
+## 2026-09-04 (session 2) — fixed 2 real gaps found via live testing, not caught by the audit
+
+Direct follow-up to session 1's honest-assessment pass (owner: "quero conseguir estimar quanto falta"). That pass ran `make check` for real and drove a real end-to-end pipeline on `ai-etl.vercel.app`, and found 2 real, live-verified gaps the 2026-09-03/04 audit missed. Both are fixed now.
+
+**Bug: unambiguous ISO dates silently day/month-swapped for pt-BR tenants (`core/locale.py`, `agents/pipeline/transformer.py`).**
+Root cause: `date_parse_hint()` told the Transformer LLM to try `dayfirst=True` FIRST for
+pt-BR tenants, falling back to the default reading only if it produced more `NaT`. For an
+unambiguous ISO date (`2026-01-02`), both readings parse successfully (0 `NaT` either way) —
+the tie-break never triggers, so the wrong (day-first) reading won unconditionally. Verified
+live: uploaded `2026-01-02..05` came back as `2026-02-01, 2026-03-01, 2026-04-01, 2026-05-01`.
+Fixed by changing the prompt's canonical example and the locale hint text to compute both
+readings and only apply locale preference when the two readings actually *disagree* on a row
+where both succeeded (the real signature of day/month ambiguity) — an unambiguous format now
+falls through to a plain NaT-count tie-break instead of a forced locale-preferred reading.
+This is a prompt-engineering fix (the Transformer writes fresh code every run, sandboxed with
+no `import`), so there's no deterministic unit under test that reproduces the exact
+corruption — `tests/unit/test_locale.py`/`test_transformer.py` assert the corrected guidance
+text ships in the prompt instead.
+
+**Gap: manual spec silently discarded when a file is also attached (`services/spec_builder.py`, `api/routers/runs.py`).**
+`create_run` used `auto_generate_spec()`/`_document_spec()` unconditionally whenever a file
+was uploaded, regardless of anything typed in the "manual spec" textarea — deliberate,
+inherited from the old Streamlit branching, but the frontend copy ("optional if a file was
+attached") implied it would still be considered. Live-verified: a typed instruction ("rename
+dt to date, filter active rows, save as sales_active.csv") never reached the Orchestrator
+when a CSV was also attached. Fixed by threading the manual-spec text through as a new
+`additional_instructions` param on both `auto_generate_spec()` and `_document_spec()`,
+surfaced up front in the generated spec and marked as taking priority over the generic
+cleaning steps on conflict. Frontend hint copy (`en-US.json`/`pt-BR.json`) updated to state
+this accurately instead of implying the field might be ignored.
+
+Both fixes covered by new/updated unit tests (`test_locale.py`, `test_transformer.py`,
+`test_spec_builder.py`, `test_api_runs.py`) — `make check`'s lint/format/type-check/security
+all still clean; full `pytest unit+integration` 1141 passed (was 1137, +4 new), 94.8%
+coverage; `pytest e2e` 5/5 passed run standalone (fails when combined with unit+integration
+in the same pytest process due to Celery eager-mode test-isolation bleed across suites —
+pre-existing quirk unrelated to this change, confirmed by reverting and re-running the same
+combined command; `make check`/CI never run them combined, so this doesn't affect either).
 
 ## 2026-09-04 — implemented every actionable audit finding
 

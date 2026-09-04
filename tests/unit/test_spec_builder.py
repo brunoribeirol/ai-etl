@@ -42,3 +42,27 @@ def test_auto_generate_spec_reports_row_and_column_counts() -> None:
     spec = auto_generate_spec(Path("f.csv"), df, Path("out.csv"))
 
     assert "3 rows and 2 columns" in spec
+
+
+def test_auto_generate_spec_includes_additional_instructions() -> None:
+    """2026-09-04 gap-closing fix: the manual-spec textarea used to be silently
+    discarded whenever a file was also attached (`api/routers/runs.py::create_run`
+    never passed it through) — regression guard that it now reaches the spec text
+    and is marked as taking priority over the generic cleaning steps."""
+    df = pd.DataFrame({"dt": ["2026-01-02"], "active": [True]})
+    spec = auto_generate_spec(
+        Path("f.csv"),
+        df,
+        Path("out.csv"),
+        additional_instructions="rename dt to date, keep only active rows",
+    )
+
+    assert "rename dt to date, keep only active rows" in spec
+    assert "user's instructions" in spec
+
+
+def test_auto_generate_spec_omits_additional_instructions_hint_when_empty() -> None:
+    df = pd.DataFrame({"a": [1]})
+    spec = auto_generate_spec(Path("f.csv"), df, Path("out.csv"))
+
+    assert "specific instructions" not in spec

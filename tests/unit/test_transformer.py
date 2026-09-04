@@ -220,13 +220,17 @@ def test_no_override_does_not_add_audit_entry(mock_get_llm) -> None:
 
 def test_default_locale_prompt_prefers_dayfirst(mock_get_llm) -> None:
     """Sprint 25 (ADR-036): `_make_state()`'s default locale (`initial_state`'s
-    `"pt-BR"` default) should steer the prompt toward trying `dayfirst=True` first."""
+    `"pt-BR"` default) should steer the prompt toward preferring `dayfirst=True` on
+    a genuine ambiguity. 2026-09-04 fix: no longer unconditional — must not tell the
+    LLM to force dayfirst=True on an unambiguous date (that's the ISO-date
+    corruption bug this fix closes)."""
     llm = _mock_llm([VALID_CODE])
     mock_get_llm.return_value = llm
     transformer_node(_make_state())
 
     sent_prompt = llm.invoke.call_args[0][0]
-    assert "dayfirst=True FIRST" in sent_prompt
+    assert "prefer the dayfirst=True reading" in sent_prompt
+    assert "must NOT be forced into dayfirst=True" in sent_prompt
 
 
 def test_en_us_locale_prompt_prefers_month_first(mock_get_llm) -> None:

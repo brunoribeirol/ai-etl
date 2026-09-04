@@ -39,24 +39,50 @@ Rules:
 - Do not read from files or databases — data is already in `dfs`.
 - When parsing a date/datetime column with `pd.to_datetime(..., errors="coerce")`, a
   day-first dataset (DD/MM/YYYY) parsed with the default month-first reading will
-  silently turn a large fraction of it into NaT instead of raising — always try BOTH
-  readings for any ambiguous date column and keep whichever produced fewer NaT.
-  {date_parse_hint}
+  silently turn a large fraction of it into NaT instead of raising. But an
+  unambiguous format (ISO YYYY-MM-DD, or any day > 12) parses the SAME under both
+  readings — do not force a locale-preferred reading onto data that was never
+  ambiguous. Always compute BOTH readings, check whether they actually *disagree*
+  on any row where both succeeded, and only then let locale preference (and NaT
+  count as the final tie-break) decide. {date_parse_hint}
 
 Example fallback pattern (WRONG: no fallback attempted, silently drops day-first dates):
 ```python
 df["date"] = pd.to_datetime(df["date"], errors="coerce")
 ```
 
-RIGHT (tries both readings, keeps whichever produced fewer NaT — see the hint above for
-which reading to attempt first for this tenant):
+ALSO WRONG (forces a reading by locale/NaT-count alone, without checking whether the
+two readings actually disagree — this SILENTLY CORRUPTS unambiguous ISO dates by
+swapping day and month, a real bug found 2026-09-04):
 ```python
-parsed = pd.to_datetime(df["date"], errors="coerce")
-non_null = df["date"].notna().sum()
-if non_null > 0 and parsed.isna().sum() / non_null > 0.05:
-    parsed_alt = pd.to_datetime(df["date"], errors="coerce", dayfirst=True)
-    if parsed_alt.isna().sum() < parsed.isna().sum():
-        parsed = parsed_alt
+parsed = pd.to_datetime(df["date"], errors="coerce", dayfirst=True)  # forced, unchecked
+df["date"] = parsed
+```
+
+RIGHT (computes both readings, only prefers one over the other where they actually
+disagree — see the hint above for which reading this tenant prefers on genuine
+ambiguity):
+```python
+default_parsed = pd.to_datetime(df["date"], errors="coerce")
+dayfirst_parsed = pd.to_datetime(df["date"], errors="coerce", dayfirst=True)
+both_ok = default_parsed.notna() & dayfirst_parsed.notna()
+disagree = bool(both_ok.any()) and bool((default_parsed[both_ok] != dayfirst_parsed[both_ok]).any())
+if disagree:
+    # Genuine day/month ambiguity — apply this tenant's locale preference, unless it
+    # produces strictly more NaT than the alternative reading.
+    parsed = (
+        dayfirst_parsed
+        if dayfirst_parsed.isna().sum() <= default_parsed.isna().sum()
+        else default_parsed
+    )
+else:
+    # No disagreement (e.g. unambiguous ISO dates) — locale preference is moot;
+    # fall back to whichever reading produced fewer NaT.
+    parsed = (
+        default_parsed
+        if default_parsed.isna().sum() <= dayfirst_parsed.isna().sum()
+        else dayfirst_parsed
+    )
 df["date"] = parsed
 ```
 

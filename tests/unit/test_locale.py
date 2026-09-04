@@ -59,14 +59,19 @@ def test_narrative_language_instruction_mentions_the_language_and_code() -> None
 
 
 def test_date_parse_hint_prefers_dayfirst_for_pt_br() -> None:
+    """2026-09-04 fix: preference only applies on genuine disagreement between the
+    two readings, not unconditionally — regression guard for the ISO-date
+    corruption bug (unambiguous dates were getting silently day/month-swapped)."""
     hint = date_parse_hint("pt-BR")
-    assert "dayfirst=True FIRST" in hint
+    assert "prefer the dayfirst=True reading" in hint
+    assert "disagree" in hint
+    assert "must NOT be forced into dayfirst=True" in hint
 
 
 def test_date_parse_hint_prefers_month_first_for_en_us() -> None:
     hint = date_parse_hint("en-US")
-    assert "month-first" in hint
-    assert "FIRST" in hint
+    assert "prefer the default (month-first) reading" in hint
+    assert "disagree" in hint
 
 
 def test_currency_hint_mentions_the_right_symbol_per_locale() -> None:

@@ -202,6 +202,28 @@ def test_create_run_with_uploaded_csv(client: TestClient, mocker) -> None:
     assert "name, price" in spec
 
 
+def test_create_run_with_file_and_manual_spec_combines_both(client: TestClient, mocker) -> None:
+    """Real, live-verified bug found 2026-09-04: `manual_spec` used to be silently
+    discarded whenever a file was also attached — a typed instruction like "rename
+    dt to date, filter active rows" never reached the Orchestrator. Regression guard
+    that both the file-derived spec AND the typed instructions now reach
+    `enqueue_analysis`."""
+    mock_enqueue = mocker.patch("ai_etl.api.routers.runs.enqueue_analysis", return_value="task-xyz")
+    csv_bytes = b"dt,active\n2026-01-02,true\n"
+
+    response = client.post(
+        "/runs",
+        data={"manual_spec": "rename dt to date, keep only active rows"},
+        files={"file": ("sales.csv", csv_bytes, "text/csv")},
+    )
+
+    assert response.status_code == 200
+    mock_enqueue.assert_called_once()
+    spec = mock_enqueue.call_args.args[0]
+    assert "dt, active" in spec  # file-derived part still present
+    assert "rename dt to date, keep only active rows" in spec  # user's typed part now kept
+
+
 # ---------------------------------------------------------------------------
 # Real bug found 2026-08-30, live testing: `.pdf`/`.docx` uploads had no
 # branch in `_dataframe_from_upload()` at all and always 400'd with "Could
@@ -229,6 +251,28 @@ def test_create_run_with_uploaded_pdf(client: TestClient, mocker) -> None:
     spec = mock_enqueue.call_args.args[0]
     assert "Widget A sold best in North" in spec
     assert "Which region sold best?" in spec
+
+
+def test_create_run_with_pdf_and_manual_spec_combines_both(client: TestClient, mocker) -> None:
+    """Same regression guard as the CSV case above, for the document-upload branch
+    (`_document_spec`)."""
+    mock_enqueue = mocker.patch("ai_etl.api.routers.runs.enqueue_analysis", return_value="task-pdf")
+    mocker.patch(
+        "ai_etl.api.routers.runs.extract_document_text",
+        return_value="Sales Notes - Q3\nWidget A sold best in North.",
+    )
+
+    response = client.post(
+        "/runs",
+        data={"manual_spec": "only extract rows mentioning Widget A"},
+        files={"file": ("notes.pdf", b"%PDF-1.4 fake bytes", "application/pdf")},
+    )
+
+    assert response.status_code == 200
+    mock_enqueue.assert_called_once()
+    spec = mock_enqueue.call_args.args[0]
+    assert "Widget A sold best in North" in spec
+    assert "only extract rows mentioning Widget A" in spec
 
 
 def test_create_run_with_uploaded_docx(client: TestClient, mocker) -> None:
