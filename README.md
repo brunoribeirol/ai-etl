@@ -26,7 +26,7 @@ ai-etl/
 │   │                    #   Planner/Analyst/Science/Advisor (LangGraph nodes)
 │   ├── core/            #   PipelineState, LangGraph wiring, sandboxed code exec, LLM client
 │   ├── sources/          #   csv/postgres/sqlite/mysql/mongodb/rest(+auth)/document connectors
-│   ├── destinations/    #   csv/postgres/s3_parquet writers
+│   ├── destinations/    #   csv/postgres/mysql/mongodb/s3_parquet writers
 │   ├── audit/            #   Postgres audit trail (runs/analysis_runs) + storage.py (local/S3)
 │   ├── services/          #   pipeline orchestration, Celery async queue, auth, spec builder
 │   └── api/               #   FastAPI HTTP layer for the frontend (ADR-011)
@@ -36,7 +36,7 @@ ai-etl/
 ├── case_study/            # TCC evaluation datasets, pipeline specs, baselines
 │
 └── frontend/              # Next.js + Clerk — the real login/UI (deploys to Vercel)
-    └── src/{app,components,middleware.ts}
+    └── src/{app,components,proxy.ts}
 ```
 
 Backend and frontend are versioned together (same PR history, same commit range) but deploy and scale independently — Railway never builds `frontend/`, Vercel never builds anything outside it (`frontend-ci.yml`/Vercel's own build are both scoped to that directory; `ci.yml` never touches it). See `docs/adr/ADR-011-nextjs-frontend-fastapi-clerk-middleware.md` for why.

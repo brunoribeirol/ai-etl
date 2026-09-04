@@ -24,22 +24,28 @@ no local login form; Clerk's own hosted sign-in flow handles it.
 header state (`<SignedIn>`/`<SignedOut>` were removed in `@clerk/nextjs` v7
 "Core 3", independent of the Next.js version below).
 
-## Why Next.js 15, not 16
+## Next.js 16, and `proxy.ts` (history: the 15-vs-16 back-and-forth)
 
-`create-next-app@latest` scaffolded this on Next.js 16.3.1, which renamed
-`middleware.ts` to `proxy.ts`. That broke routing on Vercel — the deployed
-app 404'd on every request with zero runtime logs, meaning the platform's
-edge routing never found a function to invoke for the new "Proxy" convention
-at all (confirmed live on `ai-etl.vercel.app`, not a local-only issue).
-Downgraded to `next@15.5.23` (`middleware.ts`, Vercel's well-established
-convention) rather than chase bleeding-edge framework support. `@clerk/nextjs`
-v7's peer range covers both, so no Clerk downgrade was needed —
-`eslint-config-next` was pinned to match (15.5.23), which required switching
-`eslint.config.mjs` back to the `FlatCompat` bridge (that version still
-exports the legacy eslintrc shape, not a flat-config-native array). `postcss`/
-`sharp` (transitive, via `next`) had known-CVE versions pinned to 15.5.23's
-lockfile — pinned to patched versions via `package.json`'s `overrides` instead
-of following `npm audit fix --force`'s suggestion to jump back to `next@16`.
+`create-next-app@latest` originally scaffolded this on Next.js 16.3.1, which
+renamed `middleware.ts` to `proxy.ts` — that broke routing on Vercel at the
+time (the deployed app 404'd on every request with zero runtime logs, the
+platform's edge routing never finding a function to invoke for the new
+"Proxy" convention at all, confirmed live on `ai-etl.vercel.app`, not a
+local-only issue). Downgraded to `next@15.5.23` (`middleware.ts`) on
+2026-08-17 rather than chase a bleeding-edge framework release.
+
+**Re-upgraded to Next.js 16 on 2026-08-21 (PR #76, a routine Dependabot bump,
+auto-merged without anyone re-reading this note against it)** — currently on
+16.3.4, using `src/proxy.ts` (renamed from `middleware.ts` on 2026-09-03,
+same file, same `clerkMiddleware()` contents). Re-verified live multiple
+times since (most recently 2026-09-04): every route loads correctly on
+`ai-etl.vercel.app`, no 404s, `proxy.ts` shows up correctly in `next build`'s
+own output as `ƒ Proxy (Middleware)`. Whatever caused the original 404 was
+specific to that first 16.3.1 release or an earlier Vercel platform gap —
+both have since moved on. Left this section's history intact (rather than
+deleting it) so a future upgrade doesn't rediscover the same dead end from
+scratch, but the header no longer reflects current reality — don't downgrade
+based on it.
 
 ## Checks
 
