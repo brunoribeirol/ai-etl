@@ -56,7 +56,7 @@ from ai_etl.services.execution_queue import (
 )
 
 
-@celery_app.task(name="ai_etl.check_scheduled_pipelines")  # type: ignore[untyped-decorator]
+@celery_app.task(name="ai_etl.check_scheduled_pipelines")  # type: ignore[untyped-decorator]  # celery has no type stubs for @task
 def check_scheduled_pipelines_task() -> dict[str, Any]:
     """Fire every due, active saved pipeline. Returns a small summary dict
     (fired/skipped counts) — useful for beat log inspection, not consumed by

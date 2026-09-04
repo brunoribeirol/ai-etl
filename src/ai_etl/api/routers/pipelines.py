@@ -16,6 +16,7 @@ from ai_etl.api.deps import get_current_tenant_id, require_role
 from ai_etl.audit.db import (
     DEFAULT_PIPELINE_HISTORY_LIMIT,
     create_saved_pipeline,
+    delete_saved_pipeline,
     get_pipeline_health,
     get_saved_pipeline,
     get_saved_pipeline_llm_config,
@@ -265,6 +266,27 @@ def patch_pipeline(
     if updated is None:
         raise HTTPException(status_code=404, detail="Saved pipeline not found.")
     return updated
+
+
+@router.delete("/{pipeline_id}", status_code=204)
+def delete_pipeline(
+    pipeline_id: str,
+    tenant_id: Annotated[str, Depends(require_role("editor"))],
+) -> None:
+    """2026-09-04 gap-closing feature: until now, `is_active=False` (pause) was
+    the only way to stop a saved pipeline — there was no way to actually remove
+    a mistaken or test entry, so it stayed listed on `/pipelines` and `/summary`
+    forever. Permanently deletes the `saved_pipelines` row; safe by schema design
+    — `runs.saved_pipeline_id`/`analysis_runs.saved_pipeline_id` are both
+    `ON DELETE SET NULL` (`audit/models.py`), so existing run history is
+    detached, never deleted, by this call. `require_role("editor")`, same as
+    `create_pipeline`/`patch_pipeline` — this is a regular tenant-scoped
+    mutation, not a platform-admin action (no `log_admin_action`, matching the
+    existing create/update endpoints in this router, neither of which logs
+    either).
+    """
+    if not delete_saved_pipeline(pipeline_id, tenant_id):
+        raise HTTPException(status_code=404, detail="Saved pipeline not found.")
 
 
 # Sprint 30 (ADR-031) — per-pipeline LLM provider/model selection, split into its

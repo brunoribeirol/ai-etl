@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import { FileText, LineChart, PauseCircle, PlayCircle, Plus } from "lucide-react";
+import { FileText, LineChart, PauseCircle, PlayCircle, Plus, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
@@ -88,6 +88,10 @@ export function PipelinesManager() {
         const body = await response.json().catch(() => null);
         throw new Error(body?.detail ?? `HTTP ${response.status}`);
       }
+      // 204 No Content (the new DELETE endpoint) has no body to parse —
+      // `.json()` on an empty response throws, which every existing caller
+      // here would otherwise treat as a failure despite the request succeeding.
+      if (response.status === 204) return null;
       return response.json();
     },
     [apiUrl, getToken, t],
@@ -315,6 +319,24 @@ export function PipelinesManager() {
         body: JSON.stringify({ is_active: !pipeline.is_active }),
       });
       toast.success(pipeline.is_active ? t("toastPaused") : t("toastResumed"));
+      await loadPipelines();
+    } catch (err) {
+      toast.error(String(err));
+    }
+  }
+
+  // 2026-09-04 gap-closing feature: until now, `toggleActive` (pause) was the
+  // only way to stop a saved pipeline — there was no way to actually remove a
+  // mistaken or test entry, so it stayed listed here and on `/summary` forever.
+  // `window.confirm` matches this action's actual stakes (a single saved
+  // pipeline; run history is detached, not deleted — see the DELETE endpoint's
+  // docstring) rather than `data-export-manager.tsx`'s heavier typed-"DELETE"
+  // confirmation, reserved for whole-account erasure.
+  async function deletePipeline(pipeline: SavedPipeline) {
+    if (!window.confirm(t("deleteConfirm", { name: pipeline.name }))) return;
+    try {
+      await authedFetch(`/pipelines/${pipeline.id}`, { method: "DELETE" });
+      toast.success(t("toastDeleted"));
       await loadPipelines();
     } catch (err) {
       toast.error(String(err));
@@ -604,6 +626,14 @@ export function PipelinesManager() {
                       <PlayCircle className="h-4 w-4" /> {t("resume")}
                     </>
                   )}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => deletePipeline(pipeline)}
+                >
+                  <Trash2 className="h-4 w-4" /> {t("delete")}
                 </Button>
               </div>
             </CardContent>

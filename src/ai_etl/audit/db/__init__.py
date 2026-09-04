@@ -49,6 +49,7 @@ from ai_etl.audit.db.onboarding import get_onboarding_status
 from ai_etl.audit.db.pipelines import (
     claim_due_pipeline,
     create_saved_pipeline,
+    delete_saved_pipeline,
     get_run_status_and_pipeline,
     get_saved_pipeline,
     get_saved_pipeline_llm_config,
@@ -87,6 +88,7 @@ __all__ = [
     "TenantSummary",
     "claim_due_pipeline",
     "create_saved_pipeline",
+    "delete_saved_pipeline",
     "ensure_user",
     "get_avg_run_cost_usd",
     "get_global_avg_run_cost_usd",

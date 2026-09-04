@@ -60,11 +60,11 @@ def build_graph() -> Any:
     # Callable alias (NodeFn) the way it can against a concrete `def` passed
     # directly — this is a static-typing resolution artifact of the wrapper,
     # not a real type mismatch (langgraph accepts a plain callable at runtime).
-    graph.add_node("orchestrator", _timed("orchestrator", orchestrator_node))  # type: ignore[call-overload]
-    graph.add_node("extractor", _timed("extractor", extractor_node))  # type: ignore[call-overload]
-    graph.add_node("transformer", _timed("transformer", transformer_node))  # type: ignore[call-overload]
-    graph.add_node("quality", _timed("quality", quality_node))  # type: ignore[call-overload]
-    graph.add_node("loader", _timed("loader", loader_node))  # type: ignore[call-overload]
+    graph.add_node("orchestrator", _timed("orchestrator", orchestrator_node))  # type: ignore[call-overload]  # see comment above
+    graph.add_node("extractor", _timed("extractor", extractor_node))  # type: ignore[call-overload]  # see comment above
+    graph.add_node("transformer", _timed("transformer", transformer_node))  # type: ignore[call-overload]  # see comment above
+    graph.add_node("quality", _timed("quality", quality_node))  # type: ignore[call-overload]  # see comment above
+    graph.add_node("loader", _timed("loader", loader_node))  # type: ignore[call-overload]  # see comment above
 
     graph.set_entry_point("orchestrator")
     graph.add_edge("orchestrator", "extractor")

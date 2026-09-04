@@ -2,7 +2,50 @@
 
 > Living doc. Updated at the end of meaningful work sessions, not per-commit. Source of truth for repo/code state; the Obsidian vault (`~/Documents/Obsidian Vault/tcc/`) is the source of truth for the academic TCC narrative and product/strategy context.
 
-**Last updated:** 2026-09-04 — **Fixed 2 real gaps found via live end-to-end testing that the 2026-09-03/04 audit did not catch (see "2026-09-04 (session 2)" below): a silent data-corruption bug where unambiguous ISO dates got day/month-swapped for pt-BR tenants, and the manual-spec textarea being fully discarded whenever a file was also attached.** Previous entry: implemented every actionable item from the 2026-09-03 platform audit (owner: "implemente todas as melhorias propostas na auditoria"), excluding the 2 items the audit itself flagged as the owner's own decision (Vercel Sandbox Pro upgrade, TCC case-study re-run). `tests/integration/` turned out already fixed (stale doc, not a real gap) — verified 24/24 passing live against a real local Postgres. Closed the REST source's tenant-secret gap (PR #183, ADR-045 — lazy `secret_ref` resolution, since a REST credential's name is plan-dependent unlike the 3 fixed DB names). Added MySQL and MongoDB as write destinations (PR #184), closing the source/destination asymmetry the audit flagged. Batch-applied all 5 pending Dependabot updates (PR #182). Live-tested the tenant-scoped DB credential feature end-to-end against a real disposable production Postgres (not just SQLite/unit tests) — confirmed a real read + write through a tenant-saved `postgres_connection_string` secret, then cleaned up (secret deleted, disposable Railway service deleted). See "2026-09-04" section below for full detail.
+**Last updated:** 2026-09-04 — **Closed the small technical/polish backlog from session 2's honest assessment (see "2026-09-04 (session 3)" below): added the previously-missing `DELETE /pipelines/{id}` (saved pipelines could only be paused, never removed), commented the remaining unexplained `# type: ignore`s, corrected a stale "pip outdated" finding.** Previous entry (session 2): fixed 2 real gaps found via live end-to-end testing that the 2026-09-03/04 audit did not catch — a silent data-corruption bug where unambiguous ISO dates got day/month-swapped for pt-BR tenants, and the manual-spec textarea being fully discarded whenever a file was also attached. See "2026-09-04 (session 2)" below for that detail, and the "2026-09-04" section further down for the original audit-implementation session.
+
+## 2026-09-04 (session 3) — closed the small technical backlog from session 2's assessment
+
+Direct follow-up to session 2 (owner: "Faça as 5 técnicas") — the 4 optional/cosmetic
+items flagged there, minus one correction found while starting on them.
+
+**Feature: `DELETE /pipelines/{id}` — saved pipelines could only be paused, never
+removed.** Found while trying to clean up a stray test pipeline ("t") that showed up
+on `/summary` in production: `PATCH is_active=False` (pause) was the *only* lifecycle
+action that existed — there was no way to actually remove a mistaken or test entry, so
+it stayed listed forever. Added `audit/db/pipelines.py::delete_saved_pipeline()` +
+`DELETE /pipelines/{id}` (`require_role("editor")`, same as create/patch) + a delete
+button (`window.confirm`, proportionate to a single pipeline's stakes — not
+`data-export-manager.tsx`'s heavier typed-"DELETE" account-erasure flow) in
+`pipelines-manager.tsx`. Safe by schema design, not just by convention:
+`runs.saved_pipeline_id`/`analysis_runs.saved_pipeline_id` are both `ON DELETE SET
+NULL` (already in `audit/models.py`, unused until now) — deleting a saved pipeline
+detaches its run history, never deletes it. Regression-tested against a real SQLite
+FK check (`PRAGMA foreign_keys=ON`), not just asserted from the schema comment.
+
+**Commented every remaining unexplained `# type: ignore`.** The 5 `call-overload`
+ignores in `core/graph.py` already had a block comment above them (session 2's
+assessment mischaracterized them as bare) — added an inline `# see comment above`
+per line so no one occurrence reads as unexplained on its own. The 3
+`@celery_app.task` decorators (`execution_queue.py`, `scheduler.py`,
+`retention_service.py`) genuinely had none — added `# celery has no type stubs for
+@task` to each. mypy requires a *second* `#` after the `[code]` bracket for any
+trailing text — `# type: ignore[x] extra text` (no second `#`) is itself a mypy
+"Invalid type: ignore comment" error, caught by re-running `make check` before
+committing.
+
+**Correction, not a fix: the "pip itself is outdated" finding from session 2 was
+already handled.** `make security`/`make check` already run `uv run pip install
+--upgrade pip` immediately before `pip-audit` — the 1 vulnerability session 2 found
+was an artifact of running `pip-audit` directly, bypassing that upgrade step, not a
+real gap in the project's own check pipeline. No code change; corrected the record.
+
+**Not fixed, investigated and explained instead: the Clerk `INVALID_MESSAGE` console
+errors.** Traced to Clerk's cross-tab session-sync `postMessage` handler inside the
+Next.js bundle rejecting a message from an origin it doesn't recognize — most likely
+the browser extension (Claude in Chrome) used to live-test the app in session 2, not
+a real product bug reachable by an actual user's browser. Nothing in this repo to fix;
+not re-chased further without a way to reproduce it browser-extension-free.
 
 ## 2026-09-04 (session 2) — fixed 2 real gaps found via live testing, not caught by the audit
 

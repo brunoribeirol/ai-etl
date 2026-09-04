@@ -200,7 +200,7 @@ def cleanup_expired_retention_for_tenant(
     )
 
 
-@celery_app.task(name="ai_etl.cleanup_expired_retention")  # type: ignore[untyped-decorator]
+@celery_app.task(name="ai_etl.cleanup_expired_retention")  # type: ignore[untyped-decorator]  # celery has no type stubs for @task
 def cleanup_expired_retention_task() -> dict[str, Any]:
     """Sweep every tenant with a configured retention window. Returns a
     small summary dict (tenants processed, total storage keys deleted) —

@@ -325,7 +325,7 @@ def check_budget_cap(tenant_id: str) -> BudgetStatus:
     return status
 
 
-@celery_app.task(  # type: ignore[untyped-decorator]
+@celery_app.task(  # type: ignore[untyped-decorator]  # celery has no type stubs for @task
     name="ai_etl.run_full_analysis",
     bind=True,
     # Sprint 15 (ADR-020 Decision 1) — Level A: an unhandled exception
