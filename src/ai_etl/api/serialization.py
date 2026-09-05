@@ -40,7 +40,7 @@ def _serialize_dataframe(df: pd.DataFrame) -> list[dict[str, Any]]:
 def _serialize_figure(fig: Figure) -> dict[str, Any]:
     # Plotly.js's `Plotly.newPlot(el, data, layout)` reads this exact shape
     # directly — no transformation needed on the frontend side.
-    return fig.to_plotly_json()  # type: ignore[no-any-return]
+    return fig.to_plotly_json()  # type: ignore[no-any-return]  # plotly has no return-type stub here
 
 
 def _serialize_analysis_entry(entry: dict[str, Any], df_key: str) -> dict[str, Any]:
