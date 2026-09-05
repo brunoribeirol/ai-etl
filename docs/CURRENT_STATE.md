@@ -2,36 +2,112 @@
 
 > Living doc. Updated at the end of meaningful work sessions, not per-commit. Source of truth for repo/code state; the Obsidian vault (`~/Documents/Obsidian Vault/tcc/`) is the source of truth for the academic TCC narrative and product/strategy context.
 
-**Last updated:** 2026-09-04 — **Session 4 closed the coverage gap on 3 real modules; see "Owner's next steps" immediately below for where the project actually stands as of today.** Session 3 added `DELETE /pipelines/{id}` + explained remaining `# type: ignore`s. Session 2 fixed 2 real gaps a live end-to-end test found that the 2026-09-03/04 audit missed (pt-BR date corruption, manual-spec-discarded-with-file-upload). Full detail in each dated section below; the "2026-09-04" section further down is the original audit-implementation session.
+**Last updated:** 2026-09-05 — **A full-scope 12-persona audit (PR #192) found real open gaps a "prototype is functionally done" claim from the day before did not anticipate; a wave-based remediation plan for all of them now exists (PR #193, not yet implemented) — see "Owner's next steps" immediately below.** Session 4 (2026-09-04) closed the coverage gap on 3 real modules. Session 3 added `DELETE /pipelines/{id}` + explained remaining `# type: ignore`s. Session 2 fixed 2 real gaps a live end-to-end test found that the 2026-09-03/04 audit missed. Full detail in each dated section below; the "2026-09-04" section further down is the original audit-implementation session.
 
-## Owner's next steps (as of 2026-09-04, end of session 4)
+## Owner's next steps (as of 2026-09-05)
 
-**Prototype is functionally done.** Every gap found across this session's honest
-assessment (2 real product bugs) and its 2 follow-up rounds (4 technical/coverage
-items) is closed, merged to `main`, CI green. `make check` clean; 1168 tests,
-95.3% coverage; a real end-to-end pipeline run and a page-by-page sweep of
-`ai-etl.vercel.app` both came back clean post-fix. Nothing technical is known to
-be outstanding — see [[2026-09-04-honest-assessment-real-bugs-and-delete-feature|
-this session's own vault log]] for the full trail (that's *this session's*
-finding, not a guarantee no future live use turns up something new — every real
-bug found this round was found by actually using the product, not by re-reading
-code).
+**Not "functionally done" anymore — that was session 4's read, and the very next
+day's mega-audit (12 personas, full scope, `.claude/skills/persona-audit.md`)
+found real gaps it hadn't surfaced yet.** One of them (a regression in the
+pt-BR date-parse fix itself) was serious enough to fix immediately (PR #191,
+live-verified against the deployed app); everything else was deliberately left
+open for the owner to triage, per a wave-based remediation plan.
 
-**What's actually left is not code:**
-1. **Billing top-ups, owner's own action, not a code task.** Railway plan is
-   close to its usage cap; OpenAI/Anthropic API credit will need topping up too.
-   Not a blocker on anything technical — the app itself has no code dependency on
-   which billing tier is active (`services/execution_queue.py`'s budget-cap logic
-   is per-tenant application-level, unrelated to the provider account's own
-   balance).
-2. **2 unchanged owner-decision items** (see the "2026-09-04" audit-implementation
-   section below for original context): Vercel Sandbox Pro upgrade (declined,
-   `"process"` backend stays default), and whether to re-run the TCC case study
-   before writing the results chapter — those numbers are from 2026-06-23, before
-   Clerk/RLS/approvals/multi-source and everything shipped since.
-3. **TCC monograph writing** — redação final (resultados/discussão/conclusão),
-   due December. Lives only in the Obsidian vault, out of this repo's scope by
-   the owner's own standing instruction.
+**Real next step: decide Wave 0, then say go on Waves 1-4.** The plan
+(`docs/work/2026-09-05-mega-audit-remediation-plan.md`) groups every open
+finding from the audit (`docs/work/2026-09-04-mega-persona-audit.md`) into
+waves by severity/dependency, with effort estimates. Nothing in Waves 1-4
+needs a further decision per item — only Wave 0 does:
+
+1. **Wave 0, item 1 (the one real blocker) — sandbox isolation.** Red Team
+   reproduced real arbitrary command execution (`whoami`, for real) through the
+   known `exec()`-sandbox bypass, on the `"process"` backend that's the default
+   in production today (Vercel Sandbox — the real mitigation — stays off by the
+   owner's own prior billing decision, unchanged). The plan lays out 3 options
+   (accept as-is / OS-level network+subprocess lockdown / Vercel Sandbox Pro)
+   without picking one — that's the owner's call, not proposed again unprompted.
+2. **Wave 0, items 12/13 — wording-only**, not code: the "billing" label and an
+   RLS sentence in audit/pitch materials overstate what actually exists/is
+   guaranteed. Fix whenever, doesn't block anything.
+3. **Wave 0, item 14** — a non-technical-user navigation complaint that may be
+   an artifact of the audit's own parallel-subagent browser contention, not a
+   real bug; cheap (~15 min) to re-verify in isolation before spending real
+   frontend effort on it.
+4. **Waves 1-4 (the actual fix backlog)** — critical: Excel multi-sheet always
+   fails, a systematic BR-currency regex-escape bug in LLM-generated code,
+   nested JSON crashes the Transformer with no visible error. High: keyboard-
+   inaccessible file upload, a narrative-consistency guard-rail that checks the
+   wrong column, Advisor giving unhedged recommendations off tiny samples, no UI
+   for `drift_threshold_pct`. Medium/low: several UI/i18n/test-hygiene items.
+   Full list, effort estimates, and the "live-verify before done" rule (see next
+   paragraph) are in the plan doc.
+
+**Standing rule the plan exists to enforce**: any fix that changes LLM-generated-
+code behavior must be live-verified against the deployed app with the exact
+reported input before being called done — not just reasoned about. The pt-BR
+date bug was "fixed" twice this session and wrong both times; only an actual
+live re-run caught the second failure.
+
+Unrelated to the audit, still true: billing top-ups (Railway/OpenAI/Anthropic,
+owner's own action, no code dependency on which tier is active) and the TCC
+monograph writing (redação final, due December, lives only in the Obsidian
+vault) remain outside this repo's scope.
+
+## 2026-09-05 — mega 12-persona audit (PR #192) + wave-based remediation plan (PR #193)
+
+Direct follow-up to session 4's "prototype functionally done" claim (owner: "Quero
+uma super mega ultra auditoria com personas... depois analisaremos as
+considerações, implementaremos ou não"). Full-scope run of
+`.claude/skills/persona-audit.md` — all 12 personas, dispatched as independent
+subagents, not a subset.
+
+**Process note, real cost paid learning it**: the first parallel dispatch of all
+12 personas hit real Chrome-tab-group contention (multiple browser-driving
+personas fighting over the same shared tab) plus an unrelated session rate-limit
+— 4 of the 12 (Accessibility, LLM/Prompt Engineer, Data Engineer, partially
+Non-technical User) failed or produced hypothesis-only reports on the first pass.
+Retried those 4 solo (one at a time, no other browser-driving persona
+concurrent) — all completed cleanly on retry. Don't run browser-using personas
+in parallel against one Chrome session again.
+
+**The one finding serious enough to fix immediately, not just log**: the
+LLM/Prompt Engineer persona reproduced live, twice, that the pt-BR date-parse
+fix from earlier this session (PR #187 — see the 2026-09-04 session-2 entry
+below) was *itself* still corrupting ISO dates whenever day and month are both
+≤ 12 (`2026-02-01` → `2026-01-02`) — the common case (~39% of days), not an edge
+case. Root cause: `dayfirst=True` genuinely disagrees with the default reading
+in exactly that case, so PR #187's "agreement check" picked the wrong reading.
+Fixed for real in PR #191 by checking the STRING FORMAT directly (a strict
+`format="%Y-%m-%d"` parse either matches every value or it doesn't) before ever
+considering `dayfirst=True` — verified against real pandas via new unit tests,
+**and** re-verified live post-deploy against production with the exact
+reproduction case (confirmed unchanged, no swap). This is the second time this
+exact bug survived a "fix" that was only reasoned about, not live-tested against
+the deployed app — see the standing rule in "Owner's next steps" above.
+
+**Everything else found — left open, per the audit's own protocol (investigate,
+don't fix).** Full findings: `docs/work/2026-09-04-mega-persona-audit.md` (consolidated, prioritized,
+deduplicated) + `docs/work/2026-09-04-persona-audit/*.md` (12 individual reports
+with full evidence). Highlights: Red Team reproduced real arbitrary command
+execution through the known sandbox-`exec()` bypass (not just `os.environ`
+leakage, the framing the code's own comments used) — the risk ADR-038/039
+accepted is running today with its primary mitigation (Vercel Sandbox) inactive
+by the owner's own billing decision. Data Engineer found 3 new critical bugs by
+actually uploading messy files: Excel multi-sheet always fails (no `sheet_name`
+field anywhere in the Orchestrator's plan schema), a systematic BR-currency
+cleanup bug in LLM-generated code (`str.replace('R\$ ', '')` — invalid Python
+escape, confirmed twice in unrelated files), and nested JSON crashing the
+Transformer with no error surfaced in the UI. Accessibility found the file
+upload on `/app` is completely keyboard-inaccessible. Full list (medium/low
+severity items too) in the plan doc below.
+
+**Remediation plan (PR #193, plan only, nothing implemented)**:
+`docs/work/2026-09-05-mega-audit-remediation-plan.md`
+groups every open finding into 5 waves (Wave 0 = owner decisions needed first,
+Waves 1-4 = ordered by severity/dependency, no further decisions needed per
+item), with effort estimates and an explicit "live-verify before done" checklist
+per item touching LLM-generated-code behavior. See "Owner's next steps" above
+for the current status.
 
 ## 2026-09-04 (session 4) — raised coverage on 3 real gaps, left the sandbox backends alone on purpose
 
