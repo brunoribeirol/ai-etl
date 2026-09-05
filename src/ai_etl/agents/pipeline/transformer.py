@@ -39,49 +39,56 @@ Rules:
 - Do not read from files or databases — data is already in `dfs`.
 - When parsing a date/datetime column with `pd.to_datetime(..., errors="coerce")`, a
   day-first dataset (DD/MM/YYYY) parsed with the default month-first reading will
-  silently turn a large fraction of it into NaT instead of raising. But an
-  unambiguous format (ISO YYYY-MM-DD, or any day > 12) parses the SAME under both
-  readings — do not force a locale-preferred reading onto data that was never
-  ambiguous. Always compute BOTH readings, check whether they actually *disagree*
-  on any row where both succeeded, and only then let locale preference (and NaT
-  count as the final tie-break) decide. {date_parse_hint}
+  silently turn a large fraction of it into NaT instead of raising. But ISO
+  (YYYY-MM-DD) strings must NEVER be re-read with `dayfirst=True` — that flag does
+  not mean "this format is ambiguous, try both and compare," it means "reinterpret
+  which token is day vs month," which silently SWAPS a perfectly valid ISO date
+  whenever both day and month are ≤ 12 (roughly 39% of all real dates — this is the
+  common case, not a rare edge case). The only way to tell an ISO-shaped string
+  apart from a genuinely day-first one is to check whether it matches the ISO
+  format directly — comparing two numeric-parse *results* against each other
+  cannot distinguish "this is unambiguous ISO" from "this is genuinely ambiguous
+  day-first text," because both produce two different-but-valid timestamps either
+  way. Always try a strict ISO parse FIRST; only fall back to the day-first
+  heuristic for values that don't match ISO. {date_parse_hint}
 
 Example fallback pattern (WRONG: no fallback attempted, silently drops day-first dates):
 ```python
 df["date"] = pd.to_datetime(df["date"], errors="coerce")
 ```
 
-ALSO WRONG (forces a reading by locale/NaT-count alone, without checking whether the
-two readings actually disagree — this SILENTLY CORRUPTS unambiguous ISO dates by
-swapping day and month, a real bug found 2026-09-04):
-```python
-parsed = pd.to_datetime(df["date"], errors="coerce", dayfirst=True)  # forced, unchecked
-df["date"] = parsed
-```
-
-RIGHT (computes both readings, only prefers one over the other where they actually
-disagree — see the hint above for which reading this tenant prefers on genuine
-ambiguity):
+ALSO WRONG (comparing the two parses' *results* to detect "ambiguity" — this SILENTLY
+CORRUPTS ISO dates whenever day and month are both ≤ 12, a real bug found 2026-09-04
+that this exact "agreement check" pattern failed to catch, confirmed by re-testing
+live: the two parses of an ISO date like "2026-02-01" don't error and don't agree —
+they just produce two different wrong-or-right timestamps, so an agreement check
+alone can't tell which one is real):
 ```python
 default_parsed = pd.to_datetime(df["date"], errors="coerce")
 dayfirst_parsed = pd.to_datetime(df["date"], errors="coerce", dayfirst=True)
-both_ok = default_parsed.notna() & dayfirst_parsed.notna()
-disagree = bool(both_ok.any()) and bool((default_parsed[both_ok] != dayfirst_parsed[both_ok]).any())
-if disagree:
-    # Genuine day/month ambiguity — apply this tenant's locale preference, unless it
-    # produces strictly more NaT than the alternative reading.
+parsed = dayfirst_parsed if (dayfirst_parsed != default_parsed).any() else default_parsed  # WRONG
+df["date"] = parsed
+```
+
+RIGHT (checks the STRING FORMAT first — a strict ISO parse either matches every
+non-null value or it doesn't; only fall back to the day-first heuristic, and only
+for locale preference, on values that are not already unambiguous ISO):
+```python
+non_null = df["date"].notna().sum()
+strict_iso = pd.to_datetime(df["date"], format="%Y-%m-%d", errors="coerce")
+if non_null > 0 and strict_iso.notna().sum() == non_null:
+    # Every value matched YYYY-MM-DD exactly — already unambiguous, dayfirst is
+    # irrelevant and must not be applied.
+    parsed = strict_iso
+else:
+    # Not (all) ISO-shaped — a genuine day-first vs month-first ambiguity is
+    # possible here. See the hint above for which reading this tenant prefers.
+    default_parsed = pd.to_datetime(df["date"], errors="coerce")
+    dayfirst_parsed = pd.to_datetime(df["date"], errors="coerce", dayfirst=True)
     parsed = (
         dayfirst_parsed
         if dayfirst_parsed.isna().sum() <= default_parsed.isna().sum()
         else default_parsed
-    )
-else:
-    # No disagreement (e.g. unambiguous ISO dates) — locale preference is moot;
-    # fall back to whichever reading produced fewer NaT.
-    parsed = (
-        default_parsed
-        if default_parsed.isna().sum() <= dayfirst_parsed.isna().sum()
-        else dayfirst_parsed
     )
 df["date"] = parsed
 ```

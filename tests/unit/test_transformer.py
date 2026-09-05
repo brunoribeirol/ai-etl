@@ -220,17 +220,74 @@ def test_no_override_does_not_add_audit_entry(mock_get_llm) -> None:
 
 def test_default_locale_prompt_prefers_dayfirst(mock_get_llm) -> None:
     """Sprint 25 (ADR-036): `_make_state()`'s default locale (`initial_state`'s
-    `"pt-BR"` default) should steer the prompt toward preferring `dayfirst=True` on
-    a genuine ambiguity. 2026-09-04 fix: no longer unconditional — must not tell the
-    LLM to force dayfirst=True on an unambiguous date (that's the ISO-date
-    corruption bug this fix closes)."""
+    `"pt-BR"` default) should steer the prompt toward preferring `dayfirst=True`.
+    2026-09-04 fix (2nd round): the prompt must gate that preference on a strict
+    ISO-format check, not on comparing the two parses' results — the 1st-round fix
+    (agreement-check) was found live to still corrupt ISO dates whenever day and
+    month are both <= 12, since dayfirst=True genuinely disagrees with the default
+    reading in exactly that case."""
     llm = _mock_llm([VALID_CODE])
     mock_get_llm.return_value = llm
     transformer_node(_make_state())
 
     sent_prompt = llm.invoke.call_args[0][0]
     assert "prefer the dayfirst=True reading" in sent_prompt
-    assert "must NOT be forced into dayfirst=True" in sent_prompt
+    assert "NOT already unambiguous ISO" in sent_prompt
+    assert 'format="%Y-%m-%d"' in sent_prompt
+
+
+def _date_parse_pattern_from_prompt(dates: pd.Series, prefer_dayfirst: bool) -> pd.Series:
+    """A literal copy of the RIGHT pattern from `TRANSFORMER_PROMPT`
+    (2026-09-04, 2nd round fix) — executed for real against pandas, not just
+    asserted as prompt text. This is what caught the 1st round's fix being
+    itself still broken: the earlier "agreement check" pattern read as
+    correct prose, but `dayfirst=True` genuinely disagrees with the default
+    reading for ISO dates whenever day and month are both <= 12, so the
+    agreement check picked the wrong (locale-preferred) reading exactly when
+    it needed to not. Testing the prompt's *words* was not enough — this
+    tests the algorithm itself. `prefer_dayfirst` stands in for what the two
+    `date_parse_hint()` branches steer the LLM toward.
+    """
+    non_null = dates.notna().sum()
+    strict_iso = pd.to_datetime(dates, format="%Y-%m-%d", errors="coerce")
+    if non_null > 0 and strict_iso.notna().sum() == non_null:
+        return strict_iso
+    default_parsed = pd.to_datetime(dates, errors="coerce")
+    dayfirst_parsed = pd.to_datetime(dates, errors="coerce", dayfirst=True)
+    if prefer_dayfirst:
+        return (
+            dayfirst_parsed
+            if dayfirst_parsed.isna().sum() <= default_parsed.isna().sum()
+            else default_parsed
+        )
+    return (
+        default_parsed
+        if default_parsed.isna().sum() <= dayfirst_parsed.isna().sum()
+        else dayfirst_parsed
+    )
+
+
+def test_date_parse_pattern_preserves_iso_dates_with_day_and_month_both_low() -> None:
+    """The exact live-reproduced 2026-09-04 corruption case (found a 2nd time by
+    the LLM/Prompt Engineer persona audit after the 1st-round fix): ISO dates
+    where day and month are both <= 12 must NOT get swapped, for a pt-BR
+    (dayfirst-preferring) tenant."""
+    dates = pd.Series(["2026-02-01", "2026-03-01", "2026-01-05"])
+
+    result = _date_parse_pattern_from_prompt(dates, prefer_dayfirst=True)
+
+    assert list(result) == list(pd.to_datetime(dates))  # unchanged, no swap
+
+
+def test_date_parse_pattern_still_prefers_dayfirst_for_genuine_ddmmyyyy_text() -> None:
+    """Regression guard the other direction: fixing the ISO case must not break
+    the original bug this whole fix chain exists for — real DD/MM/YYYY text for
+    a pt-BR tenant must still parse day-first."""
+    dates = pd.Series(["02/03/2026", "15/04/2026"])  # 2 Mar and 15 Apr if dayfirst
+
+    result = _date_parse_pattern_from_prompt(dates, prefer_dayfirst=True)
+
+    assert list(result) == [pd.Timestamp("2026-03-02"), pd.Timestamp("2026-04-15")]
 
 
 def test_en_us_locale_prompt_prefers_month_first(mock_get_llm) -> None:
