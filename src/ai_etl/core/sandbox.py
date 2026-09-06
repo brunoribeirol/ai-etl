@@ -14,8 +14,38 @@ not. Analyst/Science layer additional globals (Plotly, sklearn, statsmodels) on
 top of this shared base via ``extra_globals``.
 
 Security note: exec() with restricted globals can be bypassed via
-introspection (e.g., ().__class__.__mro__[1].__subclasses__()). ADR-038 adds
-a second, opt-in isolation backend (``core/sandbox_docker.py`` — a
+introspection (e.g., ().__class__.__mro__[1].__subclasses__()). The
+`"process"` backend's child now installs a seccomp filter on itself (Linux
+only, see ``_install_seccomp_filter``) before running any sandboxed code,
+denying the `execve`/`execveat` syscalls with `EPERM` — this closes the
+specific arbitrary-command-execution vector the 2026-09-04 Red Team audit
+demonstrated (``docs/work/2026-09-04-persona-audit/red-team.md``: reaching
+`subprocess.run` via the introspection bypass above and using it to run
+`whoami`), without requiring Docker/Vercel Sandbox.
+
+An earlier version of this fix used `RLIMIT_NPROC=0` instead — rejected
+after testing against a real Linux container (this project's own
+`python:3.12-slim` base image), not just macOS: as root (this project's
+Dockerfile has no `USER`, so the "process" backend's child runs as root
+in production), Linux exempts privileged processes from `RLIMIT_NPROC`
+entirely, so it blocked nothing; dropping privilege first
+(`os.setuid()`) before applying the limit made it block `subprocess.run`
+correctly, but ALSO broke `multiprocessing.Queue.put()`'s own feeder
+thread (Linux counts threads against `RLIMIT_NPROC`, unlike macOS) —
+meaning every sandboxed call, not just ML code, would have stopped being
+able to return its result. Seccomp filters specific syscalls
+(`execve`/`execveat`) rather than a blunt process/thread-count ceiling, so
+it blocks exactly the demonstrated vector without touching thread
+creation (`clone()`) that `Queue`'s feeder thread and BLAS's own
+multi-threading both rely on — verified against the same real Linux
+container: sklearn `LinearRegression` still works, the Red Team's gadget
+does not.
+
+It does not close the introspection escape itself, and does not block
+non-forking abuse of an already-imported, already-connected object (e.g.
+a live network socket) — see ADR-038/ADR-039 below for the stronger,
+opt-in container-isolation backends that do. ADR-038
+adds a second, opt-in isolation backend (``core/sandbox_docker.py`` — a
 network-disabled, read-only, resource-capped Docker container) specifically
 to contain that bypass, superseding ADR-032 Decision 4's risk acceptance.
 The `"process"` backend below remains the default (this project's Railway
@@ -34,6 +64,7 @@ Decision 4, ADR-038, and ADR-039 for the full risk analysis and its history.
 import importlib
 import multiprocessing
 import os
+import platform
 import queue
 import time
 import traceback
@@ -41,6 +72,18 @@ from typing import Any, Literal, Optional, TypedDict
 
 import numpy as np
 import pandas as pd
+
+try:
+    import pyseccomp
+
+    _PYSECCOMP_AVAILABLE = True
+except ImportError:  # pragma: no cover -- exercised on non-Linux dev machines
+    # (macOS) and by unit tests via monkeypatch, not a real missing-package
+    # run in production. seccomp is a Linux-kernel-only feature — pyseccomp
+    # itself fails to import wherever libseccomp.so isn't present (macOS has
+    # no such library at all), which is why this is a guarded import rather
+    # than a hard `pyproject.toml` dependency failure blocking local dev.
+    _PYSECCOMP_AVAILABLE = False
 
 SAFE_BUILTINS: dict[str, Any] = {
     "len": len,
@@ -249,6 +292,61 @@ def _execute_code(
         return _run_script_mode(code, dfs, result_vars, sandbox_globals)
 
 
+def _install_seccomp_filter() -> None:
+    """Deny `execve`/`execveat` (EPERM) for the calling process, Linux only.
+
+    Wave 0 item 1, 2026-09-05 mega-audit remediation
+    (docs/work/2026-09-05-mega-audit-remediation-plan.md): closes the
+    arbitrary-command-execution vector the Red Team audit demonstrated
+    (docs/work/2026-09-04-persona-audit/red-team.md — reaching
+    `subprocess.run` via `().__class__.__base__.__subclasses__()` and
+    calling it to run `whoami`, no `import` needed) at the kernel syscall
+    level — it doesn't matter which Python object the introspection bypass
+    reaches, launching a new program requires `execve`/`execveat`, and
+    those are refused regardless.
+
+    Deliberately NOT `RLIMIT_NPROC=0` (an earlier version of this fix,
+    reverted after testing against a real Linux container — see the module
+    docstring's "Security note" for the full story): that approach either
+    did nothing (root is exempt from `RLIMIT_NPROC` on Linux, and this
+    project's Dockerfile runs as root) or, once privilege was dropped to
+    make it bite, broke `multiprocessing.Queue.put()`'s own feeder thread
+    for every sandboxed call, not just ones using threaded BLAS code.
+    Seccomp filters the specific syscall instead of capping a shared
+    process/thread counter, so `clone()`-based thread creation (`Queue`'s
+    feeder thread, numpy/BLAS's own threading) is untouched — verified
+    against the same real Linux container: sklearn `LinearRegression`
+    still works, the Red Team's gadget does not.
+
+    Fails open (silently does nothing) when `pyseccomp` isn't
+    importable — true on every non-Linux dev machine (macOS has no
+    `libseccomp.so` at all, so `pyseccomp` itself fails to import there;
+    see the module-level `try`/`except ImportError` above) and, in
+    principle, in some future deployment target. Every production/CI
+    target for this project (Railway, `ubuntu-latest`) is Linux, where
+    this always applies. `os.environ.clear()` (called immediately before
+    this, in `_sandbox_worker`) and the timeout/kill bound around the
+    whole child process both still apply regardless of whether this
+    particular layer is active.
+
+    Also fails open (never raises) on any error installing the filter
+    itself — this must never crash the worker or prevent legitimate code
+    from running; it can only make the sandbox *more* restrictive, never
+    less available.
+    """
+    if not _PYSECCOMP_AVAILABLE or platform.system() != "Linux":
+        return
+    try:
+        seccomp_filter = pyseccomp.SyscallFilter(defaction=pyseccomp.ALLOW)
+        seccomp_filter.add_rule(pyseccomp.ERRNO(1), "execve")  # errno 1 = EPERM
+        seccomp_filter.add_rule(pyseccomp.ERRNO(1), "execveat")
+        seccomp_filter.load()
+    except Exception:  # nosec B110 — fail open, see docstring above: this must
+        # never crash the worker or block legitimate code, only ever make the
+        # sandbox more restrictive when it succeeds
+        pass
+
+
 def _sandbox_worker(
     code: str,
     dfs: dict[str, Any],
@@ -300,6 +398,8 @@ def _sandbox_worker(
     # `TMPDIR`/`TEMP`/`TMP`) has a hardcoded `/tmp` fallback on the Linux
     # containers this project deploys to. Nothing here needs an allowlist.
     os.environ.clear()
+
+    _install_seccomp_filter()
 
     try:
         values, error = _execute_code(

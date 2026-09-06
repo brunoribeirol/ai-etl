@@ -83,6 +83,19 @@ dependencies = [
     # langchain-anthropic/-google-genai/-ollama above. `[celery,fastapi]`
     # pulls in both framework integrations this project actually uses.
     "sentry-sdk[celery,fastapi]>=2.0.0",
+    # Wave 0 item 1, 2026-09-05 mega-audit remediation
+    # (docs/work/2026-09-05-mega-audit-remediation-plan.md) —
+    # `core/sandbox.py::_install_seccomp_filter()` denies execve/execveat in
+    # the sandboxed child process, closing the Red Team audit's demonstrated
+    # arbitrary-command-execution vector. Base dependency, not an extra: the
+    # "process" backend (default in production) calls this unconditionally.
+    # Pure-ctypes wrapper around libseccomp (already present by default in
+    # the project's own python:3.12-slim base image, verified in Dockerfile)
+    # — no compiler/build step needed to install it. Import-guarded in
+    # sandbox.py (fails open) since it only works on Linux — macOS has no
+    # libseccomp.so at all, so this doesn't block local dev on the owner's
+    # machine.
+    "pyseccomp>=0.1.2; sys_platform == 'linux'",
 ]
 
 [project.optional-dependencies]
