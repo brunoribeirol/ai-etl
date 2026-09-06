@@ -27,6 +27,24 @@ with real inputs, not by static reading. Prefer spawning each persona as a separ
 (general-purpose, isolation: worktree if it needs to run code) so investigations don't
 cross-contaminate each other's assumptions.
 
+**Do not dispatch browser-driving personas in parallel against one shared Chrome session.**
+The 2026-09-04 full-scope run (all 12 at once) hit real tab-group contention — multiple
+personas' navigation stole each other's tabs mid-investigation — plus an unrelated session
+rate-limit; 4 of 12 (Accessibility, LLM/Prompt Engineer, Data Engineer, Non-technical User)
+failed or produced hypothesis-only reports on the first pass and had to be retried solo, one at
+a time. Personas that need `mcp__claude-in-chrome__*` (Data Engineer, LLM/Prompt Engineer,
+Non-technical user, Accessibility, Product/PO) should either run sequentially, or be the only
+browser-using persona in a given parallel batch — code-only personas (Tech Lead, Red Team, Blue
+Team, SRE, CTO/Founder, Academic Evaluator, QA) can still run fully in parallel with each other.
+
+**Any finding that touches LLM-generated-code behavior (a prompt, not deterministic code) and
+gets fixed as this audit's one allowed exception (see Step 4) must be live-verified against the
+deployed app with the exact reported input before being called done — not just reasoned about or
+covered by a prompt-text assertion.** The 2026-09-04/05 run's own date-parsing finding was a
+"fix" (from an *earlier*, unrelated session) that had itself passed exactly that weaker bar and
+was still wrong; only a live re-test caught it. See `bugs-solved/ai-etl-dayfirst-agreement-check-
+still-corrupts-iso-dates.md` (Vault) for the full account.
+
 | Persona | Focus | Typical method |
 |---|---|---|
 | CTO/Founder | Due-diligence red flags, gap between docs and reality | Cross-reference `docs/adr/`, `SECURITY.md`, vault `artefact/` against actual code |
@@ -63,4 +81,8 @@ it" as distinct, separately-approved steps.
 
 - `docs/work/2026-08-24-full-technical-product-audit.md` — the original, unformalized run of
   this protocol.
+- `docs/work/2026-09-04-mega-persona-audit.md` (+ `docs/work/2026-09-04-persona-audit/*.md`) —
+  first full-scope run using this formalized skill; source of the browser-contention and
+  live-verification lessons folded into Step 2 above.
+- `docs/work/2026-09-05-mega-audit-remediation-plan.md` — the Step-4 follow-up plan for that run.
 - `work-plan` skill — use for the follow-up fix-execution plan once findings are prioritized.
