@@ -54,9 +54,26 @@ You will receive an acknowledgement within 72 hours.
   patching the specific `__mro__` vector, third-party sandboxing libraries)
   and the risk-acceptance re-confirmed with a concrete revisit trigger — see
   [ADR-032](docs/adr/ADR-032-security-posture-admin-role-sast.md). Real
-  process/filesystem/network isolation (Docker or gVisor) is the stated
-  pre-requisite before opening self-serve external signups; still not
-  implemented.
+  process/filesystem/network isolation (Docker or gVisor) was the stated
+  pre-requisite before opening self-serve external signups; **the app went
+  public before that pre-requisite was met** (owner decision, 2026-09-06),
+  which is why the mitigation below was added rather than deferred further.
+- **Update (2026-09-06, ADR-046):** a Red Team persona reproduced the
+  introspection bypass for real — arbitrary command execution
+  (`subprocess.run(["whoami"])`) via the `"process"` backend's known
+  `__subclasses__()` path. The `"process"` backend's sandboxed child now
+  installs a seccomp filter denying `execve`/`execveat` (Linux only,
+  `core/sandbox.py::_install_seccomp_filter()`) before any user code runs —
+  closes the specific arbitrary-command-execution angle of the
+  introspection bypass. **Does not close the introspection bypass itself**
+  (a gadget that abuses an already-imported, already-connected object
+  without forking a new process is not addressed) — real process/
+  filesystem/network isolation (Docker/ADR-038 or Vercel Sandbox/ADR-039)
+  remains the stronger mitigation, still not the production default. See
+  [ADR-046](docs/adr/ADR-046-seccomp-sandbox-execve-denial.md), including
+  a documented false start (`RLIMIT_NPROC` looked correct on macOS, proved
+  ineffective-or-worse on real Linux) worth reading before assuming this
+  class of mitigation is simple to get right.
 
 ### SQL
 - SQL queries use SQLAlchemy bound parameters (`text("... WHERE id = :id")`)
