@@ -1,9 +1,10 @@
 # 2026-09-06 — MVP monetization-readiness plan
 
-**Status:** WS1, WS2 (runbook), and WS3 complete and merged (PRs #204, #205,
-#206). The one item still genuinely open is the owner actually *running*
-WS2's checklist (a real Supabase test restore) — everything Claude could
-do without dashboard access is done.
+**Status:** WS1 and WS3 complete and merged (PRs #204, #205, #206, #207).
+**WS2 pivoted mid-plan**: the owner ran the Supabase verification and found
+zero backups on the Free Plan (not "unverified but likely present") — WS2
+became "build a manual `pg_dump`-to-S3 stopgap" instead of "verify and
+report back." See "Workstream 2" below for the finding and the new plan.
 **Owner:** Bruno Ribeiro (decisions) + Claude (execution)
 
 ## Objective
@@ -135,16 +136,36 @@ Branch: `docs/soc2-remaining-gaps`. One PR.
    tracking gap (Sentry) as closed (was already true, doc was stale), and
    point each remaining P1 row at its new doc.
 
-## Workstream 2 — Backup/restore verification (owner action) — RUNBOOK READY, AWAITING OWNER
+## Workstream 2 — Backup/restore: verification, finding, and fix — DONE (rehearsal owed)
 
-Not a branch with code changes of its own beyond the runbook doc. The
-step-by-step checklist is now in `docs/adr/ADR-042-rto-rpo-disaster-recovery.md`'s
-"Owner verification checklist" section (4 steps: confirm PITR enabled, note
-the real retention window, perform one test restore into a scratch project,
-report back). **The owner still needs to actually run it** — Claude has no
-Supabase dashboard access. Once done, update that section (or ADR-042's
-Consequences) with the real date/tier/window/duration, replacing
-"unverified."
+**Owner ran the verification** and reported back a screenshot: Supabase
+dashboard → Database → Backups → *"Free Plan does not include project
+backups."* No PITR, no scheduled backups, no "restore to new project" data.
+This overturned Decision 2's original assumption ("almost certainly
+available on paid tiers") — the real RPO for Postgres was, until this
+session, infinite.
+
+**Owner chose, from 3 options** (Supabase Pro upgrade / accept the risk in
+writing / manual stopgap): **a manual `pg_dump`-to-S3 stopgap**, on the
+reasoning that a real free mechanism beats a paid upgrade bought before
+there's revenue to justify it.
+
+**Built**: `.github/workflows/db-backup.yml` — a GitHub Actions workflow
+(deliberately not a Celery beat task, to keep this fully outside the live
+application's blast radius), daily `pg_dump --format=custom` to
+`s3://{bucket}/_system/db-backups/production/{date}.dump`, verified
+non-trivially-sized before declaring success. Uses a dedicated read-only
+Postgres role (`backup_reader`, SQL provided in ADR-042) instead of the
+app's own `rolbypassrls`-privileged credential — a leaked backup secret
+must not carry full write access.
+
+**Still owed** (owner action, tracked in ADR-042's "Owner verification
+checklist" section, now rescoped to the new mechanism):
+1. Set the 5 new GitHub secrets the workflow needs.
+2. Trigger it once manually, confirm the dump lands in S3.
+3. Perform one real `pg_restore` rehearsal into a scratch Postgres (a local
+   Docker Postgres is enough) and time it.
+4. Report back — closes the "documented, tested backup" gap for real.
 
 ## Workstream 3 — Admin mediated write-access + support audit log (code) — DONE
 
