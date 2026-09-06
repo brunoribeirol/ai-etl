@@ -143,8 +143,21 @@ no write access to secrets):
   GRANT USAGE ON SCHEMA public TO backup_reader;
   GRANT SELECT ON ALL TABLES IN SCHEMA public TO backup_reader;
   ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO backup_reader;
+  -- pg_dump also reads sequence state (last_value/is_called) to preserve
+  -- auto-increment position on restore — found missing on the first real
+  -- dump attempt ("permission denied for sequence stage_latencies_id_seq"),
+  -- table-level SELECT alone doesn't cover this.
+  GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO backup_reader;
+  ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON SEQUENCES TO backup_reader;
   ```
-  Then set `BACKUP_DATABASE_URL` to that role's connection string.
+  Generate the password with something URL-safe (`openssl rand -hex 24`,
+  not `-base64` — a `/` or `+` in a base64 password breaks connection-string
+  parsing, found on the first real attempt to use this role). Then set
+  `BACKUP_DATABASE_URL` to that role's connection string using Supabase's
+  **Session pooler** (not Direct connection, not Transaction pooler) — the
+  Session pooler is the one that resolves over IPv4 (GitHub Actions runners
+  have no IPv6 egress) and is documented as `pg_dump`/`pg_restore`-safe,
+  unlike the Transaction pooler.
 - `BACKUP_AWS_ACCESS_KEY_ID` / `BACKUP_AWS_SECRET_ACCESS_KEY` — likewise
   recommended as a dedicated IAM user scoped to
   `s3:PutObject`/`s3:GetObject`/`s3:HeadObject` on
