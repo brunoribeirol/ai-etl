@@ -56,9 +56,16 @@ jobs:
       - name: pg_dump (custom format, compressed)
         env:
           PGCONNECT_TIMEOUT: "30"
+        # Explicit versioned path, not the bare `pg_dump` on PATH: found
+        # running this workflow for the first time (2026-09-06) that even
+        # with postgresql-client-17 installed alongside the runner's
+        # pre-existing v16, the postgresql-common wrapper script still
+        # resolved plain `pg_dump` to v16 — silently, no error, just the
+        # wrong binary. Bypassing the wrapper entirely is more reliable
+        # than debugging its version-selection logic in CI.
         run: |
           set -euo pipefail
-          pg_dump "${{ secrets.BACKUP_DATABASE_URL }}" \
+          /usr/lib/postgresql/17/bin/pg_dump "${{ secrets.BACKUP_DATABASE_URL }}" \
             --format=custom --no-owner --no-privileges \
             --file=backup.dump
 
