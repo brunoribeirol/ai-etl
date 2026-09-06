@@ -96,20 +96,34 @@ def date_parse_hint(locale: str) -> str:
     timestamps either way. The only reliable signal is the STRING FORMAT itself: a
     strict `format="%Y-%m-%d"` parse either matches every value or it doesn't.
     Locale preference below applies ONLY to values that fail that strict ISO
-    check — see the prompt's own RIGHT example for the exact pattern."""
+    check — see the prompt's own RIGHT example for the exact pattern.
+
+    Wave 3 item 16, 2026-09-05 mega-audit remediation
+    (docs/work/2026-09-05-mega-audit-remediation-plan.md): live-verified
+    real gap — the strict-ISO check above only helps a column that is
+    *purely* ISO; a column genuinely MIXING ISO and non-ISO strings still
+    fell to a whole-column `pd.to_datetime(...)` call for the non-ISO
+    branch, and pandas infers ONE format from the column and applies it to
+    every row, silently turning the minority-format rows into NaT even
+    though each string is individually parseable. The prompt's RIGHT
+    example now parses per-value (`.apply()`), which sidesteps that
+    column-wide format inference entirely — this hint no longer talks about
+    comparing NaT counts across the whole column (that comparison doesn't
+    apply per-value: a single value either parses under the tenant's
+    preferred reading or it doesn't)."""
     meta = get_locale_metadata(locale)
     if meta["dayfirst"]:
         return (
             f"This tenant's locale is {locale} ({meta['date_format_hint']}, day-first). Only "
             "for values that are NOT already unambiguous ISO (YYYY-MM-DD) — see the strict-ISO "
-            "check in the pattern above — prefer the dayfirst=True reading for this tenant, "
-            "unless it produces strictly more NaT than the default reading."
+            "check in the pattern above, applied per value — use the dayfirst=True reading for "
+            "this tenant on each such value."
         )
     return (
         f"This tenant's locale is {locale} ({meta['date_format_hint']}, month-first — pandas' "
         "own default). Only for values that are NOT already unambiguous ISO (YYYY-MM-DD) — see "
-        "the strict-ISO check in the pattern above — prefer the default (month-first) reading "
-        "for this tenant, unless it produces strictly more NaT than the dayfirst=True reading."
+        "the strict-ISO check in the pattern above, applied per value — use the default "
+        "(month-first) reading for this tenant on each such value."
     )
 
 

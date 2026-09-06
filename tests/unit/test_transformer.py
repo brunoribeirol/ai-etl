@@ -1,5 +1,6 @@
 """Unit tests for the Transformer Agent."""
 
+from typing import Any
 from unittest.mock import MagicMock
 
 import pandas as pd
@@ -242,40 +243,37 @@ def test_default_locale_prompt_prefers_dayfirst(mock_get_llm) -> None:
     transformer_node(_make_state())
 
     sent_prompt = llm.invoke.call_args[0][0]
-    assert "prefer the dayfirst=True reading" in sent_prompt
+    assert "use the dayfirst=True reading" in sent_prompt
     assert "NOT already unambiguous ISO" in sent_prompt
     assert 'format="%Y-%m-%d"' in sent_prompt
 
 
 def _date_parse_pattern_from_prompt(dates: pd.Series, prefer_dayfirst: bool) -> pd.Series:
-    """A literal copy of the RIGHT pattern from `TRANSFORMER_PROMPT`
-    (2026-09-04, 2nd round fix) — executed for real against pandas, not just
-    asserted as prompt text. This is what caught the 1st round's fix being
-    itself still broken: the earlier "agreement check" pattern read as
-    correct prose, but `dayfirst=True` genuinely disagrees with the default
-    reading for ISO dates whenever day and month are both <= 12, so the
-    agreement check picked the wrong (locale-preferred) reading exactly when
-    it needed to not. Testing the prompt's *words* was not enough — this
-    tests the algorithm itself. `prefer_dayfirst` stands in for what the two
+    """A literal copy of the RIGHT pattern from `TRANSFORMER_PROMPT` (Wave 3
+    item 16, 2026-09-05 mega-audit remediation) — executed for real against
+    pandas, not just asserted as prompt text.
+
+    Per-value (`.apply()`), not per-column: the previous column-wide version
+    of this pattern (2026-09-04, 2nd round fix) correctly handled a column
+    that was *purely* ISO or *purely* non-ISO, but a live-verified real gap
+    (docs/work/2026-09-05-mega-audit-remediation-plan.md) found it still
+    broke on a column genuinely MIXING both — `pd.to_datetime(...)` with no
+    explicit `format=` infers ONE format from the column and silently turns
+    minority-format rows into NaT, even though each string is individually
+    parseable. Parsing per-value sidesteps that column-wide inference
+    entirely. `prefer_dayfirst` stands in for what the two
     `date_parse_hint()` branches steer the LLM toward.
     """
-    non_null = dates.notna().sum()
-    strict_iso = pd.to_datetime(dates, format="%Y-%m-%d", errors="coerce")
-    if non_null > 0 and strict_iso.notna().sum() == non_null:
-        return strict_iso
-    default_parsed = pd.to_datetime(dates, errors="coerce")
-    dayfirst_parsed = pd.to_datetime(dates, errors="coerce", dayfirst=True)
-    if prefer_dayfirst:
-        return (
-            dayfirst_parsed
-            if dayfirst_parsed.isna().sum() <= default_parsed.isna().sum()
-            else default_parsed
-        )
-    return (
-        default_parsed
-        if default_parsed.isna().sum() <= dayfirst_parsed.isna().sum()
-        else dayfirst_parsed
-    )
+
+    def parse_one(value: object) -> Any:
+        if pd.isna(value):
+            return pd.NaT
+        iso = pd.to_datetime(value, format="%Y-%m-%d", errors="coerce")
+        if pd.notna(iso):
+            return iso
+        return pd.to_datetime(value, errors="coerce", dayfirst=prefer_dayfirst)
+
+    return dates.apply(parse_one)
 
 
 def test_date_parse_pattern_preserves_iso_dates_with_day_and_month_both_low() -> None:
@@ -299,6 +297,27 @@ def test_date_parse_pattern_still_prefers_dayfirst_for_genuine_ddmmyyyy_text() -
     result = _date_parse_pattern_from_prompt(dates, prefer_dayfirst=True)
 
     assert list(result) == [pd.Timestamp("2026-03-02"), pd.Timestamp("2026-04-15")]
+
+
+def test_date_parse_pattern_handles_a_column_genuinely_mixing_iso_and_ddmmyyyy() -> None:
+    """Wave 3 item 16, 2026-09-05 mega-audit remediation
+    (docs/work/2026-09-05-mega-audit-remediation-plan.md): the exact
+    live-reproduced case (Data Engineer persona, `vendas_br_edge.csv` /
+    confirmed again via the deployed app's own live-verification run for
+    items 2/3/4b) — a column mixing ISO strings with DD/MM/YYYY strings.
+    The column-wide version of this pattern dropped every ISO row here
+    (pandas infers one format from the column and applies it uniformly);
+    parsing per-value must recover all of them."""
+    dates = pd.Series(["02/03/2026", "2026-03-15", "05/03/2026", "2026-03-20"])
+
+    result = _date_parse_pattern_from_prompt(dates, prefer_dayfirst=True)
+
+    assert list(result) == [
+        pd.Timestamp("2026-03-02"),
+        pd.Timestamp("2026-03-15"),
+        pd.Timestamp("2026-03-05"),
+        pd.Timestamp("2026-03-20"),
+    ]
 
 
 def test_en_us_locale_prompt_prefers_month_first(mock_get_llm) -> None:

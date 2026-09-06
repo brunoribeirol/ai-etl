@@ -89,6 +89,18 @@ export default async function History() {
               </TableRow>
             </TableHeader>
             <TableBody>
+              {/* Wave 3 item 9, 2026-09-05 mega-audit remediation
+                  (docs/work/2026-09-05-mega-audit-remediation-plan.md): this
+                  already renders real `<table>`/`<tr>`/`<td>` markup (shadcn
+                  `<Table>`, not a `<div>` grid) — the actual reported gap was
+                  5 separate, identically-targeted `<a>` elements per row, so
+                  a screen reader announces "link" 5 times per run instead of
+                  once. Collapsed to a single link (the run title/id cell,
+                  the one already carrying the most identifying text); the
+                  other cells are now static content. `cursor-pointer` stays
+                  on the row as a visual affordance even though only the
+                  first cell is the real click target — a full-row stretched
+                  link is a heavier change than this finding calls for. */}
               {runs.map((run) => (
                 <TableRow key={run.run_id} className="cursor-pointer">
                   <TableCell className="p-0">
@@ -105,24 +117,14 @@ export default async function History() {
                     </Link>
                   </TableCell>
                   <TableCell>
-                    <Link href={`/history/${run.run_id}`} className="block">
-                      <StatusBadge status={run.status} />
-                    </Link>
+                    <StatusBadge status={run.status} />
                   </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    <Link href={`/history/${run.run_id}`} className="block">
-                      {run.model_name ?? "—"}
-                    </Link>
-                  </TableCell>
+                  <TableCell className="text-muted-foreground">{run.model_name ?? "—"}</TableCell>
                   <TableCell className="text-right font-mono text-xs">
-                    <Link href={`/history/${run.run_id}`} className="block">
-                      {run.cost_usd != null ? `$${run.cost_usd.toFixed(6)}` : "—"}
-                    </Link>
+                    {run.cost_usd != null ? `$${run.cost_usd.toFixed(6)}` : "—"}
                   </TableCell>
                   <TableCell className="text-right text-muted-foreground text-xs">
-                    <Link href={`/history/${run.run_id}`} className="block">
-                      {new Date(run.timestamp).toLocaleString()}
-                    </Link>
+                    {new Date(run.timestamp).toLocaleString()}
                   </TableCell>
                 </TableRow>
               ))}
