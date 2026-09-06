@@ -66,13 +66,13 @@ def test_date_parse_hint_prefers_dayfirst_for_pt_br() -> None:
     with the default reading precisely for ISO dates with day/month both <= 12 —
     exactly the case that must NOT be re-read."""
     hint = date_parse_hint("pt-BR")
-    assert "prefer the dayfirst=True reading" in hint
+    assert "use the dayfirst=True reading" in hint
     assert "NOT already unambiguous ISO" in hint
 
 
 def test_date_parse_hint_prefers_month_first_for_en_us() -> None:
     hint = date_parse_hint("en-US")
-    assert "prefer the default (month-first) reading" in hint
+    assert "use the default (month-first) reading" in hint
     assert "NOT already unambiguous ISO" in hint
 
 

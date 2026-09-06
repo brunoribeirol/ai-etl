@@ -4,7 +4,8 @@
     "description": "Descreva o pipeline em linguagem natural. Agentes de IA extraem, limpam e carregam seus dados heterogêneos gerando código Python auditável — não uma resposta de chat que some quando você fecha a aba."
   },
   "localeToggle": {
-    "switchTo": "Mudar para {locale, select, en-US {inglês} other {português}}"
+    "switchToEnglish": "Mudar para inglês",
+    "switchToPortuguese": "Mudar para português"
   },
   "common": {
     "brand": "AI-ETL",

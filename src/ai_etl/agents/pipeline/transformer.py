@@ -70,19 +70,23 @@ parsed = dayfirst_parsed if (dayfirst_parsed != default_parsed).any() else defau
 df["date"] = parsed
 ```
 
-RIGHT (checks the STRING FORMAT first — a strict ISO parse either matches every
-non-null value or it doesn't; only fall back to the day-first heuristic, and only
-for locale preference, on values that are not already unambiguous ISO):
+ALSO WRONG, a subtler one (checking the whole column's format uniformly — this
+DROPS valid dates whenever a column genuinely MIXES ISO and non-ISO strings, a
+real bug found 2026-09-05 live testing: `pd.to_datetime(...)` with no explicit
+`format=` infers ONE format from the column and applies it to every row, so a
+column with SOME rows like "2026-03-15" and OTHER rows like "02/03/2026" turns
+the minority-format rows into NaT even though each string is individually
+parseable — this is a pandas gotcha, not a logic bug in the branch below, and
+it means "is the whole column ISO?" is the wrong question to ask):
 ```python
 non_null = df["date"].notna().sum()
 strict_iso = pd.to_datetime(df["date"], format="%Y-%m-%d", errors="coerce")
 if non_null > 0 and strict_iso.notna().sum() == non_null:
-    # Every value matched YYYY-MM-DD exactly — already unambiguous, dayfirst is
-    # irrelevant and must not be applied.
     parsed = strict_iso
 else:
-    # Not (all) ISO-shaped — a genuine day-first vs month-first ambiguity is
-    # possible here. See the hint above for which reading this tenant prefers.
+    # WRONG: still parses the whole column at once. If some rows are ISO and
+    # others aren't, whichever format pandas infers from the column silently
+    # fails on rows in the other format.
     default_parsed = pd.to_datetime(df["date"], errors="coerce")
     dayfirst_parsed = pd.to_datetime(df["date"], errors="coerce", dayfirst=True)
     parsed = (
@@ -91,6 +95,23 @@ else:
         else default_parsed
     )
 df["date"] = parsed
+```
+
+RIGHT (parse EACH VALUE independently with `.apply()`, so pandas never gets a
+chance to infer one format for a column that may genuinely mix them — a
+strict ISO check per value, falling back to this tenant's locale-preferred
+reading only for that specific value if it isn't ISO-shaped):
+```python
+def _parse_one_date(value):
+    if pd.isna(value):
+        return pd.NaT
+    iso = pd.to_datetime(value, format="%Y-%m-%d", errors="coerce")
+    if pd.notna(iso):
+        return iso
+    # Not ISO-shaped — apply this tenant's locale preference to THIS value only.
+    return pd.to_datetime(value, errors="coerce", dayfirst=True)  # or dayfirst=False, see hint above
+
+df["date"] = df["date"].apply(_parse_one_date)
 ```
 
 When cleaning a monetary/currency column that has a currency-symbol prefix (e.g.

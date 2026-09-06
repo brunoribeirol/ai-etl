@@ -36,6 +36,18 @@ export function LocaleToggle({ syncBackend = false }: { syncBackend?: boolean })
   const apiUrl = process.env.NEXT_PUBLIC_API_URL;
 
   const nextLocale: Locale = locale === "pt-BR" ? "en-US" : "pt-BR";
+  // Wave 3 item 10, 2026-09-05 mega-audit remediation
+  // (docs/work/2026-09-05-mega-audit-remediation-plan.md): the previous
+  // single `switchTo` key used an ICU `select` with `en-US`/`pt-BR` as the
+  // case labels (`{locale, select, en-US {English} other {Portuguese}}`) —
+  // a hyphenated case label next-intl's ICU parser can't handle, so it
+  // failed to compile and silently rendered the raw key
+  // ("localeToggle.switchTo") as both the visible text and the
+  // `aria-label` on every page, flagged 11 days before this fix and still
+  // unfixed until now. Two plain keys, picked in JS, sidesteps ICU `select`
+  // entirely rather than trying to find syntax it accepts for a hyphenated
+  // variable.
+  const switchToLabel = nextLocale === "en-US" ? t("switchToEnglish") : t("switchToPortuguese");
 
   function handleClick() {
     // Real bug found 2026-08-30: the backend sync used to be awaited inside
@@ -73,12 +85,12 @@ export function LocaleToggle({ syncBackend = false }: { syncBackend?: boolean })
       size="icon-sm"
       onClick={handleClick}
       disabled={isPending}
-      aria-label={t("switchTo", { locale: nextLocale })}
+      aria-label={switchToLabel}
     >
       <span className="text-xs font-semibold" aria-hidden>
         {locale === "pt-BR" ? "PT" : "EN"}
       </span>
-      <span className="sr-only">{t("switchTo", { locale: nextLocale })}</span>
+      <span className="sr-only">{switchToLabel}</span>
     </Button>
   );
 }
