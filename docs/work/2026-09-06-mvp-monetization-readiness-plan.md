@@ -132,13 +132,16 @@ Branch: `docs/soc2-remaining-gaps`. One PR.
    tracking gap (Sentry) as closed (was already true, doc was stale), and
    point each remaining P1 row at its new doc.
 
-## Workstream 2 — Backup/restore verification (owner action)
+## Workstream 2 — Backup/restore verification (owner action) — RUNBOOK READY, AWAITING OWNER
 
-Not a branch — no code. Claude writes a short verification runbook (folded
-into WS1's PR, appended to ADR-042, or its own tiny doc — decide at write
-time); the owner performs the actual Supabase dashboard check + one test
-restore, then reports the result back so ADR-042's Consequences section can
-be updated with real dates/findings instead of "unverified."
+Not a branch with code changes of its own beyond the runbook doc. The
+step-by-step checklist is now in `docs/adr/ADR-042-rto-rpo-disaster-recovery.md`'s
+"Owner verification checklist" section (4 steps: confirm PITR enabled, note
+the real retention window, perform one test restore into a scratch project,
+report back). **The owner still needs to actually run it** — Claude has no
+Supabase dashboard access. Once done, update that section (or ADR-042's
+Consequences) with the real date/tier/window/duration, replacing
+"unverified."
 
 ## Workstream 3 — Admin mediated write-access + support audit log (code, needs scoping first)
 
