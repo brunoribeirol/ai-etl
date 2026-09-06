@@ -58,7 +58,8 @@ production-rollout item: it gives the same container-isolation guarantees
 reachable from this project's Railway deployment (no Docker daemon
 required on the calling side, unlike `"docker"`).
 See SECURITY.md and docs/adr/ADR-003-exec-sandbox.md, ADR-007, ADR-032
-Decision 4, ADR-038, and ADR-039 for the full risk analysis and its history.
+Decision 4, ADR-038, ADR-039, and ADR-046 (the seccomp execve/execveat
+denial below) for the full risk analysis and its history.
 """
 
 import importlib
@@ -295,7 +296,7 @@ def _execute_code(
 def _install_seccomp_filter() -> None:
     """Deny `execve`/`execveat` (EPERM) for the calling process, Linux only.
 
-    Wave 0 item 1, 2026-09-05 mega-audit remediation
+    ADR-046. Wave 0 item 1, 2026-09-05 mega-audit remediation
     (docs/work/2026-09-05-mega-audit-remediation-plan.md): closes the
     arbitrary-command-execution vector the Red Team audit demonstrated
     (docs/work/2026-09-04-persona-audit/red-team.md — reaching

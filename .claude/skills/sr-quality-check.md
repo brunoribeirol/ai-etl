@@ -48,6 +48,7 @@ Para cada agente novo ou modificado em `src/ai_etl/agents/`, verificar:
 | SQL: parametrizado via SQLAlchemy text() | grep f"SELECT em src/ |
 | sqlite3: sempre com contextlib.closing() | grep sqlite3.connect src/ |
 | query param de load_postgres() nunca vem de input externo | revisar chamadas |
+| Mudança toca primitiva de SO (rlimit, seccomp, permissões, uid/gid, threads/processos) | verificar contra um container Linux real (`docker run python:3.12-slim ...`), não só `make check` no macOS — ver ADR-046 (`RLIMIT_NPROC` parecia correto no macOS, era inofensivo como root e quebrava a própria fila do sandbox como não-root, ambos só visíveis testando em Linux de verdade) |
 
 ---
 

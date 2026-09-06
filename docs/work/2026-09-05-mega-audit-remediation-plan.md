@@ -1,7 +1,11 @@
 # 2026-09-05 — Remediation plan: mega 12-persona audit findings
 
-**Status: PLAN ONLY, nothing implemented yet.** Owner: Bruno Ribeiro (decisions, especially
-Wave 0) + Claude (execution once each wave is approved).
+**Status: DONE (2026-09-06).** Every wave implemented, tested, and (where the standing
+live-verification rule below applies) verified against the deployed app — see
+`docs/CURRENT_STATE.md`'s 2026-09-06 sections for what shipped, PRs #196-#202, and
+[ADR-046](../adr/ADR-046-seccomp-sandbox-execve-denial.md) for Wave 0 item 1's final
+(seccomp, not the originally-planned OS-level rlimit) shape. Kept below as-is for the
+historical record of what was planned and why — read `CURRENT_STATE.md` for current state.
 
 ## Objective
 

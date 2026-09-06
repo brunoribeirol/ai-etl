@@ -60,6 +60,16 @@ still-corrupts-iso-dates.md` (Vault) for the full account.
 | Accessibility | a11y compliance | aria attributes, keyboard nav, screen-reader labels on the real rendered UI |
 | Academic evaluator | TCC narrative honesty | Cross-reference `writing/drafts/` (vault) claims against `docs/CURRENT_STATE.md`'s actual shipped state |
 
+**A screenshot showing expected-looking UI state is not proof the underlying mechanism
+exists.** A 2026-09-06 re-verification wrote down "nav highlight lost on run-detail page" as a
+confirmed regression from a screenshot — later grepping the actual frontend found no
+active-tab-highlighting mechanism anywhere in the codebase at all (no `aria-current`, no
+pathname comparison, no conditional class); the screenshot's "highlighted" link was very
+likely just hover-state at the moment of capture. Before writing a UI-based observation down
+as a finding, especially one implying a specific mechanism regressed, grep for that mechanism
+in the actual code — this is cheap and would have caught this before it entered a remediation
+plan as a phantom item.
+
 ### Step 3 — Consolidate
 
 One document, `docs/work/YYYY-MM-DD-<slug>-audit.md`, with:

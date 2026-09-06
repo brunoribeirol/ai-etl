@@ -128,7 +128,7 @@ make check        # lint + format + type-check + test + test-e2e + security
 
 ## Security notes
 
-- LLM-generated Transformer/Analyst/Science code runs inside `core/sandbox.py`'s isolated `multiprocessing.Process` (spawn context), with a real enforced timeout and no network/file-system access beyond what's explicitly passed in — see [ADR-007](docs/adr/ADR-007-unified-sandbox-policy.md) (supersedes the earlier single-`exec()` design in ADR-003).
+- LLM-generated Transformer/Analyst/Science code runs inside `core/sandbox.py`'s isolated `multiprocessing.Process` (spawn context), with a real enforced timeout and restricted globals (no `open`/`import`/network calls in scope) — see [ADR-007](docs/adr/ADR-007-unified-sandbox-policy.md) (supersedes the earlier single-`exec()` design in ADR-003). This is not airtight: a documented Python-introspection bypass exists (a Red Team audit reproduced real command execution through it) and a seccomp filter now blocks the specific `execve` path out of it — see [ADR-046](docs/adr/ADR-046-seccomp-sandbox-execve-denial.md) and `SECURITY.md` before assuming this sandbox is a hard security boundary.
 - Auth: Clerk JWT verified server-side via JWKS (`iss`/`exp`/`sub` all required, fails closed) — [ADR-006](docs/adr/ADR-006-clerk-auth-supabase-postgres-tenancy.md).
 - Every `runs`/`analysis_runs` row and S3 storage key is tenant-scoped; cross-tenant access is checked server-side, not just filtered in the UI.
 - API keys are never logged — the audit logger redacts sensitive fields automatically.
