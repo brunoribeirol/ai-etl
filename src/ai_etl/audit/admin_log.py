@@ -15,6 +15,11 @@ rule as `audit/logger.py`'s automatic key/token/secret redaction and
 `services/secrets_service.py`'s logging discipline. `detail` is a short,
 human-readable string (e.g. a target run id, a query filter) chosen by the
 caller, not a dump of the accessed record.
+
+`reason` (ADR-047, migration 0022): the caller's stated justification for
+this specific action (e.g. "tenant emailed support, run stuck in queued for
+2h"), required by every `api/routers/admin.py` route added from ADR-047
+forward. Free text, same never-log-a-secret discipline as `detail`.
 """
 
 from __future__ import annotations
@@ -36,6 +41,7 @@ class AdminActionRecord(TypedDict):
     action: str
     target_tenant_id: Optional[str]
     detail: Optional[str]
+    reason: Optional[str]
     created_at: datetime
 
 
@@ -43,6 +49,7 @@ def log_admin_action(
     actor_user_id: str,
     action: str,
     *,
+    reason: Optional[str] = None,
     target_tenant_id: Optional[str] = None,
     detail: Optional[str] = None,
 ) -> None:
@@ -61,6 +68,8 @@ def log_admin_action(
             vocabulary so `list_admin_actions()` stays queryable/filterable.
         target_tenant_id: The tenant whose data was accessed, if any single
             one applies.
+        reason: The caller's stated justification (ADR-047) — `None` only
+            for pre-ADR-047 call sites; every route added since requires it.
         detail: Optional short human-readable context (e.g. a run id). Must
             never contain a decrypted secret/credential value.
     """
@@ -70,6 +79,7 @@ def log_admin_action(
         action=action,
         target_tenant_id=target_tenant_id,
         detail=detail,
+        reason=reason,
         created_at=datetime.now(tz=timezone.utc),
     )
     with get_engine().begin() as conn:
@@ -102,6 +112,7 @@ def list_admin_actions(
             action=row["action"],
             target_tenant_id=row["target_tenant_id"],
             detail=row["detail"],
+            reason=row["reason"],
             created_at=row["created_at"],
         )
         for row in rows

@@ -336,6 +336,12 @@ admin_action_log = Table(
     Column("action", String(100), nullable=False),
     Column("target_tenant_id", String, nullable=True),
     Column("detail", Text, nullable=True),
+    # ADR-047, migration 0022 — the caller's stated justification for this
+    # action. Nullable because every row written before this migration has
+    # none (never backfilled — an honest "unknown" beats a fabricated one);
+    # every route added after ADR-047 requires it at the API layer, so new
+    # rows always have a value even though the column itself stays nullable.
+    Column("reason", Text, nullable=True),
     Column("created_at", DateTime(timezone=True), nullable=False),
     Index("ix_admin_action_log_actor", "actor_user_id"),
     Index("ix_admin_action_log_target", "target_tenant_id"),
