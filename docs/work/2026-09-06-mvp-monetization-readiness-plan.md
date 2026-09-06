@@ -1,6 +1,9 @@
 # 2026-09-06 — MVP monetization-readiness plan
 
-**Status:** WS1 and WS3 complete. WS2 open (owner action).
+**Status:** WS1, WS2 (runbook), and WS3 complete and merged (PRs #204, #205,
+#206). The one item still genuinely open is the owner actually *running*
+WS2's checklist (a real Supabase test restore) — everything Claude could
+do without dashboard access is done.
 **Owner:** Bruno Ribeiro (decisions) + Claude (execution)
 
 ## Objective
