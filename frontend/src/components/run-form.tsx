@@ -225,22 +225,34 @@ export function RunForm({
           <form onSubmit={handleSubmit} className="flex flex-col gap-5">
             <div className="flex flex-col gap-2">
               <Label htmlFor="file">{t("fileLabel")}</Label>
+              {/* Wave 2 item 5, 2026-09-05 mega-audit remediation
+                  (docs/work/2026-09-05-mega-audit-remediation-plan.md):
+                  `className="hidden"` (display:none) used to remove this
+                  input from the tab order entirely — a keyboard-only user
+                  tabbing through the form skipped straight over file upload
+                  with no way to activate it. `sr-only` (clip-path, not
+                  display:none) keeps it visually hidden but focusable; `peer`
+                  + `peer-focus-visible:*` on the visual label below gives
+                  keyboard focus a visible indicator, since Tab lands on the
+                  real input, not the label. The input is placed before the
+                  label in markup order so the `peer` sibling selector (which
+                  only matches later siblings) can reach it. */}
+              <Input
+                id="file"
+                type="file"
+                onChange={(e) => handleFileChange(e.target.files?.[0] ?? null)}
+                disabled={submitting}
+                className="sr-only! peer"
+              />
               <label
                 htmlFor="file"
-                className="flex items-center gap-3 border border-dashed rounded-md px-4 py-3 text-sm cursor-pointer hover:bg-accent/50 transition-colors"
+                className="flex items-center gap-3 border border-dashed rounded-md px-4 py-3 text-sm cursor-pointer hover:bg-accent/50 transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2"
               >
                 <UploadCloud className="h-4 w-4 text-muted-foreground shrink-0" />
                 <span className="truncate text-muted-foreground">
                   {file ? file.name : t("fileCta")}
                 </span>
               </label>
-              <Input
-                id="file"
-                type="file"
-                onChange={(e) => handleFileChange(e.target.files?.[0] ?? null)}
-                disabled={submitting}
-                className="hidden"
-              />
             </div>
 
             {sheetOptions && sheetOptions.length > 1 && (

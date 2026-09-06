@@ -80,6 +80,18 @@ Rules:
   a recommendation based on the flagged number without acknowledging the warning — either
   avoid grounding a recommendation in that specific figure, or explicitly caveat it in the
   "rationale" and mention the uncertainty in the "summary".
+- If a recommendation is grounded in a segment, group, or breakdown with a small sample size
+  (roughly fewer than 5 rows/customers/records backing that specific number), do NOT present
+  it at "high" priority as if it were as reliable as a finding from the full dataset —
+  downgrade its priority (to "medium" or "low") and say in the "rationale" that the sample
+  behind it is small, so the reader doesn't act on a tiny-N pattern with full confidence.
+- Column names that sound like a specific calculated metric ("profit_margin", "revenue",
+  "conversion_rate") are NOT guaranteed to actually be that metric — the column could hold
+  raw values under a misleading name (e.g. a "profit_margin" column that is really unit
+  price, never divided by anything). Do not assert what a column semantically represents
+  beyond what the data overview/schema actually says about it; if you're inferring the
+  column's real-world meaning from its name alone, say so as an assumption in the
+  "rationale" rather than stating it as settled fact.
 """
 
 _PRIORITY_ORDER = {"high": 0, "medium": 1, "low": 2}

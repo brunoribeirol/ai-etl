@@ -208,6 +208,35 @@ _DECREASE_WORDS = (
 )
 
 
+def _column_named_in_narrative(lowercased_narrative: str, numeric_cols: pd.Index) -> str | None:
+    """Which of `numeric_cols` the narrative text actually names, if any.
+
+    Wave 2 item 6, 2026-09-05 mega-audit remediation
+    (docs/work/2026-09-05-mega-audit-remediation-plan.md): the guard-rail
+    below used to always check `numeric_cols[-1]` (last by DataFrame
+    position) regardless of which column the narrative's trend claim was
+    actually about — live-verified real miss (LLM/Prompt Engineer persona,
+    `misleading_column.csv`): a narrative about a misread `profit_margin`
+    column sailed through unchecked because a different, unrelated numeric
+    column happened to be last.
+
+    Column names are typically snake_case (`profit_margin`) while narrative
+    prose uses natural language (`"profit margin"`) — normalize underscores
+    to spaces before substring-matching. Checks columns in DataFrame order
+    (not narrative word order) and returns the first match; a predictions_df
+    with two numeric columns both named in the narrative is rare enough that
+    "first by position" is a reasonable tiebreak, not a real ambiguity this
+    function needs to resolve perfectly. Returns `None` (caller falls back
+    to the old `numeric_cols[-1]` behavior) when the narrative names none of
+    them — unchanged behavior for narratives that don't call out a specific
+    column by name.
+    """
+    for col in numeric_cols:
+        if str(col).replace("_", " ").lower() in lowercased_narrative:
+            return str(col)
+    return None
+
+
 def _validate_narrative_consistency(
     narrative: str, predictions_df: pd.DataFrame, model_info: dict[str, Any]
 ) -> None:
@@ -230,12 +259,12 @@ def _validate_narrative_consistency(
     numeric_cols = predictions_df.select_dtypes(include="number").columns
     if len(numeric_cols) == 0:
         return
-    series = predictions_df[numeric_cols[-1]].dropna()
+    col = _column_named_in_narrative(text, numeric_cols) or numeric_cols[-1]
+    series = predictions_df[col].dropna()
     if len(series) < 2:
         return
 
     delta = series.iloc[-1] - series.iloc[0]
-    col = numeric_cols[-1]
     if claims_increase and delta < 0:
         raise ValueError(
             f"Narrative claims an increase but '{col}' decreased "
