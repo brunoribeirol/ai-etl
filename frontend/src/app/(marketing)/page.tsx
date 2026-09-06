@@ -129,6 +129,7 @@ export default function LandingPage() {
           <motion.div {...fadeUp} className="mx-auto mb-14 max-w-2xl text-center">
             <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">{t("howTitle")}</h2>
             <p className="mt-3 text-muted-foreground">{t("howBody")}</p>
+            <p className="mt-3 text-sm text-muted-foreground">{t("howPlainLanguage")}</p>
           </motion.div>
           <motion.div
             {...fadeUp}

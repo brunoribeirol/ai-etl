@@ -24,6 +24,15 @@
  *     `docs/CURRENT_STATE.md`) — a real measurement, not a live metric this
  *     deployment recomputes per request (no endpoint for that exists yet).
  *     Update this file by hand the same way, whenever the comparison is re-run.
+ *
+ * `reliabilityNote` is rendered verbatim on the model-picker screen a business
+ * user sees while choosing which model runs their pipeline (Wave 3 item 11,
+ * 2026-09-05 mega-audit remediation, docs/work/2026-09-05-mega-audit-
+ * remediation-plan.md) — keep it to user-facing facts (completion rate,
+ * quality score, cost). Internal engineering history (which PR fixed what,
+ * "this model used to fail 100% of the time") belongs in
+ * `docs/CURRENT_STATE.md`/a changelog, not here — two entries leaked exactly
+ * that ("PR #109", "temperature-parameter fix") before this fix.
  */
 export type ModelReferenceEntry = {
   provider: "openai" | "anthropic";
@@ -62,8 +71,7 @@ export const MODEL_REFERENCE_DATA: ModelReferenceEntry[] = [
     inputPricePerMillionUsd: 1.0,
     outputPricePerMillionUsd: 5.0,
     reliability: "verified",
-    reliabilityNote:
-      "3/3 real runs completed after the markdown-fence fix (PR #109), quality score 88.0, ~$0.017/run — confirms the fix resolved what was previously a 100% failure rate for this model.",
+    reliabilityNote: "3/3 real runs completed, quality score 88.0, ~$0.017/run.",
   },
   {
     provider: "anthropic",
@@ -72,6 +80,6 @@ export const MODEL_REFERENCE_DATA: ModelReferenceEntry[] = [
     inputPricePerMillionUsd: 3.0,
     outputPricePerMillionUsd: 15.0,
     reliability: "verified",
-    reliabilityNote: "3/3 real runs completed after a temperature-parameter fix, quality score 83.0-88.0, ~$0.08-0.10/run.",
+    reliabilityNote: "3/3 real runs completed, quality score 83.0-88.0, ~$0.08-0.10/run.",
   },
 ];
