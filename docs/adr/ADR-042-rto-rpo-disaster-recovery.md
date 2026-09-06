@@ -1,6 +1,9 @@
 # ADR-042: RTO/RPO Targets and Disaster Recovery Posture
 
-**Status:** Accepted
+**Status:** Accepted. **Decision 2 amended 2026-09-06** — the Supabase PITR
+verification this ADR asked for found no PITR available at all (Free Plan);
+superseded by a manual `pg_dump`-to-S3 stopgap. See "Manual backup stopgap"
+below.
 **Date:** 2026-08-27
 **Sprint:** Wave 3 (post-audit strategic decisions, `docs/work/2026-08-26-strategic-decisions-execution-plan.md`)
 
@@ -65,9 +68,18 @@ process, not a DR/backup-restore one, and stays out of scope here.
 
 ## Decision 2 — Recovery strategy per component
 
-**Application Postgres (the one genuinely stateful, non-regenerable
-component): rely on Supabase's managed point-in-time recovery (PITR), but
-treat "enabled and tested" as an open verification, not an assumption.**
+**Superseded 2026-09-06 — see "Manual backup stopgap" below.** This
+Decision originally read: *"rely on Supabase's managed point-in-time
+recovery (PITR), but treat 'enabled and tested' as an open verification,
+not an assumption,"* rejecting a `pg_dump`-to-S3 pipeline as premature
+effort ahead of that verification. The verification happened on 2026-09-06
+(owner checked the actual Supabase dashboard) and found the opposite of
+"almost certainly available on paid tiers": **this project is on the Free
+Plan, which includes zero backups — no scheduled backups, no PITR at all.**
+Kept below for history; does not reflect this project's current posture.
+
+<details>
+<summary>Original text (superseded)</summary>
 
 Building a second, independent backup pipeline (e.g. a scheduled `pg_dump` to
 S3) was considered and rejected for now: Supabase's own managed PITR is the
@@ -85,6 +97,79 @@ elsewhere in this project). Until that verification happens, this project's
 actual current RPO for Postgres **should be treated as unknown, not as the
 24h target above** — the target is what this ADR commits to; today's real
 number is unverified.
+
+</details>
+
+### Manual backup stopgap (2026-09-06)
+
+**Finding**: Supabase dashboard → Database → Backups confirmed *"Free Plan
+does not include project backups"* — no scheduled backups tab content, no
+PITR, no "restore to new project" available. Before this finding, this
+project's real RPO for Postgres was unknown; after it, the honest number was
+**infinite** — there was no recovery path at all for the one genuinely
+stateful, non-regenerable component in this whole topology.
+
+**Decision, owner-chosen from 3 options** (Supabase Pro upgrade / accept the
+risk in writing / a manual stopgap): **a manual `pg_dump`-to-S3 backup**,
+not a Supabase plan upgrade. Reasoning: pre-revenue, no paying tenant yet —
+a real, working backup at zero recurring cost beats a $25/mo upgrade bought
+before there's revenue to justify it, and beats accepting a risk that (unlike
+`rolbypassrls`) had no compensating control whatsoever.
+
+**Mechanism**: `.github/workflows/db-backup.yml` — a scheduled GitHub Actions
+workflow (daily, 03:00 UTC, plus manual `workflow_dispatch`), not a Celery
+beat task inside the running application. Chosen over adding this to
+`core/celery_app.py`'s existing beat schedule (same mechanism
+`services/retention_service.py` uses) specifically to keep blast radius
+small: a backup job with a bug must never be able to touch production
+runtime, and a GitHub Actions workflow has no code path into the live
+API/worker process at all, only read access to the DB connection string and
+write access to S3. Runs `pg_dump --format=custom` (compressed, restorable
+selectively via `pg_restore`), uploads to
+`s3://{AI_ETL_S3_BUCKET}/_system/db-backups/production/{date}.dump`, then
+verifies the uploaded object is non-trivially sized before declaring success
+(catches a silent empty/truncated dump, not just a non-zero exit code).
+
+**New secrets required** (GitHub repo secrets, set by the owner — Claude has
+no write access to secrets):
+- `BACKUP_DATABASE_URL` — **a dedicated, read-only Postgres role**, not
+  `APP_DATABASE_URL`. Deliberately not reusing the app's own connection
+  role (which has `rolbypassrls = true`, ADR-032 Decision 1) — a leaked
+  backup-workflow secret must not carry the app's full write/bypass
+  privilege. Create it once via the Supabase SQL editor:
+  ```sql
+  CREATE ROLE backup_reader LOGIN PASSWORD '<generate a strong one>';
+  GRANT CONNECT ON DATABASE postgres TO backup_reader;
+  GRANT USAGE ON SCHEMA public TO backup_reader;
+  GRANT SELECT ON ALL TABLES IN SCHEMA public TO backup_reader;
+  ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO backup_reader;
+  ```
+  Then set `BACKUP_DATABASE_URL` to that role's connection string.
+- `BACKUP_AWS_ACCESS_KEY_ID` / `BACKUP_AWS_SECRET_ACCESS_KEY` — likewise
+  recommended as a dedicated IAM user scoped to
+  `s3:PutObject`/`s3:GetObject`/`s3:HeadObject` on
+  `arn:aws:s3:::{bucket}/_system/db-backups/*` only, not the app's own
+  broader S3 credential. Reusing the app's existing `AWS_ACCESS_KEY_ID` as
+  a stopgap is acceptable if a dedicated IAM user isn't set up yet, but is
+  not the target state.
+- `AI_ETL_S3_BUCKET` / `AWS_DEFAULT_REGION` — same values already
+  configured for the app (not secret-sensitive by themselves, stored as
+  repo secrets anyway per this workflow's own `secrets.*` references).
+
+**Restore procedure** (the other half of "documented, tested backup" —
+ADR-042's own original ask): download the dump from S3
+(`aws s3 cp s3://.../production/{date}.dump .`), then
+`pg_restore --clean --if-exists --no-owner --dbname=<scratch-db-url> backup.dump`
+against a **scratch** database, never the live one. This has not yet been
+exercised end-to-end (no scratch Postgres provisioned this session) — same
+"mechanism built, real rehearsal still owed" honesty this ADR already
+applies elsewhere; tracked in `docs/compliance/risk-register.md` row 4.
+
+**Explicitly not equivalent to real PITR**: one dump per day means up to 24h
+of data loss in the worst case (matching the RPO target above by
+coincidence, not by a stronger mechanism) — a Supabase Pro upgrade (continuous
+PITR, up to 7 days retention) remains the better long-term answer once
+there's revenue to justify the cost. Revisit trigger: first paying tenant.
 
 **S3 run artifacts: no independent backup, by design.** Every artifact under
 `audit/storage.py` (`{run_id}.json`, `_silver.csv`, `_gold_*.csv`, figures) is
@@ -127,28 +212,34 @@ this is the same "S3 is a cache of derived outputs, Postgres is the source of
 truth" split `docs/architecture-storage.md` already documents, just stated
 here in DR terms.
 
-## Owner verification checklist (added 2026-09-06, `docs/work/2026-09-06-mvp-monetization-readiness-plan.md` WS2)
+## Owner verification checklist — resolved 2026-09-06
 
-The 3-item follow-up in Decision 2 above, made concrete as steps — none of
-this requires code, all of it requires the Supabase dashboard (credentials
-this coding environment does not have):
+The original 3-item follow-up in Decision 2 (confirm PITR enabled, note the
+retention window, perform a test restore) is answered, just not the way it
+assumed: **PITR isn't available on this project's plan at all** —
+"Database Backups" in the Supabase dashboard shows *"Free Plan does not
+include project backups,"* no Point-in-Time or scheduled-backup tab has any
+content, "Restore to new project" has nothing to restore from. Steps 1-2 are
+answered (no PITR, no window — there is nothing to have a window). Step 3
+(a real test restore) carries forward to the manual stopgap below, not to
+Supabase's own restore flow.
 
-1. **Confirm PITR is enabled.** Supabase dashboard → the project backing
-   `APP_DATABASE_URL` → Database → Backups. Note the plan tier and whether
-   Point-in-Time Recovery shows as enabled or requires an upgrade.
-2. **Note the actual retention window.** The PITR panel states how far back
-   a restore can target (commonly 7 days on paid tiers, more on higher
-   tiers) — record the real number, don't assume the RPO target above
-   equals it.
-3. **Perform one real test restore.** Use Supabase's "restore to a new
-   project" (or equivalent) flow to restore to a *separate* scratch
-   project — never restore over the live database. Time how long the
-   restore takes end to end. Confirm the restored data looks sane (row
-   counts on `users`/`runs`/`saved_pipelines` roughly match expectations
-   for the point in time chosen). Delete the scratch project afterward.
-4. **Report back**: update this section (or the Consequences below) with
-   the date, the plan tier, the real retention window, and the actual
-   restore duration observed — replacing "unverified" with a real number.
+**Remaining, now-scoped-differently checklist** (tracks the manual stopgap's
+own restore rehearsal, not Supabase's PITR):
+
+1. Set the 5 new GitHub secrets `.github/workflows/db-backup.yml` needs —
+   `BACKUP_DATABASE_URL`, `BACKUP_AWS_ACCESS_KEY_ID`,
+   `BACKUP_AWS_SECRET_ACCESS_KEY`, `AI_ETL_S3_BUCKET`, `AWS_DEFAULT_REGION`
+   — see the "Manual backup stopgap" section above for the exact role/IAM
+   setup.
+2. Trigger the workflow once manually (`workflow_dispatch`) and confirm a
+   `.dump` object lands under `_system/db-backups/production/` in S3.
+3. Perform one real `pg_restore` rehearsal into a scratch Postgres database
+   (a local Docker Postgres is enough — no Supabase project needed for
+   this rehearsal) and time it.
+4. Report back with the date and restore duration — this ADR's
+   "real rehearsal still owed" line above then gets updated with a real
+   number.
 
 ## Consequences
 
@@ -157,16 +248,19 @@ this coding environment does not have):
   (`ADR-033`'s SLO section, `ADR-039`'s unverified-in-this-environment
   containment test) — stated as a target derived from the project's actual
   pre-revenue stage, not invented false precision.
-- The real, still-open gap is verification, not architecture: whether
-  Supabase PITR is actually enabled, its actual retention window, and a real
-  timed test restore — none of which this coding environment can perform.
-  Tracked as required next-session follow-up (`docs/CURRENT_STATE.md`), same
-  as the other credential-gated verification gaps already tracked there
-  (Vercel Sandbox live containment test, Sentry DSN).
-- No new backup infrastructure was built — the decision was "verify and rely
-  on Supabase's existing PITR" over "build a redundant `pg_dump` pipeline,"
-  explicitly to avoid effort duplicating a mechanism that likely already
-  exists, before confirming what's actually there.
+- **Verification did happen (2026-09-06) and found no mechanism to rely
+  on** — Supabase's Free Plan includes no backups of any kind. The plan's
+  "verify before duplicating effort" caution paid off in the opposite
+  direction than expected: it caught that there was nothing to rely on
+  before committing to that reliance.
+- New backup infrastructure **was** built as a direct result:
+  `.github/workflows/db-backup.yml`, a manual `pg_dump`-to-S3 stopgap (see
+  "Manual backup stopgap" above) — not the redundant-effort scenario this
+  Decision originally worried about, since there turned out to be nothing
+  to duplicate.
+- The real, still-open gap is now the restore rehearsal for the new
+  mechanism (a `pg_restore` timing test), not Supabase verification — see
+  the checklist above. Tracked in `docs/compliance/risk-register.md` row 4.
 - S3 artifacts and Redis are explicitly *not* backed up, by design, with the
   reasoning recorded here so a future reviewer doesn't mistake the absence
   for an oversight.

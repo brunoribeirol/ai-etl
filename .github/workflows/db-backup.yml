@@ -1,0 +1,69 @@
+name: Postgres backup (manual stopgap)
+
+# ADR-042 amendment (2026-09-06): Supabase's dashboard confirmed the Free
+# Plan includes zero backups (no scheduled backups, no PITR) — the ADR's
+# original assumption ("almost certainly available on paid tiers") was
+# wrong for this project's actual tier. Owner chose a manual pg_dump-to-S3
+# stopgap over a Supabase Pro upgrade for now. See
+# docs/adr/ADR-042-rto-rpo-disaster-recovery.md's "Manual backup stopgap"
+# section for the full decision and the restore procedure.
+#
+# This is deliberately NOT continuous (PITR) — one dump per day means an
+# RPO of up to 24h, matching ADR-042's original target by coincidence, not
+# by a stronger mechanism. Read the ADR before assuming this is equivalent
+# to real PITR.
+
+on:
+  schedule:
+    # 03:00 UTC daily — outside this project's own business hours, same
+    # reasoning as `services/retention_service.py`'s off-peak cadence.
+    - cron: "0 3 * * *"
+  workflow_dispatch: {} # manual trigger, e.g. for the first backup or an ad-hoc one before a risky migration
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    name: pg_dump production Postgres to S3
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install postgresql-client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.BACKUP_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.BACKUP_AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+
+      - name: pg_dump (custom format, compressed)
+        env:
+          PGCONNECT_TIMEOUT: "30"
+        run: |
+          set -euo pipefail
+          pg_dump "${{ secrets.BACKUP_DATABASE_URL }}" \
+            --format=custom --no-owner --no-privileges \
+            --file=backup.dump
+
+      - name: Upload to S3
+        run: |
+          set -euo pipefail
+          DATE="$(date -u +%Y-%m-%d)"
+          aws s3 cp backup.dump \
+            "s3://${{ secrets.AI_ETL_S3_BUCKET }}/_system/db-backups/production/${DATE}.dump"
+
+      - name: Verify the uploaded object is non-empty
+        run: |
+          set -euo pipefail
+          DATE="$(date -u +%Y-%m-%d)"
+          SIZE=$(aws s3api head-object \
+            --bucket "${{ secrets.AI_ETL_S3_BUCKET }}" \
+            --key "_system/db-backups/production/${DATE}.dump" \
+            --query 'ContentLength' --output text)
+          if [ "$SIZE" -lt 1024 ]; then
+            echo "::error::Backup object is suspiciously small (${SIZE} bytes) — treating as a failed backup."
+            exit 1
+          fi
+          echo "Backup verified: ${SIZE} bytes."
