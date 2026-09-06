@@ -93,6 +93,36 @@ else:
 df["date"] = parsed
 ```
 
+When cleaning a monetary/currency column that has a currency-symbol prefix (e.g.
+"R$ 1.234,56", "$1,234.56"), strip the symbol as a LITERAL string — never write a
+backslash before it. `\\$` is NOT a valid Python escape sequence: in a plain
+(non-raw) string literal, Python keeps the backslash character literally, so
+`'R\\$ '` is actually the 4-character string R, \\, $, space — which never
+matches "R$ " (3 characters, no backslash) in the real data. `str.replace()`'s
+first argument is a literal substring by default (`regex=False`), so `$` needs
+no escaping at all; write it exactly as it appears in the data.
+
+WRONG (real bug, found 2026-09-04 live testing, confirmed twice independently in
+generated code — the invalid `\\$` escape silently makes every `.str.replace()`
+call a no-op, so the currency symbol is never stripped, and the whole column
+becomes NaN after `pd.to_numeric`, not just some rows):
+```python
+df["preco"] = df["preco"].str.replace('R\\$ ', '').str.replace('.', '').str.replace(',', '.')
+df["preco"] = pd.to_numeric(df["preco"], errors="coerce")
+```
+
+RIGHT (no backslash before the currency symbol; `regex=False` made explicit so `.`
+is treated as a literal thousands-separator character, not "match any character"):
+```python
+df["preco"] = (
+    df["preco"]
+    .str.replace("R$ ", "", regex=False)
+    .str.replace(".", "", regex=False)
+    .str.replace(",", ".", regex=False)
+)
+df["preco"] = pd.to_numeric(df["preco"], errors="coerce")
+```
+
 Respond ONLY with the Python function. No explanation, no markdown fences.
 """
 
@@ -184,6 +214,17 @@ def transformer_node(state: PipelineState) -> PipelineState:
     )
     return {
         **state,
+        # Wave 1 item 4b, 2026-09-05 mega-audit remediation
+        # (docs/work/2026-09-05-mega-audit-remediation-plan.md): before this
+        # fix, a total failure never set `transformation_code` at all, so the
+        # History page's Code tab showed "No code available for this run."
+        # with no way to see what was actually tried — confirmed live for the
+        # nested-JSON case (Data Engineer persona, `pedidos_aninhado.json`).
+        # `code` here is the last attempt's generated code (the for-loop
+        # variable, still in scope after the loop exits) — showing it doesn't
+        # make the run succeed, but it turns an opaque "Failed" into something
+        # a technical operator can actually audit and act on.
+        "transformation_code": code,
         "transformation_attempts": attempts,
         "transformation_error": last_error,
         "error": f"Transformer failed after {attempts} attempts: {last_error}",

@@ -59,6 +59,11 @@ export default async function RunDetail({
             {t("questionPrefix", { question: result.question })}
           </p>
         )}
+        {result.state.error && (
+          <Alert variant="destructive">
+            <AlertDescription>{result.state.error}</AlertDescription>
+          </Alert>
+        )}
       </div>
 
       <RunSections

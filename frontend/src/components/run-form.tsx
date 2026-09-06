@@ -54,6 +54,17 @@ export function RunForm({
   const apiUrl = process.env.NEXT_PUBLIC_API_URL;
 
   const [file, setFile] = useState<File | null>(initialFile);
+  // Wave 1 item 2 (2026-09-05 mega-audit remediation,
+  // docs/work/2026-09-05-mega-audit-remediation-plan.md): a multi-sheet Excel
+  // upload used to always silently run against sheet 0 for the preview, then
+  // fail during the real pipeline execution with no explanation ("Excel
+  // multi-sheet always fails"). `sheetOptions` is `null` until a `.xlsx`/`.xls`
+  // file is selected and checked; it stays `null` for every other file type,
+  // and becomes `[]`/`[oneSheet]` (no picker needed) or a real list (picker
+  // required before submit) once `POST /runs/excel-sheets` answers.
+  const [sheetOptions, setSheetOptions] = useState<string[] | null>(null);
+  const [selectedSheet, setSelectedSheet] = useState<string>("");
+  const [checkingSheets, setCheckingSheets] = useState(false);
   const [manualSpec, setManualSpec] = useState("");
   const [businessQuestion, setBusinessQuestion] = useState(initialBusinessQuestion);
   // One-off runs have no saved-pipeline id to write an LLM override to
@@ -73,6 +84,42 @@ export function RunForm({
       if (pollTimer.current) clearInterval(pollTimer.current);
     };
   }, []);
+
+  async function handleFileChange(selected: File | null) {
+    setFile(selected);
+    setSheetOptions(null);
+    setSelectedSheet("");
+    setError(null);
+
+    if (!selected || !/\.(xlsx|xls)$/i.test(selected.name) || !apiUrl) {
+      return;
+    }
+
+    setCheckingSheets(true);
+    try {
+      const token = await getToken();
+      const formData = new FormData();
+      formData.append("file", selected);
+      const response = await fetch(`${apiUrl}/runs/excel-sheets`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const { sheets }: { sheets: string[] } = await response.json();
+      if (sheets.length > 1) {
+        setSheetOptions(sheets);
+      }
+    } catch {
+      // Non-fatal: the picker just won't show. `create_run` still enforces
+      // the same rule server-side (400 naming the sheets) if this file
+      // really does have more than one sheet, so nothing silently breaks —
+      // the user just loses the up-front picker and has to retry.
+      toast.error(t("sheetCheckFailed"));
+    } finally {
+      setCheckingSheets(false);
+    }
+  }
 
   function pollStatus(id: string) {
     if (pollTimer.current) clearInterval(pollTimer.current);
@@ -116,6 +163,10 @@ export function RunForm({
       setError(t("missingInput"));
       return;
     }
+    if (sheetOptions && sheetOptions.length > 1 && !selectedSheet) {
+      setError(t("sheetHint"));
+      return;
+    }
 
     setError(null);
     setStatus(null);
@@ -126,6 +177,9 @@ export function RunForm({
       const token = await getToken();
       const formData = new FormData();
       if (file) formData.append("file", file);
+      if (sheetOptions && sheetOptions.length > 1 && selectedSheet) {
+        formData.append("sheet_name", selectedSheet);
+      }
       if (manualSpec.trim()) formData.append("manual_spec", manualSpec.trim());
       formData.append("business_question", businessQuestion);
       // Sent under the same field names as `PipelineState["llm_provider_override"]`/
@@ -183,11 +237,40 @@ export function RunForm({
               <Input
                 id="file"
                 type="file"
-                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                onChange={(e) => handleFileChange(e.target.files?.[0] ?? null)}
                 disabled={submitting}
                 className="hidden"
               />
             </div>
+
+            {sheetOptions && sheetOptions.length > 1 && (
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="sheetName">
+                  {t("sheetLabel")}{" "}
+                  <span className="text-muted-foreground font-normal">{t("sheetHint")}</span>
+                </Label>
+                <select
+                  id="sheetName"
+                  value={selectedSheet}
+                  onChange={(e) => setSelectedSheet(e.target.value)}
+                  disabled={submitting}
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none disabled:opacity-50"
+                >
+                  <option value="">{t("sheetPlaceholder")}</option>
+                  {sheetOptions.map((sheet) => (
+                    <option key={sheet} value={sheet}>
+                      {sheet}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {checkingSheets && (
+              <p className="text-muted-foreground text-xs">
+                <Loader2 className="h-3 w-3 animate-spin inline mr-1" />
+                {t("sheetPlaceholder")}
+              </p>
+            )}
 
             <div className="flex flex-col gap-2">
               <Label htmlFor="manualSpec">
@@ -235,7 +318,13 @@ export function RunForm({
               />
             </div>
 
-            <Button type="submit" disabled={submitting} className="w-full">
+            <Button
+              type="submit"
+              disabled={
+                submitting || checkingSheets || !!(sheetOptions && sheetOptions.length > 1 && !selectedSheet)
+              }
+              className="w-full"
+            >
               {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
               {submitting ? t("submitLoading") : t("submitIdle")}
             </Button>

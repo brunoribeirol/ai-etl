@@ -122,6 +122,11 @@ Then write Python code that defines EXACTLY four variables:
 - `predictions_df` must be a pd.DataFrame. `fig` must be a Plotly Figure.
 - `model_info` must be a plain Python dict (no numpy types: cast with float(), int()).
 - Do NOT call `fig.show()`.
+- If a column still holds a currency string (e.g. "R$ 5500.00", not already numeric),
+  strip the symbol as a LITERAL string with `regex=False` and NEVER put a backslash
+  before it: `\\$` is not a valid Python escape, so `'R\\$ '` silently fails to match
+  "R$ " in the real data (a real bug found 2026-09-04 live testing). Write
+  `.str.replace("R$ ", "", regex=False)`, then `pd.to_numeric(..., errors="coerce")`.
 - Respond ONLY with valid Python code. No markdown fences. No explanations.
 """
 

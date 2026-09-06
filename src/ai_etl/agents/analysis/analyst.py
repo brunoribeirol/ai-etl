@@ -88,6 +88,15 @@ Write Python code that defines EXACTLY three variables:
 - Use ONLY the exact column names listed above. Access columns with `df['column_name']`.
 - Handle edge cases: if a column is missing, use `df.columns.tolist()` to inspect.
 - For numeric aggregations, use `.fillna(0)` to avoid NaN issues.
+- If a column still holds a currency string (e.g. "R$ 5500.00", not already numeric —
+  this can happen when Silver cleaning didn't touch it), strip the symbol as a LITERAL
+  string with `regex=False` and NEVER put a backslash before it: `\\$` is not a valid
+  Python escape, so `'R\\$ '` silently fails to match "R$ " in the real data (a real bug
+  found 2026-09-04 live testing — `.str.replace('R\\$ ', '')` never strips the prefix,
+  and a later `.astype(float)` then crashes the whole analysis). Write
+  `.str.replace("R$ ", "", regex=False)`, then `pd.to_numeric(..., errors="coerce")`
+  (not a bare `.astype(float)`, which raises on the first non-numeric leftover instead
+  of coercing it).
 - `gold_df` must be a pd.DataFrame (not a Series). Use `.reset_index()` if needed.
 - `fig` must be a Plotly Figure object. Do NOT call `fig.show()`.
 - Respond ONLY with valid Python code. No markdown fences. No explanations. No comments.

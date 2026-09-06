@@ -150,6 +150,17 @@ def test_all_attempts_exhausted_sets_failed(mock_get_llm) -> None:
     assert result["transformation_attempts"] == 3
 
 
+def test_all_attempts_exhausted_still_persists_last_code(mock_get_llm) -> None:
+    """Wave 1 item 4b, 2026-09-05 mega-audit remediation: before this fix, a
+    total failure never set `transformation_code` at all — the History page's
+    Code tab showed "No code available for this run." with no way to see what
+    was actually tried (confirmed live for the nested-JSON case)."""
+    mock_get_llm.return_value = _mock_llm([INVALID_CODE, INVALID_CODE, INVALID_CODE])
+    result = transformer_node(_make_state())
+
+    assert result["transformation_code"] == INVALID_CODE.strip()
+
+
 def test_upstream_error_short_circuits() -> None:
     state = _make_state()
     state["error"] = "upstream failure"
@@ -298,3 +309,64 @@ def test_en_us_locale_prompt_prefers_month_first(mock_get_llm) -> None:
 
     sent_prompt = llm.invoke.call_args[0][0]
     assert "month-first" in sent_prompt
+
+
+# ---------------------------------------------------------------------------
+# Wave 1 item 3, 2026-09-05 mega-audit remediation
+# (docs/work/2026-09-05-mega-audit-remediation-plan.md): Data Engineer found,
+# live, that generated code twice wrote `str.replace('R\$ ', '')` to strip a
+# BR-currency prefix — `\$` is not a valid Python escape sequence, so the
+# literal backslash it leaves never matches "R$ " in the real data, silently
+# turning the entire column to NaN after `pd.to_numeric`. Same technique as
+# the date-parsing tests above: a literal copy of the prompt's pattern,
+# executed for real against pandas, not just asserted as prompt text.
+# ---------------------------------------------------------------------------
+
+
+def test_currency_prompt_warns_against_invalid_backslash_escape(mock_get_llm) -> None:
+    llm = _mock_llm([VALID_CODE])
+    mock_get_llm.return_value = llm
+    transformer_node(_make_state())
+
+    sent_prompt = llm.invoke.call_args[0][0]
+    assert "NOT a valid Python escape sequence" in sent_prompt
+    assert "regex=False" in sent_prompt
+
+
+def _wrong_currency_clean(prices: pd.Series) -> pd.Series:
+    """The exact real bug, found live 2026-09-04 in generated code (Data
+    Engineer persona, `vendas_br_edge.csv`) — kept here only to prove it
+    really is broken, not to recommend it."""
+    cleaned = prices.str.replace("R\\$ ", "").str.replace(".", "").str.replace(",", ".")
+    return pd.to_numeric(cleaned, errors="coerce")
+
+
+def _right_currency_clean(prices: pd.Series) -> pd.Series:
+    """A literal copy of the RIGHT pattern from `TRANSFORMER_PROMPT`."""
+    cleaned = (
+        prices.str.replace("R$ ", "", regex=False)
+        .str.replace(".", "", regex=False)
+        .str.replace(",", ".", regex=False)
+    )
+    return pd.to_numeric(cleaned, errors="coerce")
+
+
+def test_wrong_currency_pattern_really_does_null_the_whole_column() -> None:
+    """Documents the bug mechanism for real: the invalid `\\$` escape means the
+    WRONG pattern is not merely non-idiomatic, it silently produces 100% NaN —
+    the exact live-reproduced symptom ('preco' column became fully null)."""
+    prices = pd.Series(["R$ 1.234,56", "R$ 89,90"])
+
+    result = _wrong_currency_clean(prices)
+
+    assert result.isna().all()
+
+
+def test_right_currency_pattern_parses_br_formatted_values() -> None:
+    """The exact live-reproduced 2026-09-04 case: BR currency with a symbol
+    prefix and thousands/decimal separators must parse to real floats."""
+    prices = pd.Series(["R$ 1.234,56", "R$ 89,90"])
+
+    result = _right_currency_clean(prices)
+
+    assert list(result) == [1234.56, 89.90]

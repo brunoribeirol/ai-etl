@@ -55,6 +55,7 @@
     ],
     "howTitle": "Do dado bruto à recomendação, uma pirâmide de agentes",
     "howBody": "Nove agentes especializados, cada um com uma responsabilidade só — o estado do pipeline passa de um pro outro, nunca escondido numa caixa-preta.",
+    "howPlainLanguage": "Em termos simples: cada etapa refina os dados um pouco mais — entra um arquivo bruto, sai um dado limpo e sem duplicatas, depois insights de negócio, depois previsões, e no topo uma recomendação em português claro. Você não precisa saber o nome das etapas para ler o resultado — elas importam para quem for auditar como ele foi produzido.",
     "dualTitle": "Feito pra duas pessoas na mesma empresa",
     "dualOperatorBadge": "Operador técnico",
     "dualOperatorTitle": "Quem hoje monta o relatório na mão",
@@ -198,6 +199,10 @@
   "runForm": {
     "fileLabel": "Arquivo (CSV, Excel, JSON, PDF, DOCX)",
     "fileCta": "Clique para selecionar um arquivo",
+    "sheetLabel": "Aba",
+    "sheetHint": "(esta planilha tem mais de uma aba — escolha qual usar)",
+    "sheetPlaceholder": "Escolha uma aba...",
+    "sheetCheckFailed": "Não foi possível ler as abas desta planilha. Confira o arquivo e tente de novo.",
     "specLabel": "Ou: spec manual",
     "specOptionalHint": "(opcional se um arquivo foi anexado — ainda é seguida como instrução extra além do arquivo)",
     "businessQuestionLabel": "Pergunta de negócio (opcional)",

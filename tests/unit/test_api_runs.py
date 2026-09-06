@@ -225,6 +225,133 @@ def test_create_run_with_file_and_manual_spec_combines_both(client: TestClient, 
 
 
 # ---------------------------------------------------------------------------
+# Wave 1 item 2, 2026-09-05 mega-audit remediation
+# (docs/work/2026-09-05-mega-audit-remediation-plan.md): a multi-sheet Excel
+# upload used to always silently read sheet 0 for the preview, then have the
+# real pipeline execution raise (no sheet_name in the generated plan, and
+# `_load_excel` refuses to guess) — reported as "Excel multi-sheet always
+# fails". Fixed with a real picker: `POST /runs/excel-sheets` lists sheets,
+# `POST /runs` requires `sheet_name` when there's more than one and threads
+# it through to both the preview DataFrame and the generated spec text.
+# ---------------------------------------------------------------------------
+
+
+def _multi_sheet_xlsx_bytes() -> bytes:
+    import io as _io
+
+    buffer = _io.BytesIO()
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        pd.DataFrame({"name": ["A"], "price": [1.0]}).to_excel(writer, sheet_name="Q1", index=False)
+        pd.DataFrame({"name": ["B"], "price": [2.0]}).to_excel(writer, sheet_name="Q2", index=False)
+    return buffer.getvalue()
+
+
+def _single_sheet_xlsx_bytes() -> bytes:
+    import io as _io
+
+    buffer = _io.BytesIO()
+    pd.DataFrame({"name": ["A"], "price": [1.0]}).to_excel(buffer, index=False, engine="openpyxl")
+    return buffer.getvalue()
+
+
+def test_excel_sheets_lists_sheet_names_for_multi_sheet_workbook(client: TestClient) -> None:
+    response = client.post(
+        "/runs/excel-sheets",
+        files={
+            "file": (
+                "vendas.xlsx",
+                _multi_sheet_xlsx_bytes(),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"sheets": ["Q1", "Q2"]}
+
+
+def test_excel_sheets_returns_empty_for_non_excel_filename(client: TestClient) -> None:
+    response = client.post(
+        "/runs/excel-sheets",
+        files={"file": ("sales.csv", b"a,b\n1,2\n", "text/csv")},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"sheets": []}
+
+
+def test_create_run_with_multi_sheet_excel_and_no_sheet_name_returns_400(
+    client: TestClient,
+) -> None:
+    response = client.post(
+        "/runs",
+        files={
+            "file": (
+                "vendas.xlsx",
+                _multi_sheet_xlsx_bytes(),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+    )
+
+    assert response.status_code == 400
+    assert "Q1" in response.json()["detail"]
+    assert "Q2" in response.json()["detail"]
+
+
+def test_create_run_with_multi_sheet_excel_and_chosen_sheet_name_succeeds(
+    client: TestClient, mocker
+) -> None:
+    mock_enqueue = mocker.patch(
+        "ai_etl.api.routers.runs.enqueue_analysis", return_value="task-xlsx"
+    )
+
+    response = client.post(
+        "/runs",
+        data={"sheet_name": "Q2"},
+        files={
+            "file": (
+                "vendas.xlsx",
+                _multi_sheet_xlsx_bytes(),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    mock_enqueue.assert_called_once()
+    spec = mock_enqueue.call_args.args[0]
+    assert "Use sheet 'Q2' of this Excel workbook." in spec
+    assert "name, price" in spec  # columns came from the chosen sheet, not the default
+
+
+def test_create_run_with_single_sheet_excel_and_no_sheet_name_still_works(
+    client: TestClient, mocker
+) -> None:
+    """Regression guard: the vast majority of Excel uploads have exactly one
+    sheet and must keep working with no picker interaction at all."""
+    mock_enqueue = mocker.patch(
+        "ai_etl.api.routers.runs.enqueue_analysis", return_value="task-xlsx"
+    )
+
+    response = client.post(
+        "/runs",
+        files={
+            "file": (
+                "sales.xlsx",
+                _single_sheet_xlsx_bytes(),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    mock_enqueue.assert_called_once()
+    spec = mock_enqueue.call_args.args[0]
+    assert "Use sheet" not in spec
+
+
+# ---------------------------------------------------------------------------
 # Real bug found 2026-08-30, live testing: `.pdf`/`.docx` uploads had no
 # branch in `_dataframe_from_upload()` at all and always 400'd with "Could
 # not parse uploaded file." — despite the upload UI advertising both and
