@@ -127,6 +127,29 @@ this is the same "S3 is a cache of derived outputs, Postgres is the source of
 truth" split `docs/architecture-storage.md` already documents, just stated
 here in DR terms.
 
+## Owner verification checklist (added 2026-09-06, `docs/work/2026-09-06-mvp-monetization-readiness-plan.md` WS2)
+
+The 3-item follow-up in Decision 2 above, made concrete as steps — none of
+this requires code, all of it requires the Supabase dashboard (credentials
+this coding environment does not have):
+
+1. **Confirm PITR is enabled.** Supabase dashboard → the project backing
+   `APP_DATABASE_URL` → Database → Backups. Note the plan tier and whether
+   Point-in-Time Recovery shows as enabled or requires an upgrade.
+2. **Note the actual retention window.** The PITR panel states how far back
+   a restore can target (commonly 7 days on paid tiers, more on higher
+   tiers) — record the real number, don't assume the RPO target above
+   equals it.
+3. **Perform one real test restore.** Use Supabase's "restore to a new
+   project" (or equivalent) flow to restore to a *separate* scratch
+   project — never restore over the live database. Time how long the
+   restore takes end to end. Confirm the restored data looks sane (row
+   counts on `users`/`runs`/`saved_pipelines` roughly match expectations
+   for the point in time chosen). Delete the scratch project afterward.
+4. **Report back**: update this section (or the Consequences below) with
+   the date, the plan tier, the real retention window, and the actual
+   restore duration observed — replacing "unverified" with a real number.
+
 ## Consequences
 
 - A documented RTO (4h) / RPO (24h) target exists for the first time,
