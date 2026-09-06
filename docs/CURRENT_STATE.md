@@ -2,29 +2,28 @@
 
 > Living doc. Updated at the end of meaningful work sessions, not per-commit. Source of truth for repo/code state; the Obsidian vault (`~/Documents/Obsidian Vault/tcc/`) is the source of truth for the academic TCC narrative and product/strategy context.
 
-**Last updated:** 2026-09-06 — **Waves 0 and 1 of the mega-audit remediation plan (PR #193) are implemented, merged, and live-verified against the deployed app — see the dated section below for what changed and how it was checked.** Waves 2-4 are still open (see "Owner's next steps"). Session 4 (2026-09-04) closed the coverage gap on 3 real modules. Session 3 added `DELETE /pipelines/{id}` + explained remaining `# type: ignore`s. Session 2 fixed 2 real gaps a live end-to-end test found that the 2026-09-03/04 audit missed. Full detail in each dated section below.
+**Last updated:** 2026-09-06 — **All 5 waves of the mega-audit remediation plan (PR #193) are implemented, merged, and live-verified against the deployed app.** See the two dated sections below for what changed and how it was checked. Session 4 (2026-09-04) closed the coverage gap on 3 real modules. Session 3 added `DELETE /pipelines/{id}` + explained remaining `# type: ignore`s. Session 2 fixed 2 real gaps a live end-to-end test found that the 2026-09-03/04 audit missed. Full detail in each dated section below.
 
 ## Owner's next steps (as of 2026-09-06)
 
-**Waves 0-1 done. Waves 2-4 remain**, per
-`docs/work/2026-09-05-mega-audit-remediation-plan.md`:
+**The mega-audit remediation plan (`docs/work/2026-09-05-mega-audit-remediation-plan.md`) is fully closed.** Every item across Waves 0-4 is either fixed and live-verified, or explicitly scoped out with a stated reason:
 
-- **Wave 2 (high)**: keyboard-inaccessible file upload (item 5), a
-  narrative-consistency guard-rail checking the wrong column (item 6), Advisor
-  giving unhedged recommendations off tiny samples (item 7), no UI for
-  `drift_threshold_pct` (item 8).
-- **Wave 3 (medium)**: `/history` table semantics (item 9), a stale i18n key
-  (item 10), the nav-highlight-lost-on-run-detail cosmetic bug found while
-  re-verifying item 14 (see below), mixed-format date columns (item 16,
-  investigate first).
-- **Wave 4 (low)**: a duplicate/mislabeled integration test file (item 15).
-- **Item 4a** (full nested-JSON flattening support) was explicitly deferred
-  when item 4b shipped — live-verified real gap, not yet attempted (see
-  below).
+- **Not attempted, by design**: item 4a (full nested-JSON flattening support)
+  — item 4b (visible error + persisted code on failure) shipped instead;
+  4a is a genuinely larger feature (new Transformer capability), not a bug
+  fix, and was never in this plan's scope to build.
+- **Nothing to fix**: item 12 (billing label lives in an external audit
+  artifact, not this app) and the item-14-adjacent "nav highlight lost on
+  `/history/[id]`" follow-up (no such feature exists anywhere in the
+  codebase — see the 2026-09-06 Waves 2-4 section below for how that was
+  found to be a misread, not a real regression).
+- **No new backlog item opened** by this remediation work itself — every
+  fix was verified (unit tests + live-verification where the standing rule
+  applies) before merging, so nothing here should need a second round the
+  way the pt-BR date bug did.
 
-**App went public mid-session** (owner decision) — this is why Wave 0 item 1's
-"accept the risk, single tenant" framing no longer applied and the sandbox fix
-became non-optional rather than a deferred decision.
+Next real work on this project is whatever the owner picks next — not
+dictated by this plan, which is now fully executed.
 
 Unrelated to the audit, still true: billing top-ups (Railway/OpenAI/Anthropic,
 owner's own action, no code dependency on which tier is active) and the TCC
@@ -100,6 +99,83 @@ external audit artifact, not this app).
 respectively, 94-95% coverage). Frontend `npm run build` clean (TypeScript,
 all routes). PR #196 (Wave 0) and #197 (Wave 1) both squash-merged after green
 CI.
+
+## 2026-09-06 — mega-audit remediation, Waves 2-4 + plan closed out (PR #200, #201, #199)
+
+Direct continuation of the same session, same day. All remaining items closed.
+
+**Item 5 (keyboard-inaccessible upload)**: the real `<input type="file">`
+used `className="hidden"` (`display:none`), which drops an element from the
+tab order entirely. Switched to `sr-only` (clip-path, stays focusable) +
+`peer`/`peer-focus-visible:*` on the visual label for a visible focus ring —
+the standard accessible-file-input pattern.
+
+**Item 8 (no UI for `drift_threshold_pct`)**: already a valid, accepted API
+field (`gt=0`, server default 20.0). Added to `pipelines-manager.tsx`'s
+create/edit form and both POST/PATCH payloads.
+
+**Item 6 (narrative guard-rail checked the wrong column)**: live-verified
+real miss (LLM/Prompt Engineer persona, `misleading_column.csv`) —
+`_validate_narrative_consistency` always checked `numeric_cols[-1]` (last by
+DataFrame position) regardless of which column the narrative's trend claim
+was actually about. Now searches the narrative text for a named column
+first, falling back to the old behavior when none is named. New tests
+exercise the real algorithm against the live-reproduced case shape.
+
+**Item 7 (Advisor gave unhedged recommendations)**: same audit run found the
+Advisor treating a small-N segment and a misleadingly-named column
+(`profit_margin` that wasn't actually a margin) as settled fact. Added
+explicit prompt rules: downgrade priority + caveat for small samples (<5),
+flag column-name-based semantic inference as an assumption, not fact.
+
+**Item 16 (mixed-format date columns, investigated, confirmed real, fixed)**:
+the existing strict-ISO-first fix only handled a column that was *purely*
+ISO or *purely* non-ISO. Investigation found the real gap — a column
+genuinely MIXING both still fell to a whole-column `pd.to_datetime(...)`
+call, and pandas infers ONE format from a column and applies it to every
+row, silently turning minority-format rows into NaT even though each string
+is individually parseable. Incidentally confirmed live during Wave 1's own
+verification run. Fixed by parsing per-value (`.apply()`) instead of
+per-column — **live-verified again after this fix, standalone**: a 6-row
+CSV mixing `DD/MM/YYYY` and ISO strings (including two dates that are only
+valid as DD-MM, `21-03-2026`/`18-03-2026`) came back with **zero nulls, all
+six dates correct** — before this fix, four of the six would have been NaT.
+
+**Item 10 (`localeToggle.switchTo` leaked as literal text) — root cause
+found, not just patched**: the key used an ICU `select` with `en-US`/`pt-BR`
+as case labels; next-intl's ICU parser can't handle a hyphenated case label,
+so it failed to compile and silently rendered the raw key as both the
+visible text and the `aria-label`, on every page, for at least 11 days.
+Replaced with two plain keys picked in JS. **Live-verified**: the toggle now
+reads "Switch to Portuguese" instead of "localeToggle.switchTo".
+
+**Item 9 (`/history` had 5 redundant identical links per row)**: already
+real `<table>`/`<tr>`/`<td>` markup — the actual gap was 5 separate `<a>`
+elements per row, all pointing at the same href, so a screen reader
+announces "link" 5 times per run. Collapsed to one (the run title/id cell).
+
+**Item 15**: deleted `tests/integration/test_quality.py` — confirmed by
+diffing against `tests/unit/test_quality.py` that it tested nothing
+actually integration (no real DB/I-O) and every scenario it covered already
+existed in the unit file.
+
+**Correction, not a fix — the item-14-adjacent "nav highlight lost on
+`/history/[id]`" follow-up from the Wave 0 PR doesn't exist**: searched the
+whole frontend for any active-tab-highlighting mechanism (`aria-current`,
+pathname comparison, conditional class) — there is none, anywhere, on any
+page. The earlier observation (Wave 0 PR) was very likely a misread of
+hover-state in a screenshot, not a real feature regression. Nothing built;
+this doc corrected instead of silently carrying a phantom backlog item.
+
+Also live-verified item 11 (model-picker copy, PR #199, merged earlier the
+same day): the Claude Haiku 4.5 card no longer mentions "PR #109" or
+"markdown-fence fix" — just the user-facing facts.
+
+**make check clean**: 1183 passed, 14 skipped, 95.07% coverage. `npm run
+build` clean (TypeScript, all routes). PR #200 (Wave 2), #201 (Wave 3/4),
+#199 (Wave 3 item 11) all squash-merged after green CI. This closes every
+item in `docs/work/2026-09-05-mega-audit-remediation-plan.md` — see "Owner's
+next steps" above.
 
 ## 2026-09-05 — mega 12-persona audit (PR #192) + wave-based remediation plan (PR #193)
 
