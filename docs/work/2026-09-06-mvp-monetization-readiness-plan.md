@@ -1,6 +1,6 @@
 # 2026-09-06 — MVP monetization-readiness plan
 
-**Status:** In progress.
+**Status:** WS1 and WS3 complete. WS2 open (owner action).
 **Owner:** Bruno Ribeiro (decisions) + Claude (execution)
 
 ## Objective
@@ -140,28 +140,32 @@ time); the owner performs the actual Supabase dashboard check + one test
 restore, then reports the result back so ADR-042's Consequences section can
 be updated with real dates/findings instead of "unverified."
 
-## Workstream 3 — Admin mediated write-access + support audit log (code, needs scoping first)
+## Workstream 3 — Admin mediated write-access + support audit log (code) — DONE
 
-**Do not start until the owner answers the scoping question below.** This is
-the one item in this plan that is a real, non-trivial code change touching
-auth/security, and ADR-032 itself flagged it as "future work" rather than
-something to build reflexively.
+**Scope decided by the owner: minimal** (required `reason` on every route +
+one real write action), branch `feat/admin-mediated-write-access`, ADR-047.
 
-Candidate minimal scope, reusing 100% of existing infrastructure
-(`require_admin()`, `admin_action_log`, `api/routers/admin.py`'s existing
-pattern):
-- Every existing/new admin route gains a required `reason: str` field
-  (freeform justification, logged verbatim in `admin_action_log.detail`) —
-  turns today's unmediated "admin can read" into "admin must state why,"
-  which is most of what a SOC2 auditor is actually checking for.
-- One concrete write action as the proof point — e.g. an admin-triggered
-  retry of a stuck/failed run on a tenant's behalf (a real support scenario
-  that exists today only as "Bruno does it by hand in the DB") — mediated
-  through the application, reason-logged, instead of direct DB access.
+- Migration `0022` (renumbered from a planned `0021` after finding a real
+  fork already on `main` — `0021_rls_tenant_isolation.py`, ADR-040 — same
+  "keep the work, fix the pointer" convention as the `0018`/`0019` fork):
+  `admin_action_log.reason`, nullable at the DB, required at the API layer.
+- Every existing `/admin` route (`list_tenants`, `list_tenant_runs`,
+  `get_tenant_budget`, `get_audit_log`) now requires `reason` as a query
+  parameter, logged verbatim.
+- New `POST /admin/tenants/{tenant_id}/pipelines/{pipeline_id}/retry` —
+  the proof-point write action: reuses `enqueue_analysis()` verbatim (same
+  function `services/scheduler.py`'s scheduled fires call), so an
+  admin-triggered retry still respects the tenant's own budget cap/rate
+  limit — never a bypass. 404 for an unknown pipeline, 402/429 mapped from
+  `BudgetExceededError`/`RateLimitExceededError`, every outcome logged
+  (including rejections) via `log_admin_action()`.
+- Full test coverage added (`tests/unit/test_api_admin.py`,
+  `tests/unit/test_admin_log.py`): happy path, reason-required 422s, 404,
+  402/429 rejections, non-admin 403s. `make check` green (lint, format,
+  type-check, full suite, bandit, pip-audit).
 
-Alternative (broader) scope: a general-purpose "support session" concept
-(time-boxed, every query during the session logged) — more auditor-
-convincing, meaningfully more code and design surface.
+Not attempted: the broader "support session" alternative (time-boxed,
+every query logged) — explicitly deferred, see ADR-047 Decision 1 for why.
 
 ## Suggested execution order
 

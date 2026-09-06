@@ -31,6 +31,7 @@ def test_log_admin_action_persists_row(engine: Engine) -> None:
         "user_admin1",
         "list_tenant_runs",
         target_tenant_id="tenant-a",
+        reason="tenant emailed support about a stuck run",
         detail="limit=20",
     )
 
@@ -39,17 +40,21 @@ def test_log_admin_action_persists_row(engine: Engine) -> None:
     assert records[0]["actor_user_id"] == "user_admin1"
     assert records[0]["action"] == "list_tenant_runs"
     assert records[0]["target_tenant_id"] == "tenant-a"
+    assert records[0]["reason"] == "tenant emailed support about a stuck run"
     assert records[0]["detail"] == "limit=20"
     assert records[0]["created_at"] is not None
 
 
-def test_log_admin_action_target_tenant_id_optional(engine: Engine) -> None:
-    """Some admin actions (e.g. listing all tenants) have no single target."""
+def test_log_admin_action_target_tenant_id_and_reason_optional(engine: Engine) -> None:
+    """Some admin actions (e.g. listing all tenants) have no single target;
+    `reason` is `None` only for pre-ADR-047 call sites — every route added
+    since requires it, but the persistence layer doesn't enforce that."""
     admin_log.log_admin_action("user_admin1", "list_all_tenants")
 
     records = admin_log.list_admin_actions()
     assert len(records) == 1
     assert records[0]["target_tenant_id"] is None
+    assert records[0]["reason"] is None
     assert records[0]["detail"] is None
 
 

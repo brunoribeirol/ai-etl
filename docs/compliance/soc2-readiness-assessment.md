@@ -94,15 +94,18 @@ real auditor's evidence-request template explicitly asking for more than
 GitHub's native history. Tracked as row 7 in
 `docs/compliance/risk-register.md`.
 
-**GAP (P1) — in progress:** No dedicated admin/operator role beyond
-read-only cross-tenant access (ADR-032's own flagged limitation) — every
-tenant is `editor` over its own data with no mediated "break-glass"
-operator write-access model for support scenarios. A SOC2 auditor will ask
-"how does staff access customer data for support, and is it logged" —
-today the honest answer is "direct DB access by Bruno, not mediated by the
-application, not
-separately logged." This is the single most auditor-visible gap in this
-assessment.
+**GAP (P1) — mitigated, minimal scope (2026-09-06, ADR-047):** No
+dedicated admin/operator role beyond read-only cross-tenant access
+(ADR-032's own flagged limitation) — every tenant is `editor` over its own
+data with no mediated "break-glass" operator write-access model for
+support scenarios. A SOC2 auditor will ask "how does staff access customer
+data for support, and is it logged." **Now**: every `/admin` route
+requires a stated `reason`, logged verbatim (`admin_action_log.reason`,
+migration `0022`); one real support write action (retrying a tenant's
+stuck pipeline) is mediated through the application (`enqueue_analysis()`,
+the same function scheduled fires use) instead of direct DB access. Not
+every conceivable support scenario has a mediated route yet — only the one
+this project has actually needed — see ADR-047 Consequences.
 
 ## CC6 — Logical and Physical Access Controls
 
@@ -188,7 +191,7 @@ for the plan that closed most of these.
 |---|---|---|
 | P0 | Tenant data deletion end-to-end | **Closed** — ADR-025, `DELETE /tenant` |
 | P0 | Formal change-approval evidence beyond Git history | **Accepted position** — GitHub PR history is the evidence trail; revisit if a real auditor asks for more |
-| P1 | No admin/support access model + audit log for staff data access | **In progress** — read-only closed (ADR-032); write-access mediation scoped, see this plan's WS3 |
+| P1 | No admin/support access model + audit log for staff data access | **Mitigated, minimal scope** — read-only closed (ADR-032); `reason` required on every route + one mediated write action (pipeline retry), see ADR-047 |
 | P1 | App DB role can bypass RLS (`rolbypassrls = true`) | **Accepted risk**, formalized in ADR-032 Decision 1 |
 | P1 | No centralized error tracking/alerting | **Closed** — Sentry (ADR-033), confirmed live in production |
 | P1 | No documented/tested backup-restore procedure | **Partially closed** — RTO/RPO + strategy documented (ADR-042); real test restore pending, owner action (WS2) |
@@ -199,9 +202,10 @@ for the plan that closed most of these.
 **Overall assessment**: this project is closer to Type I-ready than a
 typical pre-revenue solo project — tenant isolation, encryption, sandboxing,
 RBAC, audit logging, data erasure, error tracking, a structured risk
-register, a sub-processor register, and an incident response plan are all
-real, implemented, and tested/documented controls, not paper policy. The
-two gaps still genuinely open are (1) a real test restore against Supabase
-PITR (owner action, not a code fix) and (2) admin write-access mediation
-for support scenarios (in progress). Everything else a Type I engagement
-would ask for at this stage now has a paper trail.
+register, a sub-processor register, an incident response plan, and
+reason-gated/mediated admin access are all real, implemented, and
+tested/documented controls, not paper policy. The one gap still genuinely
+open is a real test restore against Supabase PITR (owner action, not a code
+fix — `docs/work/2026-09-06-mvp-monetization-readiness-plan.md` WS2).
+Everything else a Type I engagement would ask for at this stage now has a
+paper trail.
