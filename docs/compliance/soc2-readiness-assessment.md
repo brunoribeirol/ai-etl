@@ -59,14 +59,16 @@ columns) before Type I fieldwork.
 |---|---|---|
 | CI runs security scanning on every change | ✅ | `bandit` + `pip-audit`, every PR (`make security`, CI workflow) |
 | Audit trail of application actions | ✅ | `audit/logger.py::log_action()` — every agent action logged; `audit/db.py::save_run`/`save_analysis` persist it |
-| Production health monitoring | ⚠️ Partial | Railway's built-in deploy/service health; `saved_pipelines.consecutive_failures`/`last_status` (Sprint 15) gives pipeline-level health, not infra-level (no APM/error-tracking tool wired — e.g. no Sentry) |
+| Production health monitoring | ✅ | Railway's built-in deploy/service health; `saved_pipelines.consecutive_failures`/`last_status` (Sprint 15) for pipeline-level health; `core/observability.py::init_sentry()` (ADR-033, Sprint 34) for infra-level error tracking |
 
-**GAP (P1):** No centralized error tracking / alerting on unhandled
-exceptions in the API/worker processes themselves (as opposed to pipeline
-*business logic* failures, which Sprint 15 already handles). An
-unhandled exception in `api/main.py` today is visible only via Railway logs,
-not proactively alerted. Real gap for a production SaaS, independent of
-SOC2 — flagged here because CC4 explicitly asks for it.
+**GAP CLOSED (2026-09-06 update):** the original P1 finding here — no
+centralized error tracking on unhandled API/worker exceptions — was closed
+by Sprint 34 (ADR-033) and independently confirmed in production: Sentry
+was seen initializing (`Sentry initialized (component=api)`/`(component=worker)`
+in Railway logs) and later confirmed capturing a real event
+(`docs/CURRENT_STATE.md`, 2026-08-30/2026-09-01 sessions). This
+self-assessment predates that fix (dated 2026-08-21); left here, marked
+closed, rather than silently deleted, so the history is traceable.
 
 ## CC5 — Control Activities (access control, change management)
 
@@ -79,19 +81,26 @@ SOC2 — flagged here because CC4 explicitly asks for it.
 | Change management | ✅ | Branch protection (never commit to `main`), PR + CI required, ADR required for architecture decisions, `make check` gate before merge |
 | Code execution sandboxing | ✅ | `core/sandbox.py`, isolated subprocess, restricted globals, enforced timeout (ADR-003/ADR-007) |
 
-**GAP (P0 for Type I fieldwork, not for this self-assessment):** No
-formal change-management *evidence trail* beyond Git/GitHub history — a
-real Type I engagement wants a documented approval record (who approved
-what PR, when) distinct from "the PR was merged." GitHub's own PR
-approval/merge history likely satisfies this in practice, but this hasn't
-been validated against a real auditor's evidence-request template.
+**GAP — accepted position, not a fix (2026-09-06 update):** No formal
+change-management *evidence trail* beyond Git/GitHub history — a real
+Type I engagement wants a documented approval record (who approved what
+PR, when) distinct from "the PR was merged." **Decision**: GitHub's own PR
+approval/merge history is accepted as the evidence trail — branch
+protection (never commit to `main`) plus required PR plus CI gate
+(`make check`) are already enforced (`CLAUDE.md`), and building a separate
+approval-tracking system with no real auditor behind it yet would be
+paperwork theatre, not a real control improvement. **Revisit trigger**: a
+real auditor's evidence-request template explicitly asking for more than
+GitHub's native history. Tracked as row 7 in
+`docs/compliance/risk-register.md`.
 
-**GAP (P1):** No dedicated admin/operator role (ADR-022's own flagged
-limitation) — every tenant is `editor` over its own data with no separate
-"break-glass" operator access model documented for support scenarios. Not
-urgent pre-enterprise-customer, but a SOC2 auditor will ask "how does staff
-access customer data for support, and is it logged" — today the honest
-answer is "direct DB access by Bruno, not mediated by the application, not
+**GAP (P1) — in progress:** No dedicated admin/operator role beyond
+read-only cross-tenant access (ADR-032's own flagged limitation) — every
+tenant is `editor` over its own data with no mediated "break-glass"
+operator write-access model for support scenarios. A SOC2 auditor will ask
+"how does staff access customer data for support, and is it logged" —
+today the honest answer is "direct DB access by Bruno, not mediated by the
+application, not
 separately logged." This is the single most auditor-visible gap in this
 assessment.
 
@@ -105,15 +114,16 @@ assessment.
 | Encryption at rest (S3 artifacts) | ⚠️ Default only | AWS S3 default server-side encryption (SSE-S3) applies unless explicitly disabled; not explicitly configured/verified in `audit/storage.py` or IaC — bucket-level setting, owner-managed (ADR-009 scopes bucket creation as a manual step) |
 | Least-privilege database role | ⚠️ Gap | App's Postgres role has `rolbypassrls = true` (`SECURITY.md`, ADR-032 Decision 1) — the opposite of least-privilege for RLS purposes, a conscious trade-off (see GAP below), not a passing control |
 
-**GAP (P1):** `SECURITY.md` documents that the app's own connection role has
-`rolbypassrls = true` (bypasses Row Level Security). This is *why* enabling
-RLS is safe today (it only blocks `anon`/`authenticated`, not the app), but
-it also means the app's own credential is maximally privileged — a
-compromised `APP_DATABASE_URL` bypasses every tenant isolation guarantee
-this document otherwise claims. A real hardening step (not done this
-sprint, flagged for a future one) would be a dedicated non-bypassing
-application role with explicit per-table grants, closing this gap
-structurally rather than relying on application code discipline alone.
+**GAP — accepted risk, not a fix (2026-09-06 update):** `SECURITY.md`
+documents that the app's own connection role has `rolbypassrls = true`
+(bypasses Row Level Security). This is *why* enabling RLS is safe today (it
+only blocks `anon`/`authenticated`, not the app), but it also means the
+app's own credential is maximally privileged — a compromised
+`APP_DATABASE_URL` bypasses every tenant isolation guarantee this document
+otherwise claims. **Decision, formalized in ADR-032 Decision 1**: keep
+`rolbypassrls = true` for the current scope, with an explicit revisit
+trigger (external paying tenants at scale). Tracked as row 2 in
+`docs/compliance/risk-register.md`.
 
 **GAP (P0, closed this sprint):** Until this sprint, there was no way to
 fully remove a tenant's data from the system on request — see
@@ -127,13 +137,15 @@ closed by `DELETE /tenant` (ADR-025).
 | Control | Status | Evidence |
 |---|---|---|
 | Vulnerability scanning | ✅ | `pip-audit` (dependency CVEs), `bandit` (code patterns) on every CI run |
-| Incident detection | ⚠️ Partial | See CC4 gap — no proactive error-tracking/alerting beyond pipeline-level health |
-| Backup / disaster recovery | ⚠️ Undocumented | Supabase's own backup policy applies (platform-managed); no documented, tested restore procedure specific to this application |
+| Incident detection | ✅ | Sentry (ADR-033) — see CC4 update above |
+| Backup / disaster recovery | ⚠️ Partial | RTO (4h)/RPO (24h) targets and recovery strategy documented (ADR-042, Supabase PITR); enablement/retention-window confirmation and a real test restore still pending — owner action, `docs/work/2026-09-06-mvp-monetization-readiness-plan.md` WS2 |
 
-**GAP (P1):** No documented, tested backup/restore procedure. Supabase
-almost certainly has point-in-time recovery available on paid tiers, but
-whether it's enabled, and whether a restore has ever been rehearsed, is
-unverified — flagged, not assumed either way.
+**GAP (P1) — partially closed:** No documented, tested backup/restore
+procedure. **ADR-042 now documents** the recovery strategy (rely on
+Supabase PITR) and sets RTO/RPO targets. What remains open is exactly what
+ADR-042 itself flags: confirm PITR is actually enabled, its retention
+window, and perform one real test restore. Tracked as row 4 in
+`docs/compliance/risk-register.md`.
 
 ## CC8 — Change Management
 
@@ -144,13 +156,11 @@ control activity, not a separate process) — no additional findings.
 
 | Control | Status | Evidence |
 |---|---|---|
-| Third-party/sub-processor risk | ⚠️ Undocumented | No explicit sub-processor list (Clerk, Supabase, Railway, Vercel, AWS S3, OpenAI/Anthropic/Google) with each vendor's own SOC2/security posture reviewed and recorded |
+| Third-party/sub-processor risk | ✅ | `docs/compliance/sub-processors.md` (2026-09-06) — full list (Clerk, Supabase, Railway, Vercel, AWS S3, OpenAI, Anthropic, Google) with each vendor's own compliance posture recorded |
 
-**GAP (P1):** A real SOC2 report requires disclosing sub-processors and
-their own compliance posture (most of the above — Clerk, Supabase, Vercel,
-AWS — publish their own SOC2 reports; this hasn't been collected into one
-place). Cheap to fix (a table in a future doc), not done this sprint —
-out of scope for "prepare the terrain," in scope for the actual engagement.
+**GAP CLOSED (2026-09-06):** A real SOC2 report requires disclosing
+sub-processors and their own compliance posture. Now recorded in
+`docs/compliance/sub-processors.md`.
 
 ---
 
@@ -171,23 +181,27 @@ out of scope for "prepare the terrain," in scope for the actual engagement.
 
 ## Summary — priority-ordered gap list
 
-| Priority | Gap | Sprint 24 status |
+**Updated 2026-09-06** — see `docs/work/2026-09-06-mvp-monetization-readiness-plan.md`
+for the plan that closed most of these.
+
+| Priority | Gap | Status (2026-09-06) |
 |---|---|---|
 | P0 | Tenant data deletion end-to-end | **Closed** — ADR-025, `DELETE /tenant` |
-| P0 | Formal change-approval evidence beyond Git history | Not addressed — needs validation against a real auditor's request, not a code fix |
-| P1 | No admin/support access model + audit log for staff data access | Not addressed — inherits ADR-022's known limitation |
-| P1 | App DB role can bypass RLS (`rolbypassrls = true`) | Not addressed — flagged for a future hardening sprint |
-| P1 | No centralized error tracking/alerting | Not addressed — infra gap, not SOC2-specific |
-| P1 | No documented/tested backup-restore procedure | Not addressed |
-| P1 | No sub-processor compliance-posture register | Not addressed |
-| P1 | Risk register is narrative, not structured | Not addressed |
-| P2 | No written incident response plan | Not addressed |
+| P0 | Formal change-approval evidence beyond Git history | **Accepted position** — GitHub PR history is the evidence trail; revisit if a real auditor asks for more |
+| P1 | No admin/support access model + audit log for staff data access | **In progress** — read-only closed (ADR-032); write-access mediation scoped, see this plan's WS3 |
+| P1 | App DB role can bypass RLS (`rolbypassrls = true`) | **Accepted risk**, formalized in ADR-032 Decision 1 |
+| P1 | No centralized error tracking/alerting | **Closed** — Sentry (ADR-033), confirmed live in production |
+| P1 | No documented/tested backup-restore procedure | **Partially closed** — RTO/RPO + strategy documented (ADR-042); real test restore pending, owner action (WS2) |
+| P1 | No sub-processor compliance-posture register | **Closed** — `docs/compliance/sub-processors.md` |
+| P1 | Risk register is narrative, not structured | **Closed** — `docs/compliance/risk-register.md` |
+| P2 | No written incident response plan | **Closed** — `docs/compliance/incident-response-plan.md` |
 
 **Overall assessment**: this project is closer to Type I-ready than a
 typical pre-revenue solo project — tenant isolation, encryption, sandboxing,
-RBAC, audit logging, and now data erasure are real, implemented, and tested
-controls, not paper policy. The remaining gaps are mostly *documentation and
-process* (evidence trails, sub-processor registers, an incident response
-plan) rather than missing technical controls, which is the cheaper category
-to close before an actual paid engagement — consistent with this sprint's
-explicit scope ("prepare the terrain," not certify).
+RBAC, audit logging, data erasure, error tracking, a structured risk
+register, a sub-processor register, and an incident response plan are all
+real, implemented, and tested/documented controls, not paper policy. The
+two gaps still genuinely open are (1) a real test restore against Supabase
+PITR (owner action, not a code fix) and (2) admin write-access mediation
+for support scenarios (in progress). Everything else a Type I engagement
+would ask for at this stage now has a paper trail.
