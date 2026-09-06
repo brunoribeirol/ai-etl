@@ -2,56 +2,104 @@
 
 > Living doc. Updated at the end of meaningful work sessions, not per-commit. Source of truth for repo/code state; the Obsidian vault (`~/Documents/Obsidian Vault/tcc/`) is the source of truth for the academic TCC narrative and product/strategy context.
 
-**Last updated:** 2026-09-05 — **A full-scope 12-persona audit (PR #192) found real open gaps a "prototype is functionally done" claim from the day before did not anticipate; a wave-based remediation plan for all of them now exists (PR #193, not yet implemented) — see "Owner's next steps" immediately below.** Session 4 (2026-09-04) closed the coverage gap on 3 real modules. Session 3 added `DELETE /pipelines/{id}` + explained remaining `# type: ignore`s. Session 2 fixed 2 real gaps a live end-to-end test found that the 2026-09-03/04 audit missed. Full detail in each dated section below; the "2026-09-04" section further down is the original audit-implementation session.
+**Last updated:** 2026-09-06 — **Waves 0 and 1 of the mega-audit remediation plan (PR #193) are implemented, merged, and live-verified against the deployed app — see the dated section below for what changed and how it was checked.** Waves 2-4 are still open (see "Owner's next steps"). Session 4 (2026-09-04) closed the coverage gap on 3 real modules. Session 3 added `DELETE /pipelines/{id}` + explained remaining `# type: ignore`s. Session 2 fixed 2 real gaps a live end-to-end test found that the 2026-09-03/04 audit missed. Full detail in each dated section below.
 
-## Owner's next steps (as of 2026-09-05)
+## Owner's next steps (as of 2026-09-06)
 
-**Not "functionally done" anymore — that was session 4's read, and the very next
-day's mega-audit (12 personas, full scope, `.claude/skills/persona-audit.md`)
-found real gaps it hadn't surfaced yet.** One of them (a regression in the
-pt-BR date-parse fix itself) was serious enough to fix immediately (PR #191,
-live-verified against the deployed app); everything else was deliberately left
-open for the owner to triage, per a wave-based remediation plan.
+**Waves 0-1 done. Waves 2-4 remain**, per
+`docs/work/2026-09-05-mega-audit-remediation-plan.md`:
 
-**Real next step: decide Wave 0, then say go on Waves 1-4.** The plan
-(`docs/work/2026-09-05-mega-audit-remediation-plan.md`) groups every open
-finding from the audit (`docs/work/2026-09-04-mega-persona-audit.md`) into
-waves by severity/dependency, with effort estimates. Nothing in Waves 1-4
-needs a further decision per item — only Wave 0 does:
+- **Wave 2 (high)**: keyboard-inaccessible file upload (item 5), a
+  narrative-consistency guard-rail checking the wrong column (item 6), Advisor
+  giving unhedged recommendations off tiny samples (item 7), no UI for
+  `drift_threshold_pct` (item 8).
+- **Wave 3 (medium)**: `/history` table semantics (item 9), a stale i18n key
+  (item 10), the nav-highlight-lost-on-run-detail cosmetic bug found while
+  re-verifying item 14 (see below), mixed-format date columns (item 16,
+  investigate first).
+- **Wave 4 (low)**: a duplicate/mislabeled integration test file (item 15).
+- **Item 4a** (full nested-JSON flattening support) was explicitly deferred
+  when item 4b shipped — live-verified real gap, not yet attempted (see
+  below).
 
-1. **Wave 0, item 1 (the one real blocker) — sandbox isolation.** Red Team
-   reproduced real arbitrary command execution (`whoami`, for real) through the
-   known `exec()`-sandbox bypass, on the `"process"` backend that's the default
-   in production today (Vercel Sandbox — the real mitigation — stays off by the
-   owner's own prior billing decision, unchanged). The plan lays out 3 options
-   (accept as-is / OS-level network+subprocess lockdown / Vercel Sandbox Pro)
-   without picking one — that's the owner's call, not proposed again unprompted.
-2. **Wave 0, items 12/13 — wording-only**, not code: the "billing" label and an
-   RLS sentence in audit/pitch materials overstate what actually exists/is
-   guaranteed. Fix whenever, doesn't block anything.
-3. **Wave 0, item 14** — a non-technical-user navigation complaint that may be
-   an artifact of the audit's own parallel-subagent browser contention, not a
-   real bug; cheap (~15 min) to re-verify in isolation before spending real
-   frontend effort on it.
-4. **Waves 1-4 (the actual fix backlog)** — critical: Excel multi-sheet always
-   fails, a systematic BR-currency regex-escape bug in LLM-generated code,
-   nested JSON crashes the Transformer with no visible error. High: keyboard-
-   inaccessible file upload, a narrative-consistency guard-rail that checks the
-   wrong column, Advisor giving unhedged recommendations off tiny samples, no UI
-   for `drift_threshold_pct`. Medium/low: several UI/i18n/test-hygiene items.
-   Full list, effort estimates, and the "live-verify before done" rule (see next
-   paragraph) are in the plan doc.
-
-**Standing rule the plan exists to enforce**: any fix that changes LLM-generated-
-code behavior must be live-verified against the deployed app with the exact
-reported input before being called done — not just reasoned about. The pt-BR
-date bug was "fixed" twice this session and wrong both times; only an actual
-live re-run caught the second failure.
+**App went public mid-session** (owner decision) — this is why Wave 0 item 1's
+"accept the risk, single tenant" framing no longer applied and the sandbox fix
+became non-optional rather than a deferred decision.
 
 Unrelated to the audit, still true: billing top-ups (Railway/OpenAI/Anthropic,
 owner's own action, no code dependency on which tier is active) and the TCC
 monograph writing (redação final, due December, lives only in the Obsidian
 vault) remain outside this repo's scope.
+
+## 2026-09-06 — mega-audit remediation, Waves 0-1 (PR #196, #197)
+
+Direct follow-up to the 2026-09-05 mega-audit + remediation plan below. Owner
+decision on Wave 0 item 1: **not** "accept the risk" (the plan's own default
+recommendation) — the app is going public, so the single-tenant framing that
+recommendation depended on no longer holds.
+
+**Item 14 re-verified first, in isolation** (own browser session, no other
+agent contending for the tab), per the plan's own instruction: the original
+report's severe symptoms (menu highlighting the wrong tab, bouncing to home on
+refresh/deep-link, inconsistent History row clicks) **did not reproduce** —
+supports the audit's own suspicion that it was Chrome-tab-group contention
+from the earlier parallel-persona dispatch, not a product bug. Found one real
+but much smaller issue instead: the nav bar loses its active-tab highlight on
+the `/history/[id]` run-detail page (works everywhere else, including on
+refresh). Downgraded to a Wave 3 cosmetic item rather than treated as the
+original finding.
+
+**Item 1 — sandbox RCE, real fix required two attempts, second one caught by
+testing against real Linux, not macOS.** First attempt: `RLIMIT_NPROC=0` on
+the sandboxed child. Looked correct locally, but testing against a real Linux
+container (this project's own `python:3.12-slim` base image, not just
+reasoning) found it was actually broken two different ways: as root (this
+project's `Dockerfile` has no `USER`, so production runs as root), Linux
+exempts privileged processes from `RLIMIT_NPROC` entirely — it blocked
+nothing; dropping privilege first made it block the exploit, but Linux counts
+threads against `RLIMIT_NPROC` (macOS doesn't), so it also broke
+`multiprocessing.Queue.put()`'s own feeder thread — every sandboxed call, not
+just ML code, would have stopped returning results. **Final fix**: a seccomp
+filter (`pyseccomp`, new Linux-only base dependency) denying `execve`/
+`execveat` with `EPERM` — filters the specific syscall instead of a shared
+process/thread counter, so `clone()`-based thread creation is untouched.
+Verified in the same real Linux container: sklearn still works, the Red
+Team's `whoami` gadget doesn't. This is the second time this session-arc a fix
+that looked right locally turned out wrong under real conditions (the pt-BR
+date bug, PR #187 then #191, was the first) — worth remembering that "tests
+pass on my machine" is not sufficient for anything touching OS-level behavior
+that differs between macOS and Linux.
+
+**Items 2/3/4b (Excel multi-sheet, BR-currency escape bug, invisible
+Transformer errors) — all three live-verified against the deployed app after
+merge**, using the exact kind of repro files the original audit used
+(a 3-sheet `.xlsx`, a BR-currency CSV with `"R$ 1.234,56"`-style values, a
+genuinely nested JSON file):
+
+- **Item 2**: uploaded a 3-sheet workbook, picker appeared, chose "Vendas2025"
+  explicitly, run completed, Silver data confirmed to be that sheet's rows
+  (not sheet 0's).
+- **Item 3**: uploaded the BR-currency CSV — Silver's `preco` column came back
+  as real floats (`1234.56`, `89.9`, `250`, ...), not null; the Code tab
+  showed the generated cleanup using `regex=False` and no backslash, matching
+  the corrected prompt pattern exactly.
+- **Item 4b**: uploaded a genuinely nested JSON file — the Transformer still
+  fails (item 4a, full nested-JSON support, was explicitly not attempted), but
+  now the run-detail page shows the real error message (a full Python
+  traceback: the LLM hallucinated a `dfs["input_json"]["sample"]` key that
+  doesn't exist) and the Code tab shows the actual last-attempted code —
+  before this fix, both were blank ("Failed" with "No code available for this
+  run.").
+
+Also fixed: item 13 (`docs/compliance/soc2-readiness-assessment.md` marked a
+control ✅ that its own next paragraph already flagged as an unaddressed P1
+gap). Item 12 had nothing to fix in-repo (the flagged label lives in an
+external audit artifact, not this app).
+
+`make check` clean in a real Linux container both times (1164 and 1181 tests
+respectively, 94-95% coverage). Frontend `npm run build` clean (TypeScript,
+all routes). PR #196 (Wave 0) and #197 (Wave 1) both squash-merged after green
+CI.
 
 ## 2026-09-05 — mega 12-persona audit (PR #192) + wave-based remediation plan (PR #193)
 
