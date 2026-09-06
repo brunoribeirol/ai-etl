@@ -266,6 +266,12 @@ export type SavedPipeline = {
   require_approval: boolean;
   approval_threshold_rows: number | null;
   last_approved_at: string | null;
+  // Wave 2 item 8, 2026-09-05 mega-audit remediation
+  // (docs/work/2026-09-05-mega-audit-remediation-plan.md) — already a valid,
+  // accepted API field (`api/routers/pipelines.py`, `gt=0`, server default
+  // 20.0) with no UI to set it; this is the frontend catching up, not a new
+  // backend field. Never null (DB column has a `server_default`).
+  drift_threshold_pct: number;
   // Sprint 30 (ADR-031) — per-pipeline LLM provider/model override, merged onto
   // every `saved_pipeline` dict by `api/routers/pipelines.py::_with_health`.
   // Both `null` means "no override, uses this deployment's global default".

@@ -127,6 +127,25 @@ def test_run_advisor_prompt_forbids_restating_the_request(
     assert "Do NOT restate the business question" in sent_prompt
 
 
+def test_run_advisor_prompt_instructs_hedging_small_samples_and_unverified_columns(
+    mock_get_llm, sample_df, gold_result, science_result
+) -> None:
+    """Wave 2 item 7, 2026-09-05 mega-audit remediation
+    (docs/work/2026-09-05-mega-audit-remediation-plan.md): live-verified real
+    gap (LLM/Prompt Engineer persona, `misleading_column.csv`) — recommendations
+    grounded in a tiny segment, or in a column whose name implies a calculated
+    metric it may not actually be, used to be presented with the same
+    confidence as a finding from the full dataset."""
+    mock_llm = _mock_llm([VALID_RESPONSE])
+    mock_get_llm.return_value = mock_llm
+    run_advisor(sample_df, "Como aumentar o faturamento?", gold_result, science_result)
+
+    sent_prompt = mock_llm.invoke.call_args[0][0]
+    assert "small sample size" in sent_prompt
+    assert "downgrade its priority" in sent_prompt
+    assert "NOT guaranteed to actually be that metric" in sent_prompt
+
+
 def test_run_advisor_result_has_all_keys(
     mock_get_llm, sample_df, gold_result, science_result
 ) -> None:

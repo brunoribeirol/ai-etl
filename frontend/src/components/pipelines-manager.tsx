@@ -56,6 +56,10 @@ export function PipelinesManager() {
   // row-count exemption" — the same default the backend model already uses.
   const [requireApproval, setRequireApproval] = useState(false);
   const [approvalThresholdRows, setApprovalThresholdRows] = useState("");
+  // Wave 2 item 8, 2026-09-05 mega-audit remediation
+  // (docs/work/2026-09-05-mega-audit-remediation-plan.md) — a valid, accepted
+  // API field (`gt=0`, server default 20.0) with no UI to set it until now.
+  const [driftThresholdPct, setDriftThresholdPct] = useState("20");
   const [submitting, setSubmitting] = useState(false);
   // Sprint 30 (ADR-031) frontend — the pipeline currently being edited's LLM
   // provider/model override, kept separate from the fields above since it
@@ -137,6 +141,7 @@ export function PipelinesManager() {
     setBusinessQuestion("");
     setCronSchedule("0 3 * * *");
     setQualityRulesText("[]");
+    setDriftThresholdPct("20");
     setRequireApproval(false);
     setApprovalThresholdRows("");
     setLlmProvider(null);
@@ -154,6 +159,7 @@ export function PipelinesManager() {
     setBusinessQuestion(pipeline.business_question);
     setCronSchedule(pipeline.cron_schedule);
     setQualityRulesText(JSON.stringify(pipeline.quality_rules ?? [], null, 2));
+    setDriftThresholdPct(String(pipeline.drift_threshold_pct ?? 20));
     setRequireApproval(pipeline.require_approval ?? false);
     setApprovalThresholdRows(
       pipeline.approval_threshold_rows != null ? String(pipeline.approval_threshold_rows) : "",
@@ -266,12 +272,25 @@ export function PipelinesManager() {
     return parsed;
   }
 
+  /** Same "fail loud before the network call" posture as the two parsers
+   * above — matches the backend's own `Field(..., gt=0)` on
+   * `drift_threshold_pct` (Wave 2 item 8, 2026-09-05 mega-audit
+   * remediation). */
+  function parseDriftThresholdPct(): number {
+    const parsed = Number(driftThresholdPct.trim());
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      throw new Error(t("invalidDriftThreshold"));
+    }
+    return parsed;
+  }
+
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     setSubmitting(true);
     try {
       const qualityRules = parseQualityRules();
       const approvalThresholdValue = parseApprovalThresholdRows();
+      const driftThresholdValue = parseDriftThresholdPct();
       if (editingId) {
         await authedFetch(`/pipelines/${editingId}`, {
           method: "PATCH",
@@ -284,6 +303,7 @@ export function PipelinesManager() {
             quality_rules: qualityRules,
             require_approval: requireApproval,
             approval_threshold_rows: approvalThresholdValue,
+            drift_threshold_pct: driftThresholdValue,
           }),
         });
         toast.success(t("toastUpdated"));
@@ -299,6 +319,7 @@ export function PipelinesManager() {
             quality_rules: qualityRules,
             require_approval: requireApproval,
             approval_threshold_rows: approvalThresholdValue,
+            drift_threshold_pct: driftThresholdValue,
           }),
         });
         toast.success(t("toastCreated"));
@@ -481,6 +502,29 @@ export function PipelinesManager() {
                   />
                 </div>
               )}
+            </div>
+
+            {/* Wave 2 item 8, 2026-09-05 mega-audit remediation
+                (docs/work/2026-09-05-mega-audit-remediation-plan.md) —
+                already a valid, accepted API field (`gt=0`, server default
+                20.0) with no UI to set it until now. */}
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="driftThresholdPct">
+                {t("driftThresholdLabel")}{" "}
+                <span className="text-muted-foreground font-normal">
+                  {t("driftThresholdHint")}
+                </span>
+              </Label>
+              <Input
+                id="driftThresholdPct"
+                type="number"
+                min={0}
+                step="0.1"
+                value={driftThresholdPct}
+                onChange={(e) => setDriftThresholdPct(e.target.value)}
+                disabled={submitting}
+                className="font-mono text-sm"
+              />
             </div>
 
             {/* Sprint 30 (ADR-031) frontend — only shown while editing an
