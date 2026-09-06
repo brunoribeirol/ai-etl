@@ -28,8 +28,23 @@ jobs:
     name: pg_dump production Postgres to S3
     runs-on: ubuntu-latest
     steps:
-      - name: Install postgresql-client
-        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Install postgresql-client (v17, matching Supabase's server version)
+        # Ubuntu's own apt repo only ships postgresql-client 16, but this
+        # project's Supabase Postgres is 17.6 — pg_dump refuses to run
+        # against a newer server than itself ("aborting because of server
+        # version mismatch", found running this workflow for the first
+        # time, 2026-09-06). Pull the matching client from PGDG's own apt
+        # repo instead of Ubuntu's.
+        run: |
+          set -euo pipefail
+          sudo apt-get install -y curl ca-certificates
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            --fail https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-17
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
