@@ -63,10 +63,19 @@ jobs:
         # resolved plain `pg_dump` to v16 — silently, no error, just the
         # wrong binary. Bypassing the wrapper entirely is more reliable
         # than debugging its version-selection logic in CI.
+        #
+        # `--schema=public`: Supabase's shared Postgres instance also has
+        # `auth`/`storage`/`realtime` schemas it manages internally — a
+        # first real run found `backup_reader` (deliberately granted only
+        # `public` access, ADR-042) can't lock those tables, and this
+        # application doesn't own them anyway (Supabase's own platform is
+        # responsible for backing up its own internal schemas). This
+        # project's actual data — `runs`, `users`, `saved_pipelines`, etc.
+        # — all lives in `public`.
         run: |
           set -euo pipefail
           /usr/lib/postgresql/17/bin/pg_dump "${{ secrets.BACKUP_DATABASE_URL }}" \
-            --format=custom --no-owner --no-privileges \
+            --format=custom --no-owner --no-privileges --schema=public \
             --file=backup.dump
 
       - name: Upload to S3
