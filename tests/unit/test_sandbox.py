@@ -11,11 +11,13 @@ project's interactive dev sandbox — `multiprocessing`/pandas execution hangs t
 """
 
 import os
+import platform
 import time
 
 import pandas as pd
 import pytest
 
+from ai_etl.core import sandbox as sandbox_module
 from ai_etl.core.sandbox import (
     LARGE_DATASET_ROW_THRESHOLD,
     LARGE_DATASET_TIMEOUT_MULTIPLIER,
@@ -363,6 +365,96 @@ def test_injected_parent_env_var_not_visible_in_sandboxed_child(
     # Confirm the marker really was set in the parent at call time — otherwise
     # this test would trivially pass for the wrong reason.
     assert os.environ.get("AI_ETL_TEST_SECRET_MARKER") == "should-not-leak-into-sandbox"
+
+
+# ---------------------------------------------------------------------------
+# Wave 0 item 1, 2026-09-05 mega-audit remediation
+# (docs/work/2026-09-05-mega-audit-remediation-plan.md): a seccomp filter
+# denying execve/execveat on the sandboxed child, closing the
+# arbitrary-command-execution vector the Red Team audit demonstrated
+# (docs/work/2026-09-04-persona-audit/red-team.md — reaching subprocess.run
+# via ().__class__.__base__.__subclasses__() and calling it to run
+# `whoami`, with no `import` anywhere in the payload). This reproduces that
+# exact gadget through the real execute_in_sandbox() call (not a
+# copy-pasted globals dict, unlike the Red Team's own local repro), since
+# pandas already imports `subprocess` at module load — confirmed
+# separately — so `subprocess.CompletedProcess` is reliably reachable via
+# `__subclasses__()` in the real sandboxed child, the same as it was for
+# the audit.
+#
+# Linux-only, skipped elsewhere: `_install_seccomp_filter()` fails open on
+# any platform where `pyseccomp` doesn't import (every non-Linux dev
+# machine — macOS has no `libseccomp.so` at all), by design (see its
+# docstring in `core/sandbox.py`) — so this test cannot observe the
+# protection anywhere but Linux. This mirrors the project's existing
+# `test_sandbox_vercel.py` precedent (skip with an explanation when a
+# platform/credential dependency isn't available, rather than assert
+# something the current environment can't actually exercise). CI
+# (`ubuntu-latest`) and the earlier version of this fix (RLIMIT_NPROC=0,
+# reverted — see `core/sandbox.py`'s "Security note") were both verified
+# against a real Linux container (this project's own `python:3.12-slim`
+# base image) before this seccomp version was chosen; not just reasoned
+# about — see the module docstring for the full comparison.
+# ---------------------------------------------------------------------------
+
+_SUBPROCESS_GADGET_CODE = """
+def transform(dfs):
+    target = None
+    for c in ().__class__.__base__.__subclasses__():
+        if c.__name__ == "CompletedProcess":
+            target = c
+            break
+    mod_globals = target.__init__.__globals__
+    run_func = mod_globals["run"]
+    proc = run_func(["whoami"], capture_output=True, text=True)
+    raise RuntimeError(f"RCE SUCCEEDED, whoami returned: {proc.stdout!r}")
+"""
+
+
+@pytest.mark.skipif(
+    platform.system() != "Linux",
+    reason="seccomp is Linux-only; _install_seccomp_filter() fails open elsewhere by design",
+)
+def test_subclasses_gadget_can_no_longer_spawn_a_process() -> None:
+    """The exact Red Team payload, run for real: must fail at execve() (this
+    fix) rather than reach subprocess.run's `whoami` and prove the RCE
+    still works. `entry_point`'s own contract lets the gadget raise instead
+    of returning a DataFrame — that's how a caught success would surface
+    here (see _SUBPROCESS_GADGET_CODE), the same way _run_function_mode
+    wraps any exception `transform(dfs)` raises into `result["error"]`."""
+    result = execute_in_sandbox(_SUBPROCESS_GADGET_CODE, {})
+
+    assert result["error"] is not None
+    # "RCE SUCCEEDED, whoami returned: ..." is the RuntimeError the gadget
+    # itself raises on an actual successful command execution (see
+    # _SUBPROCESS_GADGET_CODE) — must never appear. "whoami" alone isn't a
+    # safe substring to assert absent: subprocess's own PermissionError
+    # legitimately names the attempted executable in its blocked-call
+    # message (`[Errno 1] Operation not permitted: 'whoami'`) even when
+    # nothing ran.
+    assert "RCE SUCCEEDED" not in result["error"]
+    # The actual failure mode this fix produces: execve() refused by the
+    # kernel (EPERM) via the seccomp filter installed in _sandbox_worker.
+    assert "Operation not permitted" in result["error"]
+    assert "PermissionError" in result["error"]
+
+
+def test_install_seccomp_filter_fails_open_when_pyseccomp_unavailable(mocker) -> None:
+    """Runs everywhere, incl. macOS dev machines: the exact fail-open path
+    `_install_seccomp_filter()` takes on every non-Linux target (and would
+    take on Linux too, if `pyseccomp` somehow weren't importable) — must
+    never raise, since this runs unconditionally before every sandboxed
+    call, on every backend call site."""
+    mocker.patch.object(sandbox_module, "_PYSECCOMP_AVAILABLE", False)
+
+    sandbox_module._install_seccomp_filter()  # must not raise
+
+
+def test_install_seccomp_filter_fails_open_on_non_linux(mocker) -> None:
+    mocker.patch.object(sandbox_module, "_PYSECCOMP_AVAILABLE", True)
+    mocker.patch.object(sandbox_module.platform, "system", return_value="Darwin")
+
+    sandbox_module._install_seccomp_filter()  # must not raise
 
 
 # ---------------------------------------------------------------------------

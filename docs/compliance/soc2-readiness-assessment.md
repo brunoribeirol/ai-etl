@@ -103,7 +103,7 @@ assessment.
 | Encryption at rest (secrets) | ✅ | Fernet AEAD, `tenant_secrets.ciphertext` (ADR-022) |
 | Encryption at rest (database) | ✅ | Supabase-managed Postgres — encryption at rest is a Supabase platform guarantee, not application-implemented; not independently verified by this project, inherited from the sub-processor |
 | Encryption at rest (S3 artifacts) | ⚠️ Default only | AWS S3 default server-side encryption (SSE-S3) applies unless explicitly disabled; not explicitly configured/verified in `audit/storage.py` or IaC — bucket-level setting, owner-managed (ADR-009 scopes bucket creation as a manual step) |
-| Least-privilege database role | ✅ | App's Postgres role documented as *not* the RLS-bypassing superuser by design intent, though `SECURITY.md` notes the current role does have `rolbypassrls = true` — see GAP below |
+| Least-privilege database role | ⚠️ Gap | App's Postgres role has `rolbypassrls = true` (`SECURITY.md`, ADR-032 Decision 1) — the opposite of least-privilege for RLS purposes, a conscious trade-off (see GAP below), not a passing control |
 
 **GAP (P1):** `SECURITY.md` documents that the app's own connection role has
 `rolbypassrls = true` (bypasses Row Level Security). This is *why* enabling
