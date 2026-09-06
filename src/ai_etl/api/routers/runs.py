@@ -101,22 +101,52 @@ def _document_spec(
     )
 
 
-def _dataframe_from_upload(filename: str, contents: bytes) -> Optional[pd.DataFrame]:
+_EXCEL_EXTENSIONS = (".xlsx", ".xls")
+
+
+def _dataframe_from_upload(
+    filename: str, contents: bytes, sheet_name: str | int | None = None
+) -> Optional[pd.DataFrame]:
     """Mirrors `app.py::_read_uploaded_file`'s extension dispatch, adapted for
     already-read bytes (FastAPI's `UploadFile` is consumed once, unlike
-    Streamlit's `UploadedFile`, which supports re-reading)."""
+    Streamlit's `UploadedFile`, which supports re-reading).
+
+    `sheet_name` (Wave 1 item 2, 2026-09-05 mega-audit remediation): before this
+    fix, an Excel upload always silently read `pd.read_excel(buffer)`'s default
+    (sheet index 0) for this preview/schema-detection DataFrame — even when the
+    workbook had other sheets, and even though the *real* pipeline execution
+    (`agents/pipeline/extractor.py` -> `sources/csv_source.py::_load_excel`)
+    explicitly raises rather than guess which sheet is "right" when more than
+    one exists and none was named. That mismatch is the reported bug: the
+    upload preview would succeed (silently on the wrong sheet, for a multi-sheet
+    file), then the real run would fail with no warning the preview could have
+    given. `create_run` below now resolves the sheet choice (via `/runs/excel-sheets`
+    + the frontend's picker) *before* calling this, so this preview reads the
+    same sheet the real pipeline will.
+    """
     name = filename.lower()
     buffer = io.BytesIO(contents)
     try:
         if name.endswith(".csv"):
             return pd.read_csv(buffer)
-        if name.endswith((".xlsx", ".xls")):
-            return pd.read_excel(buffer)
+        if name.endswith(_EXCEL_EXTENSIONS):
+            return pd.read_excel(buffer, sheet_name=sheet_name if sheet_name is not None else 0)
         if name.endswith(".json"):
             return pd.read_json(buffer)
     except Exception:
         return None
     return None
+
+
+def _excel_sheet_names(contents: bytes) -> list[str]:
+    """All sheet names in an uploaded Excel workbook, in file order.
+
+    Callers (`get_excel_sheets` below) are only reached for `.xlsx`/`.xls`
+    filenames — errors reading a corrupt/non-Excel file propagate as a 400
+    from the route, same as `_dataframe_from_upload`'s existing "Could not
+    parse uploaded file." shape for other unreadable uploads.
+    """
+    return [str(name) for name in pd.ExcelFile(io.BytesIO(contents)).sheet_names]
 
 
 @router.get("")
@@ -170,6 +200,34 @@ def get_status(
     return get_task_status(task_id)
 
 
+@router.post("/excel-sheets")
+async def get_excel_sheets(
+    tenant_id: Annotated[str, Depends(get_current_tenant_id)],
+    file: UploadFile,
+) -> dict[str, list[str]]:
+    """Wave 1 item 2, 2026-09-05 mega-audit remediation
+    (docs/work/2026-09-05-mega-audit-remediation-plan.md): lets the upload form
+    ask "does this workbook have more than one sheet, and what are they called"
+    *before* the user submits the run, so they can pick the right one instead of
+    the pipeline always defaulting to (or, before this fix, sometimes failing
+    on) the first sheet. Read-only, no write/budget/rate-limit implications —
+    `get_current_tenant_id` (auth-only) is the right dependency here, the same
+    one `/status` uses, not `require_role("editor")`.
+
+    Returns `{"sheets": []}` (not an error) for a non-Excel filename — the
+    frontend only calls this for `.xlsx`/`.xls` uploads, but a wrong/empty
+    filename shouldn't 400 a preflight check.
+    """
+    if not file.filename or not file.filename.lower().endswith(_EXCEL_EXTENSIONS):
+        return {"sheets": []}
+    contents = await file.read()
+    try:
+        sheets = _excel_sheet_names(contents)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="Could not read the Excel workbook.") from e
+    return {"sheets": sheets}
+
+
 @router.post("")
 async def create_run(
     tenant_id: Annotated[str, Depends(require_role("editor"))],
@@ -177,6 +235,7 @@ async def create_run(
     manual_spec: Annotated[str, Form()] = "",
     llm_provider_override: Annotated[Optional[str], Form()] = None,
     llm_model_override: Annotated[Optional[str], Form()] = None,
+    sheet_name: Annotated[Optional[str], Form()] = None,
     file: Optional[UploadFile] = None,
 ) -> dict[str, str]:
     """Wraps `execution_queue.enqueue_analysis`. Originally mirrored `app.py::_tab_executar`'s
@@ -199,6 +258,14 @@ async def create_run(
     ADR-031 §3 only covers saved pipelines) — this is that path's equivalent.
     Both or neither must be set (same posture as `PUT /pipelines/{id}/llm-config`),
     and the pair must be in `core.llm.ALLOWED_MODELS_BY_PROVIDER`.
+
+    `sheet_name`: Wave 1 item 2, 2026-09-05 mega-audit remediation. Only
+    meaningful for a `.xlsx`/`.xls` `file` — the frontend resolves it via
+    `POST /runs/excel-sheets` + a picker before submit whenever the workbook
+    has more than one sheet, so the Orchestrator's generated plan (and the
+    real pipeline execution behind it) reads the sheet the user actually
+    meant instead of always defaulting to (or previously, failing on) the
+    first one.
     """
     if (llm_provider_override is None) != (llm_model_override is None):
         raise HTTPException(
@@ -234,7 +301,31 @@ async def create_run(
                 saved_path.unlink(missing_ok=True)
                 raise HTTPException(status_code=400, detail="Could not parse uploaded file.")
         else:
-            df_bronze = _dataframe_from_upload(file.filename, contents)
+            resolved_sheet_name: str | int | None = sheet_name
+            if name.endswith(_EXCEL_EXTENSIONS) and resolved_sheet_name is None:
+                # Wave 1 item 2, 2026-09-05 mega-audit remediation: don't
+                # silently default to sheet 0 for a multi-sheet workbook the
+                # way `_dataframe_from_upload` used to — the frontend's
+                # `/runs/excel-sheets` picker (`run-form.tsx`) is supposed to
+                # have already resolved this before submit for any file with
+                # more than one sheet. Landing here with `sheet_name` still
+                # unset and >1 sheet means that step was skipped (an older
+                # client, or the picker itself failing) — fail with a clear
+                # 400 rather than guess, matching `_load_excel`'s own
+                # no-guessing stance for the real pipeline execution path.
+                try:
+                    sheets = _excel_sheet_names(contents)
+                except Exception as e:
+                    raise HTTPException(
+                        status_code=400, detail="Could not parse uploaded file."
+                    ) from e
+                if len(sheets) > 1:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"This workbook has {len(sheets)} sheets ({', '.join(sheets)}) "
+                        "— pass sheet_name to choose one.",
+                    )
+            df_bronze = _dataframe_from_upload(file.filename, contents, resolved_sheet_name)
             if df_bronze is None:
                 raise HTTPException(status_code=400, detail="Could not parse uploaded file.")
             saved_path.write_bytes(contents)
@@ -244,6 +335,7 @@ async def create_run(
                 output_csv,
                 business_question.strip(),
                 additional_instructions=manual_spec.strip(),
+                sheet_name=resolved_sheet_name,
             )
 
         file_path = str(saved_path)

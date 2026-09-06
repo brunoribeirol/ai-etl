@@ -55,6 +55,7 @@
     ],
     "howTitle": "From raw data to a recommendation, a pyramid of agents",
     "howBody": "Nine specialized agents, each with a single responsibility — the pipeline's state passes from one to the next, never hidden inside a black box.",
+    "howPlainLanguage": "In plain terms: each stage refines the data a bit further — raw file in, clean and de-duplicated data out, then business insights, then forecasts, then a plain-English recommendation at the top. You don't need to know the stage names to read the result — they matter if you're the one auditing how it was produced.",
     "dualTitle": "Built for two people at the same company",
     "dualOperatorBadge": "Technical operator",
     "dualOperatorTitle": "Whoever builds the report by hand today",
@@ -198,6 +199,10 @@
   "runForm": {
     "fileLabel": "File (CSV, Excel, JSON, PDF, DOCX)",
     "fileCta": "Click to select a file",
+    "sheetLabel": "Sheet",
+    "sheetHint": "(this workbook has more than one sheet — choose which one to use)",
+    "sheetPlaceholder": "Choose a sheet...",
+    "sheetCheckFailed": "Couldn't read this workbook's sheets. Check the file and try again.",
     "specLabel": "Or: manual spec",
     "specOptionalHint": "(optional if a file was attached — still followed as extra instructions on top of the file)",
     "businessQuestionLabel": "Business question (optional)",

@@ -66,3 +66,19 @@ def test_auto_generate_spec_omits_additional_instructions_hint_when_empty() -> N
     spec = auto_generate_spec(Path("f.csv"), df, Path("out.csv"))
 
     assert "specific instructions" not in spec
+
+
+def test_auto_generate_spec_includes_sheet_hint_when_given() -> None:
+    """Wave 1 item 2, 2026-09-05 mega-audit remediation: the exact phrasing
+    `ORCHESTRATOR_PROMPT` looks for to extract `sheet_name` into the plan."""
+    df = pd.DataFrame({"name": ["A"], "price": [1.0]})
+    spec = auto_generate_spec(Path("f.xlsx"), df, Path("out.csv"), sheet_name="Q2")
+
+    assert "Use sheet 'Q2' of this Excel workbook." in spec
+
+
+def test_auto_generate_spec_omits_sheet_hint_when_none() -> None:
+    df = pd.DataFrame({"a": [1]})
+    spec = auto_generate_spec(Path("f.csv"), df, Path("out.csv"))
+
+    assert "Excel workbook" not in spec

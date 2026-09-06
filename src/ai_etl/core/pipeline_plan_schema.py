@@ -18,7 +18,7 @@ mirroring `sources/mongodb_source.py::_validate_query`'s connector-level pattern
 runs regardless of caller, not just when a plan happens to pass through the Orchestrator.
 """
 
-from typing import Literal, Optional
+from typing import Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -37,6 +37,17 @@ class PipelinePlanSource(BaseModel):
 
     name: str
     type: _SourceType
+    # Wave 1 item 2, 2026-09-05 mega-audit remediation
+    # (docs/work/2026-09-05-mega-audit-remediation-plan.md): documents the
+    # `csv`-type field `agents/pipeline/extractor.py` already reads
+    # (`source.get("sheet_name")`, forwarded to
+    # `sources/csv_source.py::load_source_file`/`_load_excel`) and
+    # `ORCHESTRATOR_PROMPT` now names explicitly. `extra="allow"` above
+    # already let this field pass through unvalidated before this change —
+    # declaring it here is documentation/type-clarity, not a behavior
+    # change (existing plans without it are unaffected, `None` default
+    # matches `_load_excel`'s own "no sheet_name given" branch).
+    sheet_name: Optional[Union[str, int]] = None
 
 
 class PipelinePlanDestination(BaseModel):

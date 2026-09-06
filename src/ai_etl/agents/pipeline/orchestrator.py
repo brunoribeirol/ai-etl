@@ -20,7 +20,10 @@ Extract a structured pipeline plan as JSON with these fields:
 - sources: list of data sources, each with:
     - name (string identifier)
     - type: "csv" | "postgres" | "sqlite" | "mysql" | "mongodb" | "rest" | "document"
-    - For csv: path (file path)
+    - For csv: path (file path); if the spec explicitly names an Excel sheet to \
+use (e.g. "Use sheet 'Q1' of this Excel workbook."), also include sheet_name \
+(the exact sheet name as a string, or its 0-based position as an integer) — \
+omit this field entirely when the spec doesn't name one
     - For postgres: table (schema.table)
     - For sqlite: path (SQLite .db/.sqlite file path), table (table name, no schema prefix)
     - For mysql: table (database.table) — MySQL and MariaDB both use this type

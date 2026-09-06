@@ -16,6 +16,7 @@ def auto_generate_spec(
     output_csv: Path,
     business_question: str = "",
     additional_instructions: str = "",
+    sheet_name: str | int | None = None,
 ) -> str:
     """Build the auto NL spec for an uploaded file.
 
@@ -29,10 +30,23 @@ def auto_generate_spec(
     it would be considered. Surfaced up front and marked as taking priority, rather
     than appended at the end where an LLM is more likely to let it get crowded out
     by the longer generic instruction block below it.
+
+    `sheet_name` (Wave 1 item 2, 2026-09-05 mega-audit remediation): set only when
+    the upload is a multi-sheet Excel workbook and the user picked one via the
+    frontend's sheet picker (`api/routers/runs.py::create_run`'s new `/runs`
+    form field, sourced from `POST /runs/excel-sheets`) — `df` was already loaded
+    from that exact sheet by the caller before this function runs, so the sole
+    purpose here is telling the Orchestrator's LLM which sheet to put in the
+    generated `pipeline_plan`, in the exact phrasing `ORCHESTRATOR_PROMPT` looks
+    for. `None` (single-sheet file, or a sheet-less source) leaves the spec text
+    unchanged from before this fix.
     """
     cols = ", ".join(df.columns.tolist())
     n_rows, n_cols = df.shape
     question_hint = f" A análise responderá: {business_question}." if business_question else ""
+    sheet_hint = (
+        f" Use sheet {sheet_name!r} of this Excel workbook." if sheet_name is not None else ""
+    )
     user_hint = (
         f"The user also gave these specific instructions — follow them, and where "
         f"they conflict with the generic cleaning steps below, the user's instructions "
@@ -41,7 +55,7 @@ def auto_generate_spec(
         else ""
     )
     return (
-        f"Read the file at {file_path}. "
+        f"Read the file at {file_path}.{sheet_hint} "
         f"The file has {n_rows} rows and {n_cols} columns: {cols}.{question_hint}\n"
         f"{user_hint}"
         f"Clean the data: remove completely duplicate rows, standardize column names to snake_case, "
