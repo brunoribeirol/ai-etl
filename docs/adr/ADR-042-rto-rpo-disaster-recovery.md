@@ -149,6 +149,17 @@ no write access to secrets):
   -- table-level SELECT alone doesn't cover this.
   GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO backup_reader;
   ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON SEQUENCES TO backup_reader;
+  -- Every table has RLS enabled with no policies (ADR-040) — deny-all for
+  -- any role that isn't rolbypassrls. Table-level SELECT grants alone hit
+  -- "query would be affected by row-level security policy" (found on the
+  -- fifth real dump attempt). BYPASSRLS is required for a backup role to
+  -- read every tenant's rows at all — this is the normal, expected shape
+  -- for a backup credential (real-world equivalent: AWS RDS's own backup
+  -- roles bypass RLS the same way). Kept meaningfully narrower than the
+  -- app's own rolbypassrls credential regardless: backup_reader has no
+  -- INSERT/UPDATE/DELETE grant on anything, ever — bypassing RLS only
+  -- ever lets it read, never write.
+  ALTER ROLE backup_reader BYPASSRLS;
   ```
   Generate the password with something URL-safe (`openssl rand -hex 24`,
   not `-base64` — a `/` or `+` in a base64 password breaks connection-string
