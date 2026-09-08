@@ -141,19 +141,20 @@ closed by `DELETE /tenant` (ADR-025).
 |---|---|---|
 | Vulnerability scanning | ✅ | `pip-audit` (dependency CVEs), `bandit` (code patterns) on every CI run |
 | Incident detection | ✅ | Sentry (ADR-033) — see CC4 update above |
-| Backup / disaster recovery | ⚠️ Mitigated | RTO (4h)/RPO (24h) targets (ADR-042); Supabase confirmed to have **zero** backups on its Free Plan (finding, 2026-09-06) — mitigated with a manual `pg_dump`-to-S3 daily stopgap (`.github/workflows/db-backup.yml`); `pg_restore` rehearsal still owed |
+| Backup / disaster recovery | ✅ | RTO (4h)/RPO (24h) targets (ADR-042); Supabase confirmed to have **zero** backups on its Free Plan (finding, 2026-09-06) — mitigated with a manual `pg_dump`-to-S3 daily stopgap (`.github/workflows/db-backup.yml`); real backup + `pg_restore` rehearsal both verified 2026-09-07 |
 
-**GAP (P1) — mitigated, rehearsal pending:** No documented, tested
-backup/restore procedure. **Real finding (2026-09-06)**: Supabase's own
-dashboard confirmed the Free Plan this project runs on includes no backups
-of any kind, not "unverified but likely present" as the original assessment
+**GAP CLOSED (2026-09-07):** No documented, tested backup/restore
+procedure. **Real finding (2026-09-06)**: Supabase's own dashboard
+confirmed the Free Plan this project runs on includes no backups of any
+kind, not "unverified but likely present" as the original assessment
 assumed — this project's actual RPO for Postgres was, until this fix,
-infinite. **Now mitigated**: a scheduled GitHub Actions workflow runs
-`pg_dump` daily to S3 (ADR-042 "Manual backup stopgap"), using a dedicated
-read-only Postgres role rather than the app's own `rolbypassrls` credential.
-What remains open: a real `pg_restore` rehearsal has not yet been performed
-(mechanism built, timing/sanity check still owed) — tracked as row 4 in
-`docs/compliance/risk-register.md`.
+infinite. **Fixed and verified end to end**: a scheduled GitHub Actions
+workflow runs `pg_dump` daily to S3 (ADR-042 "Manual backup stopgap"),
+using a dedicated read-only Postgres role rather than the app's own
+`rolbypassrls` credential; a real backup ran successfully (2026-09-07,
+40,418-byte dump) and a real `pg_restore` rehearsal into a scratch
+container completed in 1.674s with row counts confirmed matching. Row 4 in
+`docs/compliance/risk-register.md` is closed.
 
 ## CC8 — Change Management
 
@@ -192,14 +193,14 @@ sub-processors and their own compliance posture. Now recorded in
 **Updated 2026-09-06** — see `docs/work/2026-09-06-mvp-monetization-readiness-plan.md`
 for the plan that closed most of these.
 
-| Priority | Gap | Status (2026-09-06) |
+| Priority | Gap | Status (2026-09-07) |
 |---|---|---|
 | P0 | Tenant data deletion end-to-end | **Closed** — ADR-025, `DELETE /tenant` |
 | P0 | Formal change-approval evidence beyond Git history | **Accepted position** — GitHub PR history is the evidence trail; revisit if a real auditor asks for more |
 | P1 | No admin/support access model + audit log for staff data access | **Mitigated, minimal scope** — read-only closed (ADR-032); `reason` required on every route + one mediated write action (pipeline retry), see ADR-047 |
 | P1 | App DB role can bypass RLS (`rolbypassrls = true`) | **Accepted risk**, formalized in ADR-032 Decision 1 |
 | P1 | No centralized error tracking/alerting | **Closed** — Sentry (ADR-033), confirmed live in production |
-| P1 | No documented/tested backup-restore procedure | **Mitigated** — Supabase confirmed to have zero backups (real finding); manual `pg_dump`-to-S3 stopgap built (ADR-042); `pg_restore` rehearsal pending |
+| P1 | No documented/tested backup-restore procedure | **Closed** — Supabase confirmed to have zero backups (real finding); manual `pg_dump`-to-S3 stopgap built and verified end-to-end (ADR-042): real backup + real `pg_restore` rehearsal, 1.674s, data matched |
 | P1 | No sub-processor compliance-posture register | **Closed** — `docs/compliance/sub-processors.md` |
 | P1 | Risk register is narrative, not structured | **Closed** — `docs/compliance/risk-register.md` |
 | P2 | No written incident response plan | **Closed** — `docs/compliance/incident-response-plan.md` |
@@ -208,9 +209,9 @@ for the plan that closed most of these.
 typical pre-revenue solo project — tenant isolation, encryption, sandboxing,
 RBAC, audit logging, data erasure, error tracking, a structured risk
 register, a sub-processor register, an incident response plan,
-reason-gated/mediated admin access, and now a real Postgres backup
+reason-gated/mediated admin access, and a real, tested Postgres backup
 mechanism are all real, implemented, and tested/documented controls, not
-paper policy. The one gap still genuinely open is a timed `pg_restore`
-rehearsal of the new backup stopgap (owner action — a local scratch
-Postgres, not a code fix). Everything else a Type I engagement would ask
-for at this stage now has a paper trail.
+paper policy. **Every gap this self-assessment originally identified is now
+either closed or a deliberately accepted, documented risk with a revisit
+trigger** — nothing is left as a bare, undecided TODO. Everything a Type I
+engagement would ask for at this stage now has a paper trail.
