@@ -2,33 +2,124 @@
 
 > Living doc. Updated at the end of meaningful work sessions, not per-commit. Source of truth for repo/code state; the Obsidian vault (`~/Documents/Obsidian Vault/tcc/`) is the source of truth for the academic TCC narrative and product/strategy context.
 
-**Last updated:** 2026-09-06 — **All 5 waves of the mega-audit remediation plan (PR #193) are implemented, merged, and live-verified against the deployed app.** See the two dated sections below for what changed and how it was checked. Session 4 (2026-09-04) closed the coverage gap on 3 real modules. Session 3 added `DELETE /pipelines/{id}` + explained remaining `# type: ignore`s. Session 2 fixed 2 real gaps a live end-to-end test found that the 2026-09-03/04 audit missed. Full detail in each dated section below.
+**Last updated:** 2026-09-08 — **A live walkthrough by the owner found and closed 3 real, user-visible bugs** (PRs #221-#224), on top of the 2026-09-06/07 MVP monetization-readiness plan (SOC2 self-assessment fully closed, real backup mechanism built and verified). See the dated sections below for full detail.
 
-## Owner's next steps (as of 2026-09-06)
+## Owner's next steps (as of 2026-09-08)
 
-**The mega-audit remediation plan (`docs/work/2026-09-05-mega-audit-remediation-plan.md`) is fully closed.** Every item across Waves 0-4 is either fixed and live-verified, or explicitly scoped out with a stated reason:
+**No plan is currently open.** The mega-audit remediation plan
+(2026-09-05/06) and the MVP monetization-readiness plan (2026-09-06/07)
+are both fully closed — see their own sections below. The 2026-09-08
+session was a live walkthrough, not a plan: the owner used the app,
+real UI gaps, and fixed them same-session.
 
-- **Not attempted, by design**: item 4a (full nested-JSON flattening support)
-  — item 4b (visible error + persisted code on failure) shipped instead;
-  4a is a genuinely larger feature (new Transformer capability), not a bug
-  fix, and was never in this plan's scope to build.
-- **Nothing to fix**: item 12 (billing label lives in an external audit
-  artifact, not this app) and the item-14-adjacent "nav highlight lost on
-  `/history/[id]`" follow-up (no such feature exists anywhere in the
-  codebase — see the 2026-09-06 Waves 2-4 section below for how that was
-  found to be a misread, not a real regression).
-- **No new backlog item opened** by this remediation work itself — every
-  fix was verified (unit tests + live-verification where the standing rule
-  applies) before merging, so nothing here should need a second round the
-  way the pt-BR date bug did.
+**Still genuinely open, not code**:
+- Pricing/billing (Stripe confirmed as the right provider — matches
+  Vercel's own `payments`-category preferred-provider guidance — but
+  never started; needs a product decision first: subscription vs.
+  usage-metered vs. hybrid, hosted vs. embedded Checkout).
+- Smoke-test `POST /admin/tenants/{id}/pipelines/{id}/retry` (ADR-047)
+  against a real tenant — built and unit-tested, never live-verified.
+- The new `POST /llm/test-connectivity` frontend wiring (PR #223) is
+  also not yet live-verified against a real provider credential.
+- Billing top-ups (Railway/OpenAI/Anthropic, owner's own action, no code
+  dependency) and the TCC monograph writing (due December, lives only in
+  the Obsidian vault) remain outside this repo's scope.
 
-Next real work on this project is whatever the owner picks next — not
-dictated by this plan, which is now fully executed.
+## 2026-09-08 — live walkthrough, 3 real bugs found and fixed (PRs #221-#224)
 
-Unrelated to the audit, still true: billing top-ups (Railway/OpenAI/Anthropic,
-owner's own action, no code dependency on which tier is active) and the TCC
-monograph writing (redação final, due December, lives only in the Obsidian
-vault) remain outside this repo's scope.
+The owner ran the app end-to-end (execute a pipeline, inspect the landing
+page, ask how scheduling/model-testing/notifications actually work) and
+found 3 real, user-visible inconsistencies — not hypothetical, all
+confirmed against actual code/live logs before fixing:
+
+1. **Execution progress messages ignored locale (PR #221).**
+   `core/locale.py` (ADR-036) already resolved a per-tenant locale for the
+   Transformer's date-parsing convention and every Analyst/Science/
+   Advisor/Planner prompt's *narrative* language — but
+   `pipeline_service.py`'s own `progress_callback` messages (what
+   `agent-progress.tsx` renders live during a run) stayed 100% hardcoded
+   Portuguese regardless. An English-UI tenant watched
+   "Executando pipeline Silver..." scroll past. Fixed with a new
+   `core/progress_messages.py` catalog (same shape as `core/locale.py`'s
+   own conventions) — every `progress_callback` call site now goes
+   through it. New tests pin down both locales end-to-end.
+2. **Landing page's "nine agents" claim wasn't backed by anything visible
+   (PR #222).** `landing.howBody` says "Nine specialized agents," but the
+   section right below only ever rendered the 5-tier pyramid
+   (Bronze/Silver/Gold/Science/Advisor — data layers, not agents). The
+   real 9-agent roster (`agents.roster`, already correctly translated)
+   existed and was rendered inside the authenticated app
+   (`agents-info.tsx`) but never on the public page — despite
+   `lib/agents.ts`'s own docstring claiming it was. Fixed: a compact
+   roster grid now renders right after the pyramid, reusing the existing
+   translated data verbatim.
+3. **`POST /llm/test-connectivity` had no frontend (PR #223).** The
+   backend endpoint (Sprint 30, ADR-031) has existed since Sprint 30 — a
+   real, working connectivity check that makes one live LLM call — but no
+   UI ever called it. A tenant picking a model had no way to know it
+   worked short of running a real pipeline and watching it fail mid-run.
+   Fixed: a "Test connection" button per model card in `ModelPicker`. Not
+   yet live-verified against a real provider credential.
+
+**Also verified as working, not bugs** (checked live before assuming
+anything, per this project's own standing rule): pipeline scheduling is
+confirmed fully automatic — the `celery-beat` Railway service is deployed
+and its `check-scheduled-pipelines` task fires every 60s, watched live in
+Railway logs. Sentry, Slack, and Resend are all confirmed working in
+production (Sentry init logs checked live this session; Slack/email
+digest delivery was confirmed with a real test send in an earlier
+session, 2026-09-01 entry below). Teams/Google Chat remain blocked by
+the owner not having a Microsoft 365/Google Workspace account — a known,
+accepted limitation, not a bug.
+
+**Doc fix (PR #224)**: `CLAUDE.md`'s opening paragraph still said "5
+specialized agents," predating the Agentic BI layer — the rest of the
+file's own architecture section already correctly said 9. Fixed to match.
+
+## 2026-09-06/07 — MVP monetization-readiness plan, fully closed (PRs #204-#213, #220)
+
+Direct follow-up to the mega-audit remediation plan closing (below): the
+owner asked for an "MVP FODA" needing minimal adjustment before
+onboarding a paying tenant. Full plan:
+`docs/work/2026-09-06-mvp-monetization-readiness-plan.md`.
+
+**Pre-planning correction**: 2 of the 4 gaps the owner assumed still open
+turned out already fixed — Sprint 30's LLM-override-not-reaching-execution
+bug (PRs #137/#138) and automatic data retention (ADR-035, Sprint 36).
+Re-verified against current code rather than trusting the 2026-08-21 SOC2
+self-assessment, which was stale on 2 separate points (Sentry
+error-tracking was also already fixed, the doc hadn't caught up).
+
+**What got built**: sub-processor register, structured risk register,
+incident response plan (`docs/compliance/`, PR #204); admin mediated
+write-access (ADR-047, PR #205) — `reason` required on every `/admin`
+route, one real write action (`POST /admin/tenants/{id}/pipelines/{id}/retry`,
+reusing `enqueue_analysis()` so it respects the tenant's own budget/
+rate-limit, never a bypass, not yet live-verified).
+
+**Backup/restore — a real finding, not just documentation (PRs #206,
+#208-#213, #220)**: the owner ran the ADR-042 verification checklist and
+found Supabase's Free Plan has **zero backups of any kind** (no PITR, no
+scheduled backups) — the ADR's original assumption ("almost certainly
+available on paid tiers") was wrong; this project's real RPO for Postgres
+was, until this fix, infinite. Owner chose a manual `pg_dump`-to-S3
+stopgap over a Supabase Pro upgrade (pre-revenue) or accepting the risk in
+writing. Built `.github/workflows/db-backup.yml` (daily dump, dedicated
+read-only `backup_reader` Postgres role, not the app's own
+`rolbypassrls`-privileged credential) — took **6 real, distinct failures**
+to reach a clean run (URL-unsafe base64 password, `pg_dump` client/server
+version mismatch, a wrapper script silently resolving to the wrong
+version, an unscoped schema dump hitting Supabase-internal schemas,
+missing sequence grants, RLS blocking even a granted `SELECT`), each
+documented in ADR-042 so the next role-setup doesn't rediscover them by
+hand. **Real numbers, not just "it works"**: first clean backup run
+2026-09-07 (40,418-byte dump in S3); real `pg_restore` rehearsal same day
+into a scratch `postgres:17` container, **1.674s total**, row counts
+confirmed matching production (`runs`: 32, `users`: 1).
+
+**Result**: every gap the 2026-08-21 SOC2 self-assessment originally
+identified is now closed or a documented accepted risk with a revisit
+trigger — nothing left as a bare TODO.
 
 ## 2026-09-06 — mega-audit remediation, Waves 0-1 (PR #196, #197)
 
