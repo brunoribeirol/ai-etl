@@ -167,6 +167,43 @@ def test_run_silver_pipeline_emits_progress_and_persists(monkeypatch) -> None:
     assert events[-1][1].startswith("✅ Silver concluído em")
 
 
+def test_run_silver_pipeline_emits_english_progress_for_en_us_locale(monkeypatch) -> None:
+    """Real bug, found live 2026-09-08: an English-UI tenant watched Portuguese
+    progress messages scroll past during every run — `core/locale.py` (ADR-036)
+    already resolved a per-tenant locale for the Transformer/Analyst/Science/
+    Advisor prompts, but `progress_callback` messages stayed hardcoded Portuguese
+    regardless. This pins down the fix (`core/progress_messages.py`): an `en-US`
+    tenant gets English progress text, not just an English narrative."""
+    silver_df = pd.DataFrame({"a": [1, 2]})
+    chunks = [
+        {"orchestrator": {"pipeline_plan": {"sources": []}}},
+        {
+            "loader": {
+                "status": "completed",
+                "transformed_data": silver_df,
+                "load_result": {"rows_loaded": 2},
+            }
+        },
+    ]
+    monkeypatch.setattr(pipeline_service, "build_graph", lambda: _FakeGraph(chunks))
+    monkeypatch.setattr(pipeline_service, "save_run", lambda *a, **k: pathlib.Path("run.json"))
+    monkeypatch.setattr(pipeline_service, "save_stage_latencies", lambda *a, **k: None)
+    monkeypatch.setattr(pipeline_service, "get_locale", lambda tenant_id: "en-US")
+
+    events, _cb = _recorder()
+    pipeline_service.run_silver_pipeline(
+        "read file.csv", run_dir="runs", progress_callback=_cb, tenant_id="tenant-a"
+    )
+
+    assert events[0][1] == "⚡ Running Silver pipeline..."
+    assert events[-1][1].startswith("✅ Silver completed in")
+    # The per-node step message (label kept as a proper noun, description
+    # localized) — confirms `agent_step()` is wired, not just the start/done
+    # messages.
+    orchestrator_events = [msg for stage, msg in events if "Orchestrator" in msg]
+    assert orchestrator_events and "Planning the pipeline..." in orchestrator_events[0]
+
+
 def test_run_silver_pipeline_makes_tenant_overrides_visible_during_the_graph_run(
     monkeypatch,
 ) -> None:

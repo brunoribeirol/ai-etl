@@ -51,23 +51,13 @@ from ai_etl.core.graph import build_graph
 from ai_etl.core.llm import get_model_name, is_llm_review_enabled, sum_token_usage
 from ai_etl.core.locale import DEFAULT_LOCALE
 from ai_etl.core.output_validation import append_check, check_gold_output, check_science_output
+from ai_etl.core.progress_messages import agent_step, progress_message
 from ai_etl.core.state import PipelineState, initial_state
 from ai_etl.core.tenant_context import resolve_tenant_overrides, tenant_connections
 
 logger = logging.getLogger(__name__)
 
 ProgressCallback = Callable[[str, str], None]
-
-# Emoji + label + short description shown for each Silver/LangGraph node as it
-# streams. Also consumed by app.py (imported, not duplicated) to render the
-# "Pipeline" results tab, which needs the same emoji/label pairing.
-AGENT_STEPS: dict[str, tuple[str, str, str]] = {
-    "orchestrator": ("🧠", "Orchestrator", "Planejando o pipeline..."),
-    "extractor": ("📥", "Extractor", "Extraindo e inspecionando os dados..."),
-    "transformer": ("⚙️", "Transformer", "Transformando e limpando os dados (Silver)..."),
-    "quality": ("🔍", "Quality", "Verificando qualidade dos dados..."),
-    "loader": ("💾", "Loader", "Persistindo os dados limpos..."),
-}
 
 
 def _noop_progress(stage: str, message: str) -> None:
@@ -206,7 +196,7 @@ def run_silver_pipeline(
     # this graph run is executing, via the `ContextVar` the `with` block sets.
     tenant_overrides = resolve_tenant_overrides(tenant_id)
 
-    progress_callback("silver", "⚡ Executando pipeline Silver...")
+    progress_callback("silver", progress_message(locale, "silver_start"))
     t_total = time.time()
     with tenant_connections(tenant_overrides, tenant_id=tenant_id):
         for chunk in graph.stream(state):
@@ -215,7 +205,7 @@ def run_silver_pipeline(
             t_node = time.time()
             final_state.update(partial)
 
-            emoji, label, desc = AGENT_STEPS.get(node_name, ("⚡", node_name, "Processando..."))
+            emoji, label, desc = agent_step(locale, node_name)
             agent_timings[node_name] = round(time.time() - t_node, 2)
             elapsed = round(time.time() - t_total, 1)
             progress_callback("silver", f"{emoji} **{label}** — {desc} *({elapsed}s)*")
@@ -223,10 +213,10 @@ def run_silver_pipeline(
     overall = final_state.get("status", "unknown")
     total_time = round(time.time() - t_total, 1)
     if overall == "completed":
-        progress_callback("silver", f"✅ Silver concluído em {total_time}s")
+        progress_callback("silver", progress_message(locale, "silver_done", total_time=total_time))
     else:
-        err = final_state.get("error") or "Erro desconhecido"
-        progress_callback("silver", f"❌ Silver falhou: {err[:80]}")
+        err = final_state.get("error") or progress_message(locale, "silver_unknown_error")
+        progress_callback("silver", progress_message(locale, "silver_failed", err=err[:80]))
 
     final_state["_agent_timings"] = agent_timings
     final_state["_total_time"] = total_time
@@ -323,8 +313,8 @@ def run_gold_analysis(
     `locale`: Sprint 25 (ADR-036) — the tenant's configured locale, forwarded to
     `run_analyst` for the narrative's output language. Defaults to `DEFAULT_LOCALE`.
     """
-    progress_callback(stage, f"🏅 Gold — {task_question}")
-    progress_callback(stage, "🤖 **Analyst Agent** — Calculando KPIs e insights...")
+    progress_callback(stage, progress_message(locale, "gold_start", task_question=task_question))
+    progress_callback(stage, progress_message(locale, "gold_analyst_start"))
     _log_llm_override_if_used("analyst", run_id, llm_provider_override, llm_model_override)
     t0 = time.monotonic()
     result = run_analyst(
@@ -347,7 +337,7 @@ def run_gold_analysis(
             attempts,
             result["error"],
         )
-        progress_callback(stage, f"⚠️ Gold concluído com aviso ({elapsed_display}s)")
+        progress_callback(stage, progress_message(locale, "gold_warning", elapsed=elapsed_display))
         return {**result, "task_question": task_question}
 
     # Sprint 21 (ADR-026): sanity-check a successful result against the Silver data
@@ -369,9 +359,15 @@ def run_gold_analysis(
         for review_entry in review_entries:
             sanity_check = append_check(sanity_check, review_entry)
     if sanity_check["severity"] != "ok":
-        progress_callback(stage, f"⚠️ Gold pronto com ressalva de sanity-check ({elapsed_display}s)")
+        progress_callback(
+            stage,
+            progress_message(locale, "gold_sanity_warning", elapsed=elapsed_display),
+        )
     else:
-        progress_callback(stage, f"✅ Gold pronto em {elapsed_display}s ({attempts} tentativa(s))")
+        progress_callback(
+            stage,
+            progress_message(locale, "gold_done", elapsed=elapsed_display, attempts=attempts),
+        )
     return {
         **result,
         "task_question": task_question,
@@ -400,8 +396,8 @@ def run_science_analysis(
 
     `locale`: Sprint 25 (ADR-036) — see `run_gold_analysis`'s identical parameter.
     """
-    progress_callback(stage, f"🔬 Science — {task_question}")
-    progress_callback(stage, "🤖 **Science Agent** — Treinando modelo e gerando previsões...")
+    progress_callback(stage, progress_message(locale, "science_start", task_question=task_question))
+    progress_callback(stage, progress_message(locale, "science_agent_start"))
     _log_llm_override_if_used("science", run_id, llm_provider_override, llm_model_override)
     t0 = time.monotonic()
     result = run_science(
@@ -421,7 +417,9 @@ def run_science_analysis(
             attempts,
             result["error"],
         )
-        progress_callback(stage, f"⚠️ Science concluído com aviso ({elapsed_display}s)")
+        progress_callback(
+            stage, progress_message(locale, "science_warning", elapsed=elapsed_display)
+        )
         return {**result, "task_question": task_question}
 
     # Sprint 21 (ADR-026): sanity-check a successful result against the Silver data
@@ -443,14 +441,26 @@ def run_science_analysis(
         tokens = sum_token_usage(tokens, review_tokens)
         for review_entry in review_entries:
             sanity_check = append_check(sanity_check, review_entry)
-    model_type = model_info_dict.get("model_type", "Modelo")
+    model_type = model_info_dict.get(
+        "model_type", progress_message(locale, "science_default_model_type")
+    )
     if sanity_check["severity"] != "ok":
         progress_callback(
-            stage, f"⚠️ {model_type} treinado com ressalva de sanity-check ({elapsed_display}s)"
+            stage,
+            progress_message(
+                locale, "science_sanity_warning", model_type=model_type, elapsed=elapsed_display
+            ),
         )
     else:
         progress_callback(
-            stage, f"✅ {model_type} treinado em {elapsed_display}s ({attempts} tentativa(s))"
+            stage,
+            progress_message(
+                locale,
+                "science_done",
+                model_type=model_type,
+                elapsed=elapsed_display,
+                attempts=attempts,
+            ),
         )
     return {
         **result,
@@ -513,10 +523,11 @@ def _run_with_repair(
         f"Resuma de forma simples os principais números relacionados a: {task_question}"
     )
     repair_stage = f"{stage}:repair"
-    progress_callback(repair_stage, f"🔧 {label} — reparo automático: {task_question}")
     progress_callback(
-        repair_stage, "A sub-análise falhou; tentando uma versão simplificada da pergunta..."
+        repair_stage,
+        progress_message(locale, "repair_start", label=label, task_question=task_question),
     )
+    progress_callback(repair_stage, progress_message(locale, "repair_trying"))
     repaired = run_fn(
         silver_df,
         fallback_question,
@@ -530,7 +541,9 @@ def _run_with_repair(
     )
     progress_callback(
         repair_stage,
-        "✅ Reparo automático funcionou" if not repaired.get("error") else "⚠️ Reparo também falhou",
+        progress_message(
+            locale, "repair_success" if not repaired.get("error") else "repair_failed"
+        ),
     )
 
     if repaired.get("error"):
@@ -641,14 +654,17 @@ def run_analysis_tasks(
 
     Returns (gold_results, science_results, planner_tokens).
     """
-    progress_callback("planner", "🧭 Planner — decompondo a pergunta em sub-análises...")
+    progress_callback("planner", progress_message(locale, "planner_start"))
     _log_llm_override_if_used("planner", run_id, llm_provider_override, llm_model_override)
     tasks, planner_tokens = plan_analysis_tasks(
         business_question, silver_df, llm_provider_override, llm_model_override, locale
     )
-    progress_callback("planner", f"✅ {len(tasks)} sub-análise(s) planejada(s)")
+    progress_callback("planner", progress_message(locale, "planner_done", count=len(tasks)))
     for t in tasks:
-        progress_callback("planner", f"- ({t['type']}) {t['question']}")
+        progress_callback(
+            "planner",
+            progress_message(locale, "planner_task_line", type=t["type"], question=t["question"]),
+        )
 
     gold_results: list[GoldResult] = []
     science_results: list[ScienceResult] = []
@@ -724,10 +740,8 @@ def run_advisor_analysis(
 
     `locale`: Sprint 25 (ADR-036) — see `run_gold_analysis`'s identical parameter.
     """
-    progress_callback("advisor", "🎯 Advisor — recomendações prescritivas...")
-    progress_callback(
-        "advisor", "🤖 **Advisor Agent** — Sintetizando análises e gerando recomendações..."
-    )
+    progress_callback("advisor", progress_message(locale, "advisor_start"))
+    progress_callback("advisor", progress_message(locale, "advisor_agent_start"))
     _log_llm_override_if_used("advisor", run_id, llm_provider_override, llm_model_override)
     t0 = time.time()
     result = run_advisor(
@@ -747,9 +761,11 @@ def run_advisor_analysis(
         logger.warning(
             "run_advisor_analysis: advisor failed after %ss: %s", elapsed, result["error"]
         )
-        progress_callback("advisor", f"⚠️ Advisor com aviso ({elapsed}s)")
+        progress_callback("advisor", progress_message(locale, "advisor_warning", elapsed=elapsed))
     else:
-        progress_callback("advisor", f"✅ {n} recomendações geradas em {elapsed}s")
+        progress_callback(
+            "advisor", progress_message(locale, "advisor_done", count=n, elapsed=elapsed)
+        )
     return result
 
 
