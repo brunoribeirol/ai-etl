@@ -2,9 +2,15 @@
 
 ## What this project is
 
-AI-ETL is a multi-agent framework based on LLMs to automate end-to-end ETL pipelines.
-The user provides a natural language specification; 5 specialized agents orchestrated
-via LangGraph perform extraction, transformation, quality, and loading, generating auditable Python code.
+AI-ETL is a multi-agent framework based on LLMs to automate end-to-end ETL pipelines
+and turn them into business recommendations. The user provides a natural language
+specification; 9 specialized agents — 5 orchestrated via LangGraph (Orchestrator,
+Extractor, Transformer, Quality, Loader) performing extraction, transformation,
+quality, and loading, plus 4 in the Agentic BI layer (Planner, Analyst, Science,
+Advisor) turning the result into descriptive/predictive insights and prescriptive
+recommendations — generate auditable Python code end to end. (A 10th agent,
+Reviewer, is opt-in via `AI_ETL_LLM_REVIEW_ENABLED` and not counted in the 9 — see
+"Architecture in one sentence" below.)
 
 **Context:** Computer Science capstone project (TCC) — CESAR School, 2026.
 
