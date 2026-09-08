@@ -367,7 +367,11 @@
   },
   "modelPicker": {
     "priceLine": "${input}/${output} por 1M tokens (entrada/saída)",
-    "reliabilityVerified": "Verificado — comparação real"
+    "reliabilityVerified": "Verificado — comparação real",
+    "testButton": "Testar conexão",
+    "testing": "Testando...",
+    "testSuccess": "Funcionando ({latency}ms)",
+    "testFailure": "Falhou"
   },
   "notificationConfig": {
     "configuredHint": "Um destino do tipo {channel} está configurado para este pipeline.",
