@@ -1,10 +1,13 @@
 # 2026-09-06 — MVP monetization-readiness plan
 
-**Status:** WS1 and WS3 complete and merged (PRs #204, #205, #206, #207).
-**WS2 pivoted mid-plan**: the owner ran the Supabase verification and found
+**Status: COMPLETE (2026-09-07).** All 3 workstreams closed and verified.
+WS2 pivoted mid-plan: the owner ran the Supabase verification and found
 zero backups on the Free Plan (not "unverified but likely present") — WS2
-became "build a manual `pg_dump`-to-S3 stopgap" instead of "verify and
-report back." See "Workstream 2" below for the finding and the new plan.
+became "build and fully verify a manual `pg_dump`-to-S3 stopgap" instead
+of "verify and report back." Every SOC2 self-assessment gap this plan
+touched is now closed or a documented accepted risk — see "Workstream 2"
+below for the full account, including the 6 real, distinct issues found
+getting the backup workflow to a clean run.
 **Owner:** Bruno Ribeiro (decisions) + Claude (execution)
 
 ## Objective
@@ -159,13 +162,30 @@ Postgres role (`backup_reader`, SQL provided in ADR-042) instead of the
 app's own `rolbypassrls`-privileged credential — a leaked backup secret
 must not carry full write access.
 
-**Still owed** (owner action, tracked in ADR-042's "Owner verification
-checklist" section, now rescoped to the new mechanism):
-1. Set the 5 new GitHub secrets the workflow needs.
-2. Trigger it once manually, confirm the dump lands in S3.
-3. Perform one real `pg_restore` rehearsal into a scratch Postgres (a local
-   Docker Postgres is enough) and time it.
-4. Report back — closes the "documented, tested backup" gap for real.
+**Done, 2026-09-07** — all 4 checklist items completed, taking 6 real
+attempts (PRs #209-#213 plus 2 direct SQL grants) to reach a clean run,
+each attempt surfacing one genuinely distinct issue rather than the same
+bug retried:
+1. Set the 5 GitHub secrets — hit a base64-password URL-parsing bug on
+   the first attempt (`/` in the password broke `pg_dump`'s URL parser;
+   fixed by regenerating with `openssl rand -hex`).
+2. Triggered manually — hit, in order: client/server version mismatch
+   (Ubuntu ships `pg_dump` 16, Supabase runs 17.6; PR #209 installed
+   `postgresql-client-17`), then the `postgresql-common` wrapper still
+   silently resolving to v16 anyway (PR #210, called the versioned binary
+   path directly), then `pg_dump` defaulting to every schema including
+   Supabase's internal `auth`/`storage`/`realtime` (PR #211,
+   `--schema=public`), then missing sequence grants (PR #212,
+   `GRANT SELECT ON ALL SEQUENCES`), then RLS blocking even a granted
+   `SELECT` for a non-`BYPASSRLS` role (PR #213,
+   `ALTER ROLE backup_reader BYPASSRLS`) — **first clean run confirmed
+   2026-09-07**, 40,418-byte dump in S3.
+3. Real `pg_restore` rehearsal, 2026-09-07: downloaded the dump, restored
+   into a local scratch `postgres:17` container — **1.674s total**, row
+   counts confirmed matching the live database (`runs`: 32, `users`: 1).
+4. Reported back — ADR-042, `risk-register.md` row 4, and
+   `soc2-readiness-assessment.md` all updated with the real numbers,
+   closing the gap for real, not just "mechanism exists."
 
 ## Workstream 3 — Admin mediated write-access + support audit log (code) — DONE
 

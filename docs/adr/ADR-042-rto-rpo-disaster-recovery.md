@@ -2,8 +2,10 @@
 
 **Status:** Accepted. **Decision 2 amended 2026-09-06** — the Supabase PITR
 verification this ADR asked for found no PITR available at all (Free Plan);
-superseded by a manual `pg_dump`-to-S3 stopgap. See "Manual backup stopgap"
-below.
+superseded by a manual `pg_dump`-to-S3 stopgap. **Fully verified
+2026-09-07** — real backup run + real `pg_restore` rehearsal, both
+succeeded with real numbers (see "Owner verification checklist" below).
+This is the only ADR-042 gap that was ever fully open; it is now closed.
 **Date:** 2026-08-27
 **Sprint:** Wave 3 (post-audit strategic decisions, `docs/work/2026-08-26-strategic-decisions-execution-plan.md`)
 
@@ -184,10 +186,11 @@ no write access to secrets):
 ADR-042's own original ask): download the dump from S3
 (`aws s3 cp s3://.../production/{date}.dump .`), then
 `pg_restore --clean --if-exists --no-owner --dbname=<scratch-db-url> backup.dump`
-against a **scratch** database, never the live one. This has not yet been
-exercised end-to-end (no scratch Postgres provisioned this session) — same
-"mechanism built, real rehearsal still owed" honesty this ADR already
-applies elsewhere; tracked in `docs/compliance/risk-register.md` row 4.
+against a **scratch** database, never the live one. **Exercised end-to-end
+and verified, 2026-09-07**: real dump → real local `postgres:17` container
+→ `pg_restore` in 1.674s → row counts confirmed matching (`runs`: 32,
+`users`: 1). See "Owner verification checklist" below for the full account;
+`docs/compliance/risk-register.md` row 4 updated to reflect this.
 
 **Explicitly not equivalent to real PITR**: one dump per day means up to 24h
 of data loss in the worst case (matching the RPO target above by
@@ -236,7 +239,7 @@ this is the same "S3 is a cache of derived outputs, Postgres is the source of
 truth" split `docs/architecture-storage.md` already documents, just stated
 here in DR terms.
 
-## Owner verification checklist — resolved 2026-09-06
+## Owner verification checklist — fully resolved 2026-09-07
 
 The original 3-item follow-up in Decision 2 (confirm PITR enabled, note the
 retention window, perform a test restore) is answered, just not the way it
@@ -245,25 +248,33 @@ assumed: **PITR isn't available on this project's plan at all** —
 include project backups,"* no Point-in-Time or scheduled-backup tab has any
 content, "Restore to new project" has nothing to restore from. Steps 1-2 are
 answered (no PITR, no window — there is nothing to have a window). Step 3
-(a real test restore) carries forward to the manual stopgap below, not to
-Supabase's own restore flow.
+(a real test restore) carried forward to the manual stopgap instead.
 
-**Remaining, now-scoped-differently checklist** (tracks the manual stopgap's
-own restore rehearsal, not Supabase's PITR):
+**Manual stopgap checklist — done, real numbers below:**
 
-1. Set the 5 new GitHub secrets `.github/workflows/db-backup.yml` needs —
-   `BACKUP_DATABASE_URL`, `BACKUP_AWS_ACCESS_KEY_ID`,
-   `BACKUP_AWS_SECRET_ACCESS_KEY`, `AI_ETL_S3_BUCKET`, `AWS_DEFAULT_REGION`
-   — see the "Manual backup stopgap" section above for the exact role/IAM
-   setup.
-2. Trigger the workflow once manually (`workflow_dispatch`) and confirm a
-   `.dump` object lands under `_system/db-backups/production/` in S3.
-3. Perform one real `pg_restore` rehearsal into a scratch Postgres database
-   (a local Docker Postgres is enough — no Supabase project needed for
-   this rehearsal) and time it.
-4. Report back with the date and restore duration — this ADR's
-   "real rehearsal still owed" line above then gets updated with a real
-   number.
+1. ✅ 5 GitHub secrets set (`BACKUP_DATABASE_URL`, `BACKUP_AWS_ACCESS_KEY_ID`,
+   `BACKUP_AWS_SECRET_ACCESS_KEY`, `AI_ETL_S3_BUCKET`, `AWS_DEFAULT_REGION`).
+2. ✅ Workflow triggered manually — took 6 real attempts to get a clean run
+   (each one a real, distinct gap, not the same bug retried): a base64
+   password with a `/` broke connection-string parsing; the runner's
+   default `pg_dump` (v16) couldn't dump a v17 server; the
+   `postgresql-common` wrapper kept resolving to v16 even after installing
+   v17 alongside it (fixed by calling the versioned binary path directly);
+   `pg_dump` defaults to every schema, including Supabase's internal
+   `auth`/`storage`/`realtime` (fixed with `--schema=public`); table-level
+   `SELECT` didn't cover sequence state (`stage_latencies_id_seq`); and
+   finally, RLS (ADR-040) blocks even a granted `SELECT` for any
+   non-`BYPASSRLS` role. First clean run: 2026-09-07, `.dump` object
+   confirmed in S3 at 40,418 bytes.
+3. ✅ **Real `pg_restore` rehearsal, 2026-09-07**: downloaded the dump,
+   restored into a local scratch `postgres:17` container —
+   **1.674s total** (`--clean --if-exists --no-owner`). Row counts after
+   restore matched the live database at dump time (`runs`: 32,
+   `users`: 1) — not just "the command exited 0," the actual data round-tripped correctly.
+4. This project's real, verified RPO for Postgres is now **≤24h** (daily
+   dump cadence) and its real, verified restore time is **under 2
+   seconds** for the current data volume — both numbers earned by running
+   the mechanism for real, not asserted.
 
 ## Consequences
 
@@ -282,9 +293,16 @@ own restore rehearsal, not Supabase's PITR):
   "Manual backup stopgap" above) — not the redundant-effort scenario this
   Decision originally worried about, since there turned out to be nothing
   to duplicate.
-- The real, still-open gap is now the restore rehearsal for the new
-  mechanism (a `pg_restore` timing test), not Supabase verification — see
-  the checklist above. Tracked in `docs/compliance/risk-register.md` row 4.
+- **The restore rehearsal happened too (2026-09-07)** — real dump, real
+  `pg_restore` into a scratch container, 1.674s, data verified matching.
+  Nothing about backup/restore in this ADR remains unverified; row 4 in
+  `docs/compliance/risk-register.md` is closed, not just mitigated.
+- Getting to a clean run took 6 real attempts, each a genuinely distinct
+  gap (URL-unsafe password, client/server version mismatch, a
+  wrapper-script version-resolution bug, dumping schemas the role had no
+  access to, missing sequence grants, RLS blocking even a granted
+  `SELECT`) — kept as the setup SQL/workflow comments above so the next
+  person standing up a similar role doesn't rediscover each one by hand.
 - S3 artifacts and Redis are explicitly *not* backed up, by design, with the
   reasoning recorded here so a future reviewer doesn't mistake the absence
   for an oversight.
