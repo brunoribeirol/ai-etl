@@ -18,7 +18,7 @@ import { useTranslations } from "next-intl";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { PYRAMID } from "@/lib/agents";
+import { AGENTS, PYRAMID } from "@/lib/agents";
 
 // Shared fade-up entrance, triggered once as each section scrolls into view
 // — cheap, tasteful, and consistent with `agent-progress.tsx`'s existing use
@@ -39,6 +39,7 @@ const TECH_FACT_ICONS = [GitBranch, Terminal, Lock, Radar, Boxes, Sparkles];
 
 type Differentiator = { title: string; body: string };
 type PyramidText = { label: string; description: string };
+type RosterText = { description: string };
 
 export default function LandingPage() {
   const t = useTranslations("landing");
@@ -46,6 +47,7 @@ export default function LandingPage() {
   const differentiators = t.raw("differentiators") as Differentiator[];
   const techFacts = t.raw("techFacts") as string[];
   const pyramidText = tAgents.raw("pyramid") as PyramidText[];
+  const rosterText = tAgents.raw("roster") as RosterText[];
 
   return (
     <main className="flex-1">
@@ -156,6 +158,36 @@ export default function LandingPage() {
                 )}
               </div>
             ))}
+          </motion.div>
+
+          {/* Real bug, found live 2026-09-08: `howBody` above says "nine
+              specialized agents", but this section used to render only the
+              5-tier pyramid (Bronze/Silver/Gold/Science/Advisor — data
+              layers, not agents) — the actual 9-agent roster existed in
+              this same message catalog (`agents.roster`) and in
+              `agents-info.tsx` (shown only inside the authenticated app),
+              but was never rendered on the public landing page. This grid
+              is that roster, so the "nine agents" claim is backed by
+              something visible right where it's made. */}
+          <motion.div {...fadeUp} className="mt-10">
+            <h3 className="mb-5 text-center text-sm font-medium text-muted-foreground">
+              {t("rosterHeading")}
+            </h3>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              {AGENTS.map((agent, i) => (
+                <Card key={agent.id} className="h-full">
+                  <CardContent className="flex gap-2.5 px-4 py-3.5">
+                    <span className="text-lg leading-none">{agent.emoji}</span>
+                    <div>
+                      <span className="text-sm font-medium">{agent.name}</span>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {rosterText[i].description}
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
           </motion.div>
         </div>
       </section>
