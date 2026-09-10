@@ -1,6 +1,6 @@
 # ADR-018: Drift detection and digest delivery for saved pipelines
 
-**Status:** Proposed (checkpoint — not merged, see PR)
+**Status:** Accepted — shipped (migration `0008_drift_threshold_pct`, `core/drift.py`, digest delivery live). _(Original checkpoint status: Proposed — not merged.)_
 **Date:** 2026-08-20
 **Context:** Sprint 14 (product roadmap post-TCC, `product-roadmap-post-tcc.md`)
 

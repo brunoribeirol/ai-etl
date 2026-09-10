@@ -1,6 +1,6 @@
 # ADR-014: Multi-provider LLM support (OpenAI, Anthropic, Google, Ollama)
 
-**Status:** Proposed
+**Status:** Accepted — shipped. Multi-provider LLM is live (`langchain-anthropic`/`-google-genai`/`-ollama` base deps; `core/llm.py`, 4 models across OpenAI + Anthropic exposed in the UI); extended by ADR-031. _(Original checkpoint status: Proposed.)_
 **Date:** 2026-08-19
 **Sprint:** 23 (product roadmap), pulled forward at owner's explicit request — see
 `~/Documents/Obsidian Vault/tcc/artefact/product-roadmap-post-tcc.md`.

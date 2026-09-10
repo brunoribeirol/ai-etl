@@ -1,10 +1,15 @@
 # ADR-039: Vercel Sandbox as the Production Sandbox Isolation Backend — Resolves ADR-038's Deferred Production Rollout
 
-**Status:** Accepted — code complete; **not yet dev/live-verified against a
-real Vercel Sandbox** (no `VERCEL_TOKEN`/`VERCEL_TEAM_ID`/`VERCEL_PROJECT_ID`
-or `vercel` Python package available in the environment this ADR was
-written in — see "Verification status" below). Not yet the production
-default (`"process"` still is).
+**Status:** Accepted (code complete) but **BLOCKED, not "one env var away."**
+A real end-to-end attempt (2026-08-31) reached the live Vercel Sandbox API and
+returned `HTTP 403: You don't have permission to create the vercel sandbox
+(code=forbidden)` — Sandbox creation requires the Vercel **Pro** plan; the team is
+on **Hobby**, and the owner **declined the Pro upgrade** (2026-08-31, re-confirmed
+2026-09-09). So this backend is **not reachable in production** and the follow-up
+"flip `AI_ETL_SANDBOX_BACKEND=vercel`" step below cannot be taken without a paid
+upgrade that is not planned. The production default is and remains `"process"`
+(seccomp-hardened per ADR-046). Kept code-complete so it activates the day the
+plan changes. Not yet dev/live-verified against a real Sandbox for the same reason.
 **Date:** 2026-08-27
 **Deciders:** Bruno Ribeiro (project owner decision; this ADR documents and
 executes it, it does not re-litigate whether to do it)

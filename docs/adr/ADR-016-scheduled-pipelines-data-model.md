@@ -1,6 +1,6 @@
 # ADR-016: Scheduled pipelines — data model and "same source" strategy
 
-**Status:** Proposed (checkpoint — not merged, see PR)
+**Status:** Accepted — shipped (migration `0006_saved_pipelines`, `core/scheduling.py`, `services/scheduler.py` in main; celery-beat deployed). _(Original checkpoint status: Proposed — not merged.)_
 **Date:** 2026-08-19
 **Context:** Sprint 13 (product roadmap post-TCC, `product-roadmap-post-tcc.md`)
 

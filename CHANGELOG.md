@@ -9,6 +9,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Multi-provider LLM in the UI (OpenAI + Anthropic, 4 models) with a per-model
+  "Test connection" check (`POST /llm/test-connectivity`) — ADR-031.
+- Docker/seccomp-hardened sandbox: seccomp `execve`/`execveat` denial on the
+  `process` backend (ADR-046); opt-in Docker (ADR-038) and Vercel Sandbox (ADR-039,
+  billing-blocked) backends.
+- RLS tenant-isolation defense-in-depth: non-bypass Postgres role + per-transaction
+  GUC scoping + real policies (ADR-040).
+- Tenant-scoped DB/REST source credentials via encrypted secrets (ADR-044/045).
+- Platform-admin RBAC role + mediated write-access with audited `reason` (ADR-032,
+  ADR-047).
+- Disaster recovery: daily `pg_dump`→S3 backup workflow (ADR-042); RTO/RPO record.
+- Per-tenant locale/i18n (pt-BR/en-US), notification destinations, data export &
+  retention, budget cap, drift detection, configurable quality rules, onboarding.
+- `LICENSE` (MIT).
+
+### Changed
+- LangChain/LangGraph upgraded to the 1.x line; OpenAI SDK to 2.x (see `uv.lock`).
+- `SECURITY.md` and ADR-003 corrected to describe the current single-site,
+  timeout-enforced, env-scrubbed, seccomp'd sandbox.
+- Seven ADRs (014/016/017/018/019/020/022) status updated from "Proposed" to
+  "Accepted — shipped".
+
+### Known limitations
+- Clerk runs on a development instance; sandbox introspection bypass allows
+  arbitrary file read on the `process` backend (root container); billing/payment
+  not implemented. See `SECURITY.md` and `docs/work/2026-09-08-full-persona-audit.md`.
+
 ---
 
 ## [1.0.0] - 2026-08-22
