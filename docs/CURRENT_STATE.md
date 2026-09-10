@@ -2,7 +2,7 @@
 
 > Living doc. Updated at the end of meaningful work sessions, not per-commit. Source of truth for repo/code state; the Obsidian vault (`~/Documents/Obsidian Vault/tcc/`) is the source of truth for the academic TCC narrative and product/strategy context.
 
-**Last updated:** 2026-09-08 — **A live walkthrough by the owner found and closed 3 real, user-visible bugs** (PRs #221-#224), on top of the 2026-09-06/07 MVP monetization-readiness plan (SOC2 self-assessment fully closed, real backup mechanism built and verified). See the dated sections below for full detail.
+**Last updated:** 2026-09-10 — **Full 12-persona audit (2026-09-08/09) + wave-based remediation (PRs #226-#235).** The audit was investigate-only; the owner then said "faça todas as waves." Most waves are implemented and pushed as PRs; a few items are deliberately owner-actions or need a deploy to live-verify (flagged per PR). Verdict: TCC-defensible YES, external-unsupervised NO, chargeable NO — see the 2026-09-10 section below. Prior context: the 2026-09-08 live walkthrough (PRs #221-#224) and the 2026-09-06/07 MVP monetization plan remain as recorded.
 
 ## Owner's next steps (as of 2026-09-08)
 
@@ -24,6 +24,65 @@ real UI gaps, and fixed them same-session.
 - Billing top-ups (Railway/OpenAI/Anthropic, owner's own action, no code
   dependency) and the TCC monograph writing (due December, lives only in
   the Obsidian vault) remain outside this repo's scope.
+
+## 2026-09-09/10 — full 12-persona audit + wave remediation (PRs #226-#235)
+
+Full run of `.claude/skills/persona-audit.md` (all 12 personas, one Claude Code session,
+no paid cloud review) — audit report + verdict in `docs/work/2026-09-08-full-persona-audit.md`
+(+ 11 per-persona reports and the wave plan `docs/work/2026-09-09-persona-audit-remediation-plan.md`,
+PR #226). `make check` was green throughout (1199 tests, 95.11% coverage). The owner made the
+Wave-0 decisions (Clerk stays dev; no billing/monetization now; no Vercel Pro; D4/D5 delegated)
+and asked to implement all waves. Status per item:
+
+**Shipped as PRs (verified locally: ruff/mypy/bandit/targeted tests, or a real Linux container):**
+- **H3** — `LICENSE` (MIT) added; `pyproject` version 0.1.0→1.1.0 (PR #227).
+- **H6** — `SECURITY.md` + ADR-003 rewritten to describe the real single-site, timeout-
+  enforced, env-scrubbed, seccomp'd sandbox (was describing 3 exec() sites / dead paths); 7
+  stale ADR statuses (014/016/017/018/019/020/022) Proposed→Accepted; CHANGELOG refreshed;
+  ADR-039 amended (billing-blocked, not "one env var away") (M6/M15) (PR #227).
+- **M13/M14** — bandit B102 (exec_used) un-skipped (a stray exec() now fails `make security`);
+  42 dead `# noqa` cleared (RUF100); LLM-stack/numpy floors raised to tested 1.x/2.x + caps
+  (PR #228).
+- **M4** — DSN passwords scrubbed from persisted `state["error"]` (JSON + error column);
+  redaction keywords widened (connection/dsn); error-path regression test added (PR #229).
+- **M8** — new `GET /health/ready` pings DB+Redis (503 if down); `/health` stays shallow
+  (PR #229). **Owner follow-up:** point Railway's healthcheck at `/health/ready`.
+- **H2** — `AI_ETL_DEFAULT_MONTHLY_BUDGET_USD` default spend cap for self-serve tenants
+  (unset = old unlimited behavior); spend-safety, independent of billing (PR #230).
+- **M2** — CodeQL re-enabled (public repo → free); **M1** — db-backup failure Slack alert +
+  documented S3 retention + GitHub added to sub-processor register (PR #231).
+- **H5** — the reopened "fixed" bug: UI locale now wins over `users.locale` for run
+  progress + narrative (`run-form.tsx` sends it; threaded through to `run_silver_pipeline`)
+  (PR #232). **Needs live-verify** (EN-UI/pt-BR-DB tenant, post-deploy) before marked done.
+- **H1** — production container runs as non-root `appuser` (D3b, after Vercel Pro ruled out);
+  **verified in a real python:3.12-slim container**: app imports, sandbox works, RCE gadget
+  BLOCKED by seccomp as non-root (PR #233). **Needs Railway deploy smoke-test** before done.
+- **M3/M11** — Advisor prompt: one consistent metric method + revenue≠demand; Transformer
+  prompt: bad-type numeric → NaN not silent 0; **M16** — CLAUDE.md clarifies audit_log is
+  Silver-only (PR #234). M3/M11 **need live-verify** (re-run the messy Excel revenue question).
+- **A11Y-1/M7** — theme-toggle aria-label localized; **M12** — plain-language tooltips on the
+  medallion-jargon result tabs (PR #235).
+- **M10 (this section's own PR)** — `case_study/results/tabela-resultados.md` annotated with
+  the honest limitations (single model, dated, 3-of-4 scenarios, non-reproducible data) + a
+  re-run protocol.
+
+**Owner actions / deferred (documented, not blindly changed):**
+- **C1** — Clerk stays on the dev instance (owner decision). Accepted risk; the H2 cap + H1
+  non-root reduce the blast radius of opening signups. Not opening self-serve to strangers
+  without a production Clerk is the honest posture.
+- **H4** — the RLS + sandbox-containment integration tests still self-skip in the required CI
+  `check` job. Wiring them (app-postgres on 5435 + migration 0021 + both role URLs) needs
+  live-CI iteration + a branch-protection change (require reviews / e2e) — documented precisely
+  in `ci.yml`'s comment, left as an owner action to avoid a red required gate.
+- **M5** (cost-estimate UI), **M17** (useAsyncData refactor across 8 components), **W4-2**
+  (automated LLM-quality harness) — deferred: M5 needs a dataset-shape detection step the
+  frontend lacks; M17 is a low-urgency refactor with real regression surface; W4-2 needs real
+  LLM spend to verify. Each is scoped in the remediation plan.
+
+**Verdict (unchanged from the audit):** finished and defensible as a TCC artifact; **not**
+ready for external unsupervised use or to charge money — the gap is commercial (billing,
+production Clerk), locale/trust wiring, and the security-tests-gate-CI wiring, not core
+engineering.
 
 ## 2026-09-08 — live walkthrough, 3 real bugs found and fixed (PRs #221-#224)
 
