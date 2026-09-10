@@ -3,6 +3,7 @@
 import pandas as pd
 
 from ai_etl.agents.pipeline.quality import (
+    _check_coerced_numeric_loss,
     _check_custom_rules,
     _check_duplicates,
     _check_logical_duplicates,
@@ -360,3 +361,71 @@ def test_quality_node_no_custom_rules_defaults_to_empty_list() -> None:
     result = quality_node(_state_with_df(df))  # type: ignore[arg-type]
     checks = result["quality_report"]["checks"]
     assert not any(c["check"] == "custom_rule" for c in checks)
+
+
+# --- _check_coerced_numeric_loss (audit finding M11, 2026-09-10) ---
+
+
+def test_coerced_numeric_loss_flags_nonnumeric_source_value() -> None:
+    """The exact live-reproduced case: source 'quantidade' had the text 'cem'
+    among integers; Silver coerced it to a numeric column (with 'cem' → 0). The
+    deterministic guard must flag that a non-numeric value was coerced away."""
+    bronze = pd.DataFrame({"quantidade": ["10", "5", "cem", "8"]})  # object column
+    silver = pd.DataFrame({"quantidade": [10, 5, 0, 8]})  # numeric after transform
+    results = _check_coerced_numeric_loss(silver, {"sales_data": bronze})
+    assert len(results) == 1
+    r = results[0]
+    assert r["check"] == "coerced_numeric_loss"
+    assert r["column"] == "quantidade"
+    assert r["lost_count"] == 1
+    assert r["sample_values"] == ["cem"]
+    assert r["severity"] == "warning"
+
+
+def test_coerced_numeric_loss_silent_on_clean_numeric_source() -> None:
+    bronze = pd.DataFrame({"quantidade": ["10", "5", "8"]})
+    silver = pd.DataFrame({"quantidade": [10, 5, 8]})
+    assert _check_coerced_numeric_loss(silver, {"s": bronze}) == []
+
+
+def test_coerced_numeric_loss_ignores_blank_cells() -> None:
+    """Empty/whitespace cells are legitimately missing, not coerced *data* — must
+    not be flagged (avoids false positives on ordinary nulls)."""
+    bronze = pd.DataFrame({"quantidade": ["10", "", "  ", "8"]})
+    silver = pd.DataFrame({"quantidade": [10, 0, 0, 8]})
+    assert _check_coerced_numeric_loss(silver, {"s": bronze}) == []
+
+
+def test_coerced_numeric_loss_skips_renamed_columns() -> None:
+    """If the Transformer renamed the column, it can't be matched to a source
+    column by name — skip rather than guess/false-positive."""
+    bronze = pd.DataFrame({"quantidade": ["10", "cem"]})
+    silver = pd.DataFrame({"qty": [10, 0]})  # renamed
+    assert _check_coerced_numeric_loss(silver, {"s": bronze}) == []
+
+
+def test_coerced_numeric_loss_skips_already_numeric_source() -> None:
+    """A source column pandas already read as numeric had no stray text to lose."""
+    bronze = pd.DataFrame({"quantidade": [10, 5, 8]})  # numeric dtype in source
+    silver = pd.DataFrame({"quantidade": [10, 5, 8]})
+    assert _check_coerced_numeric_loss(silver, {"s": bronze}) == []
+
+
+def test_quality_node_surfaces_coerced_numeric_loss_as_warning() -> None:
+    """End-to-end through quality_node: the coerced-loss warning appears in the
+    report (severity warning, not a blocking error)."""
+    bronze = pd.DataFrame({"quantidade": ["10", "5", "cem"]})
+    silver = pd.DataFrame({"quantidade": [10, 5, 0]})
+    state = initial_state(spec="test", run_id="q-m11")
+    state = {
+        **state,
+        "transformed_data": silver,
+        "source_schemas": {},
+        "extracted_data": {"sales_data": bronze},
+    }
+    result = quality_node(state)  # type: ignore[arg-type]
+    checks = result["quality_report"]["checks"]
+    coerced = [c for c in checks if c["check"] == "coerced_numeric_loss"]
+    assert len(coerced) == 1 and coerced[0]["column"] == "quantidade"
+    assert result["quality_report"]["severity"] in ("warning", "error")
+    assert result["status"] != "failed"  # a warning must not block the pipeline
