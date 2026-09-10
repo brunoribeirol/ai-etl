@@ -482,3 +482,66 @@ def test_run_advisor_missing_sanity_check_injects_no_warning(
 
     sent_prompt = mock_llm.invoke.call_args[0][0]
     assert "Known data-consistency warning for this sub-task" not in sent_prompt
+
+
+# ---------------------------------------------------------------------------
+# Audit finding M3 (2026-09-10) — deterministic revenue↔demand conflation guard
+# ---------------------------------------------------------------------------
+
+_DEMAND_REC_RESPONSE = json.dumps(
+    {
+        "recommendations": [
+            {
+                "action": "Increase the inventory of 'Caneta' to meet demand.",
+                "rationale": "'Caneta' generated the highest total revenue, indicating strong demand.",
+                "priority": "high",
+                "expected_impact": "Capitalize on demand.",
+            }
+        ],
+        "summary": "Caneta leads.",
+    }
+)
+
+
+def test_advisor_caveats_and_downgrades_demand_claim_without_quantity_dimension(
+    mock_get_llm, sample_df, gold_result, science_result
+) -> None:
+    """The exact live case: a rec infers 'demand' from a revenue-only analysis
+    (gold_df has total_revenue, no quantity column). The guard must append a caveat
+    and downgrade the 'high' priority."""
+    mock_get_llm.return_value = _mock_llm([_DEMAND_REC_RESPONSE])
+    result = run_advisor(sample_df, "Highest revenue?", gold_result, science_result, locale="en-US")
+    rec = result["recommendations"][0]
+    assert "quantity dimension" in rec["rationale"].lower()
+    assert rec["priority"] == "medium"  # downgraded from "high"
+
+
+def test_advisor_does_not_caveat_demand_when_quantity_dimension_present(
+    mock_get_llm, sample_df, science_result
+) -> None:
+    """If the analysis actually measured quantity (a 'quantidade' column exists), a
+    demand claim can be legitimately grounded — no caveat, no downgrade."""
+    gold_with_qty = [
+        {
+            "task_question": "Units sold per product?",
+            "narrative": "Caneta sold the most units.",
+            "gold_df": pd.DataFrame({"product": ["Caneta"], "quantidade": [1000]}),
+            "error": None,
+        }
+    ]
+    mock_get_llm.return_value = _mock_llm([_DEMAND_REC_RESPONSE])
+    result = run_advisor(sample_df, "Most units?", gold_with_qty, science_result, locale="en-US")
+    rec = result["recommendations"][0]
+    assert "quantity dimension" not in rec["rationale"].lower()
+    assert rec["priority"] == "high"  # not downgraded
+
+
+def test_advisor_leaves_non_demand_recommendations_untouched(
+    mock_get_llm, sample_df, gold_result, science_result
+) -> None:
+    """A recommendation with no demand/volume language is never caveated, even when
+    the analysis has no quantity dimension."""
+    mock_get_llm.return_value = _mock_llm([VALID_RESPONSE])
+    result = run_advisor(sample_df, "q", gold_result, science_result, locale="pt-BR")
+    for rec in result["recommendations"]:
+        assert "Observação:" not in rec["rationale"]

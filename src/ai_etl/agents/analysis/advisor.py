@@ -108,6 +108,93 @@ Rules:
 
 _PRIORITY_ORDER = {"high": 0, "medium": 1, "low": 2}
 
+# Audit finding M3 (2026-09-10) — deterministic guard for revenue↔demand conflation.
+# A prompt rule tells the Advisor not to infer "demand" from a revenue figure, but an
+# LLM does not reliably obey it (verified live: a recommendation still said "increase
+# inventory to meet demand" grounded in a revenue-only analysis). So detect it after the
+# fact: if a recommendation uses demand/volume language while the underlying analysis
+# has NO quantity dimension (only value/revenue), append a caveat and downgrade a
+# "high" priority — deterministic, and it only ever ADDS a hedge, never removes content.
+_DEMAND_LANGUAGE = (
+    "demand",
+    "demanda",
+    "sell the most",
+    "vendem mais",
+    "mais vendido",
+    "best-selling",
+    "best selling",
+    "most popular",
+    "mais popular",
+    "high volume",
+    "alto volume",
+    "units sold",
+    "unidades vendidas",
+)
+# Column-name tokens that mean the analysis actually measured quantity/volume (so a
+# demand claim could be legitimately grounded and must NOT be flagged).
+_QUANTITY_COLUMN_TOKENS = (
+    "quantidade",
+    "quantity",
+    "qty",
+    "units",
+    "unidades",
+    "count",
+    "volume",
+)
+_CONFLATION_CAVEAT = {
+    "pt-BR": (
+        " (Observação: baseia-se em receita/valor total, não em unidades vendidas — a "
+        "análise não incluiu uma dimensão de quantidade, então 'demanda' aqui pode "
+        "refletir preço alto, não volume.)"
+    ),
+    "en-US": (
+        " (Note: grounded in revenue/total value, not units sold — the analysis had no "
+        "quantity dimension, so 'demand' here may reflect a high price rather than volume.)"
+    ),
+}
+
+
+def _analysis_has_quantity_dimension(
+    gold_results: list[GoldResult], science_results: list[ScienceResult]
+) -> bool:
+    """True if any Gold/Science result's data has a quantity/volume-like column —
+    i.e. the analysis actually measured units, not just value/revenue."""
+    frames = [g.get("gold_df") for g in gold_results] + [
+        s.get("predictions_df") for s in science_results
+    ]
+    for frame in frames:
+        if not isinstance(frame, pd.DataFrame):
+            continue
+        for col in frame.columns:
+            name = str(col).lower()
+            if any(tok in name for tok in _QUANTITY_COLUMN_TOKENS):
+                return True
+    return False
+
+
+def _hedge_revenue_demand_conflation(
+    recommendations: list[dict[str, Any]],
+    gold_results: list[GoldResult],
+    science_results: list[ScienceResult],
+    locale: str,
+) -> None:
+    """Mutates `recommendations` in place: for any rec that uses demand/volume
+    language while the analysis has no quantity dimension, append a caveat to its
+    rationale and downgrade a 'high' priority to 'medium'. No-op otherwise."""
+    if _analysis_has_quantity_dimension(gold_results, science_results):
+        return
+    caveat = _CONFLATION_CAVEAT.get(locale, _CONFLATION_CAVEAT[DEFAULT_LOCALE])
+    for rec in recommendations:
+        text = f"{rec.get('action', '')} {rec.get('rationale', '')}".lower()
+        if not any(term in text for term in _DEMAND_LANGUAGE):
+            continue
+        rationale = rec.get("rationale", "")
+        if caveat.strip() not in rationale:
+            rec["rationale"] = f"{rationale}{caveat}"
+        if rec.get("priority") == "high":
+            rec["priority"] = "medium"
+
+
 _FALLBACK_SUMMARY: dict[str, str] = {
     "pt-BR": "Não foi possível gerar recomendações automaticamente.",
     "en-US": "Automatic recommendations could not be generated.",
@@ -263,6 +350,13 @@ def run_advisor(
             for rec in recommendations:
                 if rec.get("priority") not in valid_priorities:
                     rec["priority"] = "medium"
+
+            # Audit M3 (2026-09-10): deterministic revenue↔demand conflation guard —
+            # caveats + downgrades recs that infer demand from a revenue-only analysis.
+            # Runs before the sort so a downgraded "high" re-orders correctly.
+            _hedge_revenue_demand_conflation(
+                recommendations, gold_results, science_results, resolved_locale
+            )
 
             # Sort by priority
             recommendations.sort(key=lambda r: _PRIORITY_ORDER.get(r.get("priority", "low"), 2))

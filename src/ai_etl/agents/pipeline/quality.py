@@ -94,6 +94,7 @@ def quality_node(state: PipelineState) -> PipelineState:
     checks.extend(_check_logical_duplicates(df))
     checks.extend(_check_types(df, state["source_schemas"]))
     checks.extend(_check_outliers_iqr(df))
+    checks.extend(_check_coerced_numeric_loss(df, state.get("extracted_data", {})))
     checks.extend(_check_custom_rules(df, state.get("custom_quality_rules", [])))
 
     overall_severity = max(
@@ -197,6 +198,74 @@ def _check_logical_duplicates(df: pd.DataFrame) -> list[dict[str, Any]]:
                 "row_count": int(repeated.sum()),
                 "sample_values": repeated.head(5).index.tolist(),
                 "severity": "warning",
+            }
+        )
+    return results
+
+
+def _check_coerced_numeric_loss(
+    df: pd.DataFrame, extracted_data: dict[str, Any]
+) -> list[dict[str, Any]]:
+    """Deterministic guard for audit finding M11 (2026-09-10): a genuinely
+    non-numeric value in a column the Transformer coerced to numeric (e.g. the
+    text "cem" in a quantity column) becomes NaN under `pd.to_numeric(...,
+    errors="coerce")` and, if the LLM-generated code then does `.fillna(0)`,
+    silently turns into 0 — corrupting every downstream sum/mean/ranking with no
+    trace. A prompt rule tells the Transformer not to do that, but an LLM does not
+    reliably obey it (verified live: gpt-4o-mini still `fillna(0)`'d "cem"→0). So
+    this makes the loss *visible* deterministically instead of trusting the prompt.
+
+    Compares each numeric Silver column against a same-named object/string Bronze
+    source column: any source value that is non-empty but not parseable as a number
+    was coerced away. Column-level counts only — no row alignment needed, so
+    dedup/reorder don't matter. Columns the Transformer renamed can't be matched by
+    name and are skipped (honest: we flag what we can attribute, never guess).
+    Always "warning" — a heads-up, never a pipeline-blocking error.
+    """
+    # Collect Bronze object/string columns by name (only these can hold stray text;
+    # a column pandas already read as numeric had no non-numeric values to lose).
+    bronze_object_cols: dict[str, "pd.Series[Any]"] = {}
+    for src_df in extracted_data.values():
+        if not isinstance(src_df, pd.DataFrame):
+            continue
+        for col in src_df.columns:
+            if col in bronze_object_cols:
+                continue
+            series = src_df[col]
+            if isinstance(series, pd.DataFrame):  # duplicate column label — skip
+                continue
+            if str(series.dtype) in ("object", "string"):
+                bronze_object_cols[col] = series
+
+    results: list[dict[str, Any]] = []
+    for col in df.select_dtypes(include=["number"]).columns:
+        source = bronze_object_cols.get(col)
+        if source is None:
+            continue
+        non_null = source.dropna()
+        # Ignore blank/whitespace-only cells — those are legitimately missing, not
+        # coerced *data*; only genuine non-numeric text counts as silent loss.
+        non_blank = non_null[non_null.astype(str).str.strip() != ""]
+        if non_blank.empty:
+            continue
+        parsed = pd.to_numeric(non_blank, errors="coerce")
+        lost_mask = parsed.isna()
+        lost_count = int(lost_mask.sum())
+        if lost_count == 0:
+            continue
+        sample_values = non_blank[lost_mask].astype(str).str.strip().head(5).tolist()
+        results.append(
+            {
+                "check": "coerced_numeric_loss",
+                "column": col,
+                "lost_count": lost_count,
+                "sample_values": sample_values,
+                "severity": "warning",
+                "message": (
+                    f"Column '{col}': {lost_count} non-numeric source value(s) "
+                    f"(e.g. {sample_values}) were coerced during transformation and may have "
+                    "been silently set to 0/NaN — verify they were not turned into real zeros."
+                ),
             }
         )
     return results
