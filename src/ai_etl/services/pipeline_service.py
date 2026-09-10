@@ -165,7 +165,7 @@ def run_silver_pipeline(
     if tenant_id is not None:
         try:
             locale = get_locale(tenant_id)
-        except Exception:  # noqa: BLE001 — see comment above: never let this block a run
+        except Exception:
             logger.warning(
                 "run_silver_pipeline: failed to resolve tenant locale, "
                 "falling back to default (%r)",

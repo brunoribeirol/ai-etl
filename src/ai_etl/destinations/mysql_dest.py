@@ -51,7 +51,7 @@ def save_mysql(
 
 def _schema(table: str) -> str | None:
     parts = table.split(".")
-    return parts[0] if len(parts) == 2 else None  # noqa: PLR2004
+    return parts[0] if len(parts) == 2 else None
 
 
 def preview_mysql(df: pd.DataFrame, table: str) -> dict[str, Any]:

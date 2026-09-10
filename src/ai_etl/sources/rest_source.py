@@ -48,7 +48,7 @@ _DEFAULT_TOKEN_TTL_SECONDS = 3600
 def _read_env(var_name: str) -> str:
     value = os.getenv(var_name)
     if not value:
-        raise EnvironmentError(  # noqa: UP024 — matches postgres_source.py's EnvironmentError convention
+        raise EnvironmentError(
             f"Environment variable '{var_name}' is not set (required for REST auth)."
         )
     return value
@@ -75,7 +75,7 @@ def _read_secret(auth: dict[str, Any], env_key: str, ref_key: str) -> str:
         if value is not None:
             return value
         if env_key not in auth:
-            raise EnvironmentError(  # noqa: UP024
+            raise EnvironmentError(
                 f"REST auth secret_ref {secret_ref!r} ({ref_key}) has no value for this "
                 f"tenant, and no {env_key!r} fallback was configured."
             )

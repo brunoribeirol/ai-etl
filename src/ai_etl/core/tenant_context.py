@@ -110,7 +110,7 @@ def resolve_tenant_overrides(tenant_id: str | None) -> dict[str, str]:
             overrides[source_type] = get_secret(tenant_id, secret_name)
         except SecretNotFoundError:
             continue
-        except Exception:  # noqa: BLE001 — see docstring: never block a run over this
+        except Exception:
             logger.warning(
                 "resolve_tenant_overrides: failed to resolve %r for tenant, "
                 "falling back to the shared env var for %r",
@@ -167,7 +167,7 @@ def get_rest_secret(secret_ref: str) -> str | None:
         return get_secret(tenant_id, secret_ref)
     except SecretNotFoundError:
         return None
-    except Exception:  # noqa: BLE001 — see docstring: never block a run over this
+    except Exception:
         logger.warning(
             "get_rest_secret: failed to resolve %r for tenant, falling back to env_var",
             secret_ref,

@@ -66,7 +66,7 @@ def _fake_scope(engine: Engine):
     """
 
     @contextmanager
-    def _scope(tenant_id):  # noqa: ANN001, ANN202
+    def _scope(tenant_id):
         with engine.begin() as conn:
             yield conn
 
@@ -641,7 +641,7 @@ def _make_sqlite_engine_with_fk_enforcement() -> Engine:
     engine = sqlalchemy.create_engine("sqlite:///:memory:")
 
     @sqlalchemy.event.listens_for(engine, "connect")
-    def _enable_fk(dbapi_connection, connection_record) -> None:  # noqa: ANN001
+    def _enable_fk(dbapi_connection, connection_record) -> None:
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA foreign_keys=ON")
         cursor.close()
