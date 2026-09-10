@@ -99,6 +99,28 @@ def _make_failed_state() -> dict:
     return {**state, "status": "failed", "error": "LLM failed"}
 
 
+def test_save_run_scrubs_dsn_password_from_error_in_json_snapshot(tmp_path: Path) -> None:
+    """Audit finding M4/BT-2 (2026-09-09): a source-connection failure surfaces the
+    raw driver exception into `state["error"]`, persisted verbatim in the run's JSON
+    snapshot. If that message carries a DSN with an inline password, the password
+    would land on disk/S3. `_write_json` must scrub it. (The happy-path guard in
+    test_pipeline_service.py only proved the DSN never enters state on success — this
+    covers the error path it didn't.)"""
+    state = initial_state(spec="read tenant db", run_id="run-dsn-err")
+    state = {
+        **state,
+        "status": "failed",
+        "error": (
+            "OperationalError: could not connect to "
+            "postgresql://tenant_user:s3cr3t_pw@db.internal:5432/prod"
+        ),
+    }
+    json_key = save_run(state, log_dir=str(tmp_path))
+    snapshot = (tmp_path / json_key).read_text()
+    assert "s3cr3t_pw" not in snapshot
+    assert "postgresql://tenant_user:***@db.internal:5432/prod" in snapshot
+
+
 def test_save_run_creates_json_file(tmp_path: Path) -> None:
     state = _make_completed_state()
     json_key = save_run(state, log_dir=str(tmp_path))

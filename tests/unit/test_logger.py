@@ -1,7 +1,48 @@
 """Unit tests for the audit logger."""
 
-from ai_etl.audit.logger import _sanitize, log_action
+from ai_etl.audit.logger import _sanitize, log_action, scrub_secrets_in_text
 from ai_etl.core.state import initial_state
+
+# --- Audit finding M4 (2026-09-09): redaction gaps ---
+
+
+def test_sanitize_redacts_connection_string_and_dsn_field_names() -> None:
+    """BT-1: a DSN with an inline password in a field named connection_string /
+    postgres_connection_string / dsn used to pass through unredacted."""
+    data = {
+        "connection_string": "postgresql://u:pw@host/db",
+        "postgres_connection_string": "postgresql://u:pw@host/db",
+        "dsn": "postgresql://u:pw@host/db",
+        "table": "orders",
+    }
+    result = _sanitize(data)
+    assert result["connection_string"] == "***REDACTED***"
+    assert result["postgres_connection_string"] == "***REDACTED***"
+    assert result["dsn"] == "***REDACTED***"
+    assert result["table"] == "orders"
+
+
+def test_sanitize_scrubs_dsn_password_embedded_in_a_value() -> None:
+    """A secret inside a VALUE (not a field name) is scrubbed too — e.g. a raw
+    connection error surfaced in a benignly-named field."""
+    data = {"error": "could not connect: postgresql://tenant:supersecret@db-host:5432/prod"}
+    result = _sanitize(data)
+    assert "supersecret" not in result["error"]
+    assert "postgresql://tenant:***@db-host:5432/prod" in result["error"]
+
+
+def test_scrub_secrets_in_text_redacts_only_the_password() -> None:
+    text = "OperationalError: FATAL: password authentication failed for mysql://root:hunter2@10.0.0.1:3306/app"
+    scrubbed = scrub_secrets_in_text(text)
+    assert "hunter2" not in scrubbed
+    assert "mysql://root:***@10.0.0.1:3306/app" in scrubbed
+    # non-DSN text is left intact
+    assert "password authentication failed" in scrubbed
+
+
+def test_scrub_secrets_in_text_passthrough_non_str() -> None:
+    assert scrub_secrets_in_text(None) is None  # type: ignore[arg-type] -- defensive non-str path
+    assert scrub_secrets_in_text("no secret here") == "no secret here"
 
 
 def test_log_action_appends_entry() -> None:
