@@ -55,3 +55,37 @@
 | Quality-blocked pipeline mantinha `status="running"` | Runs bloqueados por quality ficavam com status incorreto | `quality_node` seta `status="failed"` quando `severity=="error"` |
 | `rest_source` não normalizava estrutura time-series | `weather_df` chegava como 1 linha com listas nas células | Detecção de sub-dict com listas paralelas adicionada a `rest_source.py` |
 | Spec ambígua no Cenário 3 | LLM tentava join por data (2024 vs 2026) → 100% nulls | Spec atualizada para especificar enriquecimento por cidade |
+
+---
+
+## Limitações desta rodada e protocolo de re-execução (auditoria M10, 2026-09-09)
+
+Registrado após a auditoria de 12 personas (`docs/work/2026-09-08-full-persona-audit.md`,
+persona Academic Evaluator) para manter a narrativa do TCC honesta sobre o que esta tabela
+cobre e o que **não** cobre:
+
+- **Modelo único e datado.** Todos os 15 runs usaram `gpt-4o-mini` em **2026-06-23**. O
+  produto hoje expõe 4 modelos em 2 provedores (OpenAI + Anthropic). Não há, neste artefato,
+  uma comparação multi-modelo para os cenários do estudo de caso (a comparação de estabilidade
+  existente vive em `case_study/results/sprint8/`, com outro escopo).
+- **3 de 4 cenários.** O README anuncia 4 cenários (CSV; +Postgres; +REST; +PDF/DOCX). Esta
+  tabela cobre os cenários 1–3 (15 runs = 5×3). O cenário 4 (documento) e o cenário 5
+  (sqlite+rest+auth, presente em `tests/e2e/`) **não** têm resultados de estudo de caso
+  commitados.
+- **Não reproduzível só a partir do repositório.** `case_study/data/` é gitignored, então uma
+  banca não consegue reproduzir os números só clonando o repo — precisa dos datasets. A
+  engenharia é reproduzível (testes, migrações); a *avaliação* não é, sem os dados.
+- **Artefatos por run não commitados.** Só o agregado (esta tabela + `runs_log.csv`) está no
+  repo; os JSONs individuais de cada run (cenários 2/3) são `.gitkeep`-only.
+
+### Protocolo de re-execução (para fechar as lacunas acima)
+
+1. Repor os datasets em `case_study/data/` (mesmos seeds; ver `case_study/scripts/`).
+2. Rodar `make run-scenario1|2|3` (+ os specs de cenário 4/5) com o modelo default e, para a
+   comparação, com um modelo Anthropic — registrar `--output case_study/results/scenarioN/`.
+3. Commitar os JSONs por run + regenerar esta tabela e `runs_log.csv`; datar a nova rodada.
+4. Anotar explicitamente, de novo, o resultado `warning` (esperado: nulos/outliers injetados),
+   para que a banca não o leia como falha.
+
+Bloqueado nesta sessão por falta dos datasets (gitignored) e por exigir chamadas LLM reais —
+é uma tarefa agendável pelo dono, não um item de código.
