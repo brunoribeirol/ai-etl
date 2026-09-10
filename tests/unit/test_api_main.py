@@ -48,3 +48,34 @@ def test_config_returns_resolved_role(client: TestClient, mocker, role: str) -> 
 def test_config_requires_auth(client: TestClient) -> None:
     response = client.get("/config")
     assert response.status_code == 401
+
+
+# --- Audit finding M8 (2026-09-09): /health depth ---
+
+
+def test_health_is_shallow_and_always_ok(client: TestClient) -> None:
+    """Liveness must not fail on a dead dependency — it decides restarts."""
+    response = client.get("/health")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
+def test_health_ready_returns_200_when_dependencies_are_up(client: TestClient, mocker) -> None:
+    mocker.patch("ai_etl.api.main.get_engine")  # .connect().__enter__().execute() all MagicMock
+    mocker.patch("ai_etl.api.main.redis.Redis.from_url")  # .ping() MagicMock
+    response = client.get("/health/ready")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "ok"
+    assert body["checks"] == {"database": "ok", "redis": "ok"}
+
+
+def test_health_ready_returns_503_when_database_is_down(client: TestClient, mocker) -> None:
+    mocker.patch("ai_etl.api.main.get_engine", side_effect=OSError("db unreachable"))
+    mocker.patch("ai_etl.api.main.redis.Redis.from_url")
+    response = client.get("/health/ready")
+    assert response.status_code == 503
+    body = response.json()
+    assert body["status"] == "unhealthy"
+    assert body["checks"]["database"].startswith("error:")
+    assert body["checks"]["redis"] == "ok"

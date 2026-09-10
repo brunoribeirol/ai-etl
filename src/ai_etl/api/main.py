@@ -7,8 +7,11 @@ Production (Railway, after the Sprint 6 cutover): `uvicorn ai_etl.api.main:app -
 import os
 from typing import Annotated
 
+import redis
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from sqlalchemy import text
 
 from ai_etl.api.deps import AuthContext, get_current_auth_context
 from ai_etl.api.routers import (
@@ -22,6 +25,7 @@ from ai_etl.api.routers import (
     secrets,
     tenant,
 )
+from ai_etl.audit.connection import get_engine
 from ai_etl.core.llm import get_model_name
 from ai_etl.core.logging_config import configure_logging
 from ai_etl.core.observability import init_sentry
@@ -65,7 +69,41 @@ app.include_router(llm.router)
 
 @app.get("/health")
 def health() -> dict[str, str]:
+    """Liveness: the process is up and serving. Intentionally shallow — used by
+    the platform to decide whether to restart the container, so it must not fail
+    just because a downstream dependency is temporarily unreachable. For
+    dependency health (DB/Redis) see `/health/ready`."""
     return {"status": "ok"}
+
+
+@app.get("/health/ready")
+def health_ready() -> JSONResponse:
+    """Readiness: the process AND its critical dependencies (app database, Redis
+    broker) are reachable. Returns 200 only if every check passes, otherwise 503
+    with per-dependency detail (audit finding M8 — `/health` alone returned 200
+    even with a dead DB, so the platform kept routing traffic to a broken
+    instance). Every check is best-effort and non-throwing."""
+    checks: dict[str, str] = {}
+
+    try:
+        with get_engine().connect() as conn:
+            conn.execute(text("SELECT 1"))
+        checks["database"] = "ok"
+    except Exception as exc:  # nosec B110 -- report the failure as unhealthy, never 500
+        checks["database"] = f"error: {type(exc).__name__}"
+
+    try:
+        client = redis.Redis.from_url(os.getenv("REDIS_URL", "redis://localhost:6379/0"))
+        client.ping()
+        checks["redis"] = "ok"
+    except Exception as exc:  # nosec B110 -- same: unhealthy, not a 500
+        checks["redis"] = f"error: {type(exc).__name__}"
+
+    healthy = all(v == "ok" for v in checks.values())
+    return JSONResponse(
+        status_code=200 if healthy else 503,
+        content={"status": "ok" if healthy else "unhealthy", "checks": checks},
+    )
 
 
 @app.get("/config")
