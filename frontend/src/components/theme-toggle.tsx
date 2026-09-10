@@ -1,6 +1,7 @@
 "use client";
 
 import { Moon, Sun } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useTheme } from "next-themes";
 import { useSyncExternalStore } from "react";
 import { Button } from "@/components/ui/button";
@@ -32,6 +33,7 @@ function subscribeNoop() {
 }
 
 export function ThemeToggle() {
+  const t = useTranslations("themeToggle");
   const { resolvedTheme, setTheme } = useTheme();
   const mounted = useSyncExternalStore(
     subscribeNoop,
@@ -54,10 +56,10 @@ export function ThemeToggle() {
       variant="ghost"
       size="icon-sm"
       onClick={() => setTheme(isDark ? "light" : "dark")}
-      aria-label={isDark ? "Mudar para tema claro" : "Mudar para tema escuro"}
+      aria-label={isDark ? t("switchToLight") : t("switchToDark")}
     >
       {isDark ? <Sun aria-hidden="true" /> : <Moon aria-hidden="true" />}
-      <span className="sr-only">Alternar tema claro/escuro</span>
+      <span className="sr-only">{t("toggleLabel")}</span>
     </Button>
   );
 }
