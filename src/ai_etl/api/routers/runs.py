@@ -236,6 +236,7 @@ async def create_run(
     llm_provider_override: Annotated[Optional[str], Form()] = None,
     llm_model_override: Annotated[Optional[str], Form()] = None,
     sheet_name: Annotated[Optional[str], Form()] = None,
+    locale: Annotated[Optional[str], Form()] = None,
     file: Optional[UploadFile] = None,
 ) -> dict[str, str]:
     """Wraps `execution_queue.enqueue_analysis`. Originally mirrored `app.py::_tab_executar`'s
@@ -355,6 +356,11 @@ async def create_run(
             file_bytes=file_bytes,
             llm_provider_override=llm_provider_override,
             llm_model_override=llm_model_override,
+            # Audit finding H5 / D4: the UI's active locale (next-intl cookie),
+            # sent by run-form.tsx, wins over the tenant's stored users.locale for
+            # this run's progress messages + narrative — so an English-UI user
+            # never sees Portuguese progress/narrative again.
+            locale_override=locale,
         )
     except RateLimitExceededError as e:
         raise HTTPException(status_code=429, detail=str(e)) from e

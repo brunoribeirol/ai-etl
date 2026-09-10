@@ -3,7 +3,7 @@
 import { useAuth } from "@clerk/nextjs";
 import { AnimatePresence, motion } from "motion/react";
 import { Loader2, UploadCloud } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -50,6 +50,7 @@ export function RunForm({
   initialBusinessQuestion = "",
 }: RunFormProps = {}) {
   const t = useTranslations("runForm");
+  const locale = useLocale();
   const { getToken } = useAuth();
   const apiUrl = process.env.NEXT_PUBLIC_API_URL;
 
@@ -182,6 +183,11 @@ export function RunForm({
       }
       if (manualSpec.trim()) formData.append("manual_spec", manualSpec.trim());
       formData.append("business_question", businessQuestion);
+      // Audit finding H5 / D4: send the UI's active locale so the run's progress
+      // messages + Advisor narrative follow what the user is actually seeing,
+      // instead of the tenant's stored `users.locale` (which can differ from the
+      // UI cookie — an English UI was showing Portuguese progress before this).
+      formData.append("locale", locale);
       // Sent under the same field names as `PipelineState["llm_provider_override"]`/
       // `["llm_model_override"]` (`src/ai_etl/core/state.py`). NOTE: as of this
       // change, `POST /runs` (`src/ai_etl/api/routers/runs.py::create_run`) does

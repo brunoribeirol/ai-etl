@@ -379,6 +379,7 @@ def run_full_analysis_task(
     saved_pipeline_id: str | None = None,
     llm_provider_override: str | None = None,
     llm_model_override: str | None = None,
+    locale_override: str | None = None,
 ) -> dict[str, Any]:
     """Celery task wrapping `pipeline_service.run_full_analysis`.
 
@@ -445,6 +446,7 @@ def run_full_analysis_task(
             saved_pipeline_id=saved_pipeline_id,
             llm_provider_override=llm_provider_override,
             llm_model_override=llm_model_override,
+            locale_override=locale_override,
         )
     finally:
         # Sprint 29 (ADR-019 addendum): release the per-tenant "in-flight"
@@ -585,6 +587,7 @@ def enqueue_analysis(
     saved_pipeline_id: str | None = None,
     llm_provider_override: str | None = None,
     llm_model_override: str | None = None,
+    locale_override: str | None = None,
 ) -> str:
     """Enforce the tenant's budget cap and rate limit, then enqueue the run.
 
@@ -640,6 +643,7 @@ def enqueue_analysis(
             saved_pipeline_id,
             llm_provider_override,
             llm_model_override,
+            locale_override,
         )
     except Exception:
         # The run never actually started (rate-limited, or the broker call
