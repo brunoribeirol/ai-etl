@@ -66,7 +66,7 @@ def _fake_scope(engine: Engine):
     """
 
     @contextmanager
-    def _scope(tenant_id):  # noqa: ANN001, ANN202
+    def _scope(tenant_id):
         with engine.begin() as conn:
             yield conn
 
@@ -97,6 +97,28 @@ def _make_completed_state() -> dict:
 def _make_failed_state() -> dict:
     state = initial_state(spec="bad spec", run_id="run-failed-1")
     return {**state, "status": "failed", "error": "LLM failed"}
+
+
+def test_save_run_scrubs_dsn_password_from_error_in_json_snapshot(tmp_path: Path) -> None:
+    """Audit finding M4/BT-2 (2026-09-09): a source-connection failure surfaces the
+    raw driver exception into `state["error"]`, persisted verbatim in the run's JSON
+    snapshot. If that message carries a DSN with an inline password, the password
+    would land on disk/S3. `_write_json` must scrub it. (The happy-path guard in
+    test_pipeline_service.py only proved the DSN never enters state on success — this
+    covers the error path it didn't.)"""
+    state = initial_state(spec="read tenant db", run_id="run-dsn-err")
+    state = {
+        **state,
+        "status": "failed",
+        "error": (
+            "OperationalError: could not connect to "
+            "postgresql://tenant_user:s3cr3t_pw@db.internal:5432/prod"
+        ),
+    }
+    json_key = save_run(state, log_dir=str(tmp_path))
+    snapshot = (tmp_path / json_key).read_text()
+    assert "s3cr3t_pw" not in snapshot
+    assert "postgresql://tenant_user:***@db.internal:5432/prod" in snapshot
 
 
 def test_save_run_creates_json_file(tmp_path: Path) -> None:
@@ -619,7 +641,7 @@ def _make_sqlite_engine_with_fk_enforcement() -> Engine:
     engine = sqlalchemy.create_engine("sqlite:///:memory:")
 
     @sqlalchemy.event.listens_for(engine, "connect")
-    def _enable_fk(dbapi_connection, connection_record) -> None:  # noqa: ANN001
+    def _enable_fk(dbapi_connection, connection_record) -> None:
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA foreign_keys=ON")
         cursor.close()

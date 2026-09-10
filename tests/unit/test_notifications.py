@@ -53,7 +53,7 @@ def test_send_email_digest_posts_correct_payload_and_returns_true(
 
     captured: dict = {}
 
-    def _fake_post(url, json=None, headers=None, timeout=None):  # noqa: ANN001
+    def _fake_post(url, json=None, headers=None, timeout=None):
         captured["url"] = url
         captured["json"] = json
         captured["headers"] = headers
@@ -76,7 +76,7 @@ def test_send_email_digest_returns_false_on_http_error(monkeypatch: pytest.Monke
     monkeypatch.setenv("AI_ETL_ALERT_EMAIL_FROM", "alerts@example.com")
     monkeypatch.setenv("AI_ETL_ALERT_EMAIL_TO", "a@example.com")
 
-    def _fake_post(*args, **kwargs):  # noqa: ANN001, ANN002, ANN003
+    def _fake_post(*args, **kwargs):
         return _FakeResponse(500)
 
     monkeypatch.setattr(notifications.httpx, "post", _fake_post)
@@ -95,7 +95,7 @@ def test_send_slack_digest_posts_blocks_and_returns_true(monkeypatch: pytest.Mon
     monkeypatch.setenv("SLACK_WEBHOOK_URL", "https://hooks.slack.com/services/T/B/X")
     captured: dict = {}
 
-    def _fake_post(url, json=None, timeout=None):  # noqa: ANN001
+    def _fake_post(url, json=None, timeout=None):
         captured["url"] = url
         captured["json"] = json
         return _FakeResponse(200)
@@ -114,7 +114,7 @@ def test_send_slack_digest_posts_blocks_and_returns_true(monkeypatch: pytest.Mon
 def test_send_slack_digest_returns_false_on_http_error(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SLACK_WEBHOOK_URL", "https://hooks.slack.com/services/T/B/X")
 
-    def _fake_post(*args, **kwargs):  # noqa: ANN001, ANN002, ANN003
+    def _fake_post(*args, **kwargs):
         return _FakeResponse(404)
 
     monkeypatch.setattr(notifications.httpx, "post", _fake_post)
@@ -135,7 +135,7 @@ def test_send_teams_digest_posts_adaptive_card_and_returns_true(
     monkeypatch.setenv("TEAMS_WEBHOOK_URL", "https://prod-00.eastus.logic.azure.com/workflows/abc")
     captured: dict = {}
 
-    def _fake_post(url, json=None, timeout=None):  # noqa: ANN001
+    def _fake_post(url, json=None, timeout=None):
         captured["url"] = url
         captured["json"] = json
         return _FakeResponse(200)
@@ -156,7 +156,7 @@ def test_send_teams_digest_posts_adaptive_card_and_returns_true(
 def test_send_teams_digest_returns_false_on_http_error(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("TEAMS_WEBHOOK_URL", "https://prod-00.eastus.logic.azure.com/workflows/abc")
 
-    def _fake_post(*args, **kwargs):  # noqa: ANN001, ANN002, ANN003
+    def _fake_post(*args, **kwargs):
         return _FakeResponse(500)
 
     monkeypatch.setattr(notifications.httpx, "post", _fake_post)
@@ -180,7 +180,7 @@ def test_send_google_chat_digest_posts_text_and_returns_true(
     )
     captured: dict = {}
 
-    def _fake_post(url, json=None, timeout=None):  # noqa: ANN001
+    def _fake_post(url, json=None, timeout=None):
         captured["url"] = url
         captured["json"] = json
         return _FakeResponse(200)
@@ -202,7 +202,7 @@ def test_send_google_chat_digest_returns_false_on_http_error(
         "https://chat.googleapis.com/v1/spaces/AAA/messages?key=k&token=t",
     )
 
-    def _fake_post(*args, **kwargs):  # noqa: ANN001, ANN002, ANN003
+    def _fake_post(*args, **kwargs):
         return _FakeResponse(403)
 
     monkeypatch.setattr(notifications.httpx, "post", _fake_post)
@@ -221,7 +221,7 @@ def test_send_email_digest_override_recipients_takes_precedence_over_env(
     monkeypatch.setenv("AI_ETL_ALERT_EMAIL_TO", "global@example.com")
     captured: dict = {}
 
-    def _fake_post(url, json=None, headers=None, timeout=None):  # noqa: ANN001
+    def _fake_post(url, json=None, headers=None, timeout=None):
         captured["json"] = json
         return _FakeResponse(200)
 
@@ -249,7 +249,7 @@ def test_send_slack_digest_override_webhook_takes_precedence_over_env(
     monkeypatch.setenv("SLACK_WEBHOOK_URL", "https://hooks.slack.com/services/GLOBAL")
     captured: dict = {}
 
-    def _fake_post(url, json=None, timeout=None):  # noqa: ANN001
+    def _fake_post(url, json=None, timeout=None):
         captured["url"] = url
         return _FakeResponse(200)
 
@@ -269,7 +269,7 @@ def test_send_teams_digest_override_webhook_takes_precedence_over_env(
     monkeypatch.setenv("TEAMS_WEBHOOK_URL", "https://global.example.com/workflows/global")
     captured: dict = {}
 
-    def _fake_post(url, json=None, timeout=None):  # noqa: ANN001
+    def _fake_post(url, json=None, timeout=None):
         captured["url"] = url
         return _FakeResponse(200)
 
@@ -291,7 +291,7 @@ def test_send_google_chat_digest_override_webhook_takes_precedence_over_env(
     )
     captured: dict = {}
 
-    def _fake_post(url, json=None, timeout=None):  # noqa: ANN001
+    def _fake_post(url, json=None, timeout=None):
         captured["url"] = url
         return _FakeResponse(200)
 
@@ -362,7 +362,7 @@ def test_resolve_pipeline_notification_override_swallows_decrypt_failure(
         },
     )
 
-    def _raise(ct):  # noqa: ANN001
+    def _raise(ct):
         raise InvalidToken()
 
     monkeypatch.setattr(notifications, "decrypt_value", _raise)

@@ -32,19 +32,40 @@ export function RunSections({
   // Sprint 25 (ADR-036) — "Silver"/"Pipeline"/"Gold"/"Science"/"Advisor" are
   // this product's own technical vocabulary (see `lib/agents.ts`), identical
   // in both locales — only "Código" is translated (`runSections.code`).
+  // Audit finding M12 (2026-09-09): a non-technical user has no idea "Silver"
+  // means "cleaned data" or "Gold" means "analysis". Rather than drop the brand
+  // vocabulary (a deliberate product decision), each tab now carries a localized
+  // plain-language `title` tooltip explaining what it is. A fuller relabel is an
+  // owner UX call; this adds clarity without changing the visible labels.
   const t = useTranslations("runSections");
   const tabs = [
-    silver && { value: "silver", label: "Silver", content: silver },
-    pipeline && { value: "pipeline", label: "Pipeline", content: pipeline },
-    gold.length > 0 && { value: "gold", label: `Gold (${gold.length})`, content: gold },
+    silver && { value: "silver", label: "Silver", hint: t("silverHint"), content: silver },
+    pipeline && {
+      value: "pipeline",
+      label: "Pipeline",
+      hint: t("pipelineHint"),
+      content: pipeline,
+    },
+    gold.length > 0 && {
+      value: "gold",
+      label: `Gold (${gold.length})`,
+      hint: t("goldHint"),
+      content: gold,
+    },
     science.length > 0 && {
       value: "science",
       label: `Science (${science.length})`,
+      hint: t("scienceHint"),
       content: science,
     },
-    advisor && { value: "advisor", label: "Advisor", content: advisor },
-    code && { value: "code", label: t("code"), content: code },
-  ].filter(Boolean) as { value: string; label: string; content: ReactNode | ReactNode[] }[];
+    advisor && { value: "advisor", label: "Advisor", hint: t("advisorHint"), content: advisor },
+    code && { value: "code", label: t("code"), hint: t("codeHint"), content: code },
+  ].filter(Boolean) as {
+    value: string;
+    label: string;
+    hint: string;
+    content: ReactNode | ReactNode[];
+  }[];
 
   if (tabs.length === 0) {
     return null;
@@ -54,7 +75,7 @@ export function RunSections({
     <Tabs defaultValue={tabs[0].value}>
       <TabsList>
         {tabs.map((tab) => (
-          <TabsTrigger key={tab.value} value={tab.value}>
+          <TabsTrigger key={tab.value} value={tab.value} title={tab.hint}>
             {tab.label}
           </TabsTrigger>
         ))}

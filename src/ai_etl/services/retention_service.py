@@ -160,7 +160,7 @@ def cleanup_expired_retention_for_tenant(
                 if storage.exists(key):
                     storage.delete_bytes(key)
                     deleted += 1
-            except Exception as exc:  # noqa: BLE001 - best-effort, see docstring
+            except Exception as exc:
                 errors.append(f"{key}: {exc}")
                 logger.warning(
                     "retention_cleanup_storage_error",

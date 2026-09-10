@@ -1,6 +1,15 @@
 # ADR-003 — Execute LLM-generated code inside a restricted exec() sandbox
 
-**Status:** Accepted (with documented limitations)  
+**Status:** Superseded — the "three independent `exec()` sites / no enforced timeout"
+design below no longer reflects the code. It was unified into a **single**
+`execute_in_sandbox()` with one whitelist, an enforced `timeout_seconds`, an env-scrubbed
+child process, and a seccomp `execve` filter by
+[ADR-007](ADR-007-unified-sandbox-policy.md), [ADR-032](ADR-032-security-posture-admin-role-sast.md)
+(Decision 4), [ADR-038](ADR-038-docker-sandbox-migration.md),
+[ADR-039](ADR-039-vercel-sandbox-production-isolation.md), and
+[ADR-046](ADR-046-seccomp-sandbox-execve-denial.md). The "Follow-up (open)" section below was
+closed by ADR-007. This ADR is kept as-written for the historical record; read `SECURITY.md`'s
+"Code execution" section and the ADRs above for the current posture.  
 **Date:** 2026-06-22  
 **Deciders:** Bruno Ribeiro
 

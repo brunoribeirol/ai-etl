@@ -1,6 +1,6 @@
 # ADR-019: Tenant Budget Cap — Pre-Enqueue Enforcement
 
-**Status:** Proposed (code complete, migration verified locally, not applied to production)
+**Status:** Accepted — shipped (migration `0009_tenant_budget_cap` applied; `api/routers/budget.py`, enforcement in `services/execution_queue.py` live). _(Original checkpoint status: Proposed, not applied to production.)_
 **Date:** 2026-08-20
 **Sprint:** 29 (post-TCC product roadmap)
 **Note:** Originally drafted as ADR-017 / migration `0007`. Renumbered to

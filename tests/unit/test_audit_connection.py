@@ -78,7 +78,7 @@ def test_tenant_scope_sets_guc_via_bound_parameter_not_string_interpolation(
     captured: list[tuple[str, dict]] = []
 
     class _FakeConnection:
-        def execute(self, statement, params=None):  # noqa: ANN001
+        def execute(self, statement, params=None):
             captured.append((str(statement), dict(params or {})))
 
             class _Result:
@@ -121,7 +121,7 @@ def test_scoped_connection_uses_tenant_scope_when_tenant_id_given(
     from contextlib import contextmanager
 
     @contextmanager
-    def _fake_tenant_scope(tenant_id):  # noqa: ANN001
+    def _fake_tenant_scope(tenant_id):
         calls.append(("tenant_scope", tenant_id))
         yield "tenant-conn"
 
@@ -156,7 +156,7 @@ def test_scoped_connection_falls_back_to_bypass_engine_when_tenant_id_is_none(
         def begin(self):
             return _FakeTransactionCtx()
 
-    def _fake_tenant_scope(tenant_id):  # noqa: ANN001
+    def _fake_tenant_scope(tenant_id):
         raise AssertionError("tenant_scope() should not be called when tenant_id is None")
 
     monkeypatch.setattr(connection, "tenant_scope", _fake_tenant_scope)

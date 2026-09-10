@@ -146,6 +146,23 @@ def test_run_advisor_prompt_instructs_hedging_small_samples_and_unverified_colum
     assert "NOT guaranteed to actually be that metric" in sent_prompt
 
 
+def test_run_advisor_prompt_requires_consistent_metric_and_no_revenue_demand_conflation(
+    mock_get_llm, sample_df, gold_result, science_result
+) -> None:
+    """Audit finding M3 (2026-09-09): a live run had the Advisor cite total revenue
+    with an INCONSISTENT method across products (price×qty for the top item,
+    price-only for others) and conflate high revenue with high demand. Pin down the
+    two prompt rules that address it."""
+    mock_llm = _mock_llm([VALID_RESPONSE])
+    mock_get_llm.return_value = mock_llm
+    run_advisor(sample_df, "Qual produto teve maior receita?", gold_result, science_result)
+
+    sent_prompt = mock_llm.invoke.call_args[0][0]
+    assert "ONE consistent method" in sent_prompt
+    assert "conflate revenue" in sent_prompt
+    assert "demand" in sent_prompt
+
+
 def test_run_advisor_result_has_all_keys(
     mock_get_llm, sample_df, gold_result, science_result
 ) -> None:

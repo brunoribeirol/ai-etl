@@ -33,6 +33,23 @@ COPY .env.example .env.example
 
 ENV PATH="/app/.venv/bin:$PATH"
 
+# Audit finding H1 (2026-09-09): run as a non-root user. The default "process"
+# sandbox has a documented introspection bypass allowing arbitrary file read,
+# and the ADR-046 seccomp filter only blocks execve/execveat, NOT open/read —
+# so a bypass can still read any file the container user can. Running as root
+# gave that read root's reach; a dedicated unprivileged user shrinks the blast
+# radius (partial mitigation for the isolation D3 decision that ruled out the
+# Vercel Sandbox Pro upgrade). The app's only runtime write path is /app/runs
+# (upload re-materialization + local audit artifacts; production uses S3), so
+# that dir is pre-created and owned by the user while the code and venv stay
+# root-owned and read-only to it. `core/paths.py` does `RUNS_DIR.mkdir(
+# exist_ok=True)` at import — pre-creating it here keeps that a no-op that
+# needs no write to /app itself.
+RUN useradd --create-home --uid 1000 appuser \
+    && mkdir -p /app/runs \
+    && chown -R appuser:appuser /app/runs
+USER appuser
+
 # Railway injects $PORT at runtime; `sh -c` is required for it to expand —
 # Railway runs ENTRYPOINT/startCommand without a shell otherwise (see
 # docs/CURRENT_STATE.md's PR #20/#46 history).

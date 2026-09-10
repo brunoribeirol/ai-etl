@@ -76,7 +76,13 @@ make run-scenario3
 - Commit directly to `main`
 
 **Always do:**
-- Use `log_action()` from `src/ai_etl/audit/logger.py` for every relevant action of every agent
+- Use `log_action()` from `src/ai_etl/audit/logger.py` for every relevant action of every
+  Silver/LangGraph agent (Orchestrator/Extractor/Transformer/Quality/Loader). The
+  `audit_log` array it builds is the **Silver-layer** trail — the Agentic BI agents
+  (Planner/Analyst/Science/Advisor/Reviewer) run *outside* the graph and have no
+  `PipelineState` to thread, so they use stdlib `logging` + `_record_stage_call()`'s
+  `stage_log` + their persisted result artifacts instead (audit finding M16). Don't read
+  "every agent" as "every agent writes to `audit_log`" — that array is Silver-only by design.
 - Type hints on all code — run `make type-check` before committing
 - Write tests for new modules in `tests/unit/` or `tests/integration/`
 - Run `make check` before opening any PR
@@ -173,7 +179,7 @@ End-to-end orchestration (Silver → Planner → Analyst/Science → Advisor) in
 ## Stack
 
 ```
-Python 3.11+  |  langgraph>=0.2  |  langchain>=0.3  |  langchain-openai>=0.3  |  openai>=1.50
+Python 3.11+  |  langgraph>=1.2  |  langchain>=1.3  |  langchain-openai>=1.3  |  openai>=2.0
 pandas>=2.0   |  sqlalchemy>=2.0 |  httpx>=0.27     |  python-dotenv
 ```
 

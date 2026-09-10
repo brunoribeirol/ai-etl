@@ -77,6 +77,6 @@ def build_column_stats(df: pd.DataFrame) -> str:
                         f"  {col}: high-cardinality ({n_unique} unique),"
                         f" samples={sample_vals}, nulls={nulls}"
                     )
-        except Exception:  # noqa: BLE001
+        except Exception:
             parts.append(f"  {col}: (stats unavailable)")
     return "\n".join(parts) if parts else "(no stats)"
