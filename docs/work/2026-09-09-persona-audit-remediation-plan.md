@@ -1,6 +1,14 @@
 # 2026-09-09 — Remediation plan: full 12-persona audit findings
 
-**Status: PLAN ONLY — nothing implemented.** Source of findings:
+**Status: DONE (2026-09-10).** Every implementable item was shipped across 18 PRs (#226-#242),
+all merged, deployed, and live-verified — see `docs/CURRENT_STATE.md`'s 2026-09-09/10 section for
+the per-item verification. Owner Wave-0 decisions: Clerk stays dev (C1 accepted), no billing now
+(D2), no Vercel Pro (D3); D4 = UI cookie wins for locale; D5 = case-study refresh scoped
+(data-blocked). Notable beyond the plan: the H1 non-root change crashed celery-beat live (fixed
+#238), a critical maplibre-gl npm advisory was cleared (#237), and the M11/M3-demand prompt fixes
+did **not** hold live and were replaced with deterministic guards (#240/#241). Deferred as owner
+actions: H4 (gate RLS/sandbox tests in CI), M5, M17, W4-1, W4-2, admin-retry smoke-test. Kept
+below as-written for the historical record of what was planned. Source of findings:
 [`2026-09-08-full-persona-audit.md`](2026-09-08-full-persona-audit.md) (consolidated) +
 `2026-09-08-persona-audit/*.md` (11 per-persona reports). Each finding's ID (C1, H1–H6,
 M1–M17) matches the consolidated doc. Keep "found the problem" (the audit) and "decided how
