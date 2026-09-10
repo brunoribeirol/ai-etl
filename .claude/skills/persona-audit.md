@@ -35,7 +35,17 @@ failed or produced hypothesis-only reports on the first pass and had to be retri
 a time. Personas that need `mcp__claude-in-chrome__*` (Data Engineer, LLM/Prompt Engineer,
 Non-technical user, Accessibility, Product/PO) should either run sequentially, or be the only
 browser-using persona in a given parallel batch — code-only personas (Tech Lead, Red Team, Blue
-Team, SRE, CTO/Founder, Academic Evaluator, QA) can still run fully in parallel with each other.
+Team, SRE, CTO/Founder, Academic Evaluator, QA) can still run in parallel with each other.
+
+**But do not fan out all 7 code-only personas as parallel subagents at once.** The 2026-09-08
+run tried exactly that and **all 7 subagents were killed by the claude.ai session/usage
+rate-limit (HTTP 429)** before finishing — 2 had written their report files, 5 had not. Two
+mitigations, in order of preference: (a) tell each subagent to **write its report to a file as
+it goes** (not only return a summary at the end), so a mid-run kill still leaves usable output;
+and (b) either dispatch code personas in **small batches (2–3)** or just complete them
+**inline in the lead session** — inline was the reliable fallback when the limit reset, and
+avoids re-spawning agents into the same wall. See memory
+`feedback_persona_audit_subagent_ratelimit`.
 
 **Any finding that touches LLM-generated-code behavior (a prompt, not deterministic code) and
 gets fixed as this audit's one allowed exception (see Step 4) must be live-verified against the
