@@ -173,7 +173,7 @@ End-to-end orchestration (Silver → Planner → Analyst/Science → Advisor) in
 ## Stack
 
 ```
-Python 3.11+  |  langgraph>=0.2  |  langchain>=0.3  |  langchain-openai>=0.3  |  openai>=1.50
+Python 3.11+  |  langgraph>=1.2  |  langchain>=1.3  |  langchain-openai>=1.3  |  openai>=2.0
 pandas>=2.0   |  sqlalchemy>=2.0 |  httpx>=0.27     |  python-dotenv
 ```
 

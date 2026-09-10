@@ -287,7 +287,7 @@ def test_provider_connectivity(provider: str, model: str) -> dict[str, Any]:
             "latency_ms": latency_ms,
             "error": None,
         }
-    except Exception as exc:  # noqa: BLE001 — connectivity probe, every failure is data
+    except Exception as exc:
         latency_ms = round((time.monotonic() - started) * 1000, 1)
         return {
             "ok": False,

@@ -18,6 +18,7 @@ from sqlalchemy import func, insert, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from ai_etl.audit.connection import scoped_connection, tenant_scope
+from ai_etl.audit.logger import scrub_secrets_in_text
 from ai_etl.audit.models import analysis_runs, runs, stage_latencies, users
 from ai_etl.audit.storage import StorageBackend, get_storage_backend
 from ai_etl.core.analysis_types import AdvisorResult, GoldResult, ScienceResult, TokenUsage
@@ -119,6 +120,12 @@ def _write_json(
     transform_code_key: Optional[str] = None,
 ) -> None:
     serializable = _make_serializable(dict(state))
+    # Audit finding M4/BT-2 (2026-09-09): the whole state is serialized with no
+    # per-key redaction, and `state["error"]` can carry a raw source-connection
+    # exception whose message includes a DSN with an inline password. Scrub it
+    # before it lands in the run's JSON snapshot.
+    if isinstance(serializable.get("error"), str):
+        serializable["error"] = scrub_secrets_in_text(serializable["error"])
     if transform_code_key is not None:
         serializable["transform_code_path"] = transform_code_key
     storage.write_bytes(key, json.dumps(serializable, indent=2, default=str).encode())
@@ -129,11 +136,15 @@ def _write_run_row(
 ) -> None:
     load_result = state.get("load_result")
     rows_loaded = load_result.get("rows_loaded") if load_result else None
+    error = state.get("error")
+    # M4/BT-2: same DSN-password scrub as the JSON snapshot, for the `error` column.
+    if isinstance(error, str):
+        error = scrub_secrets_in_text(error)
     stmt = pg_insert(runs).values(
         run_id=state["run_id"],
         spec=state["spec"],
         status=state["status"],
-        error=state.get("error"),
+        error=error,
         rows_loaded=rows_loaded,
         timestamp=datetime.now(tz=timezone.utc),
         tenant_id=tenant_id,

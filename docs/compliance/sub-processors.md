@@ -25,6 +25,7 @@ that's the nature of relying on a sub-processor rather than self-hosting.
 | **OpenAI** | LLM provider (opt-in per tenant/pipeline, ADR-031) | Pipeline spec, extracted schema/sample data, business questions — whatever a Transformer/Analyst/Science/Advisor prompt includes | [OpenAI enterprise privacy / SOC 2](https://openai.com/enterprise-privacy/) |
 | **Anthropic** | LLM provider (opt-in per tenant/pipeline, ADR-031) | Same category of data as OpenAI above, only when a tenant selects this provider | [Anthropic Trust Center](https://trust.anthropic.com/) |
 | **Google (Gemini)** | LLM provider (opt-in per tenant/pipeline, ADR-031) | Same category of data as OpenAI above, only when a tenant selects this provider | [Google Cloud compliance](https://cloud.google.com/security/compliance) |
+| **GitHub (Actions)** | Backup execution runner (ADR-042) | The nightly `.github/workflows/db-backup.yml` runs `pg_dump --schema=public` of the production database — `users`, `runs`, `analysis_runs`, `saved_pipelines`, `tenant_secrets` (ciphertext) — on a GitHub-hosted Actions runner, then uploads it to AWS S3. The dump transits the runner's ephemeral filesystem. | [GitHub SOC 2 / Trust Center](https://github.com/security) |
 
 **Not a sub-processor:** Ollama, when used, runs entirely on the operator's
 own machine for local model comparison (`case_study/scripts/model_comparison.py`)
@@ -43,4 +44,6 @@ enterprise/API data-retention terms govern this, not this application.
 ## Review cadence
 
 Reviewed whenever a new vendor is integrated, or at minimum once before any
-paid customer's due-diligence review. Last reviewed: 2026-09-06.
+paid customer's due-diligence review. Last reviewed: 2026-09-09 (added GitHub
+Actions as the backup-execution sub-processor — audit finding M1/CTO-6; the
+2026-09-07 backup workflow had introduced it without a register update).

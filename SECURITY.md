@@ -22,24 +22,30 @@ You will receive an acknowledgement within 72 hours.
 ## Security design principles
 
 ### Code execution
-- `exec()` is used at three call sites, each with its own restricted global
-  namespace — LLM-generated code is never executed with unrestricted globals
-  at any of them:
-  - `src/ai_etl/core/sandbox.py` — Transformer agent; `pandas`, `numpy`.
-  - `src/ai_etl/agents/analyst.py` — Analyst/Gold agent; `pandas`, `numpy`,
-    `plotly`; also permits `setattr`/`vars`, which the sandbox above does not.
-  - `src/ai_etl/agents/science.py` — Science agent; same as `analyst.py`,
-    plus pre-injected `sklearn` and `statsmodels` classes.
-- These three whitelists are maintained independently and are **not**
-  identical — see [ADR-003](docs/adr/ADR-003-exec-sandbox.md) for the full
-  comparison and the open follow-up to unify them.
-- Known limitation, applies to all three sites: restricted `exec()` globals
-  can be bypassed via Python introspection (`__class__.__mro__`). This is
-  accepted for the current scope with controlled datasets. See inline
-  comments in `sandbox.py`, `analyst.py`, and `science.py`.
-- Known gap: none of the three sites enforce an actual execution timeout —
-  `timeout_seconds` parameters accepted by some callers are not applied.
-- **Update (ADR-007):** all three sites now route through a single
+
+**Current state (as of ADR-007/ADR-046 — read this first; the history below records how it
+got here).** All LLM-generated code (Transformer, Analyst/Gold, Science) runs through a
+**single** call site — `execute_in_sandbox()` in `src/ai_etl/core/sandbox.py` (the only two
+`exec()` calls in the whole codebase, `sandbox.py:209`/`:245`). It executes in an isolated
+child process (`multiprocessing`, `spawn` context) with **one** reviewed restricted-globals
+whitelist (not three), a **real, enforced `timeout_seconds`** (`sandbox.py:556`), and
+`os.environ` cleared before any user code runs. There is no longer any `exec()` in
+`agents/analyst.py`/`science.py` — those files do not exist at those paths (the code lives in
+`agents/analysis/` and contains no `exec()`).
+
+- **Known, accepted limitation:** the restricted-globals sandbox is bypassable via Python
+  introspection (`().__class__.__mro__[1].__subclasses__()`), giving arbitrary code execution
+  *inside* the env-scrubbed child process. The `os.environ` clearing means this cannot reach
+  process secrets. The seccomp filter (ADR-046, Linux only) denies `execve`/`execveat`, closing
+  arbitrary *command* execution. **It does not close arbitrary file read** (`os.open`/`os.read`
+  use no `execve`), and the production container currently runs as root — so a bypass can read
+  files the container user can read. Real container/VM isolation (ADR-038 Docker / ADR-039
+  Vercel Sandbox) is the stronger mitigation and is **not** the production default. Do not treat
+  this sandbox as a hard security boundary. See [ADR-032](docs/adr/ADR-032-security-posture-admin-role-sast.md)
+  Decision 4 and [ADR-046](docs/adr/ADR-046-seccomp-sandbox-execve-denial.md).
+
+_History (kept for the record; superseded by the current-state paragraph above):_
+- **Update (ADR-007):** all (then three) sites now route through a single
   `execute_in_sandbox()` in `sandbox.py`, running in an isolated child
   process (`multiprocessing`, `spawn` context) with a real, enforced
   `timeout_seconds`. That child clears `os.environ` before any user code

@@ -156,7 +156,7 @@ def _delete_tenant_storage(tenant_id: str, storage: StorageBackend) -> tuple[int
     # real compliance-record accuracy regression, not just a perf detail.
     try:
         existing_keys: set[str] | None = storage.list_existing_keys()
-    except Exception as exc:  # noqa: BLE001 - best-effort, see docstring
+    except Exception as exc:
         existing_keys = None
         errors: list[str] = [f"list_existing_keys: {exc}"]
         logger.warning(
@@ -176,7 +176,7 @@ def _delete_tenant_storage(tenant_id: str, storage: StorageBackend) -> tuple[int
                 if key_exists:
                     storage.delete_bytes(key)
                     deleted += 1
-            except Exception as exc:  # noqa: BLE001 - best-effort, see docstring
+            except Exception as exc:
                 errors.append(f"{key}: {exc}")
                 logger.warning(
                     "tenant_deletion_storage_error",

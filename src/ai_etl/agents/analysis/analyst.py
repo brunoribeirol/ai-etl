@@ -217,7 +217,7 @@ def run_analyst(
                 "tokens": sum_token_usage(*attempt_usages),
             }
 
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             last_error = textwrap.shorten(str(exc), width=400, placeholder="...")
 
     return {

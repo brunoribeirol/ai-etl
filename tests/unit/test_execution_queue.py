@@ -560,6 +560,7 @@ def test_get_task_status_maps_failure_result(monkeypatch: pytest.MonkeyPatch) ->
 
 def test_budget_status_reports_no_cap_when_unconfigured(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(eq_module, "get_monthly_budget", lambda tenant_id: None)
+    monkeypatch.delenv("AI_ETL_DEFAULT_MONTHLY_BUDGET_USD", raising=False)
     status = get_budget_status("tenant-a")
     assert status == {
         "cap_usd": None,
@@ -568,6 +569,38 @@ def test_budget_status_reports_no_cap_when_unconfigured(monkeypatch: pytest.Monk
         "near_limit": False,
         "exceeded": False,
     }
+
+
+# --- Audit finding H2 (2026-09-09): default spend cap for self-serve tenants ---
+
+
+def test_budget_status_applies_default_cap_when_tenant_has_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A tenant with no explicit cap falls back to AI_ETL_DEFAULT_MONTHLY_BUDGET_USD
+    instead of being implicitly unlimited on the operator's keys."""
+    monkeypatch.setattr(eq_module, "get_monthly_budget", lambda tenant_id: None)
+    monkeypatch.setattr(eq_module, "get_monthly_spend_usd", lambda tenant_id: 6.0)
+    monkeypatch.setenv("AI_ETL_DEFAULT_MONTHLY_BUDGET_USD", "5")
+    status = get_budget_status("tenant-a")
+    assert status["cap_usd"] == 5.0
+    assert status["exceeded"] is True  # 6.0 spent >= 5.0 default cap
+
+
+def test_explicit_tenant_cap_overrides_the_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(eq_module, "get_monthly_budget", lambda tenant_id: 100.0)
+    monkeypatch.setattr(eq_module, "get_monthly_spend_usd", lambda tenant_id: 6.0)
+    monkeypatch.setenv("AI_ETL_DEFAULT_MONTHLY_BUDGET_USD", "5")
+    status = get_budget_status("tenant-a")
+    assert status["cap_usd"] == 100.0
+    assert status["exceeded"] is False
+
+
+def test_default_cap_ignored_when_unset_or_non_positive(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(eq_module, "get_monthly_budget", lambda tenant_id: None)
+    for bad in ("", "0", "-1", "abc"):
+        monkeypatch.setenv("AI_ETL_DEFAULT_MONTHLY_BUDGET_USD", bad)
+        assert get_budget_status("tenant-a")["cap_usd"] is None
 
 
 def test_budget_status_under_cap_is_not_near_limit(monkeypatch: pytest.MonkeyPatch) -> None:

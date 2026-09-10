@@ -12,6 +12,20 @@ name: Postgres backup (manual stopgap)
 # RPO of up to 24h, matching ADR-042's original target by coincidence, not
 # by a stronger mechanism. Read the ADR before assuming this is equivalent
 # to real PITR.
+#
+# Audit finding M1 (2026-09-09), two operational gaps this workflow must not
+# leave silent:
+#  1. Failure alerting — a failed nightly dump would otherwise be invisible
+#     until a restore is needed. The `notify-on-failure` step below posts to
+#     Slack (SLACK_WEBHOOK_URL secret) whenever any step fails. GitHub also
+#     disables `schedule` triggers after 60 days of repo inactivity — if this
+#     project goes dormant, RPO silently returns to infinite; the weekly
+#     "still alive" nudge is a manual owner check, tracked in ADR-042.
+#  2. Retention — these dumps must NOT accumulate forever (both cost and a
+#     right-to-erasure gap: an erased tenant persists in old dumps). The S3
+#     bucket needs a lifecycle rule expiring `_system/db-backups/` objects
+#     (e.g. 35 days). That rule is AWS-side config, not expressible in this
+#     workflow — see infra/ and ADR-042/ADR-025 for the required lifecycle.
 
 on:
   schedule:
@@ -98,3 +112,18 @@ jobs:
             exit 1
           fi
           echo "Backup verified: ${SIZE} bytes."
+
+      - name: Notify on failure (Slack)
+        # Audit finding M1: a silently-failing nightly backup is the worst
+        # failure mode — the gap is only discovered when a restore is needed.
+        # Fires only if an earlier step failed. No-op (skipped, not failed) if
+        # SLACK_WEBHOOK_URL isn't configured, so this never turns a real backup
+        # failure into a second confusing failure.
+        if: failure() && env.SLACK_WEBHOOK_URL != ''
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          set -euo pipefail
+          curl -sf -X POST -H 'Content-type: application/json' \
+            --data "{\"text\":\":rotating_light: AI-ETL nightly Postgres backup FAILED (run ${GITHUB_RUN_ID}). RPO at risk — see the db-backup workflow run.\"}" \
+            "$SLACK_WEBHOOK_URL"

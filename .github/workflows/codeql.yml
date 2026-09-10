@@ -1,34 +1,29 @@
 name: CodeQL
 
 # GitHub's native SAST for both languages in this repo (Python backend,
-# TypeScript frontend). Confirmed via real PRs (#73/#82/#83, 2026-08-21):
-# code scanning on this *private* repository requires GitHub Advanced
-# Security, which this account's plan doesn't include -- every run failed
-# at the `analyze`/upload step with "Code scanning is not enabled for this
-# repository," on every PR, with no way to fix it from workflow config
-# (it's a plan/billing decision, not a bug here).
+# TypeScript frontend). It was DISABLED while this repo was private —
+# code scanning on a private repo needs GitHub Advanced Security (not on
+# this account's plan), so every run failed at the upload step (PRs
+# #73/#82/#83, 2026-08-21).
 #
-# DISABLED (automatic triggers removed, `workflow_dispatch` kept) rather
-# than deleted -- every PR was showing a real-looking red X for a check
-# nobody can act on, which trains reviewers to ignore failing checks in
-# general, a worse outcome than not having this workflow at all. The job
-# itself is untouched and correct; it activates again with zero code
-# changes the moment this repo gets GHAS (uncomment the `push`/
-# `pull_request`/`schedule` triggers below), or can be run manually any
-# time via `gh workflow run codeql.yml` / the Actions tab to re-check
-# whether the plan situation has changed.
+# RE-ENABLED 2026-09-09 (audit finding M2): the repository has been PUBLIC
+# since 2026-08-30, and code scanning is free on public repositories — the
+# billing blocker that justified disabling it no longer exists. The three
+# automatic triggers below are restored. If a run ever fails at the upload
+# step again (e.g. the repo goes private), re-comment them rather than
+# leaving a persistently-red check.
 on:
   workflow_dispatch: {}
-  # push:
-  #   branches: [main, develop]
-  # pull_request:
-  #   branches: [main]
-  # schedule:
-  #   # Weekly, not on every push -- CodeQL's own analysis is heavier than
-  #   # this project's other CI jobs; a push/PR trigger already covers real
-  #   # code changes, this catches anything a new query pack starts flagging
-  #   # in code that hasn't changed.
-  #   - cron: "0 6 * * 1"
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly, not on every push -- CodeQL's own analysis is heavier than
+    # this project's other CI jobs; a push/PR trigger already covers real
+    # code changes, this catches anything a new query pack starts flagging
+    # in code that hasn't changed.
+    - cron: "0 6 * * 1"
 
 permissions:
   contents: read

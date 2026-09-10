@@ -130,7 +130,7 @@ def plan_analysis_tasks(
             raise ValueError("no valid tasks parsed")
         return cleaned, tokens
 
-    except Exception:  # noqa: BLE001 — any planning failure degrades to one-shot mode
+    except Exception:
         # No PipelineState exists at this layer (Planner runs outside the LangGraph
         # graph, see module docstring) — `log_action()` doesn't apply here, same
         # reasoning as `execution_queue.py`'s own `logging.warning()` at enqueue time.
