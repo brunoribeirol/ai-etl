@@ -1,6 +1,6 @@
 # ADR-020: Scheduled Pipeline Reliability — Retry and Failure Alerting
 
-**Status:** Proposed (design decision — implementation follows in this same sprint)
+**Status:** Accepted — shipped (migration `0010_scheduled_pipeline_health`, `audit/db/health.py`, retry + failure alerting live). _(Original checkpoint status: Proposed.)_
 **Date:** 2026-08-21
 **Sprint:** 15 (post-TCC product roadmap)
 

@@ -1,6 +1,6 @@
 # ADR-017: `saved_pipeline_id` linkage on `runs`/`analysis_runs`
 
-**Status:** Proposed — schema-changing PR open, not merged (checkpoint required, same rigor as
+**Status:** Accepted — shipped (migration `0007_run_pipeline_linkage` applied). _(Original checkpoint status below.)_ Proposed — schema-changing PR open, not merged (checkpoint required, same rigor as
 migration `0006`/ADR-016).
 **Date:** 2026-08-20
 **Sprint:** 17 — Histórico comparável entre execuções
