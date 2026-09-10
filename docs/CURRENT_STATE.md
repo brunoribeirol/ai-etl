@@ -79,10 +79,47 @@ and asked to implement all waves. Status per item:
   frontend lacks; M17 is a low-urgency refactor with real regression surface; W4-2 needs real
   LLM spend to verify. Each is scoped in the remediation plan.
 
+**All 12 audit PRs + 2 follow-up PRs merged and deployed** (owner: "faça todas as waves" →
+"ajuste o que precise e mergeei"). PRs #226-#237 merged; the maplibre-gl critical npm advisory
+that blocked the frontend CI was cleared via an `overrides` fix (#237, verified non-breaking —
+the app uses no plotly map traces). The held items (#232 H5, #233 H1, #234 M3/M11) were then
+merged after the frontend advisory was cleared and their CI went green.
+
+**Live-verification results (2026-09-10), on the deployed app (EN-UI / pt-BR-DB tenant, real
+gpt-4o-mini run of the messy `vendas_sujas.xlsx` revenue question):**
+- **H5 — VERIFIED FIXED.** Every progress message ("📥 Extractor — Extracting and inspecting
+  the data…", "📊 Analyst Agent — Computing KPIs…", "🧭 Advisor Agent — Synthesizing…") and the
+  Advisor narrative now render in **English** on an EN-UI tenant whose `users.locale` is pt-BR —
+  the exact symptom PR #221 was recorded as fixing, now genuinely closed. This reopened bug is
+  done.
+- **H1 — VERIFIED FIXED (with a real regression caught + fixed).** The non-root deploy first
+  **crashed the celery-beat Railway service** — beat's `PersistentScheduler` couldn't write
+  `celerybeat-schedule` to the now-read-only `/app`. Fixed in **PR #238** (`beat_schedule_filename
+  =/tmp/…`); beat now deploys SUCCESS and ticks `check-scheduled-pipelines` every 60s. The full
+  messy-Excel run then completed end-to-end on the non-root container (Transformer + Science
+  sandboxes execute fine as non-root). This is exactly the Railway-specific break the H1 PR
+  flagged as needing a deploy smoke-test — the smoke-test earned its keep.
+- **A11Y-1 + M12 — VERIFIED FIXED live** (theme aria-label reads "Switch to light theme"; result
+  tabs carry the plain-language tooltips).
+- **M3 — PARTIALLY held.** The metric-consistency half **works**: the Advisor now cites total
+  revenue with ONE consistent method across all products ($2,469.12 Caneta / $179.80 Caderno /
+  $12/$3.50/$2.00), no longer the inconsistent price×qty-vs-price-only mix the audit found. But
+  the **revenue≠demand half did NOT hold** — recommendation 1 still says "increase inventory to
+  meet demand" grounded in a revenue figure.
+- **M11 — DID NOT hold.** The generated code correctly did `pd.to_numeric(…, errors="coerce")`
+  (→ NaN) but then `df["quantidade"].fillna(0, inplace=True)` — exactly the `.fillna(0)` the M11
+  prompt forbids — so the bad-type "cem" → 0 again. **Prompt guidance shipped but gpt-4o-mini did
+  not follow it.** M3-demand and M11 are prompt-behavior items: shipping the guidance is not
+  enough to guarantee compliance. A reliable fix needs a deterministic guard (a Quality/Transformer
+  post-step that flags a coerced-numeric column instead of trusting the LLM not to `fillna(0)`),
+  not another prompt tweak — flagged as follow-up, NOT marked done.
+
 **Verdict (unchanged from the audit):** finished and defensible as a TCC artifact; **not**
 ready for external unsupervised use or to charge money — the gap is commercial (billing,
 production Clerk), locale/trust wiring, and the security-tests-gate-CI wiring, not core
-engineering.
+engineering. The audit's own live-verification rule proved its worth twice more this arc: the
+celery-beat non-root crash and the M11 prompt fix that ships but doesn't hold were both caught
+only by running the real deployed app, not by green CI.
 
 ## 2026-09-08 — live walkthrough, 3 real bugs found and fixed (PRs #221-#224)
 
