@@ -117,7 +117,7 @@ def _run_review(
         response = invoke_llm(llm, prompt, llm_provider_override)
         tokens = extract_token_usage(response)
         parsed = _parse_review_response(str(response.content))
-    except Exception:  # noqa: BLE001 — never let a review failure break the sub-task itself
+    except Exception:
         logger.warning("llm_review: review call failed, skipping this entry", exc_info=True)
         return [], zero_tokens
 

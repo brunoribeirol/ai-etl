@@ -31,7 +31,7 @@ def _fake_scope(engine: Engine):
     `test_saved_pipelines_db.py`'s identical helper for the full rationale."""
 
     @contextmanager
-    def _scope(tenant_id):  # noqa: ANN001, ANN202
+    def _scope(tenant_id):
         with engine.begin() as conn:
             yield conn
 

@@ -33,7 +33,7 @@ def _make_sqlite_engine() -> Engine:
     return engine
 
 
-def _fake_scope(engine: Engine):  # noqa: ANN201
+def _fake_scope(engine: Engine):
     @contextmanager
     def _scope(tenant_id: str) -> Iterator[Connection]:
         with engine.begin() as conn:

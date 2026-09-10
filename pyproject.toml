@@ -5,16 +5,21 @@ description = "Multi-agent framework for automated ETL pipelines using LLMs"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "langchain>=0.3.0",
-    "langchain-openai>=0.3.0",
+    # Floors raised 2026-09-09 to the versions actually resolved and tested (the
+    # LLM stack is now on the 1.x/2.x line, not the 0.x floors the project shipped
+    # with) + upper caps on the fastest-breaking packages so a from-scratch resolve
+    # (or a `pip install ai-etl` consumer bypassing uv.lock) can't silently jump a
+    # major. See docs/work/2026-09-08-full-persona-audit.md (Tech Lead M14).
+    "langchain>=1.3.0,<2.0.0",
+    "langchain-openai>=1.3.0,<2.0.0",
     # Multi-provider LLM support (Sprint 23, ADR-012) — base dependencies, not
     # extras, since core/llm.py's get_llm() is called unconditionally by every
     # agent regardless of which AI_ETL_LLM_PROVIDER is configured at runtime.
-    "langchain-anthropic>=0.3.0",
+    "langchain-anthropic>=1.6.0,<2.0.0",
     "langchain-google-genai>=2.0.0",
     "langchain-ollama>=0.2.0",
-    "langgraph>=0.2.0",
-    "openai>=1.50.0",
+    "langgraph>=1.2.0,<2.0.0",
+    "openai>=2.0.0,<3.0.0",
     "pandas>=2.0.0,<4.0.0",
     "openpyxl>=3.1.0",
     "sqlalchemy>=2.0.0",
@@ -22,7 +27,7 @@ dependencies = [
     "alembic>=1.13.0",
     "httpx>=0.27.0",
     "python-dotenv>=1.0.0",
-    "numpy>=1.26.0",
+    "numpy>=2.0.0",
     "pyjwt[crypto]>=2.13.0",
     # Sprint 19 (ADR-021) — Fernet symmetric encryption for tenant_secrets
     # (services/secrets_service.py). Not a new install: pyjwt[crypto] above
@@ -145,7 +150,7 @@ line-length = 100
 target-version = "py311"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "N", "W"]
+select = ["E", "F", "I", "N", "W", "RUF100"]
 ignore = ["E501"]
 
 [tool.ruff.format]
@@ -153,7 +158,11 @@ quote-style = "double"
 indent-style = "space"
 
 [tool.bandit]
-skips = ["B101", "B102"]
+# B101 (assert_used) stays skipped — asserts are used deliberately in non-security
+# contexts. B102 (exec_used) is NOT skipped: the two legitimate exec() sites in
+# core/sandbox.py carry an explicit per-line `# nosec B102`, so a stray exec() added
+# anywhere else fails `make security` (restores the "exec() only in the sandbox" gate).
+skips = ["B101"]
 exclude_dirs = ["tests", ".venv"]
 
 [tool.pytest.ini_options]
