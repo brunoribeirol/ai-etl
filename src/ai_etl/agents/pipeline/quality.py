@@ -253,6 +253,17 @@ def _check_coerced_numeric_loss(
         lost_count = int(lost_mask.sum())
         if lost_count == 0:
             continue
+        # A source value that pandas can't parse directly (e.g. "R$ 1.234,56") is not
+        # necessarily *lost* — the Transformer may have cleaned it into a real number via
+        # string ops (currency stripping). Only flag when the Silver column actually
+        # contains 0/NaN values, the footprint of a genuine coercion-to-zero. Without at
+        # least one 0/NaN, the non-numeric source values were successfully transformed
+        # (found live: this guard flagged a correctly-cleaned currency column otherwise).
+        silver_zero_or_nan = int(((df[col] == 0) | df[col].isna()).sum())
+        if silver_zero_or_nan == 0:
+            continue
+        # Don't claim more losses than there are 0/NaN slots to hold them.
+        lost_count = min(lost_count, silver_zero_or_nan)
         sample_values = non_blank[lost_mask].astype(str).str.strip().head(5).tolist()
         results.append(
             {

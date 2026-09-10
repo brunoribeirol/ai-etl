@@ -429,3 +429,20 @@ def test_quality_node_surfaces_coerced_numeric_loss_as_warning() -> None:
     assert len(coerced) == 1 and coerced[0]["column"] == "quantidade"
     assert result["quality_report"]["severity"] in ("warning", "error")
     assert result["status"] != "failed"  # a warning must not block the pipeline
+
+
+def test_coerced_numeric_loss_not_flagged_for_correctly_cleaned_currency() -> None:
+    """Live-verify false positive (2026-09-10): a currency column like 'R$ 1.234,56'
+    isn't directly pd.to_numeric-parseable, but the Transformer cleans it into a real
+    number (no 0/NaN in Silver). It must NOT be flagged as a coercion loss."""
+    bronze = pd.DataFrame({"preco": ["R$ 1.234,56", "R$ 89,90", "250"]})
+    silver = pd.DataFrame({"preco": [1234.56, 89.9, 250.0]})  # all cleaned, no 0/NaN
+    assert _check_coerced_numeric_loss(silver, {"s": bronze}) == []
+
+
+def test_coerced_numeric_loss_flagged_when_silver_has_the_zero() -> None:
+    """Same shape but the bad value landed as 0 in Silver → genuine loss, flagged."""
+    bronze = pd.DataFrame({"quantidade": ["10", "cem", "8"]})
+    silver = pd.DataFrame({"quantidade": [10, 0, 8]})  # 'cem' → 0
+    results = _check_coerced_numeric_loss(silver, {"s": bronze})
+    assert len(results) == 1 and results[0]["lost_count"] == 1
