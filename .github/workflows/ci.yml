@@ -35,6 +35,26 @@ jobs:
     # these two only gate tests/integration/test_mysql_source_real.py and
     # test_mongodb_source_real.py's own reachability checks, so adding them
     # doesn't unblock any pre-existing self-skipping integration test.
+    #
+    # AUDIT FINDING H4 (2026-09-09), NOT yet closed here — needs live-CI
+    # iteration the owner must drive, so it is documented rather than changed
+    # blindly (a broken required check is worse than the gap). Today the RLS
+    # tenant-isolation tests (tests/integration/test_tenant_isolation_rls.py,
+    # ADR-040) and the sandbox-containment tests (test_sandbox_docker.py,
+    # ADR-038) SELF-SKIP in this required `check` job — the two headline
+    # security controls SECURITY.md cites as "verified" are not actually
+    # gating CI. Closing it requires, and must be verified over 1-2 real CI
+    # runs before merge:
+    #   - an app-postgres-test service on 5435 (as the `e2e` job has), PLUS
+    #     migration 0021 applied so the restricted `ai_etl_app_tenant`
+    #     (NOBYPASSRLS) role + RLS policies exist, PLUS
+    #     TEST_APP_DATABASE_URL / TEST_APP_DATABASE_URL_TENANT env pointing at
+    #     both roles (the RLS test needs BOTH the bypass and the restricted
+    #     role — see the file's module header);
+    #   - the ai-etl-sandbox image built (`make sandbox-image`) for the
+    #     docker-sandbox tests, or accept they stay skipped and make e2e a
+    #     REQUIRED status check instead (branch-protection setting, owner
+    #     action — see docs/work/2026-09-09-persona-audit-remediation-plan.md).
     services:
       mysql-test:
         image: mysql:8.4
