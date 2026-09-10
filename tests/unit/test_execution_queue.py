@@ -199,12 +199,14 @@ def test_enqueue_analysis_base64_encodes_file_bytes(
         saved_pipeline_id,
         llm_provider_override,
         llm_model_override,
+        locale_override,
     ) = captured["args"]
     assert file_path == "runs/uploads/abc123.csv"
     assert base64.b64decode(file_bytes_b64) == b"order_id,amt\n1,10.5\n"
     assert saved_pipeline_id is None
     assert llm_provider_override is None
     assert llm_model_override is None
+    assert locale_override is None
 
 
 def test_enqueue_analysis_omits_file_args_when_no_upload(
@@ -306,6 +308,7 @@ def test_run_full_analysis_task_rematerializes_file_before_running(
         saved_pipeline_id=None,
         llm_provider_override=None,
         llm_model_override=None,
+        locale_override=None,
     ):
         file_existed_at_call_time["exists"] = dest.exists()
         file_existed_at_call_time["content"] = dest.read_bytes() if dest.exists() else None
@@ -338,6 +341,7 @@ def test_run_full_analysis_task_skips_write_when_no_file(monkeypatch: pytest.Mon
         saved_pipeline_id=None,
         llm_provider_override=None,
         llm_model_override=None,
+        locale_override=None,
     ):
         return {"state": {"run_id": "r1", "status": "completed", "error": None}, "tokens": {}}
 
@@ -363,6 +367,7 @@ def test_run_full_analysis_task_forwards_saved_pipeline_id(
         saved_pipeline_id=None,
         llm_provider_override=None,
         llm_model_override=None,
+        locale_override=None,
     ):
         captured["saved_pipeline_id"] = saved_pipeline_id
         return {"state": {"run_id": "r1", "status": "completed", "error": None}, "tokens": {}}
@@ -402,6 +407,7 @@ def test_run_full_analysis_task_forwards_llm_override(
         saved_pipeline_id=None,
         llm_provider_override=None,
         llm_model_override=None,
+        locale_override=None,
     ):
         captured["llm_provider_override"] = llm_provider_override
         captured["llm_model_override"] = llm_model_override
@@ -434,6 +440,7 @@ def test_run_full_analysis_task_runs_drift_check_when_scheduled_and_completed(
         saved_pipeline_id=None,
         llm_provider_override=None,
         llm_model_override=None,
+        locale_override=None,
     ):
         return {
             "state": {
@@ -482,6 +489,7 @@ def test_run_full_analysis_task_skips_drift_check_for_avulso_run(
         saved_pipeline_id=None,
         llm_provider_override=None,
         llm_model_override=None,
+        locale_override=None,
     ):
         return {"state": {"run_id": "r1", "status": "completed", "error": None}, "tokens": {}}
 
@@ -515,6 +523,7 @@ def test_run_full_analysis_task_swallows_drift_check_failures(
         saved_pipeline_id=None,
         llm_provider_override=None,
         llm_model_override=None,
+        locale_override=None,
     ):
         return {"state": {"run_id": "r1", "status": "completed", "error": None}, "tokens": {}}
 
@@ -732,6 +741,7 @@ def test_inflight_lock_is_released_after_the_task_finishes(
         saved_pipeline_id=None,
         llm_provider_override=None,
         llm_model_override=None,
+        locale_override=None,
     ):
         return {"state": {"run_id": "r1", "status": "completed", "error": None}, "tokens": {}}
 
@@ -820,6 +830,7 @@ def test_run_full_analysis_task_retries_on_logical_failure_for_scheduled_pipelin
         saved_pipeline_id=None,
         llm_provider_override=None,
         llm_model_override=None,
+        locale_override=None,
     ):
         return {
             "state": {"run_id": "r1", "status": "failed", "error": "source unavailable"},
@@ -866,6 +877,7 @@ def test_run_full_analysis_task_never_retries_a_failed_avulso_run(
         saved_pipeline_id=None,
         llm_provider_override=None,
         llm_model_override=None,
+        locale_override=None,
     ):
         return {"state": {"run_id": "r1", "status": "failed", "error": "boom"}, "tokens": {}}
 
@@ -897,6 +909,7 @@ def test_run_full_analysis_task_never_retries_or_alerts_on_awaiting_approval(
         saved_pipeline_id=None,
         llm_provider_override=None,
         llm_model_override=None,
+        locale_override=None,
     ):
         return {
             "state": {"run_id": "r1", "status": "awaiting_approval", "error": None},
@@ -938,6 +951,7 @@ def test_run_full_analysis_task_stops_retrying_once_max_retries_reached(
         saved_pipeline_id=None,
         llm_provider_override=None,
         llm_model_override=None,
+        locale_override=None,
     ):
         return {
             "state": {"run_id": "r1", "status": "failed", "error": "still broken"},

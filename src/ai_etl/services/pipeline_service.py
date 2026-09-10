@@ -49,7 +49,7 @@ from ai_etl.core.analysis_types import (
 )
 from ai_etl.core.graph import build_graph
 from ai_etl.core.llm import get_model_name, is_llm_review_enabled, sum_token_usage
-from ai_etl.core.locale import DEFAULT_LOCALE
+from ai_etl.core.locale import DEFAULT_LOCALE, resolve_locale
 from ai_etl.core.output_validation import append_check, check_gold_output, check_science_output
 from ai_etl.core.progress_messages import agent_step, progress_message
 from ai_etl.core.state import PipelineState, initial_state
@@ -89,6 +89,7 @@ def run_silver_pipeline(
     saved_pipeline_id: str | None = None,
     llm_provider_override: str | None = None,
     llm_model_override: str | None = None,
+    locale_override: str | None = None,
 ) -> PipelineState:
     """Run the Silver LangGraph (Orchestrator -> Extractor -> Transformer -> Quality
     -> Loader) to completion and persist the resulting state via `save_run`.
@@ -161,8 +162,18 @@ def run_silver_pipeline(
     # before a single agent ran, for a cosmetic i18n setting. Narrating the run in the
     # wrong language is a much smaller failure than never running it — fall back to
     # DEFAULT_LOCALE and log, don't propagate.
+    # Audit finding H5 / D4 (2026-09-09): the locale the *UI is actually showing*
+    # (the next-intl cookie, passed as `locale_override` from `POST /runs`) wins over
+    # the tenant's stored `users.locale`. Before this, progress messages and the
+    # narrative were localized to `users.locale` (default pt-BR), an independent source
+    # from the UI cookie — so an English-UI tenant whose `users.locale` was still pt-BR
+    # saw Portuguese progress ("Executando pipeline Silver...") and narrative, the exact
+    # symptom PR #221 was recorded as fixing. When no override is passed (scheduled
+    # fires, the CLI, tests), fall back to the tenant's stored locale exactly as before.
     locale = DEFAULT_LOCALE
-    if tenant_id is not None:
+    if locale_override is not None:
+        locale = resolve_locale(locale_override)
+    elif tenant_id is not None:
         try:
             locale = get_locale(tenant_id)
         except Exception:  # noqa: BLE001 — see comment above: never let this block a run
@@ -778,6 +789,7 @@ def run_full_analysis(
     saved_pipeline_id: str | None = None,
     llm_provider_override: str | None = None,
     llm_model_override: str | None = None,
+    locale_override: str | None = None,
 ) -> AnalysisRunResult:
     """Run the full Silver -> Planner -> Gold/Science -> Advisor pipeline for one
     business question, persisting Silver + analysis results as a side effect.
@@ -812,6 +824,7 @@ def run_full_analysis(
         saved_pipeline_id=saved_pipeline_id,
         llm_provider_override=llm_provider_override,
         llm_model_override=llm_model_override,
+        locale_override=locale_override,
     )
     silver_df = silver_state.get("transformed_data")
     # Sprint 30/gap-closing (ADR-031 §5) — reuse the override `run_silver_pipeline`

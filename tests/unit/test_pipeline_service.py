@@ -204,6 +204,63 @@ def test_run_silver_pipeline_emits_english_progress_for_en_us_locale(monkeypatch
     assert orchestrator_events and "Planning the pipeline..." in orchestrator_events[0]
 
 
+def test_locale_override_wins_over_tenant_db_locale(monkeypatch) -> None:
+    """Audit finding H5 / D4 (2026-09-09): the UI's active locale (passed as
+    `locale_override` from POST /runs) must win over the tenant's stored
+    `users.locale`. Here the DB locale is pt-BR but the UI is en-US — the run's
+    progress messages must come back in ENGLISH. This is the gap PR #221 left:
+    it localized to `users.locale`, not the UI the user actually sees, so an
+    English-UI tenant whose `users.locale` was still pt-BR kept seeing Portuguese."""
+    silver_df = pd.DataFrame({"a": [1, 2]})
+    chunks = [
+        {"orchestrator": {"pipeline_plan": {"sources": []}}},
+        {
+            "loader": {
+                "status": "completed",
+                "transformed_data": silver_df,
+                "load_result": {"rows_loaded": 2},
+            }
+        },
+    ]
+    monkeypatch.setattr(pipeline_service, "build_graph", lambda: _FakeGraph(chunks))
+    monkeypatch.setattr(pipeline_service, "save_run", lambda *a, **k: pathlib.Path("run.json"))
+    monkeypatch.setattr(pipeline_service, "save_stage_latencies", lambda *a, **k: None)
+    # DB locale is pt-BR; if this were still authoritative the assertions below fail.
+    monkeypatch.setattr(pipeline_service, "get_locale", lambda tenant_id: "pt-BR")
+
+    events, _cb = _recorder()
+    state = pipeline_service.run_silver_pipeline(
+        "read file.csv",
+        run_dir="runs",
+        progress_callback=_cb,
+        tenant_id="tenant-a",
+        locale_override="en-US",
+    )
+
+    assert state["locale"] == "en-US"
+    assert events[0][1] == "⚡ Running Silver pipeline..."
+    assert events[-1][1].startswith("✅ Silver completed in")
+
+
+def test_no_locale_override_falls_back_to_tenant_db_locale(monkeypatch) -> None:
+    """No override (scheduled fires, CLI, tests) keeps the pre-H5 behavior:
+    the tenant's stored `users.locale` is used."""
+    silver_df = pd.DataFrame({"a": [1, 2]})
+    chunks = [
+        {"orchestrator": {"pipeline_plan": {"sources": []}}},
+        {"loader": {"status": "completed", "transformed_data": silver_df, "load_result": {}}},
+    ]
+    monkeypatch.setattr(pipeline_service, "build_graph", lambda: _FakeGraph(chunks))
+    monkeypatch.setattr(pipeline_service, "save_run", lambda *a, **k: pathlib.Path("run.json"))
+    monkeypatch.setattr(pipeline_service, "save_stage_latencies", lambda *a, **k: None)
+    monkeypatch.setattr(pipeline_service, "get_locale", lambda tenant_id: "pt-BR")
+
+    state = pipeline_service.run_silver_pipeline(
+        "read file.csv", run_dir="runs", tenant_id="tenant-a"
+    )
+    assert state["locale"] == "pt-BR"
+
+
 def test_run_silver_pipeline_makes_tenant_overrides_visible_during_the_graph_run(
     monkeypatch,
 ) -> None:
@@ -966,7 +1023,7 @@ def test_run_full_analysis_calls_stages_in_order_and_persists_analysis(monkeypat
     monkeypatch.setattr(
         pipeline_service,
         "run_silver_pipeline",
-        lambda spec, run_dir, progress_callback, tenant_id=None, saved_pipeline_id=None, llm_provider_override=None, llm_model_override=None: (
+        lambda spec, run_dir, progress_callback, tenant_id=None, saved_pipeline_id=None, llm_provider_override=None, llm_model_override=None, locale_override=None: (
             (
                 call_order.append("silver"),
                 silver_state,
@@ -1053,7 +1110,7 @@ def test_run_full_analysis_forwards_resolved_per_pipeline_model_to_save_analysis
     monkeypatch.setattr(
         pipeline_service,
         "run_silver_pipeline",
-        lambda spec, run_dir, progress_callback, tenant_id=None, saved_pipeline_id=None, llm_provider_override=None, llm_model_override=None: (
+        lambda spec, run_dir, progress_callback, tenant_id=None, saved_pipeline_id=None, llm_provider_override=None, llm_model_override=None, locale_override=None: (
             (
                 call_order.append("silver"),
                 silver_state,
@@ -1121,6 +1178,7 @@ def test_run_full_analysis_forwards_caller_llm_override_to_silver(monkeypatch) -
         saved_pipeline_id: str | None = None,
         llm_provider_override: str | None = None,
         llm_model_override: str | None = None,
+        locale_override: str | None = None,
     ) -> dict[str, Any]:
         captured["llm_provider_override"] = llm_provider_override
         captured["llm_model_override"] = llm_model_override
@@ -1163,7 +1221,7 @@ def test_run_full_analysis_short_circuits_when_silver_produces_no_data(monkeypat
     monkeypatch.setattr(
         pipeline_service,
         "run_silver_pipeline",
-        lambda spec, run_dir, progress_callback, tenant_id=None, saved_pipeline_id=None, llm_provider_override=None, llm_model_override=None: (
+        lambda spec, run_dir, progress_callback, tenant_id=None, saved_pipeline_id=None, llm_provider_override=None, llm_model_override=None, locale_override=None: (
             failed_state
         ),
     )
@@ -1206,6 +1264,7 @@ def test_run_full_analysis_forwards_progress_callback_to_every_stage(monkeypatch
         saved_pipeline_id: str | None = None,
         llm_provider_override: str | None = None,
         llm_model_override: str | None = None,
+        locale_override: str | None = None,
     ) -> dict[str, Any]:
         progress_callback("silver", "⚡ Executando pipeline Silver...")
         progress_callback("silver", "✅ Silver concluído em 1.0s")
