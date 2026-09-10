@@ -7,6 +7,11 @@
     "switchToEnglish": "Mudar para inglês",
     "switchToPortuguese": "Mudar para português"
   },
+  "themeToggle": {
+    "switchToLight": "Mudar para tema claro",
+    "switchToDark": "Mudar para tema escuro",
+    "toggleLabel": "Alternar tema claro/escuro"
+  },
   "common": {
     "brand": "AI-ETL",
     "openMenu": "Abrir menu",
@@ -363,7 +368,13 @@
     "toastNotificationCleared": "Override de notificação removido."
   },
   "runSections": {
-    "code": "Código"
+    "code": "Código",
+    "silverHint": "Dados limpos e estruturados (a camada \"Silver\")",
+    "pipelineHint": "O pipeline de ETL, passo a passo, que produziu os dados",
+    "goldHint": "Análise descritiva respondendo à sua pergunta (a camada \"Gold\")",
+    "scienceHint": "Análise preditiva e modelos (a camada \"Science\")",
+    "advisorHint": "Recomendações de negócio prescritivas e acionáveis",
+    "codeHint": "O código Python auditável gerado para esta execução"
   },
   "modelPicker": {
     "priceLine": "${input}/${output} por 1M tokens (entrada/saída)",
