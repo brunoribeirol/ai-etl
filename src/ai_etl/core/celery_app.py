@@ -91,6 +91,15 @@ celery_app.conf.update(
     # worker side.
     result_expires=3600,
     task_track_started=True,
+    # Audit finding H1 follow-up (2026-09-10): `celery beat`'s PersistentScheduler
+    # writes a `celerybeat-schedule` shelve file, defaulting to the current working
+    # directory (`/app`). Since the container now runs as a non-root user (Dockerfile
+    # `USER appuser`) and `/app` is root-owned/read-only to it, the default path is
+    # not writable and beat crashes on startup (verified live: the celery-beat Railway
+    # service crashed on the first non-root deploy while the API/worker were fine).
+    # Point it at `/tmp`, which is world-writable in the container. Only `beat` reads
+    # this; the API and worker ignore it.
+    beat_schedule_filename="/tmp/celerybeat-schedule",
     # Sprint 13 (ADR-016) — requires a separate `celery -A
     # ai_etl.core.celery_app beat` process running in production (same image
     # as the existing worker, different Custom Start Command) to actually
