@@ -106,20 +106,35 @@ gpt-4o-mini run of the messy `vendas_sujas.xlsx` revenue question):**
   $12/$3.50/$2.00), no longer the inconsistent price×qty-vs-price-only mix the audit found. But
   the **revenue≠demand half did NOT hold** — recommendation 1 still says "increase inventory to
   meet demand" grounded in a revenue figure.
-- **M11 — DID NOT hold.** The generated code correctly did `pd.to_numeric(…, errors="coerce")`
-  (→ NaN) but then `df["quantidade"].fillna(0, inplace=True)` — exactly the `.fillna(0)` the M11
-  prompt forbids — so the bad-type "cem" → 0 again. **Prompt guidance shipped but gpt-4o-mini did
-  not follow it.** M3-demand and M11 are prompt-behavior items: shipping the guidance is not
-  enough to guarantee compliance. A reliable fix needs a deterministic guard (a Quality/Transformer
-  post-step that flags a coerced-numeric column instead of trusting the LLM not to `fillna(0)`),
-  not another prompt tweak — flagged as follow-up, NOT marked done.
+- **M11 — prompt fix did not hold; a DETERMINISTIC guard was then built and live-verified
+  (PRs #240, #241).** The generated code still did `df["quantidade"].fillna(0)` ("cem" → 0),
+  confirming prompt-only is unreliable. Owner approved building the real fix: a deterministic
+  `_check_coerced_numeric_loss` in the Quality node that compares each numeric Silver column
+  against its same-named object Bronze source column and raises a **warning** for non-numeric
+  values coerced to 0/NaN — making the silent loss visible regardless of what the LLM does.
+  **Live-verified**: the run's quality report now shows `coerced_numeric_loss on quantidade`.
+  Live-verify also caught a false positive (it flagged the correctly-cleaned `preco` currency
+  column) → fixed in #241 by requiring an actual 0/NaN in the Silver column before flagging.
+
+**Follow-up: M11 + M3-demand deterministic guards — DONE (PRs #240/#241), owner-requested after
+the prompt fixes failed live.**
+- **M11 guard** (Quality node): described above — deterministic, live-verified, false-positive
+  fixed.
+- **M3-demand guard** (Advisor): `_hedge_revenue_demand_conflation` — deterministic. If a
+  recommendation uses demand/volume language while the analysis has NO quantity dimension (only
+  value/revenue), it appends a caveat and downgrades a "high" to "medium". **Live-verified**: the
+  Caneta recommendation is now **medium** (was high) and its rationale ends with "(Note: grounded
+  in revenue/total value, not units sold — the analysis had no quantity dimension, so 'demand'
+  here may reflect a high price rather than volume.)". M3-metric-consistency continues to hold.
+  These replace reliance on LLM prompt compliance with deterministic post-checks — the correct
+  fix class for a probabilistic system.
 
 **Verdict (unchanged from the audit):** finished and defensible as a TCC artifact; **not**
 ready for external unsupervised use or to charge money — the gap is commercial (billing,
 production Clerk), locale/trust wiring, and the security-tests-gate-CI wiring, not core
-engineering. The audit's own live-verification rule proved its worth twice more this arc: the
-celery-beat non-root crash and the M11 prompt fix that ships but doesn't hold were both caught
-only by running the real deployed app, not by green CI.
+engineering. The audit's own live-verification rule proved its worth repeatedly this arc: the
+celery-beat non-root crash, the prompt fixes that shipped but didn't hold, and the M11 guard's
+own false positive were all caught only by running the real deployed app, not by green CI.
 
 ## 2026-09-08 — live walkthrough, 3 real bugs found and fixed (PRs #221-#224)
 
