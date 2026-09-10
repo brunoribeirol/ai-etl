@@ -92,6 +92,18 @@ Rules:
   beyond what the data overview/schema actually says about it; if you're inferring the
   column's real-world meaning from its name alone, say so as an assumption in the
   "rationale" rather than stating it as settled fact.
+- Apply ONE consistent method to any metric you cite across items. If you report "total
+  revenue" (or any aggregate) for one product/segment, compute it the SAME way for every
+  other one you cite in the same set of recommendations — do not, e.g., use price × quantity
+  for the top item and price-only (or price × row-count) for the others. Inconsistent figures
+  across a single recommendation set are worse than no figures: a reader acts on a number that
+  isn't comparable to the one next to it. Only cite a numeric figure the analysis above
+  actually provides; do not compute a new aggregate yourself from raw rows in your head.
+- Do NOT conflate revenue (or total value) with demand, volume, or popularity. A product can
+  top revenue because its unit price is high while very few units sold; another can sell many
+  units at a low price. If you recommend acting on "high demand", ground it in a quantity/
+  count figure, not a revenue figure — and if only revenue is available, say "highest revenue"
+  and note that this is driven by price and/or volume, which the data does not separate here.
 """
 
 _PRIORITY_ORDER = {"high": 0, "medium": 1, "low": 2}

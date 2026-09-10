@@ -352,6 +352,19 @@ def test_currency_prompt_warns_against_invalid_backslash_escape(mock_get_llm) ->
     assert "regex=False" in sent_prompt
 
 
+def test_numeric_coercion_prompt_forbids_silent_fillna_zero(mock_get_llm) -> None:
+    """Audit finding M11 (2026-09-09): a live run coerced a bad-type quantity value
+    ("cem") silently to 0, corrupting units math with no trace. Pin the prompt rule
+    that a genuinely-non-numeric value must become NaN, not 0."""
+    llm = _mock_llm([VALID_CODE])
+    mock_get_llm.return_value = llm
+    transformer_node(_make_state())
+
+    sent_prompt = llm.invoke.call_args[0][0]
+    assert "must become `NaN`, NOT `0`" in sent_prompt
+    assert 'errors="coerce"' in sent_prompt
+
+
 def _wrong_currency_clean(prices: pd.Series) -> pd.Series:
     """The exact real bug, found live 2026-09-04 in generated code (Data
     Engineer persona, `vendas_br_edge.csv`) — kept here only to prove it

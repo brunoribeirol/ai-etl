@@ -144,6 +144,15 @@ df["preco"] = (
 df["preco"] = pd.to_numeric(df["preco"], errors="coerce")
 ```
 
+When coercing any column to a numeric type, a value that is genuinely not a number
+(e.g. the text "cem" in a quantity column) must become `NaN`, NOT `0`. Use
+`pd.to_numeric(col, errors="coerce")` and do NOT follow it with `.fillna(0)` on a
+column whose non-numeric entries are *bad data* rather than a true zero — filling them
+with 0 silently invents a real value (it turned "cem", i.e. 100 units, into 0 units in a
+real run), which then corrupts every downstream sum/mean/ranking without any trace. Leave
+such values as NaN so the Quality step can see and report them; only fillna(0) when a
+missing value legitimately means zero for that column's real-world meaning, and say so.
+
 Respond ONLY with the Python function. No explanation, no markdown fences.
 """
 
