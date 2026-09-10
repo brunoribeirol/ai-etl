@@ -215,6 +215,28 @@ def check_and_increment_rate_limit(tenant_id: str) -> None:
         )
 
 
+def _default_monthly_budget_usd() -> float | None:
+    """A deployment-wide fallback cap for tenants that have no explicit
+    `monthly_budget_usd` of their own (audit finding H2, 2026-09-09).
+
+    Without this, every self-serve tenant is created with an *unlimited* budget
+    and can spend arbitrarily against the operator's own OpenAI/Anthropic keys,
+    bounded only by the rate limiter. Set `AI_ETL_DEFAULT_MONTHLY_BUDGET_USD`
+    (e.g. `5`) in the deployment env to cap new tenants by default; an explicit
+    per-tenant cap (`set_monthly_budget`) still overrides it. Unset = unchanged
+    behavior (no default cap), so the owner's own single-tenant use is
+    unaffected. A non-positive or unparseable value is treated as unset.
+    """
+    raw = os.getenv("AI_ETL_DEFAULT_MONTHLY_BUDGET_USD", "").strip()
+    if not raw:
+        return None
+    try:
+        value = float(raw)
+    except ValueError:
+        return None
+    return value if value > 0 else None
+
+
 def get_budget_status(tenant_id: str) -> BudgetStatus:
     """Read-only: current cap, spend-so-far this calendar month, and whether
     the tenant is near or over it. Never raises — `check_budget_cap` below is
@@ -222,6 +244,10 @@ def get_budget_status(tenant_id: str) -> BudgetStatus:
     `GET /budget` uses this directly so status can always be read, even for
     a tenant already over their cap."""
     cap = get_monthly_budget(tenant_id)
+    if cap is None:
+        # H2: fall back to the deployment-wide default cap (if configured) so a
+        # tenant who never set one isn't implicitly unlimited on the operator's keys.
+        cap = _default_monthly_budget_usd()
     if cap is None:
         return BudgetStatus(
             cap_usd=None, spent_usd=0.0, ratio=None, near_limit=False, exceeded=False
