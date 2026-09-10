@@ -2,30 +2,49 @@
 
 > Living doc. Updated at the end of meaningful work sessions, not per-commit. Source of truth for repo/code state; the Obsidian vault (`~/Documents/Obsidian Vault/tcc/`) is the source of truth for the academic TCC narrative and product/strategy context.
 
-**Last updated:** 2026-09-10 — **Full 12-persona audit (2026-09-08/09) + wave-based remediation (PRs #226-#235).** The audit was investigate-only; the owner then said "faça todas as waves." Most waves are implemented and pushed as PRs; a few items are deliberately owner-actions or need a deploy to live-verify (flagged per PR). Verdict: TCC-defensible YES, external-unsupervised NO, chargeable NO — see the 2026-09-10 section below. Prior context: the 2026-09-08 live walkthrough (PRs #221-#224) and the 2026-09-06/07 MVP monetization plan remain as recorded.
+**Last updated:** 2026-09-10 — **Full 12-persona audit (2026-09-08/09) + its complete wave
+remediation, all shipped (PRs #226-#242, 18 PRs, all merged + deployed + live-verified).** The
+audit was investigate-only; the owner then said "faça todas as waves" → "ajuste o que precise e
+mergeei" → "faça os 2" (the deterministic guards). Everything implementable is merged, deployed,
+and live-verified on the real app; the still-open items are deliberate owner decisions/actions,
+not pending code. All stale feature branches were deleted (2026-09-10); only `main` remains.
+Verdict: TCC-defensible YES, external-unsupervised NO, chargeable NO — see the 2026-09-09/10
+section below. Prior context: the 2026-09-08 live walkthrough (PRs #221-#224) and the
+2026-09-06/07 MVP monetization plan remain as recorded.
 
-## Owner's next steps (as of 2026-09-08)
+## Owner's next steps (as of 2026-09-10)
 
-**No plan is currently open.** The mega-audit remediation plan
-(2026-09-05/06) and the MVP monetization-readiness plan (2026-09-06/07)
-are both fully closed — see their own sections below. The 2026-09-08
-session was a live walkthrough, not a plan: the owner used the app,
-real UI gaps, and fixed them same-session.
+**No plan is currently open — the persona-audit remediation is fully closed** (all 18 PRs
+#226-#242 merged, deployed, and live-verified; see the 2026-09-09/10 section below for the
+per-item verification). Nothing from the audit is left as pending code.
 
-**Still genuinely open, not code**:
-- Pricing/billing (Stripe confirmed as the right provider — matches
-  Vercel's own `payments`-category preferred-provider guidance — but
-  never started; needs a product decision first: subscription vs.
-  usage-metered vs. hybrid, hosted vs. embedded Checkout).
-- Smoke-test `POST /admin/tenants/{id}/pipelines/{id}/retry` (ADR-047)
-  against a real tenant — built and unit-tested, never live-verified.
-- The new `POST /llm/test-connectivity` frontend wiring (PR #223) is
-  also not yet live-verified against a real provider credential.
-- Billing top-ups (Railway/OpenAI/Anthropic, owner's own action, no code
-  dependency) and the TCC monograph writing (due December, lives only in
-  the Obsidian vault) remain outside this repo's scope.
+**Genuinely open — owner decisions / actions the audit surfaced (NOT code blockers):**
+- **Clerk stays on the dev instance** (C1) — owner decision; accepted risk. The default budget
+  cap (H2) and non-root container (H1) reduce the blast radius. Do NOT open self-serve signups to
+  strangers without migrating Clerk to a production instance first.
+- **Billing / monetization — deferred** (D2). Stripe is still the right provider; needs the
+  product decision (subscription vs. usage-metered vs. hybrid; hosted vs. embedded Checkout)
+  before any code. `AI_ETL_DEFAULT_MONTHLY_BUDGET_USD` (H2) exists now for spend-safety in the
+  meantime — set it before onboarding anyone external.
+- **H4 — make the RLS + sandbox-containment tests gate CI.** They still self-skip in the required
+  `check` job. Needs live-CI iteration (app-postgres:5435 + migration 0021 + both role URLs) plus
+  a branch-protection change (require reviews / make e2e required). Exact steps are documented in
+  `.github/workflows/ci.yml`'s own comment. Owner action to avoid a red required gate.
+- **Point Railway's healthcheck at `/health/ready`** (the deep check added in #229).
+- **Deferred code follow-ups (scoped, owner's call on timing):** M5 (pre-run cost-estimate UI —
+  needs a dataset-shape detection step), M17 (`useAsyncData` refactor across 8 components), W4-1
+  (case-study re-run — needs the gitignored datasets + real LLM spend), W4-2 (an automated
+  LLM-output-quality harness). All scoped in `docs/work/2026-09-09-persona-audit-remediation-plan.md`.
+- **Smoke-test `POST /admin/tenants/{id}/pipelines/{id}/retry`** (ADR-047) against a real tenant —
+  still built + unit-tested, not live-verified (unchanged this arc).
+- **Not code:** billing top-ups (Railway/OpenAI/Anthropic, owner's own action) and the TCC
+  monograph (due December, lives only in the Obsidian vault).
 
-## 2026-09-09/10 — full 12-persona audit + wave remediation (PRs #226-#235)
+_Already closed this arc (were open before): `POST /llm/test-connectivity` is now live-verified
+("Working 1921ms"); the audit's H5/H1/M3/M11 and all other merged items are live-verified — see
+below._
+
+## 2026-09-09/10 — full 12-persona audit + wave remediation (PRs #226-#242)
 
 Full run of `.claude/skills/persona-audit.md` (all 12 personas, one Claude Code session,
 no paid cloud review) — audit report + verdict in `docs/work/2026-09-08-full-persona-audit.md`
