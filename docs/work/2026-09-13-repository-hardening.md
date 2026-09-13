@@ -17,6 +17,8 @@ and the security decisions behind them — so nobody has to re-derive them from 
 | #259 | Trivy became an enforcing gate + Debian security updates applied in the `Dockerfile` |
 | #265 | Dependabot minor/patch grouping per ecosystem |
 | #266 / #267 | First grouped Dependabot PRs (frontend: 12 updates; Python: 20 updates) |
+| #260-#264 | Five ungrouped Dependabot **security** PRs — closed all 11 open alerts (5 high, 6 moderate) |
+| #271 | All 22 action references pinned to full commit SHAs |
 
 ## Security decisions
 
@@ -84,7 +86,19 @@ non-root user.
 - Squash-only workflow, auto-merge enabled, head branches deleted after merge.
 - `main` protected by the active ruleset above; signed commits are mandatory.
 - GitHub Actions default workflow permissions are **read-only**, and Actions cannot create or
-  approve pull requests. All 22 action references are **pinned to full commit SHAs**.
+  approve pull requests.
+- **SHA pinning is complete and enforced.** All 22 action references across the 9 workflows are
+  pinned to full commit SHAs, and the repository setting `sha_pinning_required` is **`true`**,
+  so an unpinned reference is now rejected rather than merely discouraged. Verified after the
+  setting was enabled: zero unpinned `uses:` remain anywhere under `.github/` (no composite
+  actions exist either), and a `Semgrep` run dispatched *after* enforcement went live completed
+  successfully — the flag alone would not have proven the workflows still run.
+
+  When changing a pin, keep the `# vX` comment: it is what makes the SHA reviewable, and
+  Dependabot reads it to propose readable version bumps (the `actions-minor-patch` group
+  updates the SHA and the comment together), so pinning does not freeze these actions.
+- All 11 Dependabot alerts open at the start of the session are **closed** — the five ungrouped
+  security PRs (#260-#264) merged.
 - Trivy gate green on `main` since #259.
 - Wikis and Discussions disabled; Issues enabled.
 
@@ -103,17 +117,7 @@ non-root user.
    credential. Sequence: create the OIDC provider + role in AWS → change the workflow →
    verify one real backup run → only then delete the two access-key secrets from the repo.
 
-2. **Enable the repository option requiring full-length SHA references.** All 22 `uses:`
-   references across the 9 workflows are now pinned to full commit SHAs, with the
-   human-readable tag kept as a trailing comment (`@3d3c42e…b1 # v7`). The repo-wide enforcement
-   toggle is the only step left — it was deliberately not enabled before the pinning, since
-   turning it on first breaks every workflow run.
-
-   Keep the `# vX` comment when changing a pin: it is what makes the SHA reviewable, and
-   Dependabot uses it to propose readable version bumps (the `actions-minor-patch` group
-   updates the SHA and the comment together).
-
-3. **Four breaking-change major dependency PRs** *(deferred — open, deliberately unmerged)*:
+2. **Four breaking-change major dependency PRs** *(deferred — open, deliberately unmerged)*:
    Plotly 7 (#269), Pandas 3 (#268), AWS provider 6 (#256), Python 3.14 (#246).
 
    These are not "merge when convenient". Each needs its own assessment of migration cost
