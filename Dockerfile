@@ -1,5 +1,12 @@
 FROM python:3.12-slim
 
+# Apply available Debian security updates to the runtime image.
+# Trivy blocks fixable HIGH/CRITICAL vulnerabilities, so the image must
+# include the latest security patches available from Debian.
+RUN apt-get update \
+    && apt-get upgrade -y \
+    && rm -rf /var/lib/apt/lists/*
+
 # Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
@@ -48,6 +55,7 @@ ENV PATH="/app/.venv/bin:$PATH"
 RUN useradd --create-home --uid 1000 appuser \
     && mkdir -p /app/runs \
     && chown -R appuser:appuser /app/runs
+
 USER appuser
 
 # Railway injects $PORT at runtime; `sh -c` is required for it to expand —
