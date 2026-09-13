@@ -2,7 +2,14 @@
 
 > Living doc. Updated at the end of meaningful work sessions, not per-commit. Source of truth for repo/code state; the Obsidian vault (`~/Documents/Obsidian Vault/tcc/`) is the source of truth for the academic TCC narrative and product/strategy context.
 
-**Last updated:** 2026-09-10 — **Full 12-persona audit (2026-09-08/09) + its complete wave
+**Last updated:** 2026-09-13 — **Repository/CI governance hardening (13 PRs, #245-#272).** The
+repo went **private again** (it had been public since 2026-08-30), which is what forces CodeQL
+to stay dormant. A `default-branch-protection` ruleset, squash-only merges, signed commits,
+enforced SHA pinning, a real Trivy gate on the production image, and expanded Dependabot
+coverage all landed; the 11 open Dependabot alerts went to **0**. No application code changed.
+Details in `docs/work/2026-09-13-repository-hardening.md`. Prior arc below, unchanged.
+
+**Previously:** 2026-09-10 — **Full 12-persona audit (2026-09-08/09) + its complete wave
 remediation, all shipped (PRs #226-#242, 18 PRs, all merged + deployed + live-verified).** The
 audit was investigate-only; the owner then said "faça todas as waves" → "ajuste o que precise e
 mergeei" → "faça os 2" (the deterministic guards). Everything implementable is merged, deployed,
@@ -12,7 +19,26 @@ Verdict: TCC-defensible YES, external-unsupervised NO, chargeable NO — see the
 section below. Prior context: the 2026-09-08 live walkthrough (PRs #221-#224) and the
 2026-09-06/07 MVP monetization plan remain as recorded.
 
-## Owner's next steps (as of 2026-09-10)
+## Owner's next steps (as of 2026-09-13)
+
+**Added 2026-09-13, deferred by the owner — repository governance, not application code:**
+- **AWS OIDC migration.** `.github/workflows/db-backup.yml` still authenticates with permanent
+  AWS access keys held as repository secrets. The blocking half is on the AWS side: **create the
+  OIDC identity provider + IAM role in the AWS account first**, then change the workflow, then
+  verify one real backup run, and only then delete the two access-key secrets. Merging the
+  workflow change first leaves backups failing until AWS catches up.
+- **Four breaking-change major dependency PRs, open on purpose:** Plotly 7 (#269), Pandas 3
+  (#268), AWS provider 6 (#256), Python 3.14 (#246). Pandas 3 is the consequential one — it
+  touches the Transformer/Quality/Analyst DataFrame paths. Python 3.14 already fails the Docker
+  job, so closing it is likely cleaner than carrying it. None should ever be auto-merged.
+- **Actions budget status is unknown again.** The repo is private, so the free-minutes
+  assumption from 2026-08-30 no longer holds and spend was not re-checked. Check before a
+  session with many parallel PRs.
+
+_Closed 2026-09-13: SHA pinning (pinned in #271, enforcement enabled and verified live) and all
+11 Dependabot alerts._
+
+## Owner's next steps carried over (as of 2026-09-10)
 
 **No plan is currently open — the persona-audit remediation is fully closed** (all 18 PRs
 #226-#242 merged, deployed, and live-verified; see the 2026-09-09/10 section below for the
@@ -43,6 +69,47 @@ per-item verification). Nothing from the audit is left as pending code.
 _Already closed this arc (were open before): `POST /llm/test-connectivity` is now live-verified
 ("Working 1921ms"); the audit's H5/H1/M3/M11 and all other merged items are live-verified — see
 below._
+
+## 2026-09-13 — repository/CI governance hardening (PRs #245-#272) — not tied to a sprint
+
+`ai-etl` was used as the golden repository to define a professional GitHub governance baseline
+against a real repo. **No application code changed** — only `.github/` config and the production
+`Dockerfile`. Full detail, including the reasoning behind each choice:
+`docs/work/2026-09-13-repository-hardening.md`.
+
+**The repo is PRIVATE again** (it was public from 2026-08-30). This is the fact that drives two
+decisions below, and it invalidates the "free Actions minutes" assumption recorded on 2026-08-30.
+
+- **Ruleset `default-branch-protection`** (targets the *default branch* by reference, `main` is
+  not hard-coded): restrict deletions, block force pushes, linear history, **signed commits**,
+  PR + conversation resolution required, squash as the only merge method, 4 required status
+  checks (Python 3.11/3.12, E2E, Semgrep) with branch-must-be-up-to-date. **Required approvals
+  = 0** — honest for a solo repo; a fake approval gate just gets bypassed. **Code scanning is
+  deliberately NOT required**: CodeQL cannot run here, and a required-but-impossible check is an
+  outage, not a control.
+- **CodeQL** (#258) is now *skipped*, not deleted, while code scanning is unavailable. It
+  resumes by itself if the repo goes public, or via a repo variable if the plan changes.
+- **Dependabot** (#245, #265): coverage expanded to 5 ecosystems (uv, npm, github-actions,
+  docker, terraform). Minor/patch grouped per ecosystem; **security updates never grouped**;
+  majors, Docker and Terraform always reviewed individually. First grouped PRs (#266/#267)
+  collapsed ~32 PRs into 2. The five ungrouped security PRs (#260-#264) took the open
+  Dependabot alerts from **11 (5 high, 6 moderate) to 0**.
+- **Trivy is now a gate, not a report** (#259): `severity: CRITICAL,HIGH`, `ignore-unfixed:
+  true`, `exit-code: 1`. Fixable HIGH/CRITICAL blocks CI; unfixable is reported but does not
+  block (a gate that blocks on unfixable CVEs gets disabled). The first enforcing run failed on
+  CVEs inherited from the Debian base, fixed by applying Debian security updates in the
+  `Dockerfile`. **Python stayed on 3.12** — no 3.14 migration; container still runs non-root.
+- **SHA pinning** (#271): all 22 action references pinned to full commit SHAs with the tag kept
+  as a trailing comment. The repo setting `sha_pinning_required` is now **`true`**. Verified
+  after enabling: zero unpinned `uses:` under `.github/`, and a Semgrep run dispatched *after*
+  enforcement went live succeeded — the flag alone would not have proven the workflows still run.
+- **Actions** default workflow permissions remain read-only; Actions cannot create/approve PRs.
+
+**Finding worth keeping:** the "branch must be up to date" rule serializes the merge queue. Six
+simultaneous PRs took ~30 minutes of sequential CI, because each merge pushes the rest behind and
+forces a full re-run. That is the rule working correctly — every PR is tested against the `main`
+that will exist after it merges — but the cost is real on a solo repo and is the first parameter
+to revisit if PR volume grows.
 
 ## 2026-09-09/10 — full 12-persona audit + wave remediation (PRs #226-#242)
 
