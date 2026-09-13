@@ -90,9 +90,19 @@ non-root user.
 
 ## Remaining work
 
-1. **AWS OIDC** — `.github/workflows/db-backup.yml` still authenticates with permanent AWS
-   access keys stored as repository secrets. Migrate to GitHub OIDC + an AWS IAM role to
-   remove long-lived credentials. See `docs/adr/ADR-042-rto-rpo-disaster-recovery.md`.
+**Deferred on 2026-09-13 to a later session — not forgotten, not blocked, just not now.**
+
+1. **AWS OIDC** *(deferred)* — `.github/workflows/db-backup.yml` still authenticates with
+   permanent AWS access keys stored as repository secrets. Migrate to GitHub OIDC + an AWS
+   IAM role to remove long-lived credentials. See
+   `docs/adr/ADR-042-rto-rpo-disaster-recovery.md`.
+
+   Order matters: **the IAM role and the OIDC identity provider must exist in the AWS account
+   before the workflow change merges.** Merging the workflow first leaves backups failing
+   until the AWS side catches up, and a broken backup is worse than one using a static
+   credential. Sequence: create the OIDC provider + role in AWS → change the workflow →
+   verify one real backup run → only then delete the two access-key secrets from the repo.
+
 2. **Enable the repository option requiring full-length SHA references.** All 22 `uses:`
    references across the 9 workflows are now pinned to full commit SHAs, with the
    human-readable tag kept as a trailing comment (`@3d3c42e…b1 # v7`). The repo-wide enforcement
@@ -102,3 +112,15 @@ non-root user.
    Keep the `# vX` comment when changing a pin: it is what makes the SHA reviewable, and
    Dependabot uses it to propose readable version bumps (the `actions-minor-patch` group
    updates the SHA and the comment together).
+
+3. **Four breaking-change major dependency PRs** *(deferred — open, deliberately unmerged)*:
+   Plotly 7 (#269), Pandas 3 (#268), AWS provider 6 (#256), Python 3.14 (#246).
+
+   These are not "merge when convenient". Each needs its own assessment of migration cost
+   against benefit, and Pandas 3 in particular touches the Transformer/Quality/Analyst code
+   paths that operate on DataFrames — the core of this project. Python 3.14 (#246) already
+   fails the Docker job, so it is the clearest candidate to close rather than carry.
+
+   Do not auto-merge any of them, and do not let a future Dependabot grouping change sweep
+   them into a batch: the config keeps majors ungrouped precisely so each stays reviewable
+   on its own.
