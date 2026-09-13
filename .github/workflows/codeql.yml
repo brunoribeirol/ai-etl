@@ -1,17 +1,23 @@
 name: CodeQL
 
-# GitHub's native SAST for both languages in this repo (Python backend,
-# TypeScript frontend). It was DISABLED while this repo was private —
-# code scanning on a private repo needs GitHub Advanced Security (not on
-# this account's plan), so every run failed at the upload step (PRs
-# #73/#82/#83, 2026-08-21).
+# GitHub's native SAST for both languages in this repo:
+# - Python backend
+# - TypeScript frontend
 #
-# RE-ENABLED 2026-09-09 (audit finding M2): the repository has been PUBLIC
-# since 2026-08-30, and code scanning is free on public repositories — the
-# billing blocker that justified disabling it no longer exists. The three
-# automatic triggers below are restored. If a run ever fails at the upload
-# step again (e.g. the repo goes private), re-comment them rather than
-# leaving a persistently-red check.
+# CodeQL code scanning is not available for this private repository under the
+# current GitHub plan, so automatic analysis must not run while the repository
+# remains private.
+#
+# The workflow stays fully configured and keeps all automatic triggers.
+#
+# It will run automatically when:
+#   1. the repository is public; OR
+#   2. the repository variable ENABLE_CODEQL is set to "true"
+#
+# The second option allows CodeQL to be enabled later on a private repository
+# if GitHub Code Security / Advanced Security becomes available, without
+# changing this workflow again.
+
 on:
   workflow_dispatch: {}
   push:
@@ -19,10 +25,8 @@ on:
   pull_request:
     branches: [main]
   schedule:
-    # Weekly, not on every push -- CodeQL's own analysis is heavier than
-    # this project's other CI jobs; a push/PR trigger already covers real
-    # code changes, this catches anything a new query pack starts flagging
-    # in code that hasn't changed.
+    # Weekly analysis catches findings introduced by new CodeQL query packs
+    # even when the repository code itself has not changed.
     - cron: "0 6 * * 1"
 
 permissions:
@@ -36,8 +40,10 @@ concurrency:
 
 jobs:
   analyze:
+    if: ${{ github.event.repository.private == false || vars.ENABLE_CODEQL == 'true' }}
     name: "CodeQL — ${{ matrix.language }}"
     runs-on: ubuntu-latest
+
     strategy:
       fail-fast: false
       matrix:
