@@ -71,4 +71,4 @@ jobs:
           image-ref: ai-etl:ci
           format: table
           severity: CRITICAL,HIGH
-          exit-code: "0"
+          exit-code: "1"
