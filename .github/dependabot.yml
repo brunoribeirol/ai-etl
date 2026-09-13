@@ -1,32 +1,76 @@
 version: 2
+
 updates:
-  - package-ecosystem: pip
+  # ===========================================================================
+  # Python / uv
+  # ===========================================================================
+
+  - package-ecosystem: "uv"
     directory: "/"
     schedule:
-      interval: weekly
-      day: monday
+      interval: "weekly"
+      day: "monday"
     open-pull-requests-limit: 5
     labels:
-      - dependencies
+      - "dependencies"
+      - "python"
 
-  - package-ecosystem: github-actions
-    directory: "/"
-    schedule:
-      interval: weekly
-      day: monday
-    labels:
-      - dependencies
-      - github-actions
 
-  # Sprint 6 (ADR-011) added frontend/ (Next.js) -- it was never added here,
-  # so npm dependencies had zero automated update coverage until now, unlike
-  # pip (above) and github-actions.
-  - package-ecosystem: npm
+  # ===========================================================================
+  # Frontend / npm
+  # ===========================================================================
+
+  - package-ecosystem: "npm"
     directory: "/frontend"
     schedule:
-      interval: weekly
-      day: monday
+      interval: "weekly"
+      day: "monday"
     open-pull-requests-limit: 5
     labels:
-      - dependencies
-      - frontend
+      - "dependencies"
+      - "frontend"
+
+
+  # ===========================================================================
+  # GitHub Actions
+  # ===========================================================================
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "github-actions"
+
+
+  # ===========================================================================
+  # Docker
+  # ===========================================================================
+
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "docker"
+
+
+  # ===========================================================================
+  # Terraform
+  # ===========================================================================
+
+  - package-ecosystem: "terraform"
+    directory: "/infra/aws/terraform"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "terraform"
