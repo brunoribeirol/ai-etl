@@ -15,6 +15,15 @@ updates:
       - "dependencies"
       - "python"
 
+    groups:
+      python-minor-patch:
+        applies-to: "version-updates"
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
 
   # ===========================================================================
   # Frontend / npm
@@ -30,6 +39,15 @@ updates:
       - "dependencies"
       - "frontend"
 
+    groups:
+      frontend-minor-patch:
+        applies-to: "version-updates"
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
 
   # ===========================================================================
   # GitHub Actions
@@ -44,6 +62,15 @@ updates:
     labels:
       - "dependencies"
       - "github-actions"
+
+    groups:
+      actions-minor-patch:
+        applies-to: "version-updates"
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
 
 
   # ===========================================================================
