@@ -84,7 +84,7 @@ non-root user.
 - Squash-only workflow, auto-merge enabled, head branches deleted after merge.
 - `main` protected by the active ruleset above; signed commits are mandatory.
 - GitHub Actions default workflow permissions are **read-only**, and Actions cannot create or
-  approve pull requests.
+  approve pull requests. All 22 action references are **pinned to full commit SHAs**.
 - Trivy gate green on `main` since #259.
 - Wikis and Discussions disabled; Issues enabled.
 
@@ -93,7 +93,12 @@ non-root user.
 1. **AWS OIDC** — `.github/workflows/db-backup.yml` still authenticates with permanent AWS
    access keys stored as repository secrets. Migrate to GitHub OIDC + an AWS IAM role to
    remove long-lived credentials. See `docs/adr/ADR-042-rto-rpo-disaster-recovery.md`.
-2. **GitHub Actions SHA pinning** — all actions are still pinned by tag (`@v7`, `@v0.36.0`, …).
-   Pin every action to a full commit SHA **first**, then enable the repository option that
-   requires full-length SHA references. Enabling that setting before pinning breaks every
-   workflow.
+2. **Enable the repository option requiring full-length SHA references.** All 22 `uses:`
+   references across the 9 workflows are now pinned to full commit SHAs, with the
+   human-readable tag kept as a trailing comment (`@3d3c42e…b1 # v7`). The repo-wide enforcement
+   toggle is the only step left — it was deliberately not enabled before the pinning, since
+   turning it on first breaks every workflow run.
+
+   Keep the `# vX` comment when changing a pin: it is what makes the SHA reviewable, and
+   Dependabot uses it to propose readable version bumps (the `actions-minor-patch` group
+   updates the SHA and the comment together).
