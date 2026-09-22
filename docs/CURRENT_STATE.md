@@ -143,9 +143,12 @@ Three findings worth carrying into the technical report:
 
 **Decision: the environment will be brought down between working sessions and raised on demand**,
 rather than running 24/7. At ~$0.25/day for the full stack, a month of idle uptime costs $7.52
-while a few hours a day costs ~$1.25. The stack must be up for the defense window (~18-20 Dec)
-and for Laura's button-by-button functional test, which explicitly covers scheduling and
-monitoring/alerting — so the shutdown happens **after** that test, not before.
+while a few hours a day costs ~$1.25. The stack must be up for the defense window
+(~18-20 Dec), when the committee will use the product. The button-by-button functional test Laura
+asked for on 2026-09-10 is explicitly scoped to run **locally**, so it does not depend on the
+deployed environment. The real coupling is the Vercel frontend: it calls `NEXT_PUBLIC_API_URL`,
+which points at the Railway API, so bringing Railway down takes the live site down with it — the
+shared demo link stops working until the environment is raised again.
 
 ## 2026-09-13 — repository/CI governance hardening (PRs #245-#272) — not tied to a sprint
 
