@@ -1,0 +1,20 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//ai-etl//credential-rotation//EN
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+BEGIN:VEVENT
+UID:anthropic-key-expiry-2027-09-21@ai-etl
+DTSTAMP:20260921T120000Z
+DTSTART;VALUE=DATE:20270822
+DTEND;VALUE=DATE:20270823
+SUMMARY:AI-ETL: rotate ANTHROPIC_API_KEY (expires 2027-09-21)
+DESCRIPTION:The Anthropic API key used by the Railway services "ai-etl" and "tranquil-appreciation" expires on 2027-09-21.\n\nFollow docs/runbooks/credential-rotation.md\n\nOrder matters: create the new key -> update BOTH Railway services via the dashboard -> confirm a redeploy fired -> verify HTTP 200 -> only then revoke the old key.
+TRANSP:TRANSPARENT
+BEGIN:VALARM
+TRIGGER:-PT9H
+ACTION:DISPLAY
+DESCRIPTION:Rotate ANTHROPIC_API_KEY - expires 2027-09-21
+END:VALARM
+END:VEVENT
+END:VCALENDAR

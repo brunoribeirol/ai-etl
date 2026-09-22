@@ -2,14 +2,20 @@
 
 > Living doc. Updated at the end of meaningful work sessions, not per-commit. Source of truth for repo/code state; the Obsidian vault (`~/Documents/Obsidian Vault/tcc/`) is the source of truth for the academic TCC narrative and product/strategy context.
 
-**Last updated:** 2026-09-13 — **Repository/CI governance hardening (13 PRs, #245-#272).** The
+**Last updated:** 2026-09-21 — **Operational session, no application code.** The
+`ANTHROPIC_API_KEY` was rotated (12-month expiry, 2027-09-21) after a failed first attempt left
+production briefly holding a revoked key; a credential-rotation runbook now exists. Railway
+spend was investigated and found to be **~$7.52/month of idle RAM against a $5 plan** — a
+structural overrun, not a usage spike. Details in the 2026-09-21 section below.
+
+**Previously:** 2026-09-13 — **Repository/CI governance hardening (13 PRs, #245-#272).** The
 repo went **private again** (it had been public since 2026-08-30), which is what forces CodeQL
 to stay dormant. A `default-branch-protection` ruleset, squash-only merges, signed commits,
 enforced SHA pinning, a real Trivy gate on the production image, and expanded Dependabot
 coverage all landed; the 11 open Dependabot alerts went to **0**. No application code changed.
 Details in `docs/work/2026-09-13-repository-hardening.md`. Prior arc below, unchanged.
 
-**Previously:** 2026-09-10 — **Full 12-persona audit (2026-09-08/09) + its complete wave
+**Before that:** 2026-09-10 — **Full 12-persona audit (2026-09-08/09) + its complete wave
 remediation, all shipped (PRs #226-#242, 18 PRs, all merged + deployed + live-verified).** The
 audit was investigate-only; the owner then said "faça todas as waves" → "ajuste o que precise e
 mergeei" → "faça os 2" (the deterministic guards). Everything implementable is merged, deployed,
@@ -69,6 +75,77 @@ per-item verification). Nothing from the audit is left as pending code.
 _Already closed this arc (were open before): `POST /llm/test-connectivity` is now live-verified
 ("Working 1921ms"); the audit's H5/H1/M3/M11 and all other merged items are live-verified — see
 below._
+
+## 2026-09-21 — credential rotation + Railway cost analysis — not tied to a sprint
+
+Operational only. **No application code changed**; the only repo change is documentation. This
+session sits inside the code freeze Laura asked for on 2026-09-10 because it was forced
+maintenance (an expiring credential), not scope.
+
+### ANTHROPIC_API_KEY rotated — 12-month expiry, 2027-09-21
+
+The key was rotated across both services that hold it (`ai-etl`, `tranquil-appreciation`).
+`celery-beat` does not hold it and was not touched.
+
+**Expiry was deliberately set to 12 months, not the conventional 90 days.** A 90-day key created
+on 2026-09-21 expires 2026-12-20 — inside the defense window (~18-20 Dec 2026). Six months
+(2027-03-20) was the acceptable stricter alternative. The security cost of the longer window is
+small: the key exists only in two Railway environment variables — never in git, never in CI,
+never in a local `.env` (there is none at the repo root).
+
+**The first attempt failed and the old key had already been revoked**, leaving both services
+returning `401` for a period. Root cause: a `railway variable set --stdin` one-liner silently
+wrote nothing, and "the command didn't error" was treated as verification. The tell was
+structural — no new deployment on either service, while a variable write always triggers one.
+Impact was contained because `AI_ETL_LLM_PROVIDER` is unset in Railway, so the default provider
+is `openai` (`core/llm.py:85`); only pipelines with an explicit `llm_provider=anthropic` override
+were affected. Re-done via the Railway dashboard and verified: HTTP 200 on both services, plus
+`/health` 200.
+
+**Workload Identity Federation was evaluated and rejected.** The Anthropic API supports WIF (GA),
+but **Railway does not issue workload OIDC identity tokens** — there is no identity to federate,
+and a custom issuer would need a long-lived credential to authenticate to it. Revisit only if the
+backend moves to ECS/EKS/Cloud Run/GKE. The genuinely federatable credential is the AWS pair in
+`.github/workflows/db-backup.yml`, since GitHub Actions does issue OIDC tokens — already tracked
+as deferred in `docs/work/2026-09-13-repository-hardening.md`.
+
+New: `docs/runbooks/credential-rotation.md` (inventory, procedure, verification, the WIF analysis,
+and the 2026-09-21 failure as a lesson) and `docs/runbooks/anthropic-key-expiry-2027-09-21.ics`
+(calendar reminder for 2027-08-22). No expiry-monitoring code was written on purpose — a monitor
+for one credential is not worth the maintenance.
+
+### Railway spend: ~$7.52/month against a $5 plan
+
+Measured from live per-service metrics, not estimated. Railway bills **$10/GB-month of RAM and
+$20/vCPU-month, metered per minute of actual consumption** — uptime, not activity. CPU is
+negligible across all four services (<0.01 vCPU combined); the entire bill is idle RAM.
+
+| Service | RAM | Cost/month |
+|---|---|---|
+| `ai-etl` (API) | 0.268 GB | $2.70 |
+| `tranquil-appreciation` (worker) | 0.261 GB | $2.68 |
+| `celery-beat` | 0.177 GB | $1.77 |
+| `Redis` | 0.033 GB | $0.37 |
+| **Total** | **0.74 GB** | **~$7.52** |
+
+Three findings worth carrying into the technical report:
+
+- **A $5 hard cap is not configurable.** Railway's minimum hard limit is $10. Email alerts accept
+  any value; only the automatic cutoff has the floor. Staying under $5 therefore means reducing
+  the footprint, not setting a limit.
+- **Serverless (app-sleeping) would not fire here.** Railway's docs list open database connection
+  pools, persistent queue connections, and telemetry as sleep blockers — this deployment has all
+  three (SQLAlchemy → Supabase, Celery → Redis, `SENTRY_DSN`). Making it work would require
+  changing the pool strategy and dropping Sentry, for an uncertain gain.
+- **`celery-beat` is the worst cost/benefit of the four** — 24% of the bill to run exactly two
+  periodic tasks (`check_scheduled_pipelines`, `cleanup_expired_retention`, see
+  `core/celery_app.py:108`), neither needed outside a demo of the scheduling feature.
+
+**Decision: the environment will be brought down between working sessions and raised on demand**,
+rather than running 24/7. At ~$0.25/day for the full stack, a month of idle uptime costs $7.52
+while a few hours a day costs ~$1.25. The stack must be up for the defense window (~18-20 Dec)
+and for Laura's button-by-button functional test, which explicitly covers scheduling and
+monitoring/alerting — so the shutdown happens **after** that test, not before.
 
 ## 2026-09-13 — repository/CI governance hardening (PRs #245-#272) — not tied to a sprint
 
