@@ -101,6 +101,19 @@ Execution checklist: `.claude/skills/sr-quality-check.md` (invoke via `/sr-quali
 make check  # lint + format-check + type-check + test + security — must pass 100%
 ```
 
+> ⚠️ **On macOS, `make check` is currently unusable** — it takes ~3h31min and reports 27
+> failures in `tests/unit/test_analyst.py` and `tests/unit/test_science.py`. Those are **not**
+> regressions: `import plotly.express` hangs inside the sandbox child process on macOS, the
+> Analyst's 15s timeout expires, auto-repair retries, and the test mocks run out
+> (`StopIteration`). CI on Linux is green and production is Linux.
+>
+> Locally, skip those two files and let CI be the real gate:
+> ```bash
+> uv run pytest tests/unit tests/integration \
+>   --ignore=tests/unit/test_analyst.py --ignore=tests/unit/test_science.py
+> ```
+> Full diagnosis: Vault `tcc/bugs-solved/plotly-import-hangs-in-sandbox-macos.md`.
+
 Project-specific checklist:
 - Every LangGraph node: signature `(state: PipelineState) -> PipelineState`, returns `{**state, ...}`
 - `log_action()` called for every relevant action of every agent
