@@ -2,13 +2,19 @@
 
 > Living doc. Updated at the end of meaningful work sessions, not per-commit. Source of truth for repo/code state; the Obsidian vault (`~/Documents/Obsidian Vault/tcc/`) is the source of truth for the academic TCC narrative and product/strategy context.
 
-**Last updated:** 2026-09-21 — **Operational session, no application code.** The
+**Last updated:** 2026-10-01 — **No application code changed since #284.** Three things a
+reader needs: production is **partially broken** (Redis has no deployment; worker and
+celery-beat have been `CRASHED` since 2026-09-22), the local test suite has **27 environment
+failures** that are not a regression, and the product-readiness blockers were re-verified
+against the live system. Details in the 2026-10-01 section below.
+
+**Previously:** 2026-09-21 — **Operational session, no application code.** The
 `ANTHROPIC_API_KEY` was rotated (12-month expiry, 2027-09-21) after a failed first attempt left
 production briefly holding a revoked key; a credential-rotation runbook now exists. Railway
 spend was investigated and found to be **~$7.52/month of idle RAM against a $5 plan** — a
 structural overrun, not a usage spike. Details in the 2026-09-21 section below.
 
-**Previously:** 2026-09-13 — **Repository/CI governance hardening (13 PRs, #245-#272).** The
+**Before that:** 2026-09-13 — **Repository/CI governance hardening (13 PRs, #245-#272).** The
 repo went **private again** (it had been public since 2026-08-30), which is what forces CodeQL
 to stay dormant. A `default-branch-protection` ruleset, squash-only merges, signed commits,
 enforced SHA pinning, a real Trivy gate on the production image, and expanded Dependabot
@@ -75,6 +81,67 @@ per-item verification). Nothing from the audit is left as pending code.
 _Already closed this arc (were open before): `POST /llm/test-connectivity` is now live-verified
 ("Working 1921ms"); the audit's H5/H1/M3/M11 and all other merged items are live-verified — see
 below._
+
+## 2026-10-01 — production partially down, test-suite environment failure, readiness re-check
+
+No application code changed. `main` is at #284; the only merges since are #279 (anyio security
+bump) and #284 (docs). This entry records three states a future session must not rediscover.
+
+### Production is partially broken — Redis has no deployment
+
+| Service | State |
+|---|---|
+| `ai-etl` (API) | up, `/health` 200 |
+| `Redis` | **no deployment** (`latestDeployment: null`) |
+| `tranquil-appreciation` (worker) | **CRASHED since 2026-09-22 04:27** |
+| `celery-beat` | **CRASHED since 2026-09-22 04:27** |
+
+```
+kombu.exceptions.OperationalError: Error -2 connecting to
+redis.railway.internal:6379. Name or service not known.
+```
+
+Cause: `railway down` was run on all four services on 2026-09-22 ~01:08 to cut cost. Railway
+recreated three of them but **not Redis**; worker and beat came back, could not resolve the
+Redis host, and died.
+
+**Pipeline execution in production has been broken since then** — runs are enqueued and never
+consumed. It went unnoticed for six days because the check used was `/health`, which only
+exercises the API and touches neither Redis, the queue, nor the worker. **`/health` 200 is not
+a system health check.** The real check is the queue accepting a task and the worker consuming
+it. Fix: restore the Redis deployment; worker and beat recover on their own.
+
+### 27 local test failures — environment, not regression
+
+`make test`: **27 failed, 1178 passed, 34 skipped, coverage 94.20%**, in 3h31min.
+
+All 27 are in `test_analyst.py` (16) and `test_science.py` (11) — the two agents that build
+plotly figures inside the sandbox. `import plotly.express` in the sandbox child process hangs on
+macOS (0.3s without plotly, 120s+ with). The Analyst's 15s timeout expires, auto-repair retries,
+the test mocks run out, and the symptom surfaces as `StopIteration`.
+
+CI (Linux) is green and production is Linux. Full diagnosis and the 30-second reproduction are
+in the Vault at `bugs-solved/plotly-import-hangs-in-sandbox-macos.md`. Practical consequences:
+the Agentic BI layer is not testable on this Mac, the case study for that layer must run on
+Linux, and `make check` is unusable locally.
+
+### Product-readiness blockers re-verified
+
+Against the 2026-09-08 twelve-persona audit verdict, which still holds: *"the engineering is
+finished and defensible; the product is not — and the gap is almost entirely commercial, locale,
+and trust wiring, not core engineering."*
+
+| Blocker | State on 2026-10-01 |
+|---|---|
+| H3 — missing `LICENSE` | closed, file exists |
+| H5 — English UI mid-run in a PT session | closed, verified live |
+| H1 — root container with open sandbox file-read | closed, verified live |
+| H2 — uncapped spend | mechanism exists (`AI_ETL_DEFAULT_MONTHLY_BUDGET_USD`) but **is not set in Railway** |
+| C1 — dev-mode identity provider | **still open** |
+| Billing | **no code at all** |
+| M3 — wrong secondary numbers in recommendations | **still open**; the prompt-only fix did not hold, a deterministic guard is needed |
+
+Setting the default budget cap is a two-minute environment change and closes H2.
 
 ## 2026-09-21 — credential rotation + Railway cost analysis — not tied to a sprint
 
