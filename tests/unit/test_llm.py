@@ -63,7 +63,7 @@ class TestGetModelName:
 
     def test_google_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("AI_ETL_LLM_PROVIDER", "google")
-        assert get_model_name() == "gemini-2.0-flash"
+        assert get_model_name() == "gemini-3.8-flash"
 
     def test_ollama_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("AI_ETL_LLM_PROVIDER", "ollama")
@@ -108,6 +108,20 @@ class TestGetLlmProviderSelection:
             assert llm.model == model
             assert llm.temperature is None
 
+    def test_anthropic_5_5_generation_omits_temperature(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Catalog refresh 2026-10-10: per Anthropic's API reference `claude-opus-5-5`
+        rejects sampling parameters and `claude-sonnet-5-5`/`claude-haiku-5-5` reject
+        any non-default value, so get_llm() must not send `temperature` for them
+        either. Documentation-backed, not yet confirmed by a live call."""
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-fake")
+        for model in ("claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"):
+            llm = get_llm(provider="anthropic", model=model, temperature=0.3)
+            assert isinstance(llm, ChatAnthropic)
+            assert llm.model == model
+            assert llm.temperature is None
+
     def test_anthropic_haiku_still_accepts_temperature(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -121,7 +135,7 @@ class TestGetLlmProviderSelection:
         monkeypatch.setenv("GOOGLE_API_KEY", "fake-key")
         llm = get_llm()
         assert isinstance(llm, ChatGoogleGenerativeAI)
-        assert llm.model == "gemini-2.0-flash"
+        assert llm.model == "gemini-3.8-flash"
 
     def test_ollama_provider_no_credential_required(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("AI_ETL_LLM_PROVIDER", "ollama")

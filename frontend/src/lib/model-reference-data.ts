@@ -77,9 +77,12 @@ export const MODEL_REFERENCE_DATA: ModelReferenceEntry[] = [
     provider: "anthropic",
     model: "claude-sonnet-5",
     displayName: "Claude Sonnet 5",
-    inputPricePerMillionUsd: 3.0,
-    outputPricePerMillionUsd: 15.0,
+    inputPricePerMillionUsd: 2.0,
+    outputPricePerMillionUsd: 10.0,
     reliability: "verified",
-    reliabilityNote: "3/3 real runs completed, quality score 83.0-88.0, ~$0.08-0.10/run.",
+    // Cost restated 2026-10-10: the 2026-08-23 runs were priced at $3/$15, and both
+    // rates were corrected by the same factor (2/3), so the measured ~$0.08-0.10
+    // scales exactly to ~$0.05-0.07. Completion rate and quality score are unchanged.
+    reliabilityNote: "3/3 real runs completed, quality score 83.0-88.0, ~$0.05-0.07/run.",
   },
 ];
