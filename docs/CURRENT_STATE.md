@@ -2,13 +2,18 @@
 
 > Living doc. Updated at the end of meaningful work sessions, not per-commit. Source of truth for repo/code state; the Obsidian vault (`~/Documents/Obsidian Vault/tcc/`) is the source of truth for the academic TCC narrative and product/strategy context.
 
-**Last updated:** 2026-10-01 — **No application code changed since #284.** Three things a
+**Last updated:** 2026-10-10 — **LLM model catalog refreshed; production is still partially
+down.** The Google entries pointed at models Google has shut down, two Anthropic prices were
+overstated, and the Claude 5.5 generation was added. Redis is still offline, so pipeline
+execution and schedules do not run in production. Details in the 2026-10-10 section below.
+
+**Previously:** 2026-10-01 — **No application code changed since #284.** Three things a
 reader needs: production is **partially broken** (Redis has no deployment; worker and
 celery-beat have been `CRASHED` since 2026-09-22), the local test suite has **27 environment
 failures** that are not a regression, and the product-readiness blockers were re-verified
 against the live system. Details in the 2026-10-01 section below.
 
-**Previously:** 2026-09-21 — **Operational session, no application code.** The
+**Before that:** 2026-09-21 — **Operational session, no application code.** The
 `ANTHROPIC_API_KEY` was rotated (12-month expiry, 2027-09-21) after a failed first attempt left
 production briefly holding a revoked key; a credential-rotation runbook now exists. Railway
 spend was investigated and found to be **~$7.52/month of idle RAM against a $5 plan** — a
@@ -81,6 +86,57 @@ per-item verification). Nothing from the audit is left as pending code.
 _Already closed this arc (were open before): `POST /llm/test-connectivity` is now live-verified
 ("Working 1921ms"); the audit's H5/H1/M3/M11 and all other merged items are live-verified — see
 below._
+
+## 2026-10-10 — LLM model catalog refresh; production still partially down
+
+### What changed in code
+
+`core/llm.py` and `core/pricing.py`, plus the tests and the frontend price mirror that pin them.
+
+| Change | Why |
+|---|---|
+| Google allowlist and default: `gemini-2.0-pro`/`gemini-2.0-flash` → `gemini-3.8-flash` (default), `gemini-2.5-pro`, `gemini-2.5-flash` | `gemini-2.0-flash` was shut down by Google on 2026-06-01; `gemini-2.0-pro` is not in Google's published model or deprecation tables. The Google provider could not have worked. |
+| Anthropic allowlist: added `claude-opus-5-5`, `claude-sonnet-5-5`, `claude-haiku-5-5` | Current generation. All three join `_ANTHROPIC_MODELS_WITHOUT_TEMPERATURE` — the API rejects this module's `temperature=0.0`. |
+| Pricing: `claude-opus-5` $15/$75 → $5/$25; `claude-sonnet-5` $3/$15 → $2/$10 | The old values overstated every estimate and budget-cap debit for those models (3x and 1.5x). Cost figures recorded before this date for these two models are overstated by the same factors. |
+| `model_comparison.py` defaults: added `claude-haiku-5-5` and `claude-sonnet-5-5` | So the next comparison run measures them. |
+
+**Not live-verified.** Nothing here was exercised against a real provider: there is no local
+`.env`, and production has no `GOOGLE_API_KEY`. The new ids and the no-temperature rule for the
+5.5 generation come from the providers' published references. Before calling any of them
+supported, run `POST /llm/test-connectivity` for each. `gpt-4o` and `gpt-4o-mini` were checked
+against OpenAI's deprecation table and have no shutdown date; the dated snapshot
+`gpt-4o-2024-05-13` shuts down 2026-10-23, which does not affect the aliases this project uses.
+
+The frontend model picker still lists four models on purpose: its own header requires real
+reliability data per entry, and the new models have none until the comparison is re-run.
+
+### Production — unchanged since 2026-10-01
+
+| Service | State on 2026-10-10 |
+|---|---|
+| `ai-etl` (API) | online |
+| `Redis` | **offline** — one deployment, `REMOVED` on 2026-09-22, redeployable |
+| `tranquil-appreciation` (worker) | **crashed** (re-crashed after the 2026-10-01 redeploy) |
+| `celery-beat` | **crashed** (same) |
+
+Recovery is one action: redeploy Redis deployment `d94fa5e3`, then restart the worker and
+beat. An agent session attempted it and was blocked by the production-deploy permission gate,
+so it remains an owner action. Verify with a real run that is enqueued **and consumed**, not
+with `/health`.
+
+### Verified working
+
+- **AWS:** the `db-backup` workflow has succeeded every day through 2026-10-10 (S3 upload with
+  the repository's AWS credentials). `AWS_*` and `AI_ETL_S3_BUCKET` are set on the API service.
+- **REST source with tenant secrets:** implemented (`ADR-045`, `get_rest_secret`). Any text
+  that describes this integration as "specified but not connected" is out of date.
+- **`AI_ETL_DEFAULT_MONTHLY_BUDGET_USD` is still not set** on Railway (H2 remains open).
+
+### Local repository note
+
+`~/Documents/ai-etl` sits under iCloud and its `.git` has duplicated files again; `git fetch`
+there took over two minutes. This session's work was done in a second clone at
+`~/dev/ai-etl`, outside iCloud. Nothing was moved or deleted.
 
 ## 2026-10-01 — production partially down, test-suite environment failure, readiness re-check
 

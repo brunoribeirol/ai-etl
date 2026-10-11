@@ -25,7 +25,7 @@ from ai_etl.core.analysis_types import TokenUsage
 _DEFAULT_MODEL_BY_PROVIDER = {
     "openai": "gpt-4o-mini",
     "anthropic": "claude-sonnet-5",
-    "google": "gemini-2.0-flash",
+    "google": "gemini-3.8-flash",
     "ollama": "llama3.1",
 }
 
@@ -40,10 +40,27 @@ _DEFAULT_MODEL_BY_PROVIDER = {
 # outside this allowlist is rejected at the API layer before it ever reaches
 # `saved_pipelines`, the same defense-in-depth posture `_validate_source_type`
 # already applies to `source_type`.
+#
+# Catalog refresh 2026-10-10: added the Claude 5.5 generation, and replaced the
+# Gemini 2.0 ids — `gemini-2.0-flash` was shut down by Google on 2026-06-01 and
+# `gemini-2.0-pro` is absent from Google's published model and deprecation tables, so
+# both entries (and the Google default) pointed at ids that can no longer be relied
+# on. The new Anthropic/Google ids are NOT yet
+# live-verified through this codebase (no credentialed run) — do that with
+# `POST /llm/test-connectivity` before presenting them as supported.
 ALLOWED_MODELS_BY_PROVIDER: dict[str, frozenset[str]] = {
     "openai": frozenset({"gpt-4o-mini", "gpt-4o"}),
-    "anthropic": frozenset({"claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5"}),
-    "google": frozenset({"gemini-2.0-pro", "gemini-2.0-flash"}),
+    "anthropic": frozenset(
+        {
+            "claude-opus-5-5",
+            "claude-opus-5",
+            "claude-sonnet-5-5",
+            "claude-sonnet-5",
+            "claude-haiku-5-5",
+            "claude-haiku-4-5",
+        }
+    ),
+    "google": frozenset({"gemini-3.8-flash", "gemini-2.5-pro", "gemini-2.5-flash"}),
     "ollama": frozenset({"llama3.1", "llama3.3", "mistral", "qwen2.5"}),
 }
 
@@ -138,7 +155,21 @@ def _build_openai(model: str, temperature: float) -> BaseChatModel:
 # (an older-tier model) still accepts it. Kept as an explicit set rather than a
 # version-string heuristic, matching this module's own "explicit allowlist over
 # pattern-matching" convention (see ALLOWED_MODELS_BY_PROVIDER above).
-_ANTHROPIC_MODELS_WITHOUT_TEMPERATURE = frozenset({"claude-opus-5", "claude-sonnet-5"})
+#
+# The 5.5 generation (added 2026-10-10) keeps the same restriction per Anthropic's
+# published API reference: `claude-opus-5-5` rejects sampling parameters outright, and
+# `claude-sonnet-5-5`/`claude-haiku-5-5` reject any non-default value — this module's
+# `temperature=0.0` default is one. Unlike the two entries above, these three come from
+# documentation, not from a live call through this codebase.
+_ANTHROPIC_MODELS_WITHOUT_TEMPERATURE = frozenset(
+    {
+        "claude-opus-5-5",
+        "claude-opus-5",
+        "claude-sonnet-5-5",
+        "claude-sonnet-5",
+        "claude-haiku-5-5",
+    }
+)
 
 
 def _build_anthropic(model: str, temperature: float) -> BaseChatModel:

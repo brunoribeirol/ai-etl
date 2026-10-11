@@ -89,7 +89,9 @@ DEFAULT_MODELS = [
     "gpt-4o-mini",
     "gpt-4o",
     "anthropic:claude-haiku-4-5",
+    "anthropic:claude-haiku-5-5",
     "anthropic:claude-sonnet-5",
+    "anthropic:claude-sonnet-5-5",
     "ollama:llama3.1",
     "ollama:mistral",
 ]
