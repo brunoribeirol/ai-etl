@@ -2,10 +2,13 @@
 
 > Living doc. Updated at the end of meaningful work sessions, not per-commit. Source of truth for repo/code state; the Obsidian vault (`~/Documents/Obsidian Vault/tcc/`) is the source of truth for the academic TCC narrative and product/strategy context.
 
-**Last updated:** 2026-10-10 — **LLM model catalog refreshed; production is still partially
-down.** The Google entries pointed at models Google has shut down, two Anthropic prices were
-overstated, and the Claude 5.5 generation was added. Redis is still offline, so pipeline
-execution and schedules do not run in production. Details in the 2026-10-10 section below.
+**Last updated:** 2026-10-11 — **LLM model catalog refreshed, dependency advisories cleared,
+public-data case-study track added (PRs #302-#305); production is still partially down.** The
+Google entries pointed at models Google has shut down, two Anthropic prices were overstated,
+and the Claude 5.5 generation was added. The case study can now run on public, pinned data —
+but **no run has been executed**, because no provider credential is available to CI or locally.
+Redis is still offline, so pipeline execution and schedules do not run in production. Details
+in the 2026-10-10 section below.
 
 **Previously:** 2026-10-01 — **No application code changed since #284.** Three things a
 reader needs: production is **partially broken** (Redis has no deployment; worker and
@@ -131,6 +134,54 @@ with `/health`.
 - **REST source with tenant secrets:** implemented (`ADR-045`, `get_rest_secret`). Any text
   that describes this integration as "specified but not connected" is out of date.
 - **`AI_ETL_DEFAULT_MONTHLY_BUDGET_USD` is still not set** on Railway (H2 remains open).
+
+### Dependency advisories cleared (2026-10-11, PRs #303 and #304)
+
+Both audits had started failing every PR. Lockfile-only fixes:
+
+| Ecosystem | Package | Was → Now | Advisory |
+|---|---|---|---|
+| npm | next | 16.3.4 → 16.4.0 | critical — RCE in `next/og` ImageResponse, plus cache-poisoning and SSRF advisories |
+| npm | sharp | 0.35.4 → 0.35.5 | high |
+| npm | source-map-js | 1.2.1 → 1.2.2 | high |
+| PyPI | langgraph-sdk | 0.4.2 → 0.4.6 | CVE-2026-104873 |
+| PyPI | pymongo | 4.18.1 → 4.18.3 | CVE-2026-96747/8/9 |
+
+`next` moved one minor version. Lint and `next build` pass; the deployed frontend was not
+exercised in a browser after the change.
+
+### Public-data case-study track (2026-10-11, PR #305)
+
+Closes the two weaknesses recorded in `case_study/results/tabela-resultados.md` (audit M10):
+author-generated data, and results that cannot be reproduced from the repository.
+
+- `case_study/data/fetch_public_data.py` — one month of NYC TLC yellow-taxi trip records plus
+  the zone lookup table; a windowed (2025-01-06 to 2025-01-12), seeded 20,000-row extract with
+  **no value altered**. `--verify` re-fetches and compares hashes.
+- `case_study/public_data_manifest.json` — the committed pin: URLs, SHA-256, selection
+  parameters, and the quality problems present as published (2,485 rows with nulls in five
+  columns, 717 fares <= 0, 437 zero distances, 152 zero-passenger trips, 0 exact duplicates).
+- Four scenarios in `case_study/pipelines/public_scenario*`: CSV→CSV; CSV+PostgreSQL→PostgreSQL;
+  +REST (Open-Meteo archive); scenario 1 plus a business question for the analysis layer.
+- `case_study/scripts/run_case_study.py` — N runs per scenario and model through
+  `run_full_analysis`; one JSON per run, `runs_log.csv`, `summary.json`. **Real calls only**: a
+  model without a credential is recorded as `skipped`, never mocked.
+- `.github/workflows/case-study.yml` — manual dispatch on Linux with a PostgreSQL service, so
+  the analysis layer (which hangs on macOS) can run.
+
+**Nothing has been run against a real model.** Three things stand in the way, all owner actions:
+
+1. **Repository secrets.** The only LLM secret is named `OPEN_API_KEY`. Every workflow reads
+   `secrets.OPENAI_API_KEY`, which therefore resolves to empty — including `ci.yml`'s E2E job
+   and `prompt-regression.yml`, which have only ever run in mocked mode. Add `OPENAI_API_KEY`
+   (and `ANTHROPIC_API_KEY` for the model comparison).
+2. **No local `.env`** in either clone, so no real-model run is possible on this machine either.
+3. **The specs are untested against a model.** Whether the generated transformations match the
+   intent, and whether the workflow passes end to end, is unknown until the first dispatch —
+   start with `runs=1` and `scenarios=1`.
+
+The script-generated track (`scenario*_spec.txt`, `generate_*.py`) is untouched and still backs
+the committed 2026-06-23 results.
 
 ### Local repository note
 
