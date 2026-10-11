@@ -1,0 +1,1 @@
+Read the file case_study/data/nyc_taxi_trips.csv and the PostgreSQL table public.taxi_zones. Join them on PULocationID equal to LocationID. Keep only rows where fare_amount is greater than 0. Group by Borough and Zone and compute the number of trips as "trips" and the average total_amount as "avg_total_amount". Save the result to the PostgreSQL table public.zone_revenue_summary.

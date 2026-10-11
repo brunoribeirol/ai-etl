@@ -1,0 +1,1 @@
+Quais zonas de embarque e faixas de horário concentram mais receita (total_amount), qual é a tendência da receita diária, e onde a frota deve ser concentrada na semana seguinte?
