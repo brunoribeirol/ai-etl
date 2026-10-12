@@ -49,8 +49,14 @@ Rules:
   format directly — comparing two numeric-parse *results* against each other
   cannot distinguish "this is unambiguous ISO" from "this is genuinely ambiguous
   day-first text," because both produce two different-but-valid timestamps either
-  way. Always try a strict ISO parse FIRST; only fall back to the day-first
-  heuristic for values that don't match ISO. {date_parse_hint}
+  way. Always try a strict ISO 8601 parse FIRST; only fall back to the day-first
+  heuristic for values that don't match ISO. The strict check must be
+  `format="ISO8601"`, which accepts a date alone ("2025-01-06") and a date followed
+  by a time ("2025-01-06 00:04:25", "2025-01-06T00:04:25Z"). A date-only
+  `format="%Y-%m-%d"` is NOT a valid ISO check: it rejects every ISO value that
+  carries a time part and sends it to the day-first branch, which swaps day and
+  month (real bug found 2026-10-12 on a public dataset of 20,000 timestamps:
+  19,974 of them came back with day and month swapped). {date_parse_hint}
 
 Example fallback pattern (WRONG: no fallback attempted, silently drops day-first dates):
 ```python
@@ -80,7 +86,7 @@ parseable — this is a pandas gotcha, not a logic bug in the branch below, and
 it means "is the whole column ISO?" is the wrong question to ask):
 ```python
 non_null = df["date"].notna().sum()
-strict_iso = pd.to_datetime(df["date"], format="%Y-%m-%d", errors="coerce")
+strict_iso = pd.to_datetime(df["date"], format="ISO8601", errors="coerce")
 if non_null > 0 and strict_iso.notna().sum() == non_null:
     parsed = strict_iso
 else:
@@ -105,7 +111,8 @@ reading only for that specific value if it isn't ISO-shaped):
 def _parse_one_date(value):
     if pd.isna(value):
         return pd.NaT
-    iso = pd.to_datetime(value, format="%Y-%m-%d", errors="coerce")
+    # "ISO8601" (not "%Y-%m-%d"): must also match ISO values that carry a time part.
+    iso = pd.to_datetime(value, format="ISO8601", errors="coerce")
     if pd.notna(iso):
         return iso
     # Not ISO-shaped — apply this tenant's locale preference to THIS value only.
