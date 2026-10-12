@@ -539,3 +539,21 @@ def test_the_etl_layer_is_timed_apart_from_the_whole_run(
         }
 
     assert timings["etl_ms"] >= 0.0
+
+
+def test_peak_memory_is_reported_in_megabytes_on_either_platform(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The kernel's unit differs: kilobytes on Linux, bytes on macOS."""
+
+    class _Usage:
+        ru_maxrss = 512 * 1024 * 1024  # 512 MB expressed in bytes
+
+    monkeypatch.setattr(run_case_study.resource, "getrusage", lambda _who: _Usage())
+
+    monkeypatch.setattr(run_case_study.sys, "platform", "darwin")
+    assert run_case_study.peak_rss_mb(run_case_study.resource.RUSAGE_SELF) == 512.0
+
+    _Usage.ru_maxrss = 512 * 1024  # the same 512 MB expressed in kilobytes
+    monkeypatch.setattr(run_case_study.sys, "platform", "linux")
+    assert run_case_study.peak_rss_mb(run_case_study.resource.RUSAGE_SELF) == 512.0
