@@ -2,10 +2,17 @@
 
 > Living doc. Updated at the end of meaningful work sessions, not per-commit. Source of truth for repo/code state; the Obsidian vault (`~/Documents/Obsidian Vault/tcc/`) is the source of truth for the academic TCC narrative and product/strategy context.
 
-**Last updated:** 2026-10-12. **Code is green and has zero open security alerts, but the
-system is NOT validated end to end: production cannot execute pipelines (Redis offline) and
-nothing has been exercised with a real model since 2026-09-10.** See the 2026-10-12 section
-for the evidence matrix and the exact next steps.
+**Last updated:** 2026-10-12, second entry. **The pipeline was exercised with real models for
+the first time since 2026-09-10, and the case-study evidence on public data exists.** The
+first real runs found two defects that no test with a simulated model could find (timestamps
+with day and month swapped; a model response returned as a list of blocks); both are fixed and
+re-verified live (#315, #318). Production executes pipelines again (Redis restored). **Still
+not done: the 52-item functional checklist (the browser session was not signed in) and the
+production connectivity test of each model.** Three defects were found and left open under the
+code freeze. See "2026-10-12: first real runs" below.
+
+**Earlier the same day:** code green and zero open security alerts, but nothing validated end
+to end; the evidence matrix of that moment is in "2026-10-12: validation status".
 
 **Previously:** 2026-10-11. **LLM model catalog refreshed, dependency advisories cleared,
 public-data case-study track added (PRs #302-#305); production is still partially down.** The
@@ -94,6 +101,76 @@ per-item verification). Nothing from the audit is left as pending code.
 _Already closed this arc (were open before): `POST /llm/test-connectivity` is now live-verified
 ("Working 1921ms"); the audit's H5/H1/M3/M11 and all other merged items are live-verified — see
 below._
+
+## 2026-10-12: first real runs, two defects fixed, case-study evidence
+
+Merged: #315, #316, #317, #318, #319. Raw numbers, run identifiers and every error message:
+vault note `tcc/artefact/case-study-evidence-2026-10-12.md`.
+
+### Corrections to the entry below
+
+- **Redis is online.** Restored by the owner on 2026-10-12 at 04:18 UTC (Railway deployment of
+  `redis:8.2`, status `SUCCESS`). `/health/ready` returned 200 with `database: ok` and
+  `redis: ok` at 08:11, 08:38 and 08:59 UTC, the last two after the deploys of this session.
+  The rows "Pipeline execution in production" and "Scheduling in production" of the matrix
+  below describe the state before that.
+- **The repository secrets exist** (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`), confirmed by name.
+- Railway deploys `main` on every merge without any action: after the last of the five PRs
+  the API, the worker and the scheduler are at `394ad30`, status `SUCCESS`.
+
+### What the first real runs found
+
+| # | Finding | State |
+|---|---|---|
+| 1 | The Transformer prompt's strict ISO check was date-only (`format="%Y-%m-%d"`). ISO values with a time part fell to the day-first reading: in the first real run 18,890 of 18,915 output timestamps left the data's week, in a run reported as a success. Third fix of this family (#187, #191, #201). | fixed in #315, re-run on the same input: 0 outside the week |
+| 2 | The case-study runner counted `status == "completed"`, not the content of the output, and the outputs of scenarios 2 and 3 were lost with the job's database. | fixed in #316: each completed run is compared with a plain-pandas reference (`case_study/scripts/output_checks.py`) and its output saved |
+| 3 | Every agent parsed `str(response.content)`. A model that reasons first returns a list of blocks; the first call to `claude-haiku-5-5` failed three times in the Transformer. | fixed in #318 (`core/llm.py::response_text`), re-run: completed, output check `match` |
+| 4 | `run_full_analysis` runs the analysis layer on every run that yields data, with or without a business question. Runner columns that looked like "time of the ETL scenario" included it. | measured apart since #317 (`etl_elapsed_ms`, `analysis_elapsed_ms`); product behaviour unchanged |
+
+### Defects found and left open (code freeze: owner's decision)
+
+1. **The cost the product reports leaves out part of the spend.** The token total returned by
+   `run_full_analysis` is `sum_run_tokens(gold, science, advisor, planner)`. The Orchestrator
+   and the Transformer never call `extract_token_usage` and `PipelineState` has no token field,
+   so the ETL layer's calls are not counted; in runs with repair attempts part of the analysis
+   calls is missing too. Measured: scenario 1 with `gpt-4o-mini`, 0.0047 USD reported against
+   0.0082 spent; scenario 4 with `gpt-4o`, 0.1009 against 0.2073. The same figure feeds the
+   cost per run in the interface and the tenant budget (ADR-019). A fix adds token usage to
+   the state contract and to two graph nodes.
+2. **Analysis code that begins with `import` fails in the sandbox.** With `gpt-4o` (20 of 20
+   runs) and `claude-haiku-4-5` (8 of 8) no sub-analysis completed:
+   `ImportError: __import__ not found`. The Analyst prompt says "Do NOT import anything else",
+   which those models read as permission to import the listed libraries. `gpt-4o` is one of
+   the four models in the interface's picker. The ETL layer is unaffected.
+3. **The REST source has no retry** (`sources/rest_source.py`: one `httpx.get`, 30 s timeout).
+   Two of five runs of scenario 3 in one batch ended at extraction on an SSL handshake timeout.
+4. **The day and month rule is still prompt text only.** No deterministic check runs after
+   the transformation. The runner's output check catches it in the case study, not in the
+   product.
+
+### Evidence matrix, as of this entry
+
+| Area | Evidence | Status |
+|---|---|---|
+| Unit and integration tests | CI on `main` at `394ad30`: 1,254 unit tests passed, coverage 94.41%; integration 6 passed and 27 skipped | ok; most integration tests still self-skip in the required job (H4) |
+| End-to-end tests in CI | 5 passed, with a simulated model | partial, unchanged |
+| Pipeline with a real model | `gpt-4o-mini`: 20 of 20 runs completed over four scenarios, output check `match` in 19 (run 38224455116) | verified |
+| Analysis layer with a real model | scenario 4, `gpt-4o-mini`: 4 of 4 sub-analyses in 5 of 5 runs; works on Linux only (unchanged) | verified |
+| Model comparison | scenario 1 complete for six models, 5 runs each; `gpt-4o` complete for four scenarios; Anthropic models incomplete for scenarios 2 to 4 | partial: the Anthropic credit ran out mid-batch |
+| New model ids | `claude-haiku-5-5`, `claude-sonnet-5-5`, `claude-opus-5-5`, `claude-sonnet-5`, `claude-opus-5` completed at least one real run through the pipeline; the three Google ids were never called (no credential anywhere) | partial |
+| `POST /llm/test-connectivity` in production | not called: needs a signed-in session | not verified |
+| Production | at commit `394ad30` on the API, the worker and the scheduler; `/health/ready` 200; worker log shows the scheduler's task received and succeeded every minute (checked 09:00 UTC, after the last deploy) | ok; no pipeline was submitted through the interface |
+| Functional checklist (52 items) | 5 items that need no session (API, landing page, language, theme); 46 not tested, 1 partly | **not done**: the browser session was not signed in to the application |
+| Memory | runner high-water mark 445.6 MB over one run of each scenario (run 38225048367) | measured |
+
+### Owner's next steps
+
+1. **Top up the Anthropic credit.** Production uses the same key, so every Anthropic model is
+   failing there too. Then finish the comparison (command in the evidence note, section C3).
+2. **Sign in to the application in Chrome** so the functional checklist and the production
+   connectivity tests can be done in an agent session, or walk the checklist by hand.
+3. Decide on the four open defects above: fix, or state them as limitations in the report.
+4. Keep the artefacts of the batches cited in the report: GitHub deletes them after 90 days.
 
 ## 2026-10-12: validation status and what is left to close the code
 
