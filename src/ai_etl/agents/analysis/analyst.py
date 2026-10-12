@@ -12,7 +12,12 @@ import textwrap
 import pandas as pd
 
 from ai_etl.agents._llm_codegen import build_column_stats as _build_column_stats
-from ai_etl.agents._llm_codegen import drop_redundant_imports, import_error_hint
+from ai_etl.agents._llm_codegen import (
+    drop_redundant_imports,
+    hand_typed_figures,
+    import_error_hint,
+    typed_figures_error,
+)
 from ai_etl.agents._llm_codegen import strip_code_fences as _strip_fences
 from ai_etl.core.analysis_types import GoldResult, TokenUsage
 from ai_etl.core.llm import extract_token_usage, get_llm, invoke_llm, response_text, sum_token_usage
@@ -85,7 +90,10 @@ Write Python code that defines EXACTLY three variables:
 
 3. `narrative` — a 2–3 sentence string, in the tenant's language above, explaining the main
    insight for a non-technical business user. Be specific: include actual numbers from
-   `gold_df`.
+   `gold_df`. Every decimal number or percentage in the text MUST be inserted with an
+   f-string field that reads it from `gold_df` or from a variable you computed
+   (e.g. `f"... {{rate:.1f}}% ..."`). Never type such a figure as plain text: code that
+   does is rejected without being executed.
 
 ## Critical rules
 - `df` is already loaded — do NOT read any files.
@@ -182,6 +190,12 @@ def run_analyst(
             _strip_fences(response_text(response).strip()), _PROVIDED_NAMES
         )
         last_code = code
+
+        typed = hand_typed_figures(code)
+        if typed:
+            # Not executed: the text would state figures the code did not compute.
+            last_error = typed_figures_error(typed, "gold_df")
+            continue
 
         sandbox_result = execute_in_sandbox(
             code,

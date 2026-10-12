@@ -112,7 +112,7 @@ class _FakeGraph:
 
 
 def test_run_silver_pipeline_emits_progress_and_persists(monkeypatch) -> None:
-    silver_df = pd.DataFrame({"a": [1, 2]})
+    silver_df = pd.DataFrame({"a": [1, 2, 3, 4, 5]})
     chunks = [
         {"orchestrator": {"pipeline_plan": {"sources": []}}},
         {
@@ -174,7 +174,7 @@ def test_run_silver_pipeline_emits_english_progress_for_en_us_locale(monkeypatch
     Advisor prompts, but `progress_callback` messages stayed hardcoded Portuguese
     regardless. This pins down the fix (`core/progress_messages.py`): an `en-US`
     tenant gets English progress text, not just an English narrative."""
-    silver_df = pd.DataFrame({"a": [1, 2]})
+    silver_df = pd.DataFrame({"a": [1, 2, 3, 4, 5]})
     chunks = [
         {"orchestrator": {"pipeline_plan": {"sources": []}}},
         {
@@ -211,7 +211,7 @@ def test_locale_override_wins_over_tenant_db_locale(monkeypatch) -> None:
     progress messages must come back in ENGLISH. This is the gap PR #221 left:
     it localized to `users.locale`, not the UI the user actually sees, so an
     English-UI tenant whose `users.locale` was still pt-BR kept seeing Portuguese."""
-    silver_df = pd.DataFrame({"a": [1, 2]})
+    silver_df = pd.DataFrame({"a": [1, 2, 3, 4, 5]})
     chunks = [
         {"orchestrator": {"pipeline_plan": {"sources": []}}},
         {
@@ -245,7 +245,7 @@ def test_locale_override_wins_over_tenant_db_locale(monkeypatch) -> None:
 def test_no_locale_override_falls_back_to_tenant_db_locale(monkeypatch) -> None:
     """No override (scheduled fires, CLI, tests) keeps the pre-H5 behavior:
     the tenant's stored `users.locale` is used."""
-    silver_df = pd.DataFrame({"a": [1, 2]})
+    silver_df = pd.DataFrame({"a": [1, 2, 3, 4, 5]})
     chunks = [
         {"orchestrator": {"pipeline_plan": {"sources": []}}},
         {"loader": {"status": "completed", "transformed_data": silver_df, "load_result": {}}},
@@ -1018,7 +1018,7 @@ def _completed_silver_state(run_id: str, silver_df: pd.DataFrame) -> dict[str, A
 
 def test_run_full_analysis_calls_stages_in_order_and_persists_analysis(monkeypatch) -> None:
     call_order: list[str] = []
-    silver_state = _completed_silver_state("run-123", pd.DataFrame({"a": [1, 2]}))
+    silver_state = _completed_silver_state("run-123", pd.DataFrame({"a": [1, 2, 3, 4, 5]}))
 
     monkeypatch.setattr(
         pipeline_service,
@@ -1103,7 +1103,7 @@ def test_run_full_analysis_forwards_resolved_per_pipeline_model_to_save_analysis
     `model_name` parameter at all and `_write_analysis_row` always re-derived
     the model from the global env var, silently mispricing every override run."""
     call_order: list[str] = []
-    silver_state = _completed_silver_state("run-override-123", pd.DataFrame({"a": [1, 2]}))
+    silver_state = _completed_silver_state("run-override-123", pd.DataFrame({"a": [1, 2, 3, 4, 5]}))
     silver_state["llm_provider_override"] = "anthropic"
     silver_state["llm_model_override"] = "claude-opus-5"
 
@@ -1168,7 +1168,7 @@ def test_run_full_analysis_forwards_caller_llm_override_to_silver(monkeypatch) -
     `ModelPicker` selection) must reach `run_silver_pipeline`, which only had
     a DB-resolved override for saved-pipeline runs before this fix."""
     captured: dict[str, Any] = {}
-    silver_state = _completed_silver_state("run-caller-override", pd.DataFrame({"a": [1]}))
+    silver_state = _completed_silver_state("run-caller-override", pd.DataFrame({"a": [1, 2, 3, 4, 5]}))
 
     def fake_run_silver_pipeline(
         spec: str,
@@ -1254,7 +1254,7 @@ def test_run_full_analysis_short_circuits_when_silver_produces_no_data(monkeypat
 
 
 def test_run_full_analysis_forwards_progress_callback_to_every_stage(monkeypatch) -> None:
-    silver_state = _completed_silver_state("run-1", pd.DataFrame({"a": [1]}))
+    silver_state = _completed_silver_state("run-1", pd.DataFrame({"a": [1, 2, 3, 4, 5]}))
 
     def fake_run_silver_pipeline(
         spec: str,
@@ -1620,7 +1620,7 @@ def test_run_full_analysis_counts_the_etl_layer_calls_in_the_run_total(monkeypat
     """Orchestrator and Transformer calls (PipelineState.llm_usage) are part of the token
     total the run returns and of the tokens stored with the analysis, from which the
     cost and the budget debit are computed."""
-    silver_state = _completed_silver_state("run-usage", pd.DataFrame({"a": [1, 2]}))
+    silver_state = _completed_silver_state("run-usage", pd.DataFrame({"a": [1, 2, 3, 4, 5]}))
     silver_state["llm_usage"] = _usage(100)
     monkeypatch.setattr(pipeline_service, "run_silver_pipeline", lambda *a, **k: silver_state)
     monkeypatch.setattr(
@@ -1667,3 +1667,56 @@ def test_run_full_analysis_returns_the_etl_layer_tokens_when_the_etl_layer_fails
 
     assert result["gold"] == []
     assert result["tokens"] == _usage(40)
+
+
+def test_run_full_analysis_does_not_analyse_fewer_rows_than_the_minimum(monkeypatch) -> None:
+    """Real run, 2026-10-12: a document with no data gave 2 rows and the run ended with
+    sub-analyses and recommendations about them. Below the minimum no model of the
+    analysis layer is called and the summary says why."""
+    silver_state = _completed_silver_state("run-small", pd.DataFrame({"a": [1, 2]}))
+    silver_state["llm_usage"] = _usage(50)
+    monkeypatch.setattr(pipeline_service, "run_silver_pipeline", lambda *a, **k: silver_state)
+
+    def must_not_run(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError("the analysis layer must not run below the minimum")
+
+    monkeypatch.setattr(pipeline_service, "plan_analysis_tasks", must_not_run)
+    monkeypatch.setattr(pipeline_service, "run_analyst", must_not_run)
+    monkeypatch.setattr(pipeline_service, "run_advisor", must_not_run)
+    stored: dict[str, Any] = {}
+
+    def fake_save_analysis(
+        run_id: str, gold: Any, science: Any, advisor: Any, planner_tokens: Any, **kwargs: Any
+    ) -> str:
+        stored.update(gold=gold, science=science, advisor=advisor, tokens=planner_tokens)
+        return "key"
+
+    monkeypatch.setattr(pipeline_service, "save_analysis", fake_save_analysis)
+
+    result = pipeline_service.run_full_analysis("spec", "Quais produtos vendem mais?", "runs")
+
+    assert result["gold"] == [] and result["science"] == []
+    assert result["advisor"]["recommendations"] == []
+    assert "2 linha(s)" in result["advisor"]["summary"]
+    assert str(pipeline_service.MIN_ROWS_FOR_ANALYSIS) in result["advisor"]["summary"]
+    assert stored["gold"] == [] and stored["tokens"] == _usage(50)
+    assert result["tokens"] == _usage(50)
+
+
+def test_run_full_analysis_analyses_exactly_the_minimum_number_of_rows(monkeypatch) -> None:
+    rows = pipeline_service.MIN_ROWS_FOR_ANALYSIS
+    silver_state = _completed_silver_state("run-min", pd.DataFrame({"a": list(range(rows))}))
+    monkeypatch.setattr(pipeline_service, "run_silver_pipeline", lambda *a, **k: silver_state)
+    monkeypatch.setattr(
+        pipeline_service,
+        "plan_analysis_tasks",
+        lambda question, df, *a, **k: ([{"question": "q", "type": "descriptive"}], _usage(1)),
+    )
+    monkeypatch.setattr(pipeline_service, "run_analyst", lambda *a, **k: _gold_result(error=None))
+    monkeypatch.setattr(pipeline_service, "run_advisor", lambda *a, **k: _advisor_result())
+    monkeypatch.setattr(pipeline_service, "save_analysis", lambda *a, **k: "key")
+    monkeypatch.setattr(pipeline_service, "save_stage_latencies", lambda *a, **k: None)
+
+    result = pipeline_service.run_full_analysis("spec", "", run_dir="runs")
+
+    assert len(result["gold"]) == 1
