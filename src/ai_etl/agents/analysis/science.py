@@ -16,7 +16,7 @@ import pandas as pd
 from ai_etl.agents._llm_codegen import build_column_stats as _build_column_stats
 from ai_etl.agents._llm_codegen import strip_code_fences as _strip_fences
 from ai_etl.core.analysis_types import ScienceResult, TokenUsage
-from ai_etl.core.llm import extract_token_usage, get_llm, invoke_llm, sum_token_usage
+from ai_etl.core.llm import extract_token_usage, get_llm, invoke_llm, response_text, sum_token_usage
 from ai_etl.core.locale import (
     DEFAULT_LOCALE,
     currency_hint,
@@ -371,7 +371,7 @@ def run_science(
 
         response = invoke_llm(llm, prompt, llm_provider_override)
         attempt_usages.append(extract_token_usage(response))
-        code = _strip_fences(str(response.content).strip())
+        code = _strip_fences(response_text(response).strip())
         last_code = code
 
         sandbox_result = execute_in_sandbox(

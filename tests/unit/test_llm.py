@@ -449,3 +449,55 @@ class TestIsLlmReviewEnabled:
     ) -> None:
         monkeypatch.setenv("AI_ETL_LLM_REVIEW_ENABLED", value)
         assert is_llm_review_enabled() is False
+
+
+# --- response_text: the answer of a model, whatever shape its content has -------------
+
+
+class _Response:
+    def __init__(self, content: object) -> None:
+        self.content = content
+
+
+_REASONING_BLOCK = {"type": "thinking", "thinking": "", "signature": "CAQSqBMKEAgS..."}
+
+
+def test_response_text_returns_a_string_content_unchanged() -> None:
+    from ai_etl.core.llm import response_text
+
+    assert response_text(_Response("def transform(dfs):\n    return dfs")) == (
+        "def transform(dfs):\n    return dfs"
+    )
+
+
+def test_response_text_keeps_only_the_text_blocks_of_a_block_list() -> None:
+    """The shape `claude-haiku-5-5` returned on 2026-10-12: a reasoning block with
+    its signature, then the answer. `str()` of that list is its repr, which is what
+    the agents were parsing."""
+    from ai_etl.core.llm import response_text
+
+    response = _Response(
+        [
+            _REASONING_BLOCK,
+            {"type": "text", "text": "def transform(dfs):\n"},
+            {"type": "text", "text": "    return dfs"},
+        ]
+    )
+
+    text = response_text(response)
+
+    assert text == "def transform(dfs):\n    return dfs"
+    assert "signature" not in text
+
+
+def test_response_text_accepts_plain_strings_inside_a_list() -> None:
+    from ai_etl.core.llm import response_text
+
+    assert response_text(_Response(["part one, ", "part two"])) == "part one, part two"
+
+
+def test_response_text_of_a_response_with_no_text_is_empty() -> None:
+    from ai_etl.core.llm import response_text
+
+    assert response_text(_Response(None)) == ""
+    assert response_text(_Response([_REASONING_BLOCK])) == ""

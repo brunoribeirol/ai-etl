@@ -7,7 +7,7 @@ from pydantic import ValidationError
 
 from ai_etl.agents._llm_codegen import strip_code_fences
 from ai_etl.audit.logger import log_action
-from ai_etl.core.llm import get_llm, invoke_llm
+from ai_etl.core.llm import get_llm, invoke_llm, response_text
 from ai_etl.core.pipeline_plan_schema import PipelinePlan
 from ai_etl.core.state import PipelineState
 
@@ -95,7 +95,7 @@ def orchestrator_node(state: PipelineState) -> PipelineState:
         # markdown fences'"), confirmed here as more than cosmetic: claude-haiku-4-5
         # consistently wraps its JSON in ```json fences on every attempt, so the old
         # code failed both retries and the run every time (100% failure rate).
-        content = strip_code_fences(str(response.content).strip())
+        content = strip_code_fences(response_text(response).strip())
 
         try:
             pipeline_plan = json.loads(content)

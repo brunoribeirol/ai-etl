@@ -260,6 +260,39 @@ def get_llm(
     return builder(resolved_model, temperature)
 
 
+def response_text(response: Any) -> str:
+    """The text of a model response, whatever shape the provider gave its content.
+
+    Most models return `content` as one string. A model that reasons before it
+    answers returns a list of blocks instead: a reasoning block (with its signature)
+    followed by the text block or blocks that carry the answer. `str()` of that list
+    is the list's Python repr, not the answer, so every agent that did
+    `str(response.content)` received something it could not parse.
+
+    Found 2026-10-12 by the first real call to `claude-haiku-5-5` (case-study run
+    38221934995): the Transformer failed three times with "No function named
+    'transform' found in generated code" because the "code" it was given was the
+    repr of a list whose first block was the reasoning.
+
+    Only the text blocks are kept, in order. Reasoning is not part of the answer and
+    is never handed to the code that parses or executes it.
+    """
+    content = getattr(response, "content", None)
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for block in content:
+            if isinstance(block, str):
+                parts.append(block)
+            elif isinstance(block, dict) and block.get("type") == "text":
+                parts.append(str(block.get("text", "")))
+        return "".join(parts)
+    return str(content)
+
+
 def extract_token_usage(response: Any) -> TokenUsage:
     """Read token usage off an LLM response, defaulting to zeros if unavailable.
 
