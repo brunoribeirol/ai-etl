@@ -142,6 +142,24 @@ def test_import_statement_triggers_retry_with_hint(mock_get_llm) -> None:
     assert "remove it entirely" in second_prompt
 
 
+def test_retry_prompt_carries_the_failed_code_and_its_error(mock_get_llm) -> None:
+    """The model must see what it wrote, not only the error. Real runs, 2026-10-12:
+    with the error alone the same mistake came back in all three attempts."""
+    llm = _mock_llm([INVALID_CODE, VALID_CODE])
+    mock_get_llm.return_value = llm
+    result = transformer_node(_make_state())
+
+    assert result["error"] is None
+    assert result["transformation_attempts"] == 2
+    first_prompt = llm.invoke.call_args_list[0].args[0]
+    second_prompt = llm.invoke.call_args_list[1].args[0]
+    assert INVALID_CODE.strip() not in first_prompt
+    assert INVALID_CODE.strip() in second_prompt
+    assert "Code of that attempt" in second_prompt
+    assert "Error it raised" in second_prompt
+    assert second_prompt.index("Code of that attempt") < second_prompt.index("Error it raised")
+
+
 def test_all_attempts_exhausted_sets_failed(mock_get_llm) -> None:
     mock_get_llm.return_value = _mock_llm([INVALID_CODE, INVALID_CODE, INVALID_CODE])
     result = transformer_node(_make_state())
