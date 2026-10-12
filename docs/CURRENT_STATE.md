@@ -2,14 +2,19 @@
 
 > Living doc. Updated at the end of meaningful work sessions, not per-commit. Source of truth for repo/code state; the Obsidian vault (`~/Documents/Obsidian Vault/tcc/`) is the source of truth for the academic TCC narrative and product/strategy context.
 
-**Last updated:** 2026-10-12, second entry. **The pipeline was exercised with real models for
-the first time since 2026-09-10, and the case-study evidence on public data exists.** The
-first real runs found two defects that no test with a simulated model could find (timestamps
-with day and month swapped; a model response returned as a list of blocks); both are fixed and
-re-verified live (#315, #318). Production executes pipelines again (Redis restored). **Still
-not done: the 52-item functional checklist (the browser session was not signed in) and the
-production connectivity test of each model.** Three defects were found and left open under the
-code freeze. See "2026-10-12: first real runs" below.
+**Last updated:** 2026-10-12, third entry. **The product was walked on production with real
+data (Kaggle files, a public PDF, public APIs). That found two new defects and confirmed two
+of the morning's open ones with the default model; the four are fixed and merged (#321 to
+#325).** The model comparison is complete for five models on
+one product code. Code is at `24f9e12`. **Open, by decision or for lack of access:** two
+defects of the morning (cost figure, date rule only in prompt text), three behaviours recorded
+and not changed (analysis text not checked against the computed figures, input with no data
+still analysed, raw failure messages), and the rows of the functional checklist that need a
+database, a credential or a new account. The Anthropic credit is exhausted again. See
+"2026-10-12: functional verification on production" below.
+
+**Second entry of the day:** first real runs since 2026-09-10, two defects fixed (#315, #318),
+case-study evidence produced; see "2026-10-12: first real runs".
 
 **Earlier the same day:** code green and zero open security alerts, but nothing validated end
 to end; the evidence matrix of that moment is in "2026-10-12: validation status".
@@ -101,6 +106,82 @@ per-item verification). Nothing from the audit is left as pending code.
 _Already closed this arc (were open before): `POST /llm/test-connectivity` is now live-verified
 ("Working 1921ms"); the audit's H5/H1/M3/M11 and all other merged items are live-verified — see
 below._
+
+## 2026-10-12: functional verification on production, four defects fixed
+
+Third entry of the day. Raw numbers and the row-by-row checklist are in the vault note
+`tcc/artefact/case-study-evidence-2026-10-12.md`, sections I to L.
+
+### What changed in the code
+
+| PR | Area | Defect, as seen in a real run | Change |
+|---|---|---|---|
+| #321, #323 | upload flow (`services/spec_builder.py`) | A real file with mixed-case headers (Kaggle Telco churn) failed the Transformer's three attempts in 2 of 4 runs: the generic steps asked for a rename to snake_case, generated code renamed and then used the original names | The generic steps no longer ask for a rename. Stating it last (#321) was not enough: the next run needed 3 attempts |
+| #322 | analysis layer (`agents/_llm_codegen.py`, Analyst, Science) | Code beginning with `import pandas as pd` failed every attempt ("__import__ not found"): all sub-analyses with `gpt-4o` and `claude-haiku-4-5`, and both descriptive sub-analyses of a production run with the default model | A top-level import is dropped when every name it binds is already provided under that name and from that root package. Other imports still fail, and the retry then says imports are not available |
+| #324 | REST source | One request, 30 s timeout, no retry: 6 runs of scenario 3 over four batches ended at extraction with a TLS handshake timeout | Up to three attempts on a connection failure, 10 s limit on connecting. An HTTP error status is not retried |
+| #325 | REST source | httpx 0.28 replaces the query of the address with `params`, and an empty dict removes it: an address with inline parameters was requested without them (Banco Central API, 406) | The query of the address and the separate parameters are merged |
+
+The ETL layer differs from the code of the official case-study batches (`f289ceb`) only in the
+REST source (#324, #325): a request that succeeds at once, with parameters given apart, is sent
+as before. The Orchestrator, the Transformer, the Quality agent and the Loader are unchanged.
+
+### Verified with real models after the fixes
+
+- Upload flow on production, real files: 5 of 5 runs completed with one attempt (Telco three
+  times, NYC TLC extract, Olist payments with 103,886 rows). Before: 2 of 4 failed.
+- Analysis layer: `gpt-4o`, scenario 4, 3 of 3 sub-analyses in 5 of 5 runs (before: 0 of 3),
+  7 model calls instead of 22. `claude-haiku-4-5`, scenario 3, 1 of 1 in 4 of 4 (before: 0 of
+  1). Production, same file and question: 4 of 4 sub-analyses (before: 2 of 4).
+- REST retry: 25 runs of scenario 3 after the fix, none ended at extraction.
+- **Not re-verified live:** #325 with the Banco Central address (the application's limit of 10
+  runs per 60 minutes had been reached). Unit tests cover it.
+- Default model, four scenarios, on `3dca92b`: 20 of 20 completed, output check `match` in 20.
+- Default model, scenario 3, on `24f9e12`: 4 of 5 completed, 3 `match`, 1 `mismatch`, 1 failed
+  after 3 attempts (requested column names not in the output of the generated code).
+
+### Defects and behaviours left as they are
+
+| # | What | Evidence |
+|---|---|---|
+| 1 | The cost the product reports, and debits from the tenant budget, leaves out the Orchestrator and the Transformer and part of the repair calls | unchanged from the entry below |
+| 2 | The date rule (ISO first, locale second) exists only as prompt text | unchanged from the entry below |
+| 3 | The text of a diagnostic sub-analysis is written by the generated code and is not compared with the computed table: figures in the text differed from the table and from a plain-pandas reference | evidence note, K2 |
+| 4 | An input with no data (a report template) completes, with sub-analyses and recommendations about "Figura 1" and "Tabela 1" | evidence note, K2 run 13 |
+| 5 | A failed run shows the Python traceback, or the database driver's message; the run page shows "Failed" with "All phases complete." | evidence note, K3 row 3.8 |
+| 6 | The Transformer's retry sends the error and not the code that failed; scenario 3 with the default model: 14 of 20 runs `match` over the day's four batches | evidence note, I3 and finding 19 |
+| 7 | Scenario 3 remains the place where generated code varies | evidence note, I3 |
+
+### Production configuration, found by the walkthrough
+
+- The default PostgreSQL source points at `localhost`: a pipeline that reads "from postgres"
+  fails on production unless the tenant saved a secret named `postgres_connection_string`.
+  The page of secrets calls it "the shared default". None is configured.
+- No Google credential: the three Gemini identifiers answer "requires GOOGLE_API_KEY".
+- Limits enforced per account: one run at a time (402), 10 runs per 60 minutes (429), monthly
+  cap (402). All three were seen working.
+- A saved pipeline created by the walkthrough is paused: "Functional check 2026-10-12: Recife
+  weather (Open-Meteo)".
+
+### Evidence matrix, end of 2026-10-12
+
+| Evidence | State |
+|---|---|
+| Case study, default model, 4 scenarios, 5 runs | done on `f289ceb` (38224455116) and again on `3dca92b` (38291491429) |
+| Model comparison, 5 runs per cell | gpt-4o-mini, gpt-4o complete; claude-haiku-4-5, claude-haiku-5-5, claude-sonnet-5 complete except scenario 3 (4, 4 and 3 runs: extraction timeouts before #324); claude-sonnet-5-5 scenario 1 only |
+| Connectivity of each model identifier on production | done: 8 answer, 3 Google without credential, local models unreachable |
+| Functional checklist (57 rows) | works 33, partly 3, does not work 3, not tested 17, noted 1 |
+| Cost figures for Anthropic models | computed from the price table; they do not account for the US$ 5.00 of credit spent (computed 3.19). To be checked against the provider's console before use |
+
+### Owner's next steps
+
+1. Check the Anthropic and OpenAI consoles against section J of the evidence note, then
+   correct `core/pricing.py` if a price is wrong.
+2. Decide whether rows 1.2 to 1.5 and 2.2 to 2.5 of the checklist are to be shown on
+   production: that needs a reachable database and a saved secret.
+3. Approval flow (rows 6.1 and 6.2): resume the paused pipeline when the hourly limit allows,
+   approve one run and reject another, then pause or delete it.
+4. Declare the code freeze at `24f9e12`, or name which of the seven items above is to be fixed
+   first.
 
 ## 2026-10-12: first real runs, two defects fixed, case-study evidence
 
