@@ -70,6 +70,7 @@ import json
 import os
 import platform
 import re
+import resource
 import statistics
 import sys
 import time
@@ -195,6 +196,10 @@ class RunRecord:
     analysis_output_tokens: int = 0
     analysis_cost_usd: float | None = None
     product_reported_cost_usd: float | None = None  # from result["tokens"]: analysis only
+    # High-water marks of resident memory when this run ended. They never go down:
+    # a value is the largest seen since the batch started, not this run's own peak.
+    process_peak_rss_mb: float | None = None  # the runner process (ETL data lives here)
+    children_peak_rss_mb: float | None = None  # largest sandbox child that has ended
     quality_score: float | None = None
     analysis_subtasks: int | None = None
     analysis_subtasks_ok: int | None = None
@@ -324,6 +329,14 @@ def time_etl_layer(stack: ExitStack, timings: dict[str, float]) -> None:
             timings["etl_ms"] = (time.perf_counter() - started) * 1000
 
     stack.enter_context(patch.object(pipeline_service, "run_silver_pipeline", timed))
+
+
+def peak_rss_mb(who: int) -> float:
+    """Largest resident set size so far, in MB, of this process (`RUSAGE_SELF`) or of
+    its ended children (`RUSAGE_CHILDREN`, the sandbox processes). The kernel reports
+    kilobytes on Linux and bytes on macOS."""
+    peak = resource.getrusage(who).ru_maxrss
+    return round(peak / (1024 * 1024 if sys.platform == "darwin" else 1024), 1)
 
 
 def usage_of(calls: list[dict[str, Any]], layer: str | None = None) -> TokenUsage:
@@ -489,6 +502,8 @@ def run_once(
     if product_tokens:
         record.product_reported_cost_usd = compute_cost_usd(bare_model, product_tokens)
     record.quality_score = score_quality(state) if state else None
+    record.process_peak_rss_mb = peak_rss_mb(resource.RUSAGE_SELF)
+    record.children_peak_rss_mb = peak_rss_mb(resource.RUSAGE_CHILDREN)
     record.stage_durations = dict(state.get("stage_durations") or {})
     record.note = crash or str(state.get("error") or "")
     record.outcome = classify_outcome(
@@ -679,6 +694,8 @@ def main() -> int:
         "finished_at_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "platform": f"{platform.system()} {platform.release()} / Python {platform.python_version()}",
         "sandbox_backend": os.getenv("AI_ETL_SANDBOX_BACKEND", "process"),
+        "process_peak_rss_mb": peak_rss_mb(resource.RUSAGE_SELF),
+        "children_peak_rss_mb": peak_rss_mb(resource.RUSAGE_CHILDREN),
         "runs_per_scenario": args.runs,
         "models": models,
         "scenarios": scenario_ids,
