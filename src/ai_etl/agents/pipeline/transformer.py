@@ -247,7 +247,15 @@ def transformer_node(state: PipelineState) -> PipelineState:
             hint = (
                 " You used an `import` statement — remove it entirely, pd/np are already available."
             )
-        prompt += f"\n\nPrevious attempt failed:\n{error}\n\nFix the transform() function.{hint}"
+        # The failed code goes back with its error. It used to be the error alone, so
+        # the model rewrote from scratch without seeing what it had written. Real runs,
+        # 2026-10-12: the same mistake came back in all three attempts (columns renamed
+        # and then referred to by the old names; requested column names missing).
+        prompt += (
+            f"\n\nPrevious attempt failed. Code of that attempt:\n{code}\n\n"
+            f"Error it raised:\n{error}\n\n"
+            f"Correct that code and return the complete transform() function.{hint}"
+        )
 
     new_log = log_action(
         state, "transformer", "code_failed", {"attempts": attempts, "error": last_error}
