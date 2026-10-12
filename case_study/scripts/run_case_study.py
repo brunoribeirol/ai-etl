@@ -236,20 +236,25 @@ def _read_public_table(table: str) -> pd.DataFrame:
         engine.dispose()
 
 
-def _fetch_weather(spec: str) -> dict[str, tuple[float, float]] | None:
-    """The scenario's own REST source, asked again for the check. `None` when it
-    cannot be reached: the check then says so instead of guessing."""
+def _fetch_weather(spec: str) -> tuple[dict[str, tuple[float, float]] | None, str]:
+    """The scenario's own REST source, asked again for the check. Returns the answer
+    and a status for the record. When the source cannot be reached after three
+    tries the answer is `None` and the status says why: the check then reports the
+    weather as not judged instead of guessing."""
     found = re.search(r"https://\S+", spec)
     if found is None:
-        return None
-    try:
-        response = httpx.get(found.group(0).rstrip(".,"), timeout=30.0)
-        response.raise_for_status()
-        return cast(
-            dict[str, tuple[float, float]], output_checks.weather_from_api_payload(response.json())
-        )
-    except (httpx.HTTPError, KeyError, ValueError):
-        return None
+        return None, "unavailable (no address in the specification)"
+    reason = ""
+    for attempt in range(3):
+        try:
+            response = httpx.get(found.group(0).rstrip(".,"), timeout=30.0)
+            response.raise_for_status()
+            weather = output_checks.weather_from_api_payload(response.json())
+            return cast(dict[str, tuple[float, float]], weather), "fetched"
+        except (httpx.HTTPError, KeyError, ValueError) as exc:
+            reason = f"{type(exc).__name__}: {exc}"[:200]
+            time.sleep(5 * (attempt + 1))
+    return None, f"unavailable ({reason})"
 
 
 def verify_output(scenario: Scenario, run_dir: Path) -> dict[str, Any]:
@@ -270,10 +275,10 @@ def verify_output(scenario: Scenario, run_dir: Path) -> dict[str, Any]:
         zones = _read_public_table("taxi_zones")
         if scenario.scenario_id == 2:
             return cast(dict[str, Any], output_checks.check_scenario2(output, trips, zones))
-        return cast(
-            dict[str, Any],
-            output_checks.check_scenario3(output, trips, zones, _fetch_weather(scenario.spec())),
-        )
+        weather, weather_status = _fetch_weather(scenario.spec())
+        result = cast(dict[str, Any], output_checks.check_scenario3(output, trips, zones, weather))
+        result["facts"]["weather_reference"] = weather_status
+        return result
     except Exception as exc:  # deliberate catch-all: the check must never end the runner
         return {
             "verdict": output_checks.NOT_CHECKED,

@@ -393,3 +393,55 @@ def test_a_failing_check_is_recorded_as_not_checked_never_as_a_verdict(
     result = run_case_study.verify_output(run_case_study.SCENARIOS[1], tmp_path)
     assert result["verdict"] == "not_checked"
     assert "FileNotFoundError" in result["facts"]["check_error"]
+
+
+class _WeatherResponse:
+    def raise_for_status(self) -> None:
+        return None
+
+    def json(self) -> dict[str, object]:
+        return {
+            "daily": {
+                "time": ["2025-01-06"],
+                "temperature_2m_max": [-1.6],
+                "precipitation_sum": [1.7],
+            }
+        }
+
+
+def test_weather_reference_asks_the_address_written_in_the_specification(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    asked: list[str] = []
+
+    def _get(url: str, **_kwargs: object) -> _WeatherResponse:
+        asked.append(url)
+        return _WeatherResponse()
+
+    monkeypatch.setattr(run_case_study.httpx, "get", _get)
+    weather, status = run_case_study._fetch_weather(run_case_study.SCENARIOS[3].spec())
+
+    assert status == "fetched"
+    assert weather == {"2025-01-06": (-1.6, 1.7)}
+    assert asked[0].startswith("https://archive-api.open-meteo.com/v1/archive?")
+    assert asked[0].endswith(
+        "timezone=America/New_York"
+    )  # the sentence's full stop is not part of it
+
+
+def test_weather_reference_that_cannot_be_reached_says_why(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+
+    def _get(url: str, **_kwargs: object) -> _WeatherResponse:
+        calls.append(url)
+        raise run_case_study.httpx.ConnectError("no route")
+
+    monkeypatch.setattr(run_case_study.httpx, "get", _get)
+    monkeypatch.setattr(run_case_study.time, "sleep", lambda _seconds: None)
+    weather, status = run_case_study._fetch_weather(run_case_study.SCENARIOS[3].spec())
+
+    assert weather is None
+    assert status == "unavailable (ConnectError: no route)"
+    assert len(calls) == 3
