@@ -44,6 +44,35 @@ _TOKEN_CACHE: dict[tuple[str, str], tuple[str, float]] = {}
 _TOKEN_EXPIRY_LEEWAY_SECONDS = 30
 _DEFAULT_TOKEN_TTL_SECONDS = 3600
 
+# The data request is tried up to three times when the connection itself fails
+# (refused, reset, or timed out before any HTTP answer). It used to be one request
+# with a 30 s timeout: in the real case-study runs of 2026-10-12, 6 runs of scenario 3
+# ended at extraction with "_ssl.c:993: The handshake operation timed out" from the
+# weather API. A 10 s limit on connecting keeps three attempts within about the time
+# one attempt used to take. An HTTP error status is an answer and is not retried.
+_REQUEST_ATTEMPTS = 3
+_RETRY_BACKOFF_SECONDS = (1.0, 2.0)
+_REQUEST_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
+
+
+def _get_with_retry(
+    url: str,
+    params: dict[str, Any],
+    headers: dict[str, str],
+    httpx_auth: httpx.BasicAuth | None,
+) -> httpx.Response:
+    """GET `url`, retrying only on `httpx.TransportError` (no HTTP answer received)."""
+    for attempt in range(_REQUEST_ATTEMPTS):
+        try:
+            return httpx.get(
+                url, params=params, headers=headers, auth=httpx_auth, timeout=_REQUEST_TIMEOUT
+            )
+        except httpx.TransportError:
+            if attempt == _REQUEST_ATTEMPTS - 1:
+                raise
+            time.sleep(_RETRY_BACKOFF_SECONDS[attempt])
+    raise AssertionError("unreachable")  # pragma: no cover
+
 
 def _read_env(var_name: str) -> str:
     value = os.getenv(var_name)
@@ -170,7 +199,7 @@ def load_rest(
     `None`) preserves the original public-endpoint behavior.
     """
     headers, httpx_auth = _build_auth(auth)
-    response = httpx.get(url, params=params or {}, headers=headers, auth=httpx_auth, timeout=30)
+    response = _get_with_retry(url, params or {}, headers, httpx_auth)
     response.raise_for_status()
     data = response.json()
     if isinstance(data, list):
