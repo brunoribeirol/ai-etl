@@ -484,6 +484,9 @@ def run_science_analysis(
 _RepairResultT = TypeVar("_RepairResultT", GoldResult, ScienceResult)
 
 
+_NO_TOKENS: TokenUsage = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+
+
 def _run_with_repair(
     run_fn: Callable[..., _RepairResultT],
     label: str,
@@ -557,10 +560,18 @@ def _run_with_repair(
         ),
     )
 
+    # Both tries called a model, so the result that is returned carries the tokens of
+    # both. It used to carry its own alone: the try that was discarded was not counted.
+    both_tries = sum_token_usage(
+        result.get("tokens") or _NO_TOKENS, repaired.get("tokens") or _NO_TOKENS
+    )
+
     if repaired.get("error"):
+        result["tokens"] = both_tries
         return result  # both failed — surface the original, more specific error
     repaired["task_question"] = task_question
     repaired["repaired"] = True
+    repaired["tokens"] = both_tries
     return repaired
 
 
@@ -852,6 +863,18 @@ def run_full_analysis(
     advisor_result: AdvisorResult | dict[str, Any] = {}
     planner_tokens: TokenUsage = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
 
+    # Model calls of the ETL layer (Orchestrator, Transformer, every attempt), recorded
+    # by the nodes in `PipelineState.llm_usage`. Added below to the tokens that are not
+    # inside a Gold/Science/Advisor result, so the cost stored for the run and debited
+    # from the tenant budget covers both layers. Measured before this change (scenario
+    # 4, gpt-4o): 0.1009 reported for 0.2073 spent.
+    etl_usage = silver_state.get("llm_usage") or {}
+    etl_tokens: TokenUsage = {
+        "input_tokens": int(etl_usage.get("input_tokens", 0)),
+        "output_tokens": int(etl_usage.get("output_tokens", 0)),
+        "total_tokens": int(etl_usage.get("total_tokens", 0)),
+    }
+
     question = business_question.strip()
 
     if isinstance(silver_df, pd.DataFrame) and not silver_df.empty:
@@ -886,7 +909,7 @@ def run_full_analysis(
             gold_results,
             science_results,
             advisor_result,
-            planner_tokens,
+            sum_token_usage(planner_tokens, etl_tokens),
             log_dir=run_dir,
             tenant_id=tenant_id,
             business_question=question,
@@ -901,7 +924,9 @@ def run_full_analysis(
             log_dir=run_dir,
         )
 
-    total_tokens = sum_run_tokens(gold_results, science_results, advisor_result, planner_tokens)
+    total_tokens = sum_run_tokens(
+        gold_results, science_results, advisor_result, sum_token_usage(planner_tokens, etl_tokens)
+    )
 
     return {
         "state": silver_state,

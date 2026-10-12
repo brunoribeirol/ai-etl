@@ -7,7 +7,7 @@ from pydantic import ValidationError
 
 from ai_etl.agents._llm_codegen import strip_code_fences
 from ai_etl.audit.logger import log_action
-from ai_etl.core.llm import get_llm, invoke_llm, response_text
+from ai_etl.core.llm import add_response_usage, get_llm, invoke_llm, response_text
 from ai_etl.core.pipeline_plan_schema import PipelinePlan
 from ai_etl.core.state import PipelineState
 
@@ -85,8 +85,10 @@ def orchestrator_node(state: PipelineState) -> PipelineState:
     prompt = ORCHESTRATOR_PROMPT.format(spec=spec)
     last_error: str | None = None
 
+    llm_usage = state.get("llm_usage")
     for attempt in range(1, 3):
         response = invoke_llm(llm, prompt, provider_override)
+        llm_usage = add_response_usage(llm_usage, response)
         # Real bug found 2026-08-23 running a live model comparison: unlike every
         # other agent that parses an LLM response (Transformer/Analyst/Science/
         # Advisor, via this same strip_code_fences), the Orchestrator used to call
@@ -114,7 +116,13 @@ def orchestrator_node(state: PipelineState) -> PipelineState:
                 "plan_created",
                 {"attempt": attempt, "sources": len(pipeline_plan.get("sources", []))},
             )
-            return {**state, "run_id": run_id, "pipeline_plan": pipeline_plan, "audit_log": new_log}
+            return {
+                **state,
+                "run_id": run_id,
+                "pipeline_plan": pipeline_plan,
+                "llm_usage": llm_usage,
+                "audit_log": new_log,
+            }
         except (json.JSONDecodeError, ValidationError) as e:
             last_error = str(e)
             prompt += f"\n\nPrevious response was not valid JSON: {e}\nResponse was:\n{content}\n\nReturn ONLY valid JSON."
@@ -124,6 +132,7 @@ def orchestrator_node(state: PipelineState) -> PipelineState:
         **state,
         "run_id": run_id,
         "error": f"Orchestrator failed to produce valid JSON: {last_error}",
+        "llm_usage": llm_usage or {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0},
         "status": "failed",
         "audit_log": new_log,
     }

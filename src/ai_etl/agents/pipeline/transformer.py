@@ -3,7 +3,7 @@
 import json
 
 from ai_etl.audit.logger import log_action
-from ai_etl.core.llm import get_llm, invoke_llm, response_text
+from ai_etl.core.llm import add_response_usage, get_llm, invoke_llm, response_text
 from ai_etl.core.locale import date_parse_hint, resolve_locale
 from ai_etl.core.sandbox import execute_in_sandbox, scale_timeout_for_rows
 from ai_etl.core.state import PipelineState
@@ -211,9 +211,11 @@ def transformer_node(state: PipelineState) -> PipelineState:
     max_source_rows = max((len(df) for df in state["extracted_data"].values()), default=0)
     timeout_seconds = scale_timeout_for_rows(TRANSFORMER_TIMEOUT_SECONDS, max_source_rows)
 
+    llm_usage = state.get("llm_usage")
     for _ in range(MAX_ATTEMPTS):
         attempts += 1
         response = invoke_llm(llm, prompt, provider_override)
+        llm_usage = add_response_usage(llm_usage, response)
         code = _clean_code(response_text(response))
 
         sandbox_result = execute_in_sandbox(
@@ -235,6 +237,7 @@ def transformer_node(state: PipelineState) -> PipelineState:
                 "transformed_data": result,
                 "transformation_attempts": attempts,
                 "transformation_error": None,
+                "llm_usage": llm_usage,
                 "audit_log": new_log,
             }
 
@@ -264,6 +267,7 @@ def transformer_node(state: PipelineState) -> PipelineState:
         "transformation_code": code,
         "transformation_attempts": attempts,
         "transformation_error": last_error,
+        "llm_usage": llm_usage or {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0},
         "error": f"Transformer failed after {attempts} attempts: {last_error}",
         "status": "failed",
         "audit_log": new_log,
