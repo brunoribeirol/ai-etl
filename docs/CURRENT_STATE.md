@@ -3,8 +3,9 @@
 > Living doc. Updated at the end of meaningful work sessions, not per-commit. Source of truth for repo/code state; the Obsidian vault (`~/Documents/Obsidian Vault/tcc/`) is the source of truth for the academic TCC narrative and product/strategy context.
 
 **Last updated:** 2026-10-12, third entry. **The product was walked on production with real
-data (Kaggle files, a public PDF, public APIs), and that found five more defects, all fixed
-and merged the same day (#321 to #325).** The model comparison is complete for five models on
+data (Kaggle files, a public PDF, public APIs). That found two new defects and confirmed two
+of the morning's open ones with the default model; the four are fixed and merged (#321 to
+#325).** The model comparison is complete for five models on
 one product code. Code is at `24f9e12`. **Open, by decision or for lack of access:** two
 defects of the morning (cost figure, date rule only in prompt text), three behaviours recorded
 and not changed (analysis text not checked against the computed figures, input with no data
@@ -106,7 +107,7 @@ _Already closed this arc (were open before): `POST /llm/test-connectivity` is no
 ("Working 1921ms"); the audit's H5/H1/M3/M11 and all other merged items are live-verified — see
 below._
 
-## 2026-10-12: functional verification on production, five more defects fixed
+## 2026-10-12: functional verification on production, four defects fixed
 
 Third entry of the day. Raw numbers and the row-by-row checklist are in the vault note
 `tcc/artefact/case-study-evidence-2026-10-12.md`, sections I to L.
