@@ -1,4 +1,5 @@
-"""Retry of the REST source on connection failures (sources/rest_source.py).
+"""Retry of the REST source on connection failures, and the query string of the URL
+(sources/rest_source.py).
 
 Real runs, 2026-10-12: 6 runs of scenario 3 ended at extraction with a TLS handshake
 timeout to the weather API, after a single request.
@@ -70,3 +71,37 @@ def test_a_first_success_makes_one_request_with_a_shorter_connect_timeout(mocker
     assert timeout.connect == 10.0
     assert timeout.read == 30.0
     no_sleep.assert_not_called()
+
+
+def _sent_url(get: MagicMock) -> str:
+    """The address httpx would request for the call recorded by the mock."""
+    call = get.call_args
+    return str(httpx.Request("GET", call.args[0], params=call.kwargs["params"]).url)
+
+
+def test_keeps_the_query_string_written_in_the_url(mocker, no_sleep) -> None:
+    """Real failure, 2026-10-12: the parameters inline in the URL were dropped
+    (httpx 0.28 replaces the URL's query with `params`, even an empty one)."""
+    get = mocker.patch(
+        "ai_etl.sources.rest_source.httpx.get", return_value=_response([{"data": "01/09/2026"}])
+    )
+    load_rest("https://example.test/dados?formato=json&dataInicial=01/09/2026")
+    assert _sent_url(get) == "https://example.test/dados?formato=json&dataInicial=01%2F09%2F2026"
+
+
+def test_merges_the_url_query_with_separate_params(mocker, no_sleep) -> None:
+    get = mocker.patch("ai_etl.sources.rest_source.httpx.get", return_value=_response([{"a": 1}]))
+    load_rest("https://example.test/data?formato=json", params={"page": 2})
+    assert _sent_url(get) == "https://example.test/data?formato=json&page=2"
+
+
+def test_separate_params_alone_still_work(mocker, no_sleep) -> None:
+    get = mocker.patch("ai_etl.sources.rest_source.httpx.get", return_value=_response([{"a": 1}]))
+    load_rest("https://example.test/data", params={"latitude": 40.71})
+    assert _sent_url(get) == "https://example.test/data?latitude=40.71"
+
+
+def test_no_query_at_all_sends_none(mocker, no_sleep) -> None:
+    get = mocker.patch("ai_etl.sources.rest_source.httpx.get", return_value=_response([{"a": 1}]))
+    load_rest("https://example.test/data")
+    assert get.call_args.kwargs["params"] is None

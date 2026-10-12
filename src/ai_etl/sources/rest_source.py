@@ -55,9 +55,23 @@ _RETRY_BACKOFF_SECONDS = (1.0, 2.0)
 _REQUEST_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
 
 
+def _merged_params(url: str, params: dict[str, Any] | None) -> httpx.QueryParams | None:
+    """The query string already written in `url`, plus `params`.
+
+    httpx 0.28 does not merge: `params` replaces the query of the URL, and an empty
+    dict removes it. A plan that keeps the parameters inline in the URL (the natural
+    way to write an API address) was therefore requested without them. Real run in
+    production, 2026-10-12, Banco Central do Brasil series API: the address in the
+    plan carried `formato`, `dataInicial` and `dataFinal`, the request went out
+    without any of them and the API answered 406.
+    """
+    merged = httpx.URL(url).params.merge(params or {})
+    return merged if str(merged) else None
+
+
 def _get_with_retry(
     url: str,
-    params: dict[str, Any],
+    params: httpx.QueryParams | None,
     headers: dict[str, str],
     httpx_auth: httpx.BasicAuth | None,
 ) -> httpx.Response:
@@ -199,7 +213,7 @@ def load_rest(
     `None`) preserves the original public-endpoint behavior.
     """
     headers, httpx_auth = _build_auth(auth)
-    response = _get_with_retry(url, params or {}, headers, httpx_auth)
+    response = _get_with_retry(url, _merged_params(url, params), headers, httpx_auth)
     response.raise_for_status()
     data = response.json()
     if isinstance(data, list):
