@@ -41,14 +41,19 @@ def auto_generate_spec(
     for. `None` (single-sheet file, or a sheet-less source) leaves the spec text
     unchanged from before this fix.
 
-    Order of the generic steps (2026-10-12): the rename to snake_case is stated last
-    and marked as the last transformation. It used to sit in the middle of the list,
-    so the generated code renamed the columns and then built `is_incomplete` (and the
-    user's own steps) with the original names. First upload of a real file with
-    mixed-case headers (Kaggle Telco churn, `customerID`, `TotalCharges`): the
-    Transformer failed its three attempts with "None of [Index(['customerID', ...])]
-    are in the [columns]". Sample files with lower-case headers never showed it,
-    because the rename changed nothing.
+    No rename of the columns (2026-10-12): the generic steps used to ask the model to
+    standardize the column names to snake_case. It was the one generic step that
+    changes the names every other step refers to, and the generated code renamed the
+    columns and then used the original names (in `is_incomplete`, or in the user's own
+    steps). First upload of a real file with mixed-case headers (Kaggle Telco churn,
+    `customerID`, `TotalCharges`), default model, production: 2 of 4 runs failed the
+    Transformer's three attempts with "None of [Index(['customerID', ...])] are in
+    the [columns]". Stating the rename as the last step (PR #321) was not enough: the
+    next run completed only on its third attempt, with the rename again placed early.
+    Sample files with lower-case headers never showed it, because the rename changed
+    nothing. The columns now keep the names the file came with, which is also what
+    "preserve all original columns" says; a user who wants them renamed can ask in
+    the manual instructions.
     """
     cols = ", ".join(df.columns.tolist())
     n_rows, n_cols = df.shape
@@ -75,8 +80,5 @@ def auto_generate_spec(
         f"Instead, add a boolean column 'is_incomplete' set to true for rows with missing "
         f"critical fields, and leave the original value missing (NaN) in those rows. "
         f"Preserve all rows and all original columns. "
-        f"As the very last transformation, after every step above, standardize the column "
-        f"names to snake_case; every step before it refers to the columns by the original "
-        f"names listed above. "
         f"Save the cleaned result to {output_csv}."
     )
