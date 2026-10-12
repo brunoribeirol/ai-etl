@@ -1585,3 +1585,85 @@ def test_services_package_does_not_import_streamlit() -> None:
             offenders.append(str(path))
 
     assert offenders == [], f"services/ must not depend on Streamlit, found in: {offenders}"
+
+
+def _usage(n: int) -> dict[str, int]:
+    return {"input_tokens": n, "output_tokens": n, "total_tokens": 2 * n}
+
+
+def test_repair_counts_the_tokens_of_both_tries_when_the_second_succeeds(monkeypatch) -> None:
+    """The try that is discarded also called a model. It used to be left out of the
+    run's cost (measured 2026-10-12: reported cost below the measured cost of the
+    analysis layer in runs with repair)."""
+    results = [{**_gold_result(error="boom"), "tokens": _usage(10)}]
+    results.append({**_gold_result(error=None), "tokens": _usage(3)})
+    monkeypatch.setattr(pipeline_service, "run_analyst", lambda *a, **k: results.pop(0))
+
+    result = pipeline_service.run_gold_with_repair(pd.DataFrame({"a": [1]}), "pergunta")
+
+    assert result["repaired"] is True
+    assert result["tokens"] == _usage(13)
+
+
+def test_repair_counts_the_tokens_of_both_tries_when_both_fail(monkeypatch) -> None:
+    results = [{**_gold_result(error="first"), "tokens": _usage(10)}]
+    results.append({**_gold_result(error="second"), "tokens": _usage(3)})
+    monkeypatch.setattr(pipeline_service, "run_analyst", lambda *a, **k: results.pop(0))
+
+    result = pipeline_service.run_gold_with_repair(pd.DataFrame({"a": [1]}), "pergunta")
+
+    assert result["error"] == "first"
+    assert result["tokens"] == _usage(13)
+
+
+def test_run_full_analysis_counts_the_etl_layer_calls_in_the_run_total(monkeypatch) -> None:
+    """Orchestrator and Transformer calls (PipelineState.llm_usage) are part of the token
+    total the run returns and of the tokens stored with the analysis, from which the
+    cost and the budget debit are computed."""
+    silver_state = _completed_silver_state("run-usage", pd.DataFrame({"a": [1, 2]}))
+    silver_state["llm_usage"] = _usage(100)
+    monkeypatch.setattr(pipeline_service, "run_silver_pipeline", lambda *a, **k: silver_state)
+    monkeypatch.setattr(
+        pipeline_service,
+        "plan_analysis_tasks",
+        lambda question, df, *a, **k: ([{"question": question, "type": "descriptive"}], _usage(5)),
+    )
+    monkeypatch.setattr(
+        pipeline_service,
+        "run_analyst",
+        lambda *a, **k: {**_gold_result(error=None), "tokens": _usage(7)},
+    )
+    monkeypatch.setattr(pipeline_service, "run_advisor", lambda *a, **k: _advisor_result())
+    stored: dict[str, Any] = {}
+
+    def fake_save_analysis(
+        run_id: str, gold: Any, science: Any, advisor: Any, planner_tokens: Any, **kwargs: Any
+    ) -> str:
+        stored["tokens_outside_results"] = planner_tokens
+        return "key"
+
+    monkeypatch.setattr(pipeline_service, "save_analysis", fake_save_analysis)
+    monkeypatch.setattr(pipeline_service, "save_stage_latencies", lambda *a, **k: None)
+
+    result = pipeline_service.run_full_analysis("spec", "pergunta", run_dir="runs")
+
+    assert stored["tokens_outside_results"] == _usage(105)  # planner 5 + ETL layer 100
+    advisor_tokens = _advisor_result().get("tokens") or dict(_ZERO_TOKENS)
+    assert result["tokens"]["input_tokens"] == 100 + 5 + 7 + advisor_tokens["input_tokens"]
+    assert result["tokens"]["total_tokens"] == 200 + 10 + 14 + advisor_tokens["total_tokens"]
+
+
+def test_run_full_analysis_returns_the_etl_layer_tokens_when_the_etl_layer_fails(
+    monkeypatch,
+) -> None:
+    failed_state = _completed_silver_state("run-failed", pd.DataFrame())
+    failed_state["transformed_data"] = None
+    failed_state["status"] = "failed"
+    failed_state["error"] = "Transformer failed after 3 attempts"
+    failed_state["llm_usage"] = _usage(40)
+    monkeypatch.setattr(pipeline_service, "run_silver_pipeline", lambda *a, **k: failed_state)
+
+    result = pipeline_service.run_full_analysis("spec", "", run_dir="runs")
+
+    assert result["gold"] == []
+    assert result["tokens"] == _usage(40)

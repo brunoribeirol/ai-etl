@@ -501,3 +501,25 @@ def test_response_text_of_a_response_with_no_text_is_empty() -> None:
 
     assert response_text(_Response(None)) == ""
     assert response_text(_Response([_REASONING_BLOCK])) == ""
+
+
+def test_add_response_usage_adds_to_what_is_already_there() -> None:
+    from unittest.mock import MagicMock
+
+    from ai_etl.core.llm import add_response_usage
+
+    response = MagicMock(
+        usage_metadata={"input_tokens": 10, "output_tokens": 4, "total_tokens": 14}
+    )
+    first = add_response_usage(None, response)
+    assert first == {"input_tokens": 10, "output_tokens": 4, "total_tokens": 14}
+    assert add_response_usage(first, response) == {
+        "input_tokens": 20,
+        "output_tokens": 8,
+        "total_tokens": 28,
+    }
+    assert add_response_usage({}, MagicMock(usage_metadata=None)) == {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": 0,
+    }
