@@ -42,11 +42,11 @@ _DEFAULT_MODEL_BY_PROVIDER = {
 # already applies to `source_type`.
 #
 # Catalog refresh 2026-10-10: added the Claude 5.5 generation, and replaced the
-# Gemini 2.0 ids — `gemini-2.0-flash` was shut down by Google on 2026-06-01 and
+# Gemini 2.0 ids: `gemini-2.0-flash` was shut down by Google on 2026-06-01 and
 # `gemini-2.0-pro` is absent from Google's published model and deprecation tables, so
 # both entries (and the Google default) pointed at ids that can no longer be relied
 # on. The new Anthropic/Google ids are NOT yet
-# live-verified through this codebase (no credentialed run) — do that with
+# live-verified through this codebase (no credentialed run). Do that with
 # `POST /llm/test-connectivity` before presenting them as supported.
 ALLOWED_MODELS_BY_PROVIDER: dict[str, frozenset[str]] = {
     "openai": frozenset({"gpt-4o-mini", "gpt-4o"}),
@@ -158,7 +158,7 @@ def _build_openai(model: str, temperature: float) -> BaseChatModel:
 #
 # The 5.5 generation (added 2026-10-10) keeps the same restriction per Anthropic's
 # published API reference: `claude-opus-5-5` rejects sampling parameters outright, and
-# `claude-sonnet-5-5`/`claude-haiku-5-5` reject any non-default value — this module's
+# `claude-sonnet-5-5`/`claude-haiku-5-5` reject any non-default value, and this module's
 # `temperature=0.0` default is one. Unlike the two entries above, these three come from
 # documentation, not from a live call through this codebase.
 _ANTHROPIC_MODELS_WITHOUT_TEMPERATURE = frozenset(

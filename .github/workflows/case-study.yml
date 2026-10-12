@@ -1,10 +1,10 @@
 name: Case study (public data, real models)
 
-# Manual trigger ONLY — same reasoning as prompt-regression.yml (ADR-029): every
+# Manual trigger ONLY, for the same reason as prompt-regression.yml (ADR-029): every
 # run here calls a real model and costs real money. This is the reproducible path
 # for the case-study evidence: public data fetched and checked against the
 # committed manifest, a clean Linux runner (the analysis layer's plotly import
-# hangs inside the sandbox on macOS — see CLAUDE.md), and every run's artefacts
+# hangs inside the sandbox on macOS, see CLAUDE.md), and every run's artefacts
 # uploaded.
 #
 # Unlike the regression harness, a missing provider key does NOT fall back to
@@ -98,7 +98,7 @@ jobs:
           summary="case_study/results/public/run-${GITHUB_RUN_ID}/summary.json"
           if [ -f "$summary" ]; then
             {
-              echo '### Case study — raw summary'
+              echo '### Case study: raw summary'
               echo '```json'
               cat "$summary"
               echo '```'

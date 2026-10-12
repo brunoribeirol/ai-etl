@@ -1,10 +1,10 @@
-"""Case-study runner over the public datasets — produces the raw evidence only.
+"""Case-study runner over the public datasets. Produces the raw evidence only.
 
 Runs each scenario N independent times per model through
 `ai_etl.services.pipeline_service.run_full_analysis` (the same entry point a real
 production run uses) and writes what happened: one JSON per run, one CSV row per
 run, and a per-(scenario, model) summary of counts and means. It does not
-interpret anything — conclusions belong to the author of the report.
+interpret anything: conclusions belong to the author of the report.
 
 Scenarios (specs in `case_study/pipelines/public_scenario*`):
     1  CSV -> CSV                          rename, cast, filter, deduplicate
@@ -15,7 +15,7 @@ Scenarios (specs in `case_study/pipelines/public_scenario*`):
 Real calls only
 ---------------
 Every run here calls a real model. A model whose provider credential is missing
-is recorded as `skipped` with the reason — never replaced by a mocked response,
+is recorded as `skipped` with the reason and never replaced by a mocked response,
 because a mocked run measures the surrounding code, not the system under study.
 (`model_comparison.py` and `regression_harness.py` do offer a mocked mode; this
 script deliberately does not.)
@@ -27,7 +27,7 @@ Prerequisites
     POSTGRES_URL and a provider credential (OPENAI_API_KEY / ANTHROPIC_API_KEY) set
 
 Scenario 4 builds plotly figures inside the sandbox, which hangs on macOS (see
-CLAUDE.md) — run it on Linux, e.g. through `.github/workflows/case-study.yml`.
+CLAUDE.md), so run it on Linux, e.g. through `.github/workflows/case-study.yml`.
 
 Usage
 -----
@@ -63,7 +63,7 @@ MANIFEST_PATH = REPO_ROOT / "case_study" / "public_data_manifest.json"
 DEFAULT_RUNS = 5  # same convention as case_study/results/tabela-resultados.md
 DEFAULT_MODELS = ["gpt-4o-mini"]
 
-# Reuse Sprint 8's helpers instead of duplicating them — same loading technique as
+# Reuse Sprint 8's helpers instead of duplicating them, with the same loading technique as
 # regression_harness.py, since case_study/scripts/ is not an installed package.
 _MC_PATH = REPO_ROOT / "case_study" / "scripts" / "model_comparison.py"
 _mc_spec = importlib.util.spec_from_file_location("model_comparison", _MC_PATH)
@@ -124,7 +124,7 @@ class RunRecord:
     provider: str
     run_index: int
     status: str  # completed | failed | awaiting_approval | skipped | crashed
-    outcome: str = ""  # classification per case-study.md — see classify_outcome()
+    outcome: str = ""  # classification per case-study.md, see classify_outcome()
     elapsed_ms: float | None = None
     rows_loaded: int | None = None
     quality_severity: str | None = None
@@ -151,7 +151,7 @@ def classify_outcome(status: str, quality_severity: str | None, error: str | Non
 
     - complete_success:      ran end to end with no human intervention
     - partial_success:       ran, but the Quality agent blocked the load (severity
-                             "error") — the designed behaviour, not a malfunction
+                             "error"), which is the designed behaviour, not a malfunction
     - recoverable_failure:   stopped with a recorded, explained error (typically the
                              Transformer exhausting its attempts)
     - unrecoverable_failure: the runner itself caught an unhandled exception
@@ -218,7 +218,7 @@ def run_once(
         record.note = "POSTGRES_URL is not set"
         return record
     if not (DATA_DIR / "nyc_taxi_trips.csv").exists():
-        record.note = "case_study/data/nyc_taxi_trips.csv missing — run fetch_public_data.py"
+        record.note = "case_study/data/nyc_taxi_trips.csv missing. Run fetch_public_data.py"
         return record
 
     run_dir = out_dir / "runs" / f"s{scenario.scenario_id}_{bare_model}_{run_index}"
@@ -445,7 +445,7 @@ def main() -> int:
 
     executed = [r for r in records if r.status != "skipped"]
     if not executed:
-        print("No run was executed — every one was skipped (see the notes above).")
+        print("No run was executed: every one was skipped (see the notes above).")
         return 1
     return 0
 
