@@ -230,6 +230,25 @@ def test_no_override_does_not_add_audit_entry(mock_get_llm) -> None:
     assert all(e["action"] != "llm_override_used" for e in result["audit_log"])
 
 
+def test_code_is_read_from_a_response_whose_content_is_a_list_of_blocks(mock_get_llm) -> None:
+    """A model that reasons before answering returns its content as blocks. Found
+    2026-10-12 with `claude-haiku-5-5`: the Transformer was handed the repr of that
+    list and failed three times with "No function named 'transform' found"."""
+    blocks = [
+        {"type": "thinking", "thinking": "", "signature": "CAQSqBMKEAgS..."},
+        {"type": "text", "text": VALID_CODE},
+    ]
+    llm = MagicMock()
+    llm.invoke.side_effect = [MagicMock(content=blocks)]
+    mock_get_llm.return_value = llm
+
+    result = transformer_node(_make_state())
+
+    assert result.get("error") is None
+    assert result["transformation_attempts"] == 1
+    assert "total" in result["transformed_data"].columns
+
+
 def test_default_locale_prompt_prefers_dayfirst(mock_get_llm) -> None:
     """Sprint 25 (ADR-036): `_make_state()`'s default locale (`initial_state`'s
     `"pt-BR"` default) should steer the prompt toward preferring `dayfirst=True`.

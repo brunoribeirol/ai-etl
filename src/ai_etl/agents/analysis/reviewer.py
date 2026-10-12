@@ -38,7 +38,7 @@ import pandas as pd
 
 from ai_etl.agents._llm_codegen import strip_code_fences
 from ai_etl.core.analysis_types import OutputSanityCheckEntry, TokenUsage
-from ai_etl.core.llm import extract_token_usage, get_llm, invoke_llm
+from ai_etl.core.llm import extract_token_usage, get_llm, invoke_llm, response_text
 
 logger = logging.getLogger(__name__)
 
@@ -116,7 +116,7 @@ def _run_review(
         )
         response = invoke_llm(llm, prompt, llm_provider_override)
         tokens = extract_token_usage(response)
-        parsed = _parse_review_response(str(response.content))
+        parsed = _parse_review_response(response_text(response))
     except Exception:
         logger.warning("llm_review: review call failed, skipping this entry", exc_info=True)
         return [], zero_tokens
