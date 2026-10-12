@@ -445,3 +445,97 @@ def test_weather_reference_that_cannot_be_reached_says_why(
     assert weather is None
     assert status == "unavailable (ConnectError: no route)"
     assert len(calls) == 3
+
+
+# --- Metering: tokens and time are measured per call and split by layer ---------------
+
+
+class _Reply:
+    def __init__(self, input_tokens: int, output_tokens: int) -> None:
+        self.usage_metadata = {
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "total_tokens": input_tokens + output_tokens,
+        }
+
+
+def test_every_model_call_is_recorded_with_its_agent_layer_and_tokens(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The product's own token total leaves out the Orchestrator and the Transformer,
+    so the runner counts at the one function every agent calls a model through."""
+    import importlib
+    from contextlib import ExitStack
+
+    for module_name in run_case_study.LLM_AGENT_MODULES.values():
+        monkeypatch.setattr(
+            importlib.import_module(module_name), "invoke_llm", lambda *_a, **_k: _Reply(100, 10)
+        )
+
+    calls: list[dict[str, object]] = []
+    with ExitStack() as stack:
+        run_case_study.meter_llm_calls(stack, calls)
+        for module_name in run_case_study.LLM_AGENT_MODULES.values():
+            importlib.import_module(module_name).invoke_llm(object(), "prompt", None)
+
+    assert [call["agent"] for call in calls] == list(run_case_study.LLM_AGENT_MODULES)
+    assert {call["agent"] for call in calls if call["layer"] == "etl"} == {
+        "orchestrator",
+        "transformer",
+    }
+    assert run_case_study.usage_of(calls) == {
+        "input_tokens": 700,
+        "output_tokens": 70,
+        "total_tokens": 770,
+    }
+    assert run_case_study.usage_of(calls, "etl")["input_tokens"] == 200
+    assert run_case_study.usage_of(calls, "analysis")["input_tokens"] == 500
+
+
+def test_a_model_call_that_raises_is_recorded_as_failed_and_still_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import importlib
+    from contextlib import ExitStack
+
+    def _boom(*_args: object, **_kwargs: object) -> None:
+        raise TimeoutError("provider timed out")
+
+    for module_name in run_case_study.LLM_AGENT_MODULES.values():
+        monkeypatch.setattr(importlib.import_module(module_name), "invoke_llm", _boom)
+
+    calls: list[dict[str, object]] = []
+    transformer = importlib.import_module(run_case_study.LLM_AGENT_MODULES["transformer"])
+    with ExitStack() as stack:
+        run_case_study.meter_llm_calls(stack, calls)
+        with pytest.raises(TimeoutError):
+            transformer.invoke_llm(object(), "prompt", None)
+
+    assert calls == [
+        {
+            "agent": "transformer",
+            "layer": "etl",
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "failed": True,
+            "seconds": calls[0]["seconds"],
+        }
+    ]
+
+
+def test_the_etl_layer_is_timed_apart_from_the_whole_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from contextlib import ExitStack
+
+    monkeypatch.setattr(
+        run_case_study.pipeline_service, "run_silver_pipeline", lambda *_a, **_k: {"status": "ok"}
+    )
+    timings: dict[str, float] = {}
+    with ExitStack() as stack:
+        run_case_study.time_etl_layer(stack, timings)
+        assert run_case_study.pipeline_service.run_silver_pipeline("spec", "dir") == {
+            "status": "ok"
+        }
+
+    assert timings["etl_ms"] >= 0.0

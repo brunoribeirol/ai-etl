@@ -6,6 +6,22 @@ production run uses) and writes what happened: one JSON per run, one CSV row per
 run, and a per-(scenario, model) summary of counts and means. It does not
 interpret anything: conclusions belong to the author of the report.
 
+What one run includes, and how it is split
+------------------------------------------
+`run_full_analysis` runs the ETL layer and then, whenever the ETL layer produced
+data, the analysis layer too, with or without a business question (with none, the
+Planner decides what to analyse). So every scenario exercises both layers; what
+makes scenario 4 different is that it asks a question. Each run is therefore
+recorded in two parts: `etl_elapsed_ms` (the ETL layer alone) and
+`analysis_elapsed_ms` (the rest), and the same split for tokens and cost.
+
+Tokens and cost are measured here, call by call, by wrapping the single function
+every agent uses to call a model. The token total the product returns
+(`result["tokens"]`) covers the analysis layer only: the Orchestrator and the
+Transformer do not record their usage. That figure is kept as
+`product_reported_cost_usd` so the difference is visible, and is not used as the
+cost of the run.
+
 Completion is not correctness
 -----------------------------
 `status == "completed"` only says the generated code ran and something was loaded.
@@ -58,12 +74,14 @@ import statistics
 import sys
 import time
 import uuid
+from collections.abc import Callable
 from contextlib import ExitStack
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from types import ModuleType
 from typing import Any, cast
+from unittest.mock import patch
 
 import httpx
 import pandas as pd
@@ -99,6 +117,7 @@ provider_and_access = model_comparison._provider_and_access
 patch_no_audit_persistence = model_comparison._patch_no_audit_persistence
 
 from ai_etl.core.analysis_types import TokenUsage  # noqa: E402
+from ai_etl.core.llm import extract_token_usage  # noqa: E402
 from ai_etl.core.pricing import compute_cost_usd  # noqa: E402
 from ai_etl.services import pipeline_service  # noqa: E402
 
@@ -159,13 +178,23 @@ class RunRecord:
     status: str  # completed | failed | awaiting_approval | skipped | crashed
     outcome: str = ""  # classification per case-study.md, see classify_outcome()
     output_check: str = ""  # match | mismatch | not_checked, see verify_output()
-    elapsed_ms: float | None = None
+    elapsed_ms: float | None = None  # whole run: ETL layer plus analysis layer
+    etl_elapsed_ms: float | None = None
+    analysis_elapsed_ms: float | None = None
     rows_loaded: int | None = None
     quality_severity: str | None = None
     transformation_attempts: int | None = None
-    input_tokens: int = 0
+    llm_calls: int = 0
+    input_tokens: int = 0  # every model call of the run, both layers
     output_tokens: int = 0
     cost_usd: float | None = None
+    etl_input_tokens: int = 0
+    etl_output_tokens: int = 0
+    etl_cost_usd: float | None = None
+    analysis_input_tokens: int = 0
+    analysis_output_tokens: int = 0
+    analysis_cost_usd: float | None = None
+    product_reported_cost_usd: float | None = None  # from result["tokens"]: analysis only
     quality_score: float | None = None
     analysis_subtasks: int | None = None
     analysis_subtasks_ok: int | None = None
@@ -225,6 +254,87 @@ def _analysis_block(result: dict[str, Any]) -> dict[str, Any]:
             "error": advisor.get("error"),
             "recommendations": advisor.get("recommendations") or [],
         },
+    }
+
+
+# Every agent that calls a model imports `invoke_llm` into its own module, so that
+# is where it has to be wrapped (the same technique `patch_no_audit_persistence`
+# uses for the persistence functions).
+LLM_AGENT_MODULES = {
+    "orchestrator": "ai_etl.agents.pipeline.orchestrator",
+    "transformer": "ai_etl.agents.pipeline.transformer",
+    "planner": "ai_etl.agents.analysis.planner",
+    "analyst": "ai_etl.agents.analysis.analyst",
+    "science": "ai_etl.agents.analysis.science",
+    "advisor": "ai_etl.agents.analysis.advisor",
+    "reviewer": "ai_etl.agents.analysis.reviewer",
+}
+ETL_AGENTS = frozenset({"orchestrator", "transformer"})
+
+
+def _metered(
+    agent: str, real: Callable[..., Any], calls: list[dict[str, Any]]
+) -> Callable[..., Any]:
+    def call(*args: Any, **kwargs: Any) -> Any:
+        started = time.perf_counter()
+        entry: dict[str, Any] = {
+            "agent": agent,
+            "layer": "etl" if agent in ETL_AGENTS else "analysis",
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "failed": False,
+        }
+        try:
+            response = real(*args, **kwargs)
+        except Exception:
+            entry["failed"] = True
+            raise
+        else:
+            usage = extract_token_usage(response)
+            entry["input_tokens"] = int(usage.get("input_tokens", 0))
+            entry["output_tokens"] = int(usage.get("output_tokens", 0))
+            return response
+        finally:
+            entry["seconds"] = round(time.perf_counter() - started, 3)
+            calls.append(entry)
+
+    return call
+
+
+def meter_llm_calls(stack: ExitStack, calls: list[dict[str, Any]]) -> None:
+    """Record every model call made while `stack` is open: which agent made it, how
+    long it took and the tokens the provider reported. Nothing about the call is
+    changed; a call that raises is recorded as failed and raises as before."""
+    for agent, module_name in LLM_AGENT_MODULES.items():
+        module = importlib.import_module(module_name)
+        stack.enter_context(
+            patch.object(module, "invoke_llm", _metered(agent, module.invoke_llm, calls))
+        )
+
+
+def time_etl_layer(stack: ExitStack, timings: dict[str, float]) -> None:
+    """Record how long the ETL layer alone took inside `run_full_analysis`."""
+    real = pipeline_service.run_silver_pipeline
+
+    def timed(*args: Any, **kwargs: Any) -> Any:
+        started = time.perf_counter()
+        try:
+            return real(*args, **kwargs)
+        finally:
+            timings["etl_ms"] = (time.perf_counter() - started) * 1000
+
+    stack.enter_context(patch.object(pipeline_service, "run_silver_pipeline", timed))
+
+
+def usage_of(calls: list[dict[str, Any]], layer: str | None = None) -> TokenUsage:
+    """Token total of the recorded calls, of one layer or of the whole run."""
+    selected = [call for call in calls if layer is None or call["layer"] == layer]
+    input_tokens = sum(int(call["input_tokens"]) for call in selected)
+    output_tokens = sum(int(call["output_tokens"]) for call in selected)
+    return {
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "total_tokens": input_tokens + output_tokens,
     }
 
 
@@ -322,11 +432,15 @@ def run_once(
     os.environ["AI_ETL_LLM_PROVIDER"] = provider
     result: dict[str, Any] = {}
     crash: str | None = None
+    llm_calls: list[dict[str, Any]] = []
+    timings: dict[str, float] = {}
     start = time.perf_counter()
     try:
         with ExitStack() as stack:
             if not persist_audit:
                 patch_no_audit_persistence(stack)
+            meter_llm_calls(stack, llm_calls)
+            time_etl_layer(stack, timings)
             result = dict(
                 pipeline_service.run_full_analysis(
                     spec=spec,
@@ -346,16 +460,34 @@ def run_once(
                 os.environ[key] = value
 
     state: dict[str, Any] = dict(result.get("state") or {})
-    tokens = cast(TokenUsage, dict(result.get("tokens") or {}))
+    product_tokens = cast(TokenUsage, dict(result.get("tokens") or {}))
+    tokens, etl_tokens, analysis_tokens = (
+        usage_of(llm_calls),
+        usage_of(llm_calls, "etl"),
+        usage_of(llm_calls, "analysis"),
+    )
     quality_report = state.get("quality_report") or {}
     record.status = "crashed" if crash else str(state.get("status", "unknown"))
     record.elapsed_ms = round(elapsed_ms, 1)
+    if "etl_ms" in timings:
+        record.etl_elapsed_ms = round(timings["etl_ms"], 1)
+        record.analysis_elapsed_ms = round(elapsed_ms - timings["etl_ms"], 1)
     record.rows_loaded = (state.get("load_result") or {}).get("rows_loaded")
     record.quality_severity = quality_report.get("severity")
     record.transformation_attempts = state.get("transformation_attempts")
-    record.input_tokens = int(tokens.get("input_tokens", 0))
-    record.output_tokens = int(tokens.get("output_tokens", 0))
-    record.cost_usd = compute_cost_usd(bare_model, tokens) if tokens else None
+    record.llm_calls = len(llm_calls)
+    record.input_tokens = tokens["input_tokens"]
+    record.output_tokens = tokens["output_tokens"]
+    record.etl_input_tokens = etl_tokens["input_tokens"]
+    record.etl_output_tokens = etl_tokens["output_tokens"]
+    record.analysis_input_tokens = analysis_tokens["input_tokens"]
+    record.analysis_output_tokens = analysis_tokens["output_tokens"]
+    if llm_calls:
+        record.cost_usd = compute_cost_usd(bare_model, tokens)
+        record.etl_cost_usd = compute_cost_usd(bare_model, etl_tokens)
+        record.analysis_cost_usd = compute_cost_usd(bare_model, analysis_tokens)
+    if product_tokens:
+        record.product_reported_cost_usd = compute_cost_usd(bare_model, product_tokens)
     record.quality_score = score_quality(state) if state else None
     record.stage_durations = dict(state.get("stage_durations") or {})
     record.note = crash or str(state.get("error") or "")
@@ -369,8 +501,9 @@ def run_once(
     record.output_check = str(check["verdict"])
 
     analysis = _analysis_block(result)
-    if question:
-        subtasks = analysis["gold"] + analysis["science"]
+    subtasks = analysis["gold"] + analysis["science"]
+    analysis_ran = bool(subtasks) or bool(result.get("advisor"))
+    if analysis_ran:
         record.analysis_subtasks = len(subtasks)
         record.analysis_subtasks_ok = sum(1 for entry in subtasks if not entry["error"])
         record.recommendations = len(analysis["advisor"]["recommendations"])
@@ -390,7 +523,8 @@ def run_once(
                 "audit_log": state.get("audit_log"),
                 "error": crash or state.get("error"),
                 "tokens": tokens,
-                "analysis": analysis if question else None,
+                "llm_calls": llm_calls,
+                "analysis": analysis if analysis_ran else None,
             },
             indent=2,
             ensure_ascii=False,
@@ -444,6 +578,12 @@ def summarize(records: list[RunRecord]) -> list[dict[str, Any]]:
                 "output_check": output_verdicts,
                 "quality_severity": severities,
                 "elapsed_ms": _stats([r.elapsed_ms for r in completed if r.elapsed_ms is not None]),
+                "etl_elapsed_ms": _stats(
+                    [r.etl_elapsed_ms for r in completed if r.etl_elapsed_ms is not None]
+                ),
+                "analysis_elapsed_ms": _stats(
+                    [r.analysis_elapsed_ms for r in completed if r.analysis_elapsed_ms is not None]
+                ),
                 "transformation_attempts": _stats(
                     [
                         float(r.transformation_attempts)
@@ -455,6 +595,13 @@ def summarize(records: list[RunRecord]) -> list[dict[str, Any]]:
                     [float(r.rows_loaded) for r in completed if r.rows_loaded is not None]
                 ),
                 "cost_usd": _stats([r.cost_usd for r in completed if r.cost_usd is not None]),
+                "etl_cost_usd": _stats(
+                    [r.etl_cost_usd for r in completed if r.etl_cost_usd is not None]
+                ),
+                "analysis_cost_usd": _stats(
+                    [r.analysis_cost_usd for r in completed if r.analysis_cost_usd is not None]
+                ),
+                "llm_calls": _stats([float(r.llm_calls) for r in completed]),
                 "analysis_subtasks_ok": _stats(
                     [
                         float(r.analysis_subtasks_ok)
