@@ -6,6 +6,15 @@ production run uses) and writes what happened: one JSON per run, one CSV row per
 run, and a per-(scenario, model) summary of counts and means. It does not
 interpret anything: conclusions belong to the author of the report.
 
+Completion is not correctness
+-----------------------------
+`status == "completed"` only says the generated code ran and something was loaded.
+Each completed run's output is therefore read back and compared with a reference
+computed by plain pandas from the same inputs (`output_checks.py`); the verdict
+(`match` / `mismatch`) goes in the `output_check` column and the facts behind it
+in the run's JSON. The output itself is saved next to it as `output.csv.gz`,
+because the PostgreSQL tables of scenarios 2 and 3 do not outlive the job.
+
 Scenarios (specs in `case_study/pipelines/public_scenario*`):
     1  CSV -> CSV                          rename, cast, filter, deduplicate
     2  CSV + PostgreSQL -> PostgreSQL      join, filter, aggregate
@@ -44,6 +53,7 @@ import importlib.util
 import json
 import os
 import platform
+import re
 import statistics
 import sys
 import time
@@ -52,7 +62,12 @@ from contextlib import ExitStack
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
+from types import ModuleType
 from typing import Any, cast
+
+import httpx
+import pandas as pd
+from sqlalchemy import create_engine
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PIPELINES_DIR = REPO_ROOT / "case_study" / "pipelines"
@@ -63,14 +78,22 @@ MANIFEST_PATH = REPO_ROOT / "case_study" / "public_data_manifest.json"
 DEFAULT_RUNS = 5  # same convention as case_study/results/tabela-resultados.md
 DEFAULT_MODELS = ["gpt-4o-mini"]
 
+
 # Reuse Sprint 8's helpers instead of duplicating them, with the same loading technique as
 # regression_harness.py, since case_study/scripts/ is not an installed package.
-_MC_PATH = REPO_ROOT / "case_study" / "scripts" / "model_comparison.py"
-_mc_spec = importlib.util.spec_from_file_location("model_comparison", _MC_PATH)
-assert _mc_spec is not None and _mc_spec.loader is not None
-model_comparison = importlib.util.module_from_spec(_mc_spec)
-sys.modules.setdefault("model_comparison", model_comparison)
-_mc_spec.loader.exec_module(model_comparison)
+def _load_sibling(name: str) -> ModuleType:
+    module_spec = importlib.util.spec_from_file_location(
+        name, REPO_ROOT / "case_study" / "scripts" / f"{name}.py"
+    )
+    assert module_spec is not None and module_spec.loader is not None
+    module = importlib.util.module_from_spec(module_spec)
+    sys.modules.setdefault(name, module)
+    module_spec.loader.exec_module(module)
+    return module
+
+
+model_comparison = _load_sibling("model_comparison")
+output_checks = _load_sibling("output_checks")
 score_quality = model_comparison.score_quality
 provider_and_access = model_comparison._provider_and_access
 patch_no_audit_persistence = model_comparison._patch_no_audit_persistence
@@ -78,6 +101,8 @@ patch_no_audit_persistence = model_comparison._patch_no_audit_persistence
 from ai_etl.core.analysis_types import TokenUsage  # noqa: E402
 from ai_etl.core.pricing import compute_cost_usd  # noqa: E402
 from ai_etl.services import pipeline_service  # noqa: E402
+
+SCENARIO1_OUTPUT = "case_study/results/public/scenario1_output.csv"
 
 
 @dataclass(frozen=True)
@@ -87,6 +112,8 @@ class Scenario:
     spec_file: str
     question_file: str | None = None
     needs_postgres: bool = False
+    output_csv: str | None = None  # destination file, relative to the repository root
+    output_table: str | None = None  # destination table in the `public` schema
 
     def spec(self) -> str:
         return (PIPELINES_DIR / self.spec_file).read_text().strip()
@@ -98,21 +125,27 @@ class Scenario:
 
 
 SCENARIOS: dict[int, Scenario] = {
-    1: Scenario(1, "CSV -> CSV", "public_scenario1_spec.txt"),
+    1: Scenario(1, "CSV -> CSV", "public_scenario1_spec.txt", output_csv=SCENARIO1_OUTPUT),
     2: Scenario(
-        2, "CSV + PostgreSQL -> PostgreSQL", "public_scenario2_spec.txt", needs_postgres=True
+        2,
+        "CSV + PostgreSQL -> PostgreSQL",
+        "public_scenario2_spec.txt",
+        needs_postgres=True,
+        output_table="zone_revenue_summary",
     ),
     3: Scenario(
         3,
         "CSV + PostgreSQL + REST -> PostgreSQL",
         "public_scenario3_spec.txt",
         needs_postgres=True,
+        output_table="trips_weather",
     ),
     4: Scenario(
         4,
         "CSV -> CSV + business question (analysis layer)",
         "public_scenario1_spec.txt",
         question_file="public_scenario4_question.txt",
+        output_csv=SCENARIO1_OUTPUT,
     ),
 }
 
@@ -125,6 +158,7 @@ class RunRecord:
     run_index: int
     status: str  # completed | failed | awaiting_approval | skipped | crashed
     outcome: str = ""  # classification per case-study.md, see classify_outcome()
+    output_check: str = ""  # match | mismatch | not_checked, see verify_output()
     elapsed_ms: float | None = None
     rows_loaded: int | None = None
     quality_severity: str | None = None
@@ -192,6 +226,64 @@ def _analysis_block(result: dict[str, Any]) -> dict[str, Any]:
             "recommendations": advisor.get("recommendations") or [],
         },
     }
+
+
+def _read_public_table(table: str) -> pd.DataFrame:
+    engine = create_engine(os.environ["POSTGRES_URL"])
+    try:
+        return pd.read_sql_table(table, engine, schema="public")
+    finally:
+        engine.dispose()
+
+
+def _fetch_weather(spec: str) -> tuple[dict[str, tuple[float, float]] | None, str]:
+    """The scenario's own REST source, asked again for the check. Returns the answer
+    and a status for the record. When the source cannot be reached after three
+    tries the answer is `None` and the status says why: the check then reports the
+    weather as not judged instead of guessing."""
+    found = re.search(r"https://\S+", spec)
+    if found is None:
+        return None, "unavailable (no address in the specification)"
+    reason = ""
+    for attempt in range(3):
+        try:
+            response = httpx.get(found.group(0).rstrip(".,"), timeout=30.0)
+            response.raise_for_status()
+            weather = output_checks.weather_from_api_payload(response.json())
+            return cast(dict[str, tuple[float, float]], weather), "fetched"
+        except (httpx.HTTPError, KeyError, ValueError) as exc:
+            reason = f"{type(exc).__name__}: {exc}"[:200]
+            time.sleep(5 * (attempt + 1))
+    return None, f"unavailable ({reason})"
+
+
+def verify_output(scenario: Scenario, run_dir: Path) -> dict[str, Any]:
+    """Read back what a completed run wrote, save it as `output.csv.gz` and compare
+    it with the reference for its scenario. A failure of the check itself is
+    recorded as `not_checked` with the reason, never as a verdict about the run."""
+    try:
+        if scenario.output_table is not None:
+            output = _read_public_table(scenario.output_table)
+        else:
+            assert scenario.output_csv is not None
+            output = pd.read_csv(REPO_ROOT / scenario.output_csv)
+        output.to_csv(run_dir / "output.csv.gz", index=False, compression="gzip")
+
+        trips = pd.read_csv(DATA_DIR / "nyc_taxi_trips.csv")
+        if scenario.scenario_id in (1, 4):
+            return cast(dict[str, Any], output_checks.check_scenario1(output, trips))
+        zones = _read_public_table("taxi_zones")
+        if scenario.scenario_id == 2:
+            return cast(dict[str, Any], output_checks.check_scenario2(output, trips, zones))
+        weather, weather_status = _fetch_weather(scenario.spec())
+        result = cast(dict[str, Any], output_checks.check_scenario3(output, trips, zones, weather))
+        result["facts"]["weather_reference"] = weather_status
+        return result
+    except Exception as exc:  # deliberate catch-all: the check must never end the runner
+        return {
+            "verdict": output_checks.NOT_CHECKED,
+            "facts": {"check_error": f"{type(exc).__name__}: {exc}"},
+        }
 
 
 def run_once(
@@ -271,6 +363,11 @@ def run_once(
         record.status, record.quality_severity, crash or state.get("error")
     )
 
+    check: dict[str, Any] = {"verdict": output_checks.NOT_CHECKED, "facts": {}}
+    if record.status == "completed":
+        check = verify_output(scenario, run_dir)
+    record.output_check = str(check["verdict"])
+
     analysis = _analysis_block(result)
     if question:
         subtasks = analysis["gold"] + analysis["science"]
@@ -289,6 +386,7 @@ def run_once(
                 "transformation_error": state.get("transformation_error"),
                 "quality_report": quality_report,
                 "load_result": state.get("load_result"),
+                "output_check": check,
                 "audit_log": state.get("audit_log"),
                 "error": crash or state.get("error"),
                 "tokens": tokens,
@@ -330,6 +428,10 @@ def summarize(records: list[RunRecord]) -> list[dict[str, Any]]:
         for record in executed:
             key = record.quality_severity or "none"
             severities[key] = severities.get(key, 0) + 1
+        output_verdicts: dict[str, int] = {}
+        for record in executed:
+            verdict = record.output_check or output_checks.NOT_CHECKED
+            output_verdicts[verdict] = output_verdicts.get(verdict, 0) + 1
         summary.append(
             {
                 "scenario": scenario_id,
@@ -339,6 +441,7 @@ def summarize(records: list[RunRecord]) -> list[dict[str, Any]]:
                 "runs_executed": len(executed),
                 "runs_completed": len(completed),
                 "outcomes": outcomes,
+                "output_check": output_verdicts,
                 "quality_severity": severities,
                 "elapsed_ms": _stats([r.elapsed_ms for r in completed if r.elapsed_ms is not None]),
                 "transformation_attempts": _stats(
