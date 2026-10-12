@@ -14,6 +14,7 @@ from typing import Any
 import pandas as pd
 
 from ai_etl.agents._llm_codegen import build_column_stats as _build_column_stats
+from ai_etl.agents._llm_codegen import drop_redundant_imports, import_error_hint
 from ai_etl.agents._llm_codegen import strip_code_fences as _strip_fences
 from ai_etl.core.analysis_types import ScienceResult, TokenUsage
 from ai_etl.core.llm import extract_token_usage, get_llm, invoke_llm, response_text, sum_token_usage
@@ -355,6 +356,16 @@ def run_science(
         "ExponentialSmoothing": ExponentialSmoothing,
     }
 
+    # Every name the generated code finds in the sandbox, with its root package:
+    # an import that only asks for these is dropped instead of failing (the sandbox
+    # has no import mechanism). See `drop_redundant_imports`.
+    provided_names = {
+        "pd": "pandas",
+        "np": "numpy",
+        **{name: path.split(".")[0] for name, path in extra_modules.items()},
+        **{name: obj.__module__.split(".")[0] for name, obj in extra_globals.items()},
+    }
+
     llm = get_llm(provider=llm_provider_override, model=llm_model_override)
     last_error = ""
     last_code = ""
@@ -371,7 +382,9 @@ def run_science(
 
         response = invoke_llm(llm, prompt, llm_provider_override)
         attempt_usages.append(extract_token_usage(response))
-        code = _strip_fences(response_text(response).strip())
+        code = drop_redundant_imports(
+            _strip_fences(response_text(response).strip()), provided_names
+        )
         last_code = code
 
         sandbox_result = execute_in_sandbox(
@@ -392,7 +405,9 @@ def run_science(
             continue
 
         if sandbox_result["error"] is not None:
-            last_error = textwrap.shorten(sandbox_result["error"], width=400, placeholder="...")
+            last_error = textwrap.shorten(
+                sandbox_result["error"], width=400, placeholder="..."
+            ) + import_error_hint(sandbox_result["error"])
             continue
 
         predictions_df = sandbox_result["values"].get("predictions_df")

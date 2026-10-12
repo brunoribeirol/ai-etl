@@ -348,3 +348,41 @@ def test_run_analyst_prompt_instructs_grounding_axis_labels_in_real_columns(
     sent_prompt = llm.invoke.call_args[0][0]
     assert "category-type column" in sent_prompt
     assert "generic placeholder term" in sent_prompt
+
+
+def test_run_analyst_succeeds_when_code_starts_with_redundant_imports(
+    mock_get_llm, sample_df: pd.DataFrame
+) -> None:
+    """Real failure, 2026-10-12: code beginning with `import pandas as pd` failed all
+    three attempts ("__import__ not found"). Those imports ask for names the sandbox
+    already provides, so they are dropped before execution."""
+    code = (
+        "import pandas as pd\n"
+        "import plotly.express as px\n"
+        "gold_df = df.groupby('product', as_index=False)['revenue'].sum()\n"
+        "fig = px.bar(gold_df, x='product', y='revenue')\n"
+        "narrative = 'ok'\n"
+    )
+    mock_get_llm.return_value = _make_llm_mock([code])
+    result = run_analyst(sample_df, "Which product sells most?")
+    assert result["error"] is None
+    assert result["attempts"] == 1
+    assert "import" not in result["code"]
+
+
+def test_run_analyst_retry_prompt_explains_a_refused_import(
+    mock_get_llm, sample_df: pd.DataFrame
+) -> None:
+    bad = "import requests\ngold_df = df\n"
+    good = (
+        "gold_df = df.groupby('product', as_index=False)['revenue'].sum()\n"
+        "fig = px.bar(gold_df, x='product', y='revenue')\n"
+        "narrative = 'ok'\n"
+    )
+    llm = _make_llm_mock([bad, good])
+    mock_get_llm.return_value = llm
+    result = run_analyst(sample_df, "Which product sells most?")
+    assert result["error"] is None
+    assert result["attempts"] == 2
+    retry_prompt = str(llm.invoke.call_args_list[1].args[0])
+    assert "remove every import" in retry_prompt
