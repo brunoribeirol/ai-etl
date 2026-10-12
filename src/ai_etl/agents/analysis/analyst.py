@@ -12,6 +12,7 @@ import textwrap
 import pandas as pd
 
 from ai_etl.agents._llm_codegen import build_column_stats as _build_column_stats
+from ai_etl.agents._llm_codegen import drop_redundant_imports, import_error_hint
 from ai_etl.agents._llm_codegen import strip_code_fences as _strip_fences
 from ai_etl.core.analysis_types import GoldResult, TokenUsage
 from ai_etl.core.llm import extract_token_usage, get_llm, invoke_llm, response_text, sum_token_usage
@@ -34,6 +35,10 @@ from ai_etl.core.sandbox import execute_in_sandbox, scale_timeout_for_rows
 # expected case while keeping the worst-case ceiling (3 x 15s = 45s) tolerable
 # for an interactive Streamlit session. Revisit if real usage shows otherwise.
 ANALYST_TIMEOUT_SECONDS = 15
+
+# Names the sandbox gives the generated code, with the root package of each
+# (`pd`/`np` from core/sandbox.py's SAFE_GLOBALS, `px`/`go` from `extra_modules` below).
+_PROVIDED_NAMES = {"pd": "pandas", "np": "numpy", "px": "plotly", "go": "plotly"}
 
 _PROMPT_TEMPLATE = """\
 You are an expert data analyst. You have access to a cleaned pandas DataFrame called `df`.
@@ -173,7 +178,9 @@ def run_analyst(
 
         response = invoke_llm(llm, prompt, llm_provider_override)
         attempt_usages.append(extract_token_usage(response))
-        code = _strip_fences(response_text(response).strip())
+        code = drop_redundant_imports(
+            _strip_fences(response_text(response).strip()), _PROVIDED_NAMES
+        )
         last_code = code
 
         sandbox_result = execute_in_sandbox(
@@ -193,7 +200,9 @@ def run_analyst(
             continue
 
         if sandbox_result["error"] is not None:
-            last_error = textwrap.shorten(sandbox_result["error"], width=400, placeholder="...")
+            last_error = textwrap.shorten(
+                sandbox_result["error"], width=400, placeholder="..."
+            ) + import_error_hint(sandbox_result["error"])
             continue
 
         gold_df = sandbox_result["values"].get("gold_df")
