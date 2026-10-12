@@ -70,7 +70,7 @@ class TestSelectTrips:
         pd.testing.assert_frame_equal(first, second)
 
     def test_values_are_passed_through_unaltered(self) -> None:
-        """The extract must keep the published nulls, zeros and negatives — repairing
+        """The extract must keep the published nulls, zeros and negatives: repairing
         them here would hide exactly what the pipeline is evaluated on."""
         trips = _trips([f"2025-01-06 0{i}:00:00" for i in range(5)])
         selected = fetch_public_data.select_trips(trips, "2025-01-06", "2025-01-06", 100, 42)
@@ -164,7 +164,7 @@ def test_run_once_skips_instead_of_mocking_when_the_credential_is_missing(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """A missing provider key must yield a `skipped` record with the reason, and
-    must never reach the pipeline — this runner has no mocked mode by design."""
+    must never reach the pipeline: this runner has no mocked mode by design."""
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
 
     def _must_not_run(**_: object) -> None:

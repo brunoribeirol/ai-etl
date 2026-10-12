@@ -2,21 +2,21 @@
 
 > Living doc. Updated at the end of meaningful work sessions, not per-commit. Source of truth for repo/code state; the Obsidian vault (`~/Documents/Obsidian Vault/tcc/`) is the source of truth for the academic TCC narrative and product/strategy context.
 
-**Last updated:** 2026-10-11 — **LLM model catalog refreshed, dependency advisories cleared,
+**Last updated:** 2026-10-11. **LLM model catalog refreshed, dependency advisories cleared,
 public-data case-study track added (PRs #302-#305); production is still partially down.** The
 Google entries pointed at models Google has shut down, two Anthropic prices were overstated,
-and the Claude 5.5 generation was added. The case study can now run on public, pinned data —
+and the Claude 5.5 generation was added. The case study can now run on public, pinned data,
 but **no run has been executed**, because no provider credential is available to CI or locally.
 Redis is still offline, so pipeline execution and schedules do not run in production. Details
 in the 2026-10-10 section below.
 
-**Previously:** 2026-10-01 — **No application code changed since #284.** Three things a
+**Previously:** 2026-10-01. **No application code changed since #284.** Three things a
 reader needs: production is **partially broken** (Redis has no deployment; worker and
 celery-beat have been `CRASHED` since 2026-09-22), the local test suite has **27 environment
 failures** that are not a regression, and the product-readiness blockers were re-verified
 against the live system. Details in the 2026-10-01 section below.
 
-**Before that:** 2026-09-21 — **Operational session, no application code.** The
+**Before that:** 2026-09-21. **Operational session, no application code.** The
 `ANTHROPIC_API_KEY` was rotated (12-month expiry, 2027-09-21) after a failed first attempt left
 production briefly holding a revoked key; a credential-rotation runbook now exists. Railway
 spend was investigated and found to be **~$7.52/month of idle RAM against a $5 plan** — a
@@ -90,7 +90,7 @@ _Already closed this arc (were open before): `POST /llm/test-connectivity` is no
 ("Working 1921ms"); the audit's H5/H1/M3/M11 and all other merged items are live-verified — see
 below._
 
-## 2026-10-10 — LLM model catalog refresh; production still partially down
+## 2026-10-10: LLM model catalog refresh; production still partially down
 
 ### What changed in code
 
@@ -99,7 +99,7 @@ below._
 | Change | Why |
 |---|---|
 | Google allowlist and default: `gemini-2.0-pro`/`gemini-2.0-flash` → `gemini-3.8-flash` (default), `gemini-2.5-pro`, `gemini-2.5-flash` | `gemini-2.0-flash` was shut down by Google on 2026-06-01; `gemini-2.0-pro` is not in Google's published model or deprecation tables. The Google provider could not have worked. |
-| Anthropic allowlist: added `claude-opus-5-5`, `claude-sonnet-5-5`, `claude-haiku-5-5` | Current generation. All three join `_ANTHROPIC_MODELS_WITHOUT_TEMPERATURE` — the API rejects this module's `temperature=0.0`. |
+| Anthropic allowlist: added `claude-opus-5-5`, `claude-sonnet-5-5`, `claude-haiku-5-5` | Current generation. All three join `_ANTHROPIC_MODELS_WITHOUT_TEMPERATURE` because the API rejects this module's `temperature=0.0`. |
 | Pricing: `claude-opus-5` $15/$75 → $5/$25; `claude-sonnet-5` $3/$15 → $2/$10 | The old values overstated every estimate and budget-cap debit for those models (3x and 1.5x). Cost figures recorded before this date for these two models are overstated by the same factors. |
 | `model_comparison.py` defaults: added `claude-haiku-5-5` and `claude-sonnet-5-5` | So the next comparison run measures them. |
 
@@ -113,12 +113,12 @@ against OpenAI's deprecation table and have no shutdown date; the dated snapshot
 The frontend model picker still lists four models on purpose: its own header requires real
 reliability data per entry, and the new models have none until the comparison is re-run.
 
-### Production — unchanged since 2026-10-01
+### Production: unchanged since 2026-10-01
 
 | Service | State on 2026-10-10 |
 |---|---|
 | `ai-etl` (API) | online |
-| `Redis` | **offline** — one deployment, `REMOVED` on 2026-09-22, redeployable |
+| `Redis` | **offline**: one deployment, `REMOVED` on 2026-09-22, redeployable |
 | `tranquil-appreciation` (worker) | **crashed** (re-crashed after the 2026-10-01 redeploy) |
 | `celery-beat` | **crashed** (same) |
 
@@ -141,7 +141,7 @@ Both audits had started failing every PR. Lockfile-only fixes:
 
 | Ecosystem | Package | Was → Now | Advisory |
 |---|---|---|---|
-| npm | next | 16.3.4 → 16.4.0 | critical — RCE in `next/og` ImageResponse, plus cache-poisoning and SSRF advisories |
+| npm | next | 16.3.4 → 16.4.0 | critical: RCE in `next/og` ImageResponse, plus cache-poisoning and SSRF advisories |
 | npm | sharp | 0.35.4 → 0.35.5 | high |
 | npm | source-map-js | 1.2.1 → 1.2.2 | high |
 | PyPI | langgraph-sdk | 0.4.2 → 0.4.6 | CVE-2026-104873 |
@@ -155,30 +155,30 @@ exercised in a browser after the change.
 Closes the two weaknesses recorded in `case_study/results/tabela-resultados.md` (audit M10):
 author-generated data, and results that cannot be reproduced from the repository.
 
-- `case_study/data/fetch_public_data.py` — one month of NYC TLC yellow-taxi trip records plus
+- `case_study/data/fetch_public_data.py`: one month of NYC TLC yellow-taxi trip records plus
   the zone lookup table; a windowed (2025-01-06 to 2025-01-12), seeded 20,000-row extract with
   **no value altered**. `--verify` re-fetches and compares hashes.
-- `case_study/public_data_manifest.json` — the committed pin: URLs, SHA-256, selection
+- `case_study/public_data_manifest.json`, the committed pin: URLs, SHA-256, selection
   parameters, and the quality problems present as published (2,485 rows with nulls in five
   columns, 717 fares <= 0, 437 zero distances, 152 zero-passenger trips, 0 exact duplicates).
 - Four scenarios in `case_study/pipelines/public_scenario*`: CSV→CSV; CSV+PostgreSQL→PostgreSQL;
   +REST (Open-Meteo archive); scenario 1 plus a business question for the analysis layer.
-- `case_study/scripts/run_case_study.py` — N runs per scenario and model through
+- `case_study/scripts/run_case_study.py`: N runs per scenario and model through
   `run_full_analysis`; one JSON per run, `runs_log.csv`, `summary.json`. **Real calls only**: a
   model without a credential is recorded as `skipped`, never mocked.
-- `.github/workflows/case-study.yml` — manual dispatch on Linux with a PostgreSQL service, so
+- `.github/workflows/case-study.yml`: manual dispatch on Linux with a PostgreSQL service, so
   the analysis layer (which hangs on macOS) can run.
 
 **Nothing has been run against a real model.** Three things stand in the way, all owner actions:
 
 1. **Repository secrets.** The only LLM secret is named `OPEN_API_KEY`. Every workflow reads
-   `secrets.OPENAI_API_KEY`, which therefore resolves to empty — including `ci.yml`'s E2E job
+   `secrets.OPENAI_API_KEY`, which therefore resolves to empty, including `ci.yml`'s E2E job
    and `prompt-regression.yml`, which have only ever run in mocked mode. Add `OPENAI_API_KEY`
    (and `ANTHROPIC_API_KEY` for the model comparison).
 2. **No local `.env`** in either clone, so no real-model run is possible on this machine either.
 3. **The specs are untested against a model.** Whether the generated transformations match the
-   intent, and whether the workflow passes end to end, is unknown until the first dispatch —
-   start with `runs=1` and `scenarios=1`.
+   intent, and whether the workflow passes end to end, is unknown until the first dispatch.
+   Start with `runs=1` and `scenarios=1`.
 
 The script-generated track (`scenario*_spec.txt`, `generate_*.py`) is untouched and still backs
 the committed 2026-06-23 results.

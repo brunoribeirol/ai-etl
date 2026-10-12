@@ -1,7 +1,7 @@
 """Load the NYC TLC taxi-zone lookup table into PostgreSQL for scenarios 2 and 3.
 
 Creates (replacing if present) `public.taxi_zones` from
-`case_study/data/taxi_zones.csv`, exactly as published — 265 rows, including the
+`case_study/data/taxi_zones.csv`, exactly as published: 265 rows, including the
 two placeholder zones whose `Zone`/`service_zone` are empty. No row is altered.
 
 Usage:
@@ -32,7 +32,7 @@ def main() -> int:
         print("POSTGRES_URL is not set.", file=sys.stderr)
         return 1
     if not ZONES_CSV.exists():
-        print(f"{ZONES_CSV} not found — run fetch_public_data.py first.", file=sys.stderr)
+        print(f"{ZONES_CSV} not found. Run fetch_public_data.py first.", file=sys.stderr)
         return 1
 
     zones = pd.read_csv(ZONES_CSV)

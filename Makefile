@@ -109,9 +109,9 @@ run-scenario3:
 # Case study over public data (NYC TLC trip records + zone lookup, Open-Meteo).
 # `case-study-data` downloads and pins the extract in
 # case_study/public_data_manifest.json; `case-study-seed` loads the zone table
-# (needs POSTGRES_URL — `make db-up`); `case-study` calls real models and costs
+# (needs POSTGRES_URL, see `make db-up`); `case-study` calls real models and costs
 # real money (needs OPENAI_API_KEY and/or ANTHROPIC_API_KEY). Scenario 4 hangs on
-# macOS (plotly in the sandbox) — run it through the `Case study` workflow instead.
+# macOS (plotly in the sandbox), so run it through the `Case study` workflow instead.
 case-study-data:
 	uv run python case_study/data/fetch_public_data.py
 

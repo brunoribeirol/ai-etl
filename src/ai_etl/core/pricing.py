@@ -41,7 +41,7 @@ MODEL_PRICING_USD_PER_MILLION_TOKENS: dict[str, dict[str, float]] = {
     # pipeline's prompts sit far below that threshold.
     "claude-haiku-5-5": {"input": 0.10, "output": 0.50},
     "claude-haiku-4-5": {"input": 1.00, "output": 5.00},
-    # Google (Sprint 30, ADR-031; ids replaced 2026-10-10 — see core/llm.py).
+    # Google (Sprint 30, ADR-031; ids replaced 2026-10-10, see core/llm.py).
     # `gemini-3.8-flash` is the rate in force through 2026-12-31; Google has
     # announced $1.50/$7.50 from 2027-01-01. `gemini-2.5-pro` is the <=200K-token
     # prompt tier.
