@@ -60,6 +60,9 @@ make db-up         # PostgreSQL via docker-compose
 make run-scenario1 # runs scenario 1 of the case study
 make run-scenario2
 make run-scenario3
+make case-study-data  # downloads the public NYC TLC extract and pins it in the manifest
+make case-study-seed  # loads the taxi-zone table into PostgreSQL (scenarios 2 and 3)
+make case-study       # N real-model runs per scenario; scenario 4 must run on Linux (CI workflow)
 ```
 
 ---

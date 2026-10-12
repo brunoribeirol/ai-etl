@@ -2,7 +2,12 @@
 
 > Living doc. Updated at the end of meaningful work sessions, not per-commit. Source of truth for repo/code state; the Obsidian vault (`~/Documents/Obsidian Vault/tcc/`) is the source of truth for the academic TCC narrative and product/strategy context.
 
-**Last updated:** 2026-10-11. **LLM model catalog refreshed, dependency advisories cleared,
+**Last updated:** 2026-10-12. **Code is green and has zero open security alerts, but the
+system is NOT validated end to end: production cannot execute pipelines (Redis offline) and
+nothing has been exercised with a real model since 2026-09-10.** See the 2026-10-12 section
+for the evidence matrix and the exact next steps.
+
+**Previously:** 2026-10-11. **LLM model catalog refreshed, dependency advisories cleared,
 public-data case-study track added (PRs #302-#305); production is still partially down.** The
 Google entries pointed at models Google has shut down, two Anthropic prices were overstated,
 and the Claude 5.5 generation was added. The case study can now run on public, pinned data,
@@ -10,7 +15,7 @@ but **no run has been executed**, because no provider credential is available to
 Redis is still offline, so pipeline execution and schedules do not run in production. Details
 in the 2026-10-10 section below.
 
-**Previously:** 2026-10-01. **No application code changed since #284.** Three things a
+**Before that:** 2026-10-01. **No application code changed since #284.** Three things a
 reader needs: production is **partially broken** (Redis has no deployment; worker and
 celery-beat have been `CRASHED` since 2026-09-22), the local test suite has **27 environment
 failures** that are not a regression, and the product-readiness blockers were re-verified
@@ -89,6 +94,48 @@ per-item verification). Nothing from the audit is left as pending code.
 _Already closed this arc (were open before): `POST /llm/test-connectivity` is now live-verified
 ("Working 1921ms"); the audit's H5/H1/M3/M11 and all other merged items are live-verified — see
 below._
+
+## 2026-10-12: validation status and what is left to close the code
+
+Merged since the 2026-10-10 entry: #312 (wording only: no em-dashes in the text added by
+#302/#305/#311) and #313 (Mako 1.3.12 to 1.4.3, the last open Dependabot alert).
+
+### Evidence matrix
+
+| Area | Evidence | Status |
+|---|---|---|
+| Unit and integration tests | 1174 passed, 34 skipped locally (minus the two macOS-only hangs); CI green on `main` | ok |
+| End-to-end tests in CI | pass, but with a mocked model: CI has never had a real provider key | partial |
+| Security | `pip-audit` and `npm audit` clean; 0 open Dependabot alerts after #313 | ok |
+| Frontend in production | `/` returns 200; protected routes answer a browser navigation with the Clerk handshake redirect, after the Next.js 16.4 upgrade | routing ok; not exercised logged in |
+| API in production | `/health` 200; `/health/ready` reports `database: ok` | ok |
+| Pipeline execution in production | `/health/ready` reports `redis: error`; the worker log shows it retrying the Redis connection | **broken** |
+| Scheduling in production | depends on Redis | **broken** |
+| Full flow with a real model | last live verification 2026-09-10 | not verified since |
+| Functional checklist (52 items) | 0 of 52 | not done |
+| New model ids (Claude 5.5, Gemini 3.8/2.5) | never called | not verified |
+| Public-data case study | tooling merged (#305) | 0 runs |
+
+Note on `curl`: a plain `curl` to a protected frontend route returns 404. That is Clerk's
+answer to a non-navigation request, not a broken route. Send `Accept: text/html` and
+`Sec-Fetch-Dest: document` to see the real 307.
+
+### Next steps, in order
+
+1. **Owner: restore Redis** (Railway dashboard, service `Redis`, Deployments, Redeploy the
+   `REMOVED` deployment `d94fa5e3`). An agent session cannot do it: the production-deploy
+   permission gate denied `mcp__railway__redeploy` twice, the second time after the owner's
+   explicit authorization. Alternative: add a permission rule for that tool.
+2. **Owner: add repository secrets** `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` (the existing
+   one is named `OPEN_API_KEY` and is never read).
+3. Verify production for real: `/health/ready` 200 and a run that is enqueued and consumed.
+4. Dispatch the `Case study` workflow with `runs=1`, `scenarios=1`; fix what breaks; then the
+   full `runs=5`, `scenarios=1,2,3,4`, then the model comparison.
+5. Walk the 52-item functional checklist in production through the owner's logged-in Chrome
+   (authorized by the owner on 2026-10-12), recording works / does not work per item.
+6. Call `POST /llm/test-connectivity` for each new model id.
+
+The code freeze still holds: fix only what blocks the case study or the demonstration.
 
 ## 2026-10-10: LLM model catalog refresh; production still partially down
 

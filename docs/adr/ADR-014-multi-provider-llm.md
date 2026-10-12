@@ -65,6 +65,10 @@ default model name, applied when `AI_ETL_LLM_MODEL` is unset, so switching
 | `google` | `gemini-2.0-flash` |
 | `ollama` | `llama3.1` |
 
+> Update 2026-10-10: the Google default is now `gemini-3.8-flash`. Google shut down
+> `gemini-2.0-flash` on 2026-06-01, so the value above no longer works. The live defaults
+> and allowlist are in `core/llm.py`; see the 2026-10-10 entry of `docs/CURRENT_STATE.md`.
+
 No cross-provider name translation is attempted (e.g. mapping `gpt-4o-mini` to a
 Claude equivalent) — `AI_ETL_LLM_MODEL` is always a literal, provider-native model id.
 Silent translation would be a worse failure mode than requiring the operator to set
