@@ -1168,7 +1168,9 @@ def test_run_full_analysis_forwards_caller_llm_override_to_silver(monkeypatch) -
     `ModelPicker` selection) must reach `run_silver_pipeline`, which only had
     a DB-resolved override for saved-pipeline runs before this fix."""
     captured: dict[str, Any] = {}
-    silver_state = _completed_silver_state("run-caller-override", pd.DataFrame({"a": [1, 2, 3, 4, 5]}))
+    silver_state = _completed_silver_state(
+        "run-caller-override", pd.DataFrame({"a": [1, 2, 3, 4, 5]})
+    )
 
     def fake_run_silver_pipeline(
         spec: str,
