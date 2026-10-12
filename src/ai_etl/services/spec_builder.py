@@ -40,6 +40,15 @@ def auto_generate_spec(
     generated `pipeline_plan`, in the exact phrasing `ORCHESTRATOR_PROMPT` looks
     for. `None` (single-sheet file, or a sheet-less source) leaves the spec text
     unchanged from before this fix.
+
+    Order of the generic steps (2026-10-12): the rename to snake_case is stated last
+    and marked as the last transformation. It used to sit in the middle of the list,
+    so the generated code renamed the columns and then built `is_incomplete` (and the
+    user's own steps) with the original names. First upload of a real file with
+    mixed-case headers (Kaggle Telco churn, `customerID`, `TotalCharges`): the
+    Transformer failed its three attempts with "None of [Index(['customerID', ...])]
+    are in the [columns]". Sample files with lower-case headers never showed it,
+    because the rename changed nothing.
     """
     cols = ", ".join(df.columns.tolist())
     n_rows, n_cols = df.shape
@@ -58,8 +67,7 @@ def auto_generate_spec(
         f"Read the file at {file_path}.{sheet_hint} "
         f"The file has {n_rows} rows and {n_cols} columns: {cols}.{question_hint}\n"
         f"{user_hint}"
-        f"Clean the data: remove completely duplicate rows, standardize column names to snake_case, "
-        f"parse date columns where obvious. "
+        f"Clean the data: remove completely duplicate rows, parse date columns where obvious. "
         f"For missing values in non-critical numeric columns, fill with a reasonable default "
         f"(e.g. 0 or the column mean) only when that is a safe assumption. "
         f"Do NOT fabricate values for missing identifying or categorical fields "
@@ -67,5 +75,8 @@ def auto_generate_spec(
         f"Instead, add a boolean column 'is_incomplete' set to true for rows with missing "
         f"critical fields, and leave the original value missing (NaN) in those rows. "
         f"Preserve all rows and all original columns. "
+        f"As the very last transformation, after every step above, standardize the column "
+        f"names to snake_case; every step before it refers to the columns by the original "
+        f"names listed above. "
         f"Save the cleaned result to {output_csv}."
     )

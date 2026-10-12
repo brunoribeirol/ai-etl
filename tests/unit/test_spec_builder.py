@@ -82,3 +82,22 @@ def test_auto_generate_spec_omits_sheet_hint_when_none() -> None:
     spec = auto_generate_spec(Path("f.csv"), df, Path("out.csv"))
 
     assert "Excel workbook" not in spec
+
+
+def test_auto_generate_spec_states_the_rename_as_the_last_transformation() -> None:
+    """The rename to snake_case must come after every step that names a column.
+    With the rename in the middle, generated code renamed first and then used the
+    original names (real failure, 2026-10-12, file with mixed-case headers)."""
+    df = pd.DataFrame({"customerID": ["a"], "TotalCharges": ["1.5"]})
+    spec = auto_generate_spec(
+        Path("f.csv"),
+        df,
+        Path("out.csv"),
+        additional_instructions="Convert TotalCharges to a number.",
+    )
+    rename_at = spec.index("snake_case")
+    assert spec.count("snake_case") == 1
+    assert "very last transformation" in spec
+    for earlier in ("Convert TotalCharges", "duplicate rows", "is_incomplete", "Preserve all rows"):
+        assert spec.index(earlier) < rename_at
+    assert rename_at < spec.index("Save the cleaned result")
