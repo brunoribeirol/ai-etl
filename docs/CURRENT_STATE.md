@@ -115,8 +115,8 @@ vault note `tcc/artefact/case-study-evidence-2026-10-12.md`.
   The rows "Pipeline execution in production" and "Scheduling in production" of the matrix
   below describe the state before that.
 - **The repository secrets exist** (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`), confirmed by name.
-- Railway deploys `main` on every merge without any action: the API, the worker and the
-  scheduler were redeployed for each of the five PRs (status `SUCCESS`).
+- Railway deploys `main` on every merge without any action: after the last of the five PRs
+  the API, the worker and the scheduler are at `394ad30`, status `SUCCESS`.
 
 ### What the first real runs found
 
@@ -159,7 +159,7 @@ vault note `tcc/artefact/case-study-evidence-2026-10-12.md`.
 | Model comparison | scenario 1 complete for six models, 5 runs each; `gpt-4o` complete for four scenarios; Anthropic models incomplete for scenarios 2 to 4 | partial: the Anthropic credit ran out mid-batch |
 | New model ids | `claude-haiku-5-5`, `claude-sonnet-5-5`, `claude-opus-5-5`, `claude-sonnet-5`, `claude-opus-5` completed at least one real run through the pipeline; the three Google ids were never called (no credential anywhere) | partial |
 | `POST /llm/test-connectivity` in production | not called: needs a signed-in session | not verified |
-| Production | `/health/ready` 200 after each deploy; worker consuming the scheduler's tasks (verified 04:20 UTC) | ok; no pipeline was submitted through the interface |
+| Production | at commit `394ad30` on the API, the worker and the scheduler; `/health/ready` 200; worker log shows the scheduler's task received and succeeded every minute (checked 09:00 UTC, after the last deploy) | ok; no pipeline was submitted through the interface |
 | Functional checklist (52 items) | 5 items that need no session (API, landing page, language, theme); 46 not tested, 1 partly | **not done**: the browser session was not signed in to the application |
 | Memory | runner high-water mark 445.6 MB over one run of each scenario (run 38225048367) | measured |
 
