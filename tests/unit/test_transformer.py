@@ -245,7 +245,10 @@ def test_default_locale_prompt_prefers_dayfirst(mock_get_llm) -> None:
     sent_prompt = llm.invoke.call_args[0][0]
     assert "use the dayfirst=True reading" in sent_prompt
     assert "NOT already unambiguous ISO" in sent_prompt
-    assert 'format="%Y-%m-%d"' in sent_prompt
+    # 2026-10-12: the check must be ISO 8601, not date-only. A date-only format sent
+    # every ISO value with a time part to the day-first branch.
+    assert 'iso = pd.to_datetime(value, format="ISO8601", errors="coerce")' in sent_prompt
+    assert 'iso = pd.to_datetime(value, format="%Y-%m-%d"' not in sent_prompt
 
 
 def _date_parse_pattern_from_prompt(dates: pd.Series, prefer_dayfirst: bool) -> pd.Series:
@@ -268,7 +271,7 @@ def _date_parse_pattern_from_prompt(dates: pd.Series, prefer_dayfirst: bool) -> 
     def parse_one(value: object) -> Any:
         if pd.isna(value):
             return pd.NaT
-        iso = pd.to_datetime(value, format="%Y-%m-%d", errors="coerce")
+        iso = pd.to_datetime(value, format="ISO8601", errors="coerce")
         if pd.notna(iso):
             return iso
         return pd.to_datetime(value, errors="coerce", dayfirst=prefer_dayfirst)
@@ -286,6 +289,38 @@ def test_date_parse_pattern_preserves_iso_dates_with_day_and_month_both_low() ->
     result = _date_parse_pattern_from_prompt(dates, prefer_dayfirst=True)
 
     assert list(result) == list(pd.to_datetime(dates))  # unchanged, no swap
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "2025-01-06 00:04:25",  # the exact shape of the NYC TLC extract
+        "2025-01-06T00:04:25",
+        "2025-01-06 00:04:25.123",
+        "2025-01-06T00:04:25Z",
+    ],
+)
+def test_date_parse_pattern_preserves_iso_datetimes_that_carry_a_time_part(value: str) -> None:
+    """Third variant of the day/month swap, found 2026-10-12 by the first real run
+    of the public-data case study. The strict check was date-only
+    (`format="%Y-%m-%d"`), so an ISO value with a time part failed it, fell to the
+    locale branch and was re-read day-first: 6 January became 1 June, on 19,974 of
+    20,000 rows, in a run that reported success."""
+    result = _date_parse_pattern_from_prompt(pd.Series([value]), prefer_dayfirst=True)
+
+    assert (result.iloc[0].month, result.iloc[0].day) == (1, 6)
+
+
+def test_date_parse_pattern_keeps_a_whole_week_of_iso_datetimes_inside_its_window() -> None:
+    """Same finding at column level: every day of the case-study window
+    (2025-01-06 to 2025-01-12) has day and month both <= 12, so each one is
+    swappable. None may leave January."""
+    dates = pd.Series([f"2025-01-{day:02d} 13:45:00" for day in range(6, 13)])
+
+    result = _date_parse_pattern_from_prompt(dates, prefer_dayfirst=True)
+
+    assert list(result.dt.month.unique()) == [1]
+    assert list(result.dt.day) == list(range(6, 13))
 
 
 def test_date_parse_pattern_still_prefers_dayfirst_for_genuine_ddmmyyyy_text() -> None:

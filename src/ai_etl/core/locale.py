@@ -110,20 +110,28 @@ def date_parse_hint(locale: str) -> str:
     column-wide format inference entirely — this hint no longer talks about
     comparing NaT counts across the whole column (that comparison doesn't
     apply per-value: a single value either parses under the tenant's
-    preferred reading or it doesn't)."""
+    preferred reading or it doesn't).
+
+    Third variant, found 2026-10-12 by the first real run of the public-data
+    case study: the strict check was `format="%Y-%m-%d"`, which matches a date
+    alone but rejects an ISO value with a time part ("2025-01-06 00:04:25").
+    Those values fell to the locale branch and were re-read day-first: 19,974 of
+    20,000 NYC TLC timestamps came back with day and month swapped while the run
+    reported success. The prompt's check is now `format="ISO8601"`, and this hint
+    says "with or without a time part" so the model does not narrow it again."""
     meta = get_locale_metadata(locale)
     if meta["dayfirst"]:
         return (
             f"This tenant's locale is {locale} ({meta['date_format_hint']}, day-first). Only "
-            "for values that are NOT already unambiguous ISO (YYYY-MM-DD) — see the strict-ISO "
-            "check in the pattern above, applied per value — use the dayfirst=True reading for "
-            "this tenant on each such value."
+            "for values that are NOT already unambiguous ISO (YYYY-MM-DD, with or without a "
+            "time part) — see the strict-ISO check in the pattern above, applied per value — "
+            "use the dayfirst=True reading for this tenant on each such value."
         )
     return (
         f"This tenant's locale is {locale} ({meta['date_format_hint']}, month-first — pandas' "
-        "own default). Only for values that are NOT already unambiguous ISO (YYYY-MM-DD) — see "
-        "the strict-ISO check in the pattern above, applied per value — use the default "
-        "(month-first) reading for this tenant on each such value."
+        "own default). Only for values that are NOT already unambiguous ISO (YYYY-MM-DD, with "
+        "or without a time part) — see the strict-ISO check in the pattern above, applied per "
+        "value — use the default (month-first) reading for this tenant on each such value."
     )
 
 
