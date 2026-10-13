@@ -7,8 +7,8 @@ finalisation round fixed what the functional verification had left open (#327 to
 Transformer's retry, the cost of a run, texts with figures typed by hand, input with almost no
 data, failure messages, and a decimal point removed by generated code, which a real API run
 showed that night. The case study was run again on the final code: 20 of 20 runs completed,
-output equal to the reference in 20. What remains is stated as limits, not as work in
-progress. See "2026-10-13: finalisation round" below.
+output equal to the reference in 20; a further batch of scenario 3 on `d77e13b` gave 3 of 5
+equal, 1 not equal and 1 failure. What remains is stated as limits, not as work in progress. See "2026-10-13: finalisation round" below.
 
 **Third entry (2026-10-12):** functional verification on production with real data, four
 defects fixed (#321 to #325); see "2026-10-12: functional verification on production".
@@ -136,6 +136,8 @@ section M.
   rejection).
 - Functional checklist, 57 rows: works 36, partly 4, does not work 1 (PostgreSQL source on
   production, configuration), not tested 15, noted 1.
+- Cost reported by the product equals the cost measured call by call in 5 of 5 runs on
+  `d77e13b` (workflow run 38334899217), the failed run included.
 - Not repeated on the final code: the Anthropic models (no provider credit). Their figures
   are those measured on `f289ceb` and `3dca92b`.
 
@@ -143,8 +145,9 @@ section M.
 
 1. The date rule (ISO first, locale second) exists only as prompt text. No failing case is
    known after #315; the real API run of this round read day-first dates correctly.
-2. Scenario 3 is where generated code varies: over the day, default model, 19 of 25 runs
-   matched the reference; the 5 after #327 all matched.
+2. Scenario 3 is where generated code varies: default model, six batches, 22 of 30 runs
+   matched the reference. After #327, 8 of 10: on `8505031` 5 of 5, on `d77e13b` 3 of 5 with
+   one `mismatch` and one failure after three attempts (workflow run 38334899217).
 3. A figure in a narrative is now computed, but the sentence around it is free text: one text
    gave the rate of a subgroup without naming the subgroup.
 4. An input longer than 4 rows that has nothing to do with the question is still analysed.
