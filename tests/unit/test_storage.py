@@ -48,6 +48,83 @@ def test_local_backend_writes_under_nested_key(tmp_path: Path) -> None:
     assert (tmp_path / "sub" / "dir" / "file.csv").exists()
 
 
+@pytest.mark.parametrize(
+    "key",
+    [
+        "../outside.json",
+        "sub/../../outside.json",
+        "..",
+        "",
+        ".",
+    ],
+)
+def test_local_backend_refuses_a_key_that_leads_outside_the_base_dir(
+    tmp_path: Path, key: str
+) -> None:
+    """Keys are built from run ids, and a run id can arrive in the path of a request."""
+    base = tmp_path / "runs"
+    (tmp_path / "outside.json").write_bytes(b"secret")
+    backend = LocalStorageBackend(str(base))
+
+    assert backend.exists(key) is False
+    with pytest.raises(ValueError, match="outside the storage directory"):
+        backend.read_bytes(key)
+    with pytest.raises(ValueError, match="outside the storage directory"):
+        backend.write_bytes(key, b"x")
+    with pytest.raises(ValueError, match="outside the storage directory"):
+        backend.delete_bytes(key)
+    assert (tmp_path / "outside.json").read_bytes() == b"secret"
+
+
+def test_local_backend_refuses_an_absolute_key(tmp_path: Path) -> None:
+    base = tmp_path / "runs"
+    outside = tmp_path / "outside.json"
+    outside.write_bytes(b"secret")
+    backend = LocalStorageBackend(str(base))
+
+    assert backend.exists(str(outside)) is False
+    with pytest.raises(ValueError, match="outside the storage directory"):
+        backend.read_bytes(str(outside))
+
+
+def test_local_backend_refuses_a_sibling_directory_that_shares_the_prefix(tmp_path: Path) -> None:
+    """`runs-old` begins with `runs` as text but is not inside it."""
+    base = tmp_path / "runs"
+    sibling = tmp_path / "runs-old"
+    sibling.mkdir()
+    (sibling / "run-1.json").write_bytes(b"secret")
+    backend = LocalStorageBackend(str(base))
+
+    assert backend.exists("../runs-old/run-1.json") is False
+    with pytest.raises(ValueError, match="outside the storage directory"):
+        backend.read_bytes("../runs-old/run-1.json")
+
+
+def test_local_backend_refuses_a_symbolic_link_that_leads_outside(tmp_path: Path) -> None:
+    base = tmp_path / "runs"
+    outside = tmp_path / "elsewhere"
+    outside.mkdir()
+    (outside / "run-1.json").write_bytes(b"secret")
+    backend = LocalStorageBackend(str(base))
+    (base / "link").symlink_to(outside, target_is_directory=True)
+
+    assert backend.exists("link/run-1.json") is False
+    with pytest.raises(ValueError, match="outside the storage directory"):
+        backend.read_bytes("link/run-1.json")
+
+
+def test_local_backend_accepts_a_relative_base_dir(tmp_path: Path, monkeypatch) -> None:
+    """The application passes `./runs`, relative to the working directory."""
+    monkeypatch.chdir(tmp_path)
+    backend = LocalStorageBackend("./runs")
+    backend.write_bytes("run-1.json", b"{}")
+
+    assert backend.exists("run-1.json")
+    assert backend.read_bytes("run-1.json") == b"{}"
+    assert backend.list_existing_keys() == {"run-1.json"}
+    assert (tmp_path / "runs" / "run-1.json").exists()
+
+
 def test_local_backend_delete_bytes_removes_the_key(tmp_path: Path) -> None:
     backend = LocalStorageBackend(str(tmp_path))
     backend.write_bytes("run-1.json", b"{}")

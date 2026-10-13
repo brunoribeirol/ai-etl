@@ -65,7 +65,14 @@ _SENSITIVE_KEYWORDS = {
 # scrub free-text values (exception messages, connection errors) where a secret
 # is embedded in a value, not in a field NAME — `_sanitize`'s key-name check
 # can't catch that. See `scrub_secrets_in_text`.
-_DSN_CREDENTIALS_RE = re.compile(r"(?P<scheme>[a-zA-Z][a-zA-Z0-9+.\-]*://[^\s:/@]+:)[^\s@/]+@")
+#
+# The match begins at the literal "://", not at the scheme before it. The pattern
+# used to begin with the scheme's own characters, and a long run of them with no
+# "://" after it was scanned again from every position of the run: quadratic time
+# on a text that can come from a request (the reason typed when a run is rejected).
+# Beginning at the literal keeps the search linear. The scheme is not part of the
+# match, so it stays in the text untouched.
+_DSN_CREDENTIALS_RE = re.compile(r"(?P<prefix>://[^\s:/@]+:)[^\s@/]+@")
 
 
 def scrub_secrets_in_text(text: str) -> str:
@@ -82,7 +89,7 @@ def scrub_secrets_in_text(text: str) -> str:
     """
     if not isinstance(text, str):
         return text
-    return _DSN_CREDENTIALS_RE.sub(r"\g<scheme>***@", text)
+    return _DSN_CREDENTIALS_RE.sub(r"\g<prefix>***@", text)
 
 
 def _sanitize_value(value: Any) -> Any:
