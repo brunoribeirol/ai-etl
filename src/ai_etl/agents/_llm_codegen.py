@@ -21,7 +21,8 @@ not exact output, so this superset introduces no regression for either.
 """
 
 import ast
-from collections.abc import Mapping
+import re
+from collections.abc import Iterator, Mapping
 
 import pandas as pd
 
@@ -93,6 +94,82 @@ def drop_redundant_imports(code: str, provided: Mapping[str, str]) -> str:
     return "\n".join(
         line for index, line in enumerate(code.splitlines()) if index not in drop
     ).strip()
+
+
+# A decimal number ("26,6", "0.85") or a percentage ("45%") written as text.
+_TYPED_FIGURE = re.compile(r"\d+[.,]\d+|\d+\s*%")
+_FORMAT_FIELD = re.compile(r"\{[^{}]*\}")
+
+
+def _string_literals(node: ast.AST) -> Iterator[str]:
+    """The pieces of literal text inside an expression that builds a string."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        yield node.value
+    elif isinstance(node, ast.JoinedStr):  # f-string: only the text between the fields
+        for part in node.values:
+            yield from _string_literals(part)
+    elif isinstance(node, ast.BinOp):  # "a" + b, "a %s" % b
+        yield from _string_literals(node.left)
+        yield from _string_literals(node.right)
+    elif isinstance(node, ast.IfExp):
+        yield from _string_literals(node.body)
+        yield from _string_literals(node.orelse)
+    elif isinstance(node, (ast.List, ast.Tuple)):
+        for element in node.elts:
+            yield from _string_literals(element)
+    elif isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+        if node.func.attr == "format":  # "taxa de {:.1f}%".format(x): drop the fields
+            for text in _string_literals(node.func.value):
+                yield _FORMAT_FIELD.sub("", text)
+        elif node.func.attr == "join":  # " ".join([...])
+            for argument in node.args:
+                yield from _string_literals(argument)
+
+
+def hand_typed_figures(code: str, variable: str = "narrative") -> list[str]:
+    """Decimal numbers and percentages typed as text in what `code` assigns to `variable`.
+
+    The narrative of a sub-analysis is a variable assigned by the generated code. When
+    the model writes the figures as text, they are guesses made before anything was
+    computed. Real run in production, 2026-10-12 (Kaggle Telco churn): the text said
+    "sem parceiro 30,5%, com parceiro 23,5%"; the table computed by the same code, and a
+    plain-pandas reference, said 33.0 and 19.7. Four of four diagnostic texts of that
+    run had such figures.
+
+    Only literal text is inspected: a figure that reaches the narrative through an
+    f-string field, `format` or a variable is computed and is not reported. Whole
+    numbers without a percent sign ("top 5", "2025") are not reported. A string built
+    in another variable first is not seen. Code that does not parse returns no figure:
+    the sandbox reports the syntax error.
+    """
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        return []
+    figures: list[str] = []
+    for node in ast.walk(tree):
+        value: ast.AST | None = None
+        if isinstance(node, ast.Assign):
+            if any(isinstance(t, ast.Name) and t.id == variable for t in node.targets):
+                value = node.value
+        elif isinstance(node, (ast.AugAssign, ast.AnnAssign)):
+            if isinstance(node.target, ast.Name) and node.target.id == variable:
+                value = node.value
+        if value is not None:
+            for text in _string_literals(value):
+                figures.extend(_TYPED_FIGURE.findall(text))
+    return figures
+
+
+def typed_figures_error(figures: list[str], data_name: str) -> str:
+    """The message fed back to the model when `hand_typed_figures` found something."""
+    shown = ", ".join(figures[:6])
+    return (
+        f"The narrative states figures typed by hand ({shown}). Do not type any decimal "
+        f"number or percentage in the narrative text: compute each figure from "
+        f"`{data_name}` or from a variable and insert it with an f-string field, so the "
+        f"text can only say what the code computed."
+    )
 
 
 def strip_code_fences(text: str) -> str:

@@ -386,3 +386,39 @@ def test_run_analyst_retry_prompt_explains_a_refused_import(
     assert result["attempts"] == 2
     retry_prompt = str(llm.invoke.call_args_list[1].args[0])
     assert "remove every import" in retry_prompt
+
+
+def test_run_analyst_rejects_figures_typed_by_hand_and_retries(
+    mock_get_llm, sample_df: pd.DataFrame
+) -> None:
+    """Real run, 2026-10-12: narratives stated figures the code had not computed. Code
+    whose narrative has a decimal number or a percentage as plain text is not executed;
+    the model is told why and asked again."""
+    typed = (
+        "gold_df = df.groupby('product', as_index=False)['revenue'].sum()\n"
+        "fig = px.bar(gold_df, x='product', y='revenue')\n"
+        "narrative = 'O produto A responde por 45,5% da receita.'\n"
+    )
+    computed = (
+        "gold_df = df.groupby('product', as_index=False)['revenue'].sum()\n"
+        "fig = px.bar(gold_df, x='product', y='revenue')\n"
+        "share = gold_df['revenue'].max() / gold_df['revenue'].sum() * 100\n"
+        "narrative = f'O produto lider responde por {share:.1f}% da receita.'\n"
+    )
+    llm = _make_llm_mock([typed, computed])
+    mock_get_llm.return_value = llm
+    result = run_analyst(sample_df, "Qual produto gera mais receita?")
+    assert result["error"] is None
+    assert result["attempts"] == 2
+    assert "45,5" not in result["narrative"]
+    retry_prompt = str(llm.invoke.call_args_list[1].args[0])
+    assert "typed by hand (45,5%)" in retry_prompt or "typed by hand (45,5" in retry_prompt
+
+
+def test_run_analyst_prompt_states_the_rule_about_figures(
+    mock_get_llm, sample_df: pd.DataFrame
+) -> None:
+    llm = _make_llm_mock([HAPPY_CODE])
+    mock_get_llm.return_value = llm
+    run_analyst(sample_df, "Qual produto gerou mais receita?")
+    assert "Never type such a figure as plain text" in llm.invoke.call_args[0][0]
