@@ -486,6 +486,51 @@ def test_approve_run_writes_and_returns_summary(client: TestClient, mocker) -> N
     mock_resume.assert_called_once_with("run-1", "tenant-a", run_dir=mocker.ANY)
 
 
+def test_approve_run_does_not_repeat_the_loader_error_text(client: TestClient, mocker) -> None:
+    """The Loader's error is the destination driver's own text. The stored run keeps it with
+    credentials scrubbed; the response of the approval gives a fixed sentence instead."""
+    driver_text = "Loader failed: could not connect: postgresql://tenant:supersecret@db-host/prod"
+    mocker.patch(
+        "ai_etl.api.routers.runs.resume_pending_load",
+        return_value={
+            "run_id": "run-1",
+            "status": "failed",
+            "error": driver_text,
+            "load_result": None,
+        },
+    )
+
+    response = client.post("/runs/run-1/approve")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "failed"
+    assert body["error"] == "The write failed after approval. Open the run to see the cause."
+    assert "supersecret" not in response.text
+    assert "db-host" not in response.text
+
+
+def test_approve_run_that_completes_has_no_error(client: TestClient, mocker) -> None:
+    mocker.patch(
+        "ai_etl.api.routers.runs.resume_pending_load",
+        return_value={
+            "run_id": "run-1",
+            "status": "completed",
+            "error": None,
+            "load_result": {"rows_loaded": 30},
+        },
+    )
+
+    response = client.post("/runs/run-1/approve")
+
+    assert response.json() == {
+        "run_id": "run-1",
+        "status": "completed",
+        "error": None,
+        "load_result": {"rows_loaded": 30},
+    }
+
+
 def test_approve_run_unknown_returns_404(client: TestClient, mocker) -> None:
     mocker.patch(
         "ai_etl.api.routers.runs.resume_pending_load",
@@ -525,6 +570,8 @@ def test_reject_run_marks_failed(client: TestClient, mocker) -> None:
 
     assert response.status_code == 200
     assert response.json()["status"] == "failed"
+    # The reason is the operator's own text, and the response returns it.
+    assert response.json()["error"] == "Rejected by operator: too risky"
     mock_reject.assert_called_once_with("run-1", "tenant-a", run_dir=mocker.ANY, reason="too risky")
 
 
