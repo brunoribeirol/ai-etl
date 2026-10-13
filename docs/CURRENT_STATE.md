@@ -2,16 +2,16 @@
 
 > Living doc. Updated at the end of meaningful work sessions, not per-commit. Source of truth for repo/code state; the Obsidian vault (`~/Documents/Obsidian Vault/tcc/`) is the source of truth for the academic TCC narrative and product/strategy context.
 
-**Last updated:** 2026-10-12, third entry. **The product was walked on production with real
-data (Kaggle files, a public PDF, public APIs). That found two new defects and confirmed two
-of the morning's open ones with the default model; the four are fixed and merged (#321 to
-#325).** The model comparison is complete for five models on
-one product code. Code is at `24f9e12`. **Open, by decision or for lack of access:** two
-defects of the morning (cost figure, date rule only in prompt text), three behaviours recorded
-and not changed (analysis text not checked against the computed figures, input with no data
-still analysed, raw failure messages), and the rows of the functional checklist that need a
-database, a credential or a new account. The Anthropic credit is exhausted again. See
-"2026-10-12: functional verification on production" below.
+**Last updated:** 2026-10-13 (02:00 UTC), fourth entry. **Code closed at `d77e13b`.** A
+finalisation round fixed what the functional verification had left open (#327 to #332): the
+Transformer's retry, the cost of a run, texts with figures typed by hand, input with almost no
+data, failure messages, and a decimal point removed by generated code, which a real API run
+showed that night. The case study was run again on the final code: 20 of 20 runs completed,
+output equal to the reference in 20. What remains is stated as limits, not as work in
+progress. See "2026-10-13: finalisation round" below.
+
+**Third entry (2026-10-12):** functional verification on production with real data, four
+defects fixed (#321 to #325); see "2026-10-12: functional verification on production".
 
 **Second entry of the day:** first real runs since 2026-09-10, two defects fixed (#315, #318),
 case-study evidence produced; see "2026-10-12: first real runs".
@@ -106,6 +106,63 @@ per-item verification). Nothing from the audit is left as pending code.
 _Already closed this arc (were open before): `POST /llm/test-connectivity` is now live-verified
 ("Working 1921ms"); the audit's H5/H1/M3/M11 and all other merged items are live-verified — see
 below._
+
+## 2026-10-13: finalisation round, code closed
+
+Fourth entry. Raw numbers: vault note `tcc/artefact/case-study-evidence-2026-10-12.md`,
+section M.
+
+### What changed
+
+| PR | Layer | Defect, as seen in a real run | Change |
+|---|---|---|---|
+| #327 | ETL, Transformer | A retry received the error and not the code that failed; the same mistake came back in all three attempts (upload with mixed-case headers; scenario 3, 1 of 5 runs on `24f9e12`) | The retry receives the failed code and then its error |
+| #328, #332 | both | Cost reported 0.1009 for 0.2073 measured (scenario 4, gpt-4o): the Orchestrator, the Transformer, the try discarded by a repair and the Planner's unusable answer were not counted | `PipelineState.llm_usage`, set by the two ETL nodes, added to the run total; both tries of a repair counted; the Planner's fallback keeps its tokens |
+| #329 | analysis | Four of four diagnostic texts stated figures typed as text that differed from the computed table; a template with no data ended with recommendations about "Figura 1" | Code whose narrative holds a decimal number or a percentage as literal text is not executed and the model is asked again; fewer than 5 rows are not analysed |
+| #330 | interface | A failed run showed the whole Python traceback, or nothing | First line of the error, the rest under a closed block |
+| #331 | ETL, Transformer | Run `ac2208d7`, public exchange-rate API, tenant locale pt-BR: "5.1570" written as 51570, run completed, no check reported it | A result in which the decimal point of a source column was removed is a failed attempt; the prompt limits the currency pattern to values with a decimal comma |
+
+### Verified on the final code
+
+- Case study, default model, `8505031`: 20 of 20 completed, output check `match` in 20
+  (workflow run 38332893793). Scenario 3: the two runs that needed 3 and 2 attempts completed
+  with `match`.
+- gpt-4o, scenario 4, `8505031`: 5 of 5, 3 of 3 sub-analyses, cost reported 0.0570 for 0.0570
+  measured (workflow run 38332896834).
+- Production: the same exchange-rate spec now converts with `pd.to_numeric` alone; the
+  template with no data is not analysed and says why; in a Telco churn run the figures of the
+  texts equal a plain-pandas computation; a failed run shows one line; approval and
+  rejection of a scheduled run both work (write only after approval; nothing written after
+  rejection).
+- Functional checklist, 57 rows: works 36, partly 4, does not work 1 (PostgreSQL source on
+  production, configuration), not tested 15, noted 1.
+- Not repeated on the final code: the Anthropic models (no provider credit). Their figures
+  are those measured on `f289ceb` and `3dca92b`.
+
+### Limits kept as they are, by decision
+
+1. The date rule (ISO first, locale second) exists only as prompt text. No failing case is
+   known after #315; the real API run of this round read day-first dates correctly.
+2. Scenario 3 is where generated code varies: over the day, default model, 19 of 25 runs
+   matched the reference; the 5 after #327 all matched.
+3. A figure in a narrative is now computed, but the sentence around it is free text: one text
+   gave the rate of a subgroup without naming the subgroup.
+4. An input longer than 4 rows that has nothing to do with the question is still analysed.
+5. The first line of a failure is the backend's text. Status words stay in English.
+6. A run that fails before the analysis layer returns its tokens but stores no cost row.
+7. The stored state of a run is not rewritten when the run is approved.
+8. The checks added in code are narrow: the decimal-point check does not judge values that
+   may use the dot as a thousands separator, nor renamed columns; the narrative check does not
+   see a string built in another variable.
+
+### Owner's items (not code)
+
+- Compare the Anthropic console with the computed cost (evidence note, section J), then
+  correct `core/pricing.py` if a price is wrong. Until then Anthropic costs are "computed",
+  not "billed".
+- Database rows of the checklist on production need a reachable database and a saved secret.
+- A paused pipeline was left on production: "Functional check 2026-10-12: Recife weather
+  (Open-Meteo)".
 
 ## 2026-10-12: functional verification on production, four defects fixed
 
