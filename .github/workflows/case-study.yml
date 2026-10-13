@@ -1,0 +1,117 @@
+name: Case study (public data, real models)
+
+# Manual trigger ONLY, for the same reason as prompt-regression.yml (ADR-029): every
+# run here calls a real model and costs real money. This is the reproducible path
+# for the case-study evidence: public data fetched and checked against the
+# committed manifest, a clean Linux runner (the analysis layer's plotly import
+# hangs inside the sandbox on macOS, see CLAUDE.md), and every run's artefacts
+# uploaded.
+#
+# Unlike the regression harness, a missing provider key does NOT fall back to
+# mocked responses: the runner records those runs as `skipped` and this job
+# fails if nothing at all was executed.
+on:
+  workflow_dispatch:
+    inputs:
+      models:
+        description: "Comma-separated models (prefix with provider, e.g. anthropic:claude-haiku-5-5)"
+        type: string
+        default: "gpt-4o-mini"
+      runs:
+        description: "Independent runs per scenario and model"
+        type: string
+        default: "5"
+      scenarios:
+        description: "Comma-separated scenario ids (1-4)"
+        type: string
+        default: "1,2,3,4"
+
+permissions:
+  contents: read
+
+jobs:
+  case-study:
+    name: "Case study over public data"
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      PGUSER: case_study
+      PGPASSWORD: case_study
+      PGDATABASE: case_study
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: case_study
+          POSTGRES_PASSWORD: case_study
+          POSTGRES_DB: case_study
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        with:
+          version: "latest"
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Point the pipeline at the service database
+        run: echo "POSTGRES_URL=postgresql://${PGUSER}:${PGPASSWORD}@localhost:5432/${PGDATABASE}" >> "$GITHUB_ENV"
+
+      - name: Fetch the public data and check it against the manifest
+        run: uv run python case_study/data/fetch_public_data.py --verify
+
+      - name: Load the taxi-zone table
+        run: uv run python case_study/data/seed_public_postgres.py
+
+      - name: Run the case study
+        # Inputs reach the shell through env, never by direct interpolation into
+        # the script, so a crafted input cannot inject commands.
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CASE_STUDY_MODELS: ${{ inputs.models }}
+          CASE_STUDY_RUNS: ${{ inputs.runs }}
+          CASE_STUDY_SCENARIOS: ${{ inputs.scenarios }}
+        run: |
+          uv run python case_study/scripts/run_case_study.py \
+            --models "$CASE_STUDY_MODELS" \
+            --runs "$CASE_STUDY_RUNS" \
+            --scenarios "$CASE_STUDY_SCENARIOS" \
+            --label "run-${GITHUB_RUN_ID}"
+
+      - name: Publish the summary
+        if: always()
+        run: |
+          summary="case_study/results/public/run-${GITHUB_RUN_ID}/summary.json"
+          if [ -f "$summary" ]; then
+            {
+              echo '### Case study: raw summary'
+              echo '```json'
+              cat "$summary"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload run artefacts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: case-study-run-${{ github.run_id }}
+          path: |
+            case_study/results/public/
+            case_study/public_data_manifest.json
+          if-no-files-found: warn
+          retention-days: 90

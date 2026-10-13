@@ -589,9 +589,9 @@ def test_write_analysis_row_uses_explicit_model_name_over_global_env(
 
     assert row is not None
     assert row.model_name == "claude-opus-5"
-    # claude-opus-5: $15/$75 per 1M tokens -> 1000*15/1e6 + 1000*75/1e6 = 0.09,
+    # claude-opus-5: $5/$25 per 1M tokens -> 1000*5/1e6 + 1000*25/1e6 = 0.03,
     # not gpt-4o-mini's $0.15/$0.60 (which would give 0.00075).
-    assert row.cost_usd == pytest.approx(0.09)
+    assert row.cost_usd == pytest.approx(0.03)
 
 
 def test_runs_table_rejects_null_tenant_id() -> None:

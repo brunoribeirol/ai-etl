@@ -40,6 +40,20 @@ def auto_generate_spec(
     generated `pipeline_plan`, in the exact phrasing `ORCHESTRATOR_PROMPT` looks
     for. `None` (single-sheet file, or a sheet-less source) leaves the spec text
     unchanged from before this fix.
+
+    No rename of the columns (2026-10-12): the generic steps used to ask the model to
+    standardize the column names to snake_case. It was the one generic step that
+    changes the names every other step refers to, and the generated code renamed the
+    columns and then used the original names (in `is_incomplete`, or in the user's own
+    steps). First upload of a real file with mixed-case headers (Kaggle Telco churn,
+    `customerID`, `TotalCharges`), default model, production: 2 of 4 runs failed the
+    Transformer's three attempts with "None of [Index(['customerID', ...])] are in
+    the [columns]". Stating the rename as the last step (PR #321) was not enough: the
+    next run completed only on its third attempt, with the rename again placed early.
+    Sample files with lower-case headers never showed it, because the rename changed
+    nothing. The columns now keep the names the file came with, which is also what
+    "preserve all original columns" says; a user who wants them renamed can ask in
+    the manual instructions.
     """
     cols = ", ".join(df.columns.tolist())
     n_rows, n_cols = df.shape
@@ -58,8 +72,7 @@ def auto_generate_spec(
         f"Read the file at {file_path}.{sheet_hint} "
         f"The file has {n_rows} rows and {n_cols} columns: {cols}.{question_hint}\n"
         f"{user_hint}"
-        f"Clean the data: remove completely duplicate rows, standardize column names to snake_case, "
-        f"parse date columns where obvious. "
+        f"Clean the data: remove completely duplicate rows, parse date columns where obvious. "
         f"For missing values in non-critical numeric columns, fill with a reasonable default "
         f"(e.g. 0 or the column mean) only when that is a safe assumption. "
         f"Do NOT fabricate values for missing identifying or categorical fields "

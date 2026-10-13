@@ -63,7 +63,7 @@ class TestGetModelName:
 
     def test_google_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("AI_ETL_LLM_PROVIDER", "google")
-        assert get_model_name() == "gemini-2.0-flash"
+        assert get_model_name() == "gemini-3.8-flash"
 
     def test_ollama_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("AI_ETL_LLM_PROVIDER", "ollama")
@@ -108,6 +108,20 @@ class TestGetLlmProviderSelection:
             assert llm.model == model
             assert llm.temperature is None
 
+    def test_anthropic_5_5_generation_omits_temperature(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Catalog refresh 2026-10-10: per Anthropic's API reference `claude-opus-5-5`
+        rejects sampling parameters and `claude-sonnet-5-5`/`claude-haiku-5-5` reject
+        any non-default value, so get_llm() must not send `temperature` for them
+        either. Documentation-backed, not yet confirmed by a live call."""
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-fake")
+        for model in ("claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"):
+            llm = get_llm(provider="anthropic", model=model, temperature=0.3)
+            assert isinstance(llm, ChatAnthropic)
+            assert llm.model == model
+            assert llm.temperature is None
+
     def test_anthropic_haiku_still_accepts_temperature(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -121,7 +135,7 @@ class TestGetLlmProviderSelection:
         monkeypatch.setenv("GOOGLE_API_KEY", "fake-key")
         llm = get_llm()
         assert isinstance(llm, ChatGoogleGenerativeAI)
-        assert llm.model == "gemini-2.0-flash"
+        assert llm.model == "gemini-3.8-flash"
 
     def test_ollama_provider_no_credential_required(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("AI_ETL_LLM_PROVIDER", "ollama")
@@ -435,3 +449,77 @@ class TestIsLlmReviewEnabled:
     ) -> None:
         monkeypatch.setenv("AI_ETL_LLM_REVIEW_ENABLED", value)
         assert is_llm_review_enabled() is False
+
+
+# --- response_text: the answer of a model, whatever shape its content has -------------
+
+
+class _Response:
+    def __init__(self, content: object) -> None:
+        self.content = content
+
+
+_REASONING_BLOCK = {"type": "thinking", "thinking": "", "signature": "CAQSqBMKEAgS..."}
+
+
+def test_response_text_returns_a_string_content_unchanged() -> None:
+    from ai_etl.core.llm import response_text
+
+    assert response_text(_Response("def transform(dfs):\n    return dfs")) == (
+        "def transform(dfs):\n    return dfs"
+    )
+
+
+def test_response_text_keeps_only_the_text_blocks_of_a_block_list() -> None:
+    """The shape `claude-haiku-5-5` returned on 2026-10-12: a reasoning block with
+    its signature, then the answer. `str()` of that list is its repr, which is what
+    the agents were parsing."""
+    from ai_etl.core.llm import response_text
+
+    response = _Response(
+        [
+            _REASONING_BLOCK,
+            {"type": "text", "text": "def transform(dfs):\n"},
+            {"type": "text", "text": "    return dfs"},
+        ]
+    )
+
+    text = response_text(response)
+
+    assert text == "def transform(dfs):\n    return dfs"
+    assert "signature" not in text
+
+
+def test_response_text_accepts_plain_strings_inside_a_list() -> None:
+    from ai_etl.core.llm import response_text
+
+    assert response_text(_Response(["part one, ", "part two"])) == "part one, part two"
+
+
+def test_response_text_of_a_response_with_no_text_is_empty() -> None:
+    from ai_etl.core.llm import response_text
+
+    assert response_text(_Response(None)) == ""
+    assert response_text(_Response([_REASONING_BLOCK])) == ""
+
+
+def test_add_response_usage_adds_to_what_is_already_there() -> None:
+    from unittest.mock import MagicMock
+
+    from ai_etl.core.llm import add_response_usage
+
+    response = MagicMock(
+        usage_metadata={"input_tokens": 10, "output_tokens": 4, "total_tokens": 14}
+    )
+    first = add_response_usage(None, response)
+    assert first == {"input_tokens": 10, "output_tokens": 4, "total_tokens": 14}
+    assert add_response_usage(first, response) == {
+        "input_tokens": 20,
+        "output_tokens": 8,
+        "total_tokens": 28,
+    }
+    assert add_response_usage({}, MagicMock(usage_metadata=None)) == {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": 0,
+    }

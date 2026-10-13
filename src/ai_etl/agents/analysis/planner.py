@@ -15,7 +15,7 @@ import pandas as pd
 
 from ai_etl.agents._llm_codegen import strip_code_fences
 from ai_etl.core.analysis_types import AnalysisTask, TokenUsage
-from ai_etl.core.llm import extract_token_usage, get_llm, invoke_llm
+from ai_etl.core.llm import extract_token_usage, get_llm, invoke_llm, response_text
 from ai_etl.core.locale import DEFAULT_LOCALE, narrative_language_instruction, resolve_locale
 
 logger = logging.getLogger(__name__)
@@ -106,10 +106,13 @@ def plan_analysis_tasks(
     )
     llm = get_llm(provider=llm_provider_override, model=llm_model_override)
 
+    # Zero until the call answers: a fallback caused by the call itself failing has
+    # nothing to count, a fallback caused by an unusable answer still paid for it.
+    tokens: TokenUsage = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
     try:
         response = invoke_llm(llm, prompt, llm_provider_override)
         tokens = extract_token_usage(response)
-        raw = strip_code_fences(str(response.content).strip())
+        raw = strip_code_fences(response_text(response).strip())
         parsed: Any = json.loads(raw)
         if not isinstance(parsed, list) or not parsed:
             raise ValueError("empty or non-list response")
@@ -141,4 +144,4 @@ def plan_analysis_tasks(
             "plan_analysis_tasks: decomposition failed, falling back to one-shot mode",
             exc_info=True,
         )
-        return [{"question": business_question, "type": "descriptive"}], _ZERO_TOKENS
+        return [{"question": business_question, "type": "descriptive"}], tokens

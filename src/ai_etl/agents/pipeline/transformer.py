@@ -2,8 +2,10 @@
 
 import json
 
+import pandas as pd
+
 from ai_etl.audit.logger import log_action
-from ai_etl.core.llm import get_llm, invoke_llm
+from ai_etl.core.llm import add_response_usage, get_llm, invoke_llm, response_text
 from ai_etl.core.locale import date_parse_hint, resolve_locale
 from ai_etl.core.sandbox import execute_in_sandbox, scale_timeout_for_rows
 from ai_etl.core.state import PipelineState
@@ -49,8 +51,14 @@ Rules:
   format directly — comparing two numeric-parse *results* against each other
   cannot distinguish "this is unambiguous ISO" from "this is genuinely ambiguous
   day-first text," because both produce two different-but-valid timestamps either
-  way. Always try a strict ISO parse FIRST; only fall back to the day-first
-  heuristic for values that don't match ISO. {date_parse_hint}
+  way. Always try a strict ISO 8601 parse FIRST; only fall back to the day-first
+  heuristic for values that don't match ISO. The strict check must be
+  `format="ISO8601"`, which accepts a date alone ("2025-01-06") and a date followed
+  by a time ("2025-01-06 00:04:25", "2025-01-06T00:04:25Z"). A date-only
+  `format="%Y-%m-%d"` is NOT a valid ISO check: it rejects every ISO value that
+  carries a time part and sends it to the day-first branch, which swaps day and
+  month (real bug found 2026-10-12 on a public dataset of 20,000 timestamps:
+  19,974 of them came back with day and month swapped). {date_parse_hint}
 
 Example fallback pattern (WRONG: no fallback attempted, silently drops day-first dates):
 ```python
@@ -80,7 +88,7 @@ parseable — this is a pandas gotcha, not a logic bug in the branch below, and
 it means "is the whole column ISO?" is the wrong question to ask):
 ```python
 non_null = df["date"].notna().sum()
-strict_iso = pd.to_datetime(df["date"], format="%Y-%m-%d", errors="coerce")
+strict_iso = pd.to_datetime(df["date"], format="ISO8601", errors="coerce")
 if non_null > 0 and strict_iso.notna().sum() == non_null:
     parsed = strict_iso
 else:
@@ -105,7 +113,8 @@ reading only for that specific value if it isn't ISO-shaped):
 def _parse_one_date(value):
     if pd.isna(value):
         return pd.NaT
-    iso = pd.to_datetime(value, format="%Y-%m-%d", errors="coerce")
+    # "ISO8601" (not "%Y-%m-%d"): must also match ISO values that carry a time part.
+    iso = pd.to_datetime(value, format="ISO8601", errors="coerce")
     if pd.notna(iso):
         return iso
     # Not ISO-shaped — apply this tenant's locale preference to THIS value only.
@@ -144,6 +153,24 @@ df["preco"] = (
 df["preco"] = pd.to_numeric(df["preco"], errors="coerce")
 ```
 
+That pattern is ONLY for values written the Brazilian way, where a comma is the decimal
+separator ("1.234,56"). Look at the sample values in the schema first. When the values have
+NO comma and a dot followed by digits ("5.1570", "12.5", "0.25"), the dot IS the decimal
+separator: convert the column with `pd.to_numeric(df[col], errors="coerce")` and never
+remove the dot.
+
+WRONG (real bug, found 2026-10-12 in production with a public exchange-rate API: the
+values came as "5.1570", the dots were removed, and every rate was written as 51570):
+```python
+df["valor"] = df["valor"].str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
+df["valor"] = pd.to_numeric(df["valor"], errors="coerce")
+```
+
+RIGHT (the values already use a dot as the decimal separator):
+```python
+df["valor"] = pd.to_numeric(df["valor"], errors="coerce")
+```
+
 When coercing any column to a numeric type, a value that is genuinely not a number
 (e.g. the text "cem" in a quantity column) must become `NaN`, NOT `0`. Use
 `pd.to_numeric(col, errors="coerce")` and do NOT follow it with `.fillna(0)` on a
@@ -157,6 +184,50 @@ Respond ONLY with the Python function. No explanation, no markdown fences.
 """
 
 MAX_ATTEMPTS = 3
+
+
+def _decimal_point_removed(sources: dict[str, pd.DataFrame], result: pd.DataFrame) -> str | None:
+    """Say which column had its decimal point removed by the generated code, if any.
+
+    Real run in production, 2026-10-12, tenant locale pt-BR, public exchange-rate API: the
+    source held text such as "5.1570"; the generated code applied the Brazilian currency
+    pattern (remove the dots, turn the comma into a dot) and wrote 51570. The run completed
+    and the quality checks had nothing to say.
+
+    The check is narrow on purpose. It reports a column only when all of this holds: a
+    source column of the same name holds text in which every value is digits, one dot,
+    digits; at least one of those values has a fractional part that is not exactly three
+    digits (so the dot cannot be a thousands separator); the output column is numeric; and
+    every value written is a source value with the dot taken out, while not every value
+    written is a source value read as it is. A column that was renamed is not seen.
+    """
+    for source in sources.values():
+        for column in source.columns:
+            if column not in result.columns or not pd.api.types.is_numeric_dtype(result[column]):
+                continue
+            values = source[column].dropna()
+            if values.empty or not values.map(lambda value: isinstance(value, str)).all():
+                continue
+            texts = values.str.strip()
+            if not texts.str.fullmatch(r"-?\d+\.\d+").all():
+                continue
+            if texts.str.split(".").str[1].str.len().eq(3).all():
+                continue
+            written = set(pd.to_numeric(result[column], errors="coerce").dropna().round(9))
+            if not written:
+                continue
+            as_read = set(pd.to_numeric(texts).round(9))
+            point_removed = set(pd.to_numeric(texts.str.replace(".", "", regex=False)).round(9))
+            if written <= point_removed and not written <= as_read:
+                example = str(texts.iloc[0])
+                return (
+                    f"Column '{column}': the source values use a dot as the decimal separator "
+                    f"(for example '{example}'), and the code removed the dot, writing "
+                    f"{example.replace('.', '')} for {example}. Convert this column with "
+                    f"pd.to_numeric(df['{column}'], errors='coerce') and do not remove or "
+                    f"replace any character in it."
+                )
+    return None
 
 
 def transformer_node(state: PipelineState) -> PipelineState:
@@ -204,16 +275,22 @@ def transformer_node(state: PipelineState) -> PipelineState:
     max_source_rows = max((len(df) for df in state["extracted_data"].values()), default=0)
     timeout_seconds = scale_timeout_for_rows(TRANSFORMER_TIMEOUT_SECONDS, max_source_rows)
 
+    llm_usage = state.get("llm_usage")
     for _ in range(MAX_ATTEMPTS):
         attempts += 1
         response = invoke_llm(llm, prompt, provider_override)
-        code = _clean_code(str(response.content))
+        llm_usage = add_response_usage(llm_usage, response)
+        code = _clean_code(response_text(response))
 
         sandbox_result = execute_in_sandbox(
             code, state["extracted_data"], mode="function", timeout_seconds=timeout_seconds
         )
         result = sandbox_result["values"].get("result")
         error = sandbox_result["error"]
+        if error is None and isinstance(result, pd.DataFrame):
+            # Code that ran but removed a decimal point is treated as a failed attempt:
+            # the message goes back to the model like any execution error.
+            error = _decimal_point_removed(state["extracted_data"], result)
 
         if error is None and result is not None:
             new_log = log_action(
@@ -228,6 +305,7 @@ def transformer_node(state: PipelineState) -> PipelineState:
                 "transformed_data": result,
                 "transformation_attempts": attempts,
                 "transformation_error": None,
+                "llm_usage": llm_usage,
                 "audit_log": new_log,
             }
 
@@ -237,7 +315,15 @@ def transformer_node(state: PipelineState) -> PipelineState:
             hint = (
                 " You used an `import` statement — remove it entirely, pd/np are already available."
             )
-        prompt += f"\n\nPrevious attempt failed:\n{error}\n\nFix the transform() function.{hint}"
+        # The failed code goes back with its error. It used to be the error alone, so
+        # the model rewrote from scratch without seeing what it had written. Real runs,
+        # 2026-10-12: the same mistake came back in all three attempts (columns renamed
+        # and then referred to by the old names; requested column names missing).
+        prompt += (
+            f"\n\nPrevious attempt failed. Code of that attempt:\n{code}\n\n"
+            f"Error it raised:\n{error}\n\n"
+            f"Correct that code and return the complete transform() function.{hint}"
+        )
 
     new_log = log_action(
         state, "transformer", "code_failed", {"attempts": attempts, "error": last_error}
@@ -257,6 +343,7 @@ def transformer_node(state: PipelineState) -> PipelineState:
         "transformation_code": code,
         "transformation_attempts": attempts,
         "transformation_error": last_error,
+        "llm_usage": llm_usage or {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0},
         "error": f"Transformer failed after {attempts} attempts: {last_error}",
         "status": "failed",
         "audit_log": new_log,

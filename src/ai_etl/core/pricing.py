@@ -28,12 +28,26 @@ MODEL_PRICING_USD_PER_MILLION_TOKENS: dict[str, dict[str, float]] = {
     "gpt-4o": {"input": 2.50, "output": 10.00},
     # Anthropic (Sprint 30, ADR-031) — matches core/llm.py's
     # _DEFAULT_MODEL_BY_PROVIDER["anthropic"] and ALLOWED_MODELS_BY_PROVIDER.
-    "claude-opus-5": {"input": 15.00, "output": 75.00},
-    "claude-sonnet-5": {"input": 3.00, "output": 15.00},
+    #
+    # Corrected 2026-10-10 against Anthropic's published rates: `claude-opus-5` was
+    # priced here at $15/$75 and `claude-sonnet-5` at $3/$15, overstating every
+    # estimate and every budget-cap debit for those two models (3x and 1.5x).
+    "claude-opus-5-5": {"input": 4.00, "output": 20.00},
+    "claude-opus-5": {"input": 5.00, "output": 25.00},
+    "claude-sonnet-5-5": {"input": 2.00, "output": 10.00},
+    "claude-sonnet-5": {"input": 2.00, "output": 10.00},
+    # Base tier (prompts up to 100K tokens); beyond that Anthropic charges
+    # $0.50/$2.50. A single flat rate is all this table can express, and this
+    # pipeline's prompts sit far below that threshold.
+    "claude-haiku-5-5": {"input": 0.10, "output": 0.50},
     "claude-haiku-4-5": {"input": 1.00, "output": 5.00},
-    # Google (Sprint 30, ADR-031).
-    "gemini-2.0-pro": {"input": 1.25, "output": 5.00},
-    "gemini-2.0-flash": {"input": 0.10, "output": 0.40},
+    # Google (Sprint 30, ADR-031; ids replaced 2026-10-10, see core/llm.py).
+    # `gemini-3.8-flash` is the rate in force through 2026-12-31; Google has
+    # announced $1.50/$7.50 from 2027-01-01. `gemini-2.5-pro` is the <=200K-token
+    # prompt tier.
+    "gemini-3.8-flash": {"input": 0.75, "output": 3.75},
+    "gemini-2.5-pro": {"input": 1.25, "output": 10.00},
+    "gemini-2.5-flash": {"input": 0.30, "output": 2.50},
     # Ollama (Sprint 30, ADR-031) — local inference, genuinely free: priced at
     # exactly $0.00/$0.00 rather than left unpriced, so `compute_cost_usd` returns
     # `0.0` (a real, correct cost) instead of `None` ("cost unknown") for these

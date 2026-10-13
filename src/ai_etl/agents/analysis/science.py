@@ -14,9 +14,15 @@ from typing import Any
 import pandas as pd
 
 from ai_etl.agents._llm_codegen import build_column_stats as _build_column_stats
+from ai_etl.agents._llm_codegen import (
+    drop_redundant_imports,
+    hand_typed_figures,
+    import_error_hint,
+    typed_figures_error,
+)
 from ai_etl.agents._llm_codegen import strip_code_fences as _strip_fences
 from ai_etl.core.analysis_types import ScienceResult, TokenUsage
-from ai_etl.core.llm import extract_token_usage, get_llm, invoke_llm, sum_token_usage
+from ai_etl.core.llm import extract_token_usage, get_llm, invoke_llm, response_text, sum_token_usage
 from ai_etl.core.locale import (
     DEFAULT_LOCALE,
     currency_hint,
@@ -94,6 +100,10 @@ Then write Python code that defines EXACTLY four variables:
    business user. Include: what type of analysis was used, the main finding, and a business
    implication. Be specific with numbers, and the DIRECTION you state (increase/decrease)
    MUST match the actual numbers in `predictions_df` — never claim a trend the data doesn't show.
+   Every decimal number or percentage in the text MUST be inserted with an f-string field
+   that reads it from `predictions_df`, `model_info` or a variable you computed
+   (e.g. `f"... {{rate:.1f}}% ..."`). Never type such a figure as plain text: code that
+   does is rejected without being executed.
 
 4. `model_info` — a Python dict with:
    {{"model_type": str, "task": str, "metrics": dict, "features": list, "target": str}}
@@ -355,6 +365,16 @@ def run_science(
         "ExponentialSmoothing": ExponentialSmoothing,
     }
 
+    # Every name the generated code finds in the sandbox, with its root package:
+    # an import that only asks for these is dropped instead of failing (the sandbox
+    # has no import mechanism). See `drop_redundant_imports`.
+    provided_names = {
+        "pd": "pandas",
+        "np": "numpy",
+        **{name: path.split(".")[0] for name, path in extra_modules.items()},
+        **{name: obj.__module__.split(".")[0] for name, obj in extra_globals.items()},
+    }
+
     llm = get_llm(provider=llm_provider_override, model=llm_model_override)
     last_error = ""
     last_code = ""
@@ -371,8 +391,16 @@ def run_science(
 
         response = invoke_llm(llm, prompt, llm_provider_override)
         attempt_usages.append(extract_token_usage(response))
-        code = _strip_fences(str(response.content).strip())
+        code = drop_redundant_imports(
+            _strip_fences(response_text(response).strip()), provided_names
+        )
         last_code = code
+
+        typed = hand_typed_figures(code)
+        if typed:
+            # Not executed: the text would state figures the code did not compute.
+            last_error = typed_figures_error(typed, "predictions_df")
+            continue
 
         sandbox_result = execute_in_sandbox(
             code,
@@ -392,7 +420,9 @@ def run_science(
             continue
 
         if sandbox_result["error"] is not None:
-            last_error = textwrap.shorten(sandbox_result["error"], width=400, placeholder="...")
+            last_error = textwrap.shorten(
+                sandbox_result["error"], width=400, placeholder="..."
+            ) + import_error_hint(sandbox_result["error"])
             continue
 
         predictions_df = sandbox_result["values"].get("predictions_df")

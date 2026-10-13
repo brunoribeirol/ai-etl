@@ -154,3 +154,18 @@ class TestLlmOverride:
         result = orchestrator_node(_make_state())
 
         assert all(e["action"] != "llm_override_used" for e in result["audit_log"])
+
+
+def test_llm_usage_counts_every_attempt_of_the_orchestrator(mock_get_llm) -> None:
+    llm = MagicMock()
+    usage = {"input_tokens": 700, "output_tokens": 200, "total_tokens": 900}
+    llm.invoke.side_effect = [
+        MagicMock(content="not json", usage_metadata=usage),
+        MagicMock(content=json.dumps(VALID_PLAN), usage_metadata=usage),
+    ]
+    mock_get_llm.return_value = llm
+
+    result = orchestrator_node(_make_state())
+
+    assert result.get("error") is None
+    assert result["llm_usage"] == {"input_tokens": 1400, "output_tokens": 400, "total_tokens": 1800}

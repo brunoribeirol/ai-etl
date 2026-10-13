@@ -82,3 +82,21 @@ def test_auto_generate_spec_omits_sheet_hint_when_none() -> None:
     spec = auto_generate_spec(Path("f.csv"), df, Path("out.csv"))
 
     assert "Excel workbook" not in spec
+
+
+def test_auto_generate_spec_does_not_ask_for_a_rename_of_the_columns() -> None:
+    """The generic steps must not ask the model to rename the columns: every other
+    step, and the user's own instructions, refer to them by the names in the file.
+    Real failure, 2026-10-12: code renamed the columns and then used the original
+    names (file with mixed-case headers); stating the rename last did not prevent it."""
+    df = pd.DataFrame({"customerID": ["a"], "TotalCharges": ["1.5"]})
+    spec = auto_generate_spec(
+        Path("f.csv"),
+        df,
+        Path("out.csv"),
+        additional_instructions="Convert TotalCharges to a number.",
+    )
+    assert "snake_case" not in spec
+    assert "rename" not in spec.lower()
+    assert "customerID, TotalCharges" in spec
+    assert "Preserve all rows and all original columns." in spec

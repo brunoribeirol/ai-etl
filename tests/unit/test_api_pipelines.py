@@ -672,13 +672,13 @@ def test_get_pipeline_llm_config_404_when_unknown(client: TestClient, mocker) ->
 def test_get_pipeline_llm_config_returns_current_override(client: TestClient, mocker) -> None:
     mocker.patch(
         "ai_etl.api.routers.pipelines.get_saved_pipeline_llm_config",
-        return_value=_llm_config(llm_provider="google", llm_model="gemini-2.0-flash"),
+        return_value=_llm_config(llm_provider="google", llm_model="gemini-2.5-flash"),
     )
 
     response = client.get("/pipelines/pl-1/llm-config")
 
     assert response.status_code == 200
-    assert response.json() == {"llm_provider": "google", "llm_model": "gemini-2.0-flash"}
+    assert response.json() == {"llm_provider": "google", "llm_model": "gemini-2.5-flash"}
 
 
 def test_set_pipeline_llm_config_happy_path(client: TestClient, mocker) -> None:
@@ -787,7 +787,9 @@ def test_get_allowed_llm_models(client: TestClient) -> None:
     body = response.json()
     assert "gpt-4o-mini" in body["openai"]
     assert "claude-sonnet-5" in body["anthropic"]
-    assert "gemini-2.0-flash" in body["google"]
+    assert "claude-haiku-5-5" in body["anthropic"]
+    assert "gemini-3.8-flash" in body["google"]
+    assert "gemini-2.0-flash" not in body["google"]  # shut down by Google 2026-06-01
     assert "llama3.1" in body["ollama"]
 
 

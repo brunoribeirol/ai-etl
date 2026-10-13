@@ -37,13 +37,19 @@ def test_compute_cost_usd_missing_keys_default_to_zero() -> None:
 def test_compute_cost_usd_anthropic_model() -> None:
     tokens = {"input_tokens": 1_000_000, "output_tokens": 1_000_000, "total_tokens": 2_000_000}
     cost = compute_cost_usd("claude-sonnet-5", tokens)
-    assert cost == 3.00 + 15.00
+    assert cost == 2.00 + 10.00
 
 
 def test_compute_cost_usd_google_model() -> None:
     tokens = {"input_tokens": 1_000_000, "output_tokens": 1_000_000, "total_tokens": 2_000_000}
-    cost = compute_cost_usd("gemini-2.0-flash", tokens)
-    assert cost == 0.10 + 0.40
+    cost = compute_cost_usd("gemini-2.5-flash", tokens)
+    assert cost == 0.30 + 2.50
+
+
+def test_compute_cost_usd_claude_haiku_5_5_uses_base_tier() -> None:
+    """Haiku 5.5 is tier-priced by prompt size; this table carries the base tier."""
+    tokens = {"input_tokens": 1_000_000, "output_tokens": 1_000_000, "total_tokens": 2_000_000}
+    assert compute_cost_usd("claude-haiku-5-5", tokens) == 0.10 + 0.50
 
 
 def test_compute_cost_usd_ollama_model_is_explicit_zero_not_none() -> None:

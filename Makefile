@@ -1,4 +1,4 @@
-.PHONY: install test test-e2e lint format format-check type-check security check db-up db-down db-test-up app-db-up app-db-down app-db-test-up db-migrate run-scenario1 run-scenario2 run-scenario3 api redis-up celery-worker clean unhide-pth mysql-test-up mysql-test-down mongodb-test-up mongodb-test-down sandbox-image sandbox-vcr-image
+.PHONY: install test test-e2e lint format format-check type-check security check db-up db-down db-test-up app-db-up app-db-down app-db-test-up db-migrate run-scenario1 run-scenario2 run-scenario3 case-study-data case-study-seed case-study api redis-up celery-worker clean unhide-pth mysql-test-up mysql-test-down mongodb-test-up mongodb-test-down sandbox-image sandbox-vcr-image
 
 install:
 	uv sync --all-extras
@@ -105,6 +105,21 @@ run-scenario3:
 	uv run python -m ai_etl run \
 		--spec "$$(cat case_study/pipelines/scenario3_spec.txt)" \
 		--output case_study/results/scenario3/
+
+# Case study over public data (NYC TLC trip records + zone lookup, Open-Meteo).
+# `case-study-data` downloads and pins the extract in
+# case_study/public_data_manifest.json; `case-study-seed` loads the zone table
+# (needs POSTGRES_URL, see `make db-up`); `case-study` calls real models and costs
+# real money (needs OPENAI_API_KEY and/or ANTHROPIC_API_KEY). Scenario 4 hangs on
+# macOS (plotly in the sandbox), so run it through the `Case study` workflow instead.
+case-study-data:
+	uv run python case_study/data/fetch_public_data.py
+
+case-study-seed:
+	uv run python case_study/data/seed_public_postgres.py
+
+case-study:
+	uv run python case_study/scripts/run_case_study.py
 
 # ADR-038 — builds the image core/sandbox_docker.py's execute_in_sandbox()
 # runs when AI_ETL_SANDBOX_BACKEND=docker. Local/dev-verified only today;
