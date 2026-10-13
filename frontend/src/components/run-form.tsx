@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/status-badge";
+import { splitErrorMessage } from "@/lib/error-message";
 import { describeSubmitError } from "@/lib/form-error";
 import type { TaskStatus } from "@/lib/types";
 
@@ -374,7 +375,11 @@ export function RunForm({
                   <span className="text-muted-foreground">{t("statusLabel")}</span>
                   {displayStatus && <StatusBadge status={displayStatus} />}
                 </div>
-                <AgentProgress meta={status?.meta ?? null} done={!!status?.ready} />
+                <AgentProgress
+                  meta={status?.meta ?? null}
+                  done={!!status?.ready}
+                  failed={status?.result?.status === "failed" || !!status?.error}
+                />
                 {status?.ready && status.result?.status === "completed" && (
                   <p className="text-emerald-400">
                     ✅ {t("completedPrefix")}{" "}
@@ -383,8 +388,18 @@ export function RunForm({
                     </Link>
                   </p>
                 )}
+                {status?.ready && status.result?.status === "failed" && (
+                  <p className="text-destructive">
+                    ❌ {splitErrorMessage(status.result.error ?? t("failedNoMessage")).summary}{" "}
+                    {status.result.run_id && (
+                      <Link href={`/history/${status.result.run_id}`} className="underline">
+                        {t("viewFailedRun")}
+                      </Link>
+                    )}
+                  </p>
+                )}
                 {status?.ready && status.error && (
-                  <p className="text-destructive">❌ {status.error}</p>
+                  <p className="text-destructive">❌ {splitErrorMessage(status.error).summary}</p>
                 )}
               </CardContent>
             </Card>

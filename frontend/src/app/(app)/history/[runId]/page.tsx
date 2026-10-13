@@ -7,6 +7,7 @@ import { RunSections } from "@/components/run-sections";
 import { StatusBadge } from "@/components/status-badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { apiFetch } from "@/lib/api";
+import { splitErrorMessage } from "@/lib/error-message";
 import type { FullResult } from "@/lib/types";
 
 /**
@@ -47,6 +48,8 @@ export default async function RunDetail({
   const silverRows = result.state.transformed_data;
   const status = result.state.status ?? "unknown";
 
+  const failure = result.state.error ? splitErrorMessage(result.state.error) : null;
+
   return (
     <main className="flex-1 px-6 py-12 max-w-4xl mx-auto w-full flex flex-col gap-8">
       <div className="flex flex-col gap-2">
@@ -59,9 +62,19 @@ export default async function RunDetail({
             {t("questionPrefix", { question: result.question })}
           </p>
         )}
-        {result.state.error && (
+        {failure && (
           <Alert variant="destructive">
-            <AlertDescription>{result.state.error}</AlertDescription>
+            <AlertDescription className="flex flex-col gap-2">
+              <span>{failure.summary}</span>
+              {failure.details && (
+                <details>
+                  <summary className="cursor-pointer text-xs">{t("technicalDetails")}</summary>
+                  <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap text-xs">
+                    {failure.details}
+                  </pre>
+                </details>
+              )}
+            </AlertDescription>
           </Alert>
         )}
       </div>
