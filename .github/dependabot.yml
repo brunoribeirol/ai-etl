@@ -1,5 +1,11 @@
 version: 2
 
+# Version updates are paused until the TCC delivery on 2026-10-30: every ecosystem
+# below has `open-pull-requests-limit: 0`. The code is frozen until then, and the
+# case-study evidence was measured on the versions pinned in `uv.lock`. Security
+# updates are not affected by this limit and still open pull requests.
+# To resume after the delivery: set the five limits back to 5.
+
 updates:
   # ===========================================================================
   # Python / uv
@@ -10,7 +16,7 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 0
     labels:
       - "dependencies"
       - "python"
@@ -34,7 +40,7 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 0
     labels:
       - "dependencies"
       - "frontend"
@@ -58,7 +64,7 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 0
     labels:
       - "dependencies"
       - "github-actions"
@@ -82,7 +88,7 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 0
     labels:
       - "dependencies"
       - "docker"
@@ -97,7 +103,7 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 0
     labels:
       - "dependencies"
       - "terraform"
