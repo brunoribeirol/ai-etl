@@ -113,10 +113,11 @@ def test_plan_analysis_tasks_normalizes_invalid_type(mock_get_llm, sample_df) ->
 
 def test_plan_analysis_tasks_falls_back_on_invalid_json(mock_get_llm, sample_df) -> None:
     mock_get_llm.return_value = _mock_llm("not valid json at all")
-    tasks, tokens = plan_analysis_tasks("pergunta original", sample_df)
+    tasks, _ = plan_analysis_tasks("pergunta original", sample_df)
 
+    # The tokens of this path are asserted in
+    # test_plan_analysis_tasks_keeps_the_tokens_of_an_answer_it_could_not_use.
     assert tasks == [{"question": "pergunta original", "type": "descriptive"}]
-    assert tokens == {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
 
 
 def test_plan_analysis_tasks_falls_back_on_empty_list(mock_get_llm, sample_df) -> None:
@@ -159,3 +160,19 @@ def test_plan_analysis_tasks_forwards_llm_override(mock_get_llm, sample_df) -> N
     plan_analysis_tasks("pergunta", sample_df, "anthropic", "claude-sonnet-5")
 
     mock_get_llm.assert_called_once_with(provider="anthropic", model="claude-sonnet-5")
+
+
+def test_plan_analysis_tasks_keeps_the_tokens_of_an_answer_it_could_not_use(
+    mock_get_llm, sample_df
+) -> None:
+    """The fallback after an unusable answer used to return zero tokens, although the call
+    had been made and paid. Seen 2026-10-13 in the case-study runner: the cost reported by
+    the product was below the measured cost by exactly the Planner's call in the runs that
+    fell back."""
+    usage = {"input_tokens": 591, "output_tokens": 104, "total_tokens": 695}
+    mock_get_llm.return_value = _mock_llm("not json at all", usage=usage)
+
+    tasks, tokens = plan_analysis_tasks("Quais produtos vendem mais?", sample_df)
+
+    assert tasks == [{"question": "Quais produtos vendem mais?", "type": "descriptive"}]
+    assert tokens == usage
