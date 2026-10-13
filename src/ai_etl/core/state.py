@@ -118,6 +118,13 @@ class PipelineState(TypedDict):
     # --- Audit (appended by every agent) ---
     audit_log: list[dict[str, Any]]
 
+    # --- Model usage of the ETL layer ---
+    # Tokens of every model call made by the Orchestrator and the Transformer (all
+    # attempts), {"input_tokens", "output_tokens", "total_tokens"}. Until 2026-10-12
+    # these calls were not counted anywhere, so the cost of a run, and the amount
+    # debited from the tenant budget, covered the analysis layer alone.
+    llm_usage: dict[str, int]
+
     # --- Latency instrumentation (ADR-007) ---
     stage_durations: dict[str, float]  # {"orchestrator": 1.2, "extractor": 0.4, ...} — wall-
     # clock seconds per LangGraph node, populated by core/graph.py's `_timed()` wrapper.
@@ -181,6 +188,7 @@ def initial_state(
         load_result=None,
         load_preview=None,
         audit_log=[],
+        llm_usage={"input_tokens": 0, "output_tokens": 0, "total_tokens": 0},
         stage_durations={},
         error=None,
         status="running",

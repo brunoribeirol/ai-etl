@@ -474,3 +474,36 @@ def test_right_currency_pattern_parses_br_formatted_values() -> None:
     result = _right_currency_clean(prices)
 
     assert list(result) == [1234.56, 89.90]
+
+
+def test_llm_usage_adds_every_attempt_to_what_the_state_already_holds(mock_get_llm) -> None:
+    """Every model call of the Transformer is counted, failed attempts included, on top
+    of the Orchestrator's usage already in the state."""
+    llm = MagicMock()
+    usage = {"input_tokens": 100, "output_tokens": 20, "total_tokens": 120}
+    llm.invoke.side_effect = [
+        MagicMock(content=INVALID_CODE, usage_metadata=usage),
+        MagicMock(content=VALID_CODE, usage_metadata=usage),
+    ]
+    mock_get_llm.return_value = llm
+    state = {
+        **_make_state(),
+        "llm_usage": {"input_tokens": 7, "output_tokens": 3, "total_tokens": 10},
+    }
+
+    result = transformer_node(state)
+
+    assert result["transformation_attempts"] == 2
+    assert result["llm_usage"] == {"input_tokens": 207, "output_tokens": 43, "total_tokens": 250}
+
+
+def test_llm_usage_is_kept_when_every_attempt_fails(mock_get_llm) -> None:
+    llm = MagicMock()
+    usage = {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}
+    llm.invoke.side_effect = [MagicMock(content=INVALID_CODE, usage_metadata=usage)] * 3
+    mock_get_llm.return_value = llm
+
+    result = transformer_node(_make_state())
+
+    assert result["status"] == "failed"
+    assert result["llm_usage"] == {"input_tokens": 30, "output_tokens": 15, "total_tokens": 45}

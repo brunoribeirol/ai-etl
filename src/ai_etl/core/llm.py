@@ -13,6 +13,7 @@ section below.
 import os
 import threading
 import time
+from collections.abc import Mapping
 from typing import Any
 
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -304,6 +305,19 @@ def extract_token_usage(response: Any) -> TokenUsage:
         "input_tokens": int(usage.get("input_tokens", 0)),
         "output_tokens": int(usage.get("output_tokens", 0)),
         "total_tokens": int(usage.get("total_tokens", 0)),
+    }
+
+
+def add_response_usage(current: Mapping[str, int] | None, response: Any) -> dict[str, int]:
+    """`current` plus the token usage of `response`, as the plain dict that
+    `PipelineState.llm_usage` holds (the ETL nodes cannot use `TokenUsage` in the state:
+    `core/analysis_types.py` imports the state)."""
+    usage = extract_token_usage(response)
+    base = current or {}
+    return {
+        "input_tokens": int(base.get("input_tokens", 0)) + usage["input_tokens"],
+        "output_tokens": int(base.get("output_tokens", 0)) + usage["output_tokens"],
+        "total_tokens": int(base.get("total_tokens", 0)) + usage["total_tokens"],
     }
 
 
