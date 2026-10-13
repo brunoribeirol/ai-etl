@@ -507,3 +507,102 @@ def test_llm_usage_is_kept_when_every_attempt_fails(mock_get_llm) -> None:
 
     assert result["status"] == "failed"
     assert result["llm_usage"] == {"input_tokens": 30, "output_tokens": 15, "total_tokens": 45}
+
+
+# ---------------------------------------------------------------------------
+# Decimal point removed by the generated code (real run, 2026-10-12)
+# ---------------------------------------------------------------------------
+
+POINT_REMOVED_CODE = """
+def transform(dfs):
+    df = dfs["rates"].copy()
+    df["valor"] = (
+        df["valor"]
+        .str.replace("R$ ", "", regex=False)
+        .str.replace(".", "", regex=False)
+        .str.replace(",", ".", regex=False)
+    )
+    df["valor"] = pd.to_numeric(df["valor"], errors="coerce")
+    return df
+"""
+
+POINT_KEPT_CODE = """
+def transform(dfs):
+    df = dfs["rates"].copy()
+    df["valor"] = pd.to_numeric(df["valor"], errors="coerce")
+    return df
+"""
+
+
+def _rates_state() -> dict:
+    rates = pd.DataFrame({"data": ["01/09/2026", "02/09/2026"], "valor": ["5.1570", "5.1273"]})
+    return {**_make_state(), "extracted_data": {"rates": rates}, "source_schemas": {"rates": {}}}
+
+
+def test_decimal_point_removed_is_reported_for_the_real_case() -> None:
+    from ai_etl.agents.pipeline.transformer import _decimal_point_removed
+
+    source = {"rates": pd.DataFrame({"valor": ["5.1570", "5.1273"]})}
+    message = _decimal_point_removed(source, pd.DataFrame({"valor": [51570.0, 51273.0]}))
+    assert message is not None
+    assert "'valor'" in message and "5.1570" in message and "51570" in message
+
+
+def test_decimal_point_removed_accepts_values_read_as_they_are() -> None:
+    from ai_etl.agents.pipeline.transformer import _decimal_point_removed
+
+    source = {"rates": pd.DataFrame({"valor": ["5.1570", "5.1273"]})}
+    assert _decimal_point_removed(source, pd.DataFrame({"valor": [5.157, 5.1273]})) is None
+
+
+def test_decimal_point_removed_says_nothing_when_the_dot_may_be_a_thousands_separator() -> None:
+    from ai_etl.agents.pipeline.transformer import _decimal_point_removed
+
+    # "1.234" and "2.500" may be 1234 and 2500 written the Brazilian way: not judged.
+    source = {"sales": pd.DataFrame({"total": ["1.234", "2.500"]})}
+    assert _decimal_point_removed(source, pd.DataFrame({"total": [1234.0, 2500.0]})) is None
+    # Brazilian format with a comma is not plain decimal text either.
+    source = {"sales": pd.DataFrame({"total": ["1.234,56", "99,90"]})}
+    assert _decimal_point_removed(source, pd.DataFrame({"total": [1234.56, 99.9]})) is None
+
+
+def test_decimal_point_removed_ignores_numeric_sources_other_columns_and_other_changes() -> None:
+    from ai_etl.agents.pipeline.transformer import _decimal_point_removed
+
+    numeric = {"s": pd.DataFrame({"valor": [5.157, 5.1273]})}
+    assert _decimal_point_removed(numeric, pd.DataFrame({"valor": [51570.0, 51273.0]})) is None
+    text = {"s": pd.DataFrame({"valor": ["5.1570", "5.1273"]})}
+    assert _decimal_point_removed(text, pd.DataFrame({"rate": [51570.0, 51273.0]})) is None
+    assert _decimal_point_removed(text, pd.DataFrame({"valor": [515.7, 512.73]})) is None
+    assert _decimal_point_removed(text, pd.DataFrame({"valor": ["5.1570", "5.1273"]})) is None
+
+
+def test_code_that_removes_the_decimal_point_is_a_failed_attempt(mock_get_llm) -> None:
+    llm = _mock_llm([POINT_REMOVED_CODE, POINT_KEPT_CODE])
+    mock_get_llm.return_value = llm
+
+    result = transformer_node(_rates_state())
+
+    assert result["error"] is None
+    assert result["transformation_attempts"] == 2
+    assert result["transformed_data"]["valor"].tolist() == [5.157, 5.1273]
+    retry_prompt = llm.invoke.call_args_list[1].args[0]
+    assert "removed the dot" in retry_prompt
+
+
+def test_code_that_always_removes_the_decimal_point_fails_the_run(mock_get_llm) -> None:
+    mock_get_llm.return_value = _mock_llm([POINT_REMOVED_CODE] * 3)
+
+    result = transformer_node(_rates_state())
+
+    assert result["status"] == "failed"
+    assert "removed the dot" in result["error"]
+
+
+def test_prompt_limits_the_currency_pattern_to_values_with_a_decimal_comma(mock_get_llm) -> None:
+    llm = _mock_llm([POINT_KEPT_CODE])
+    mock_get_llm.return_value = llm
+    transformer_node(_rates_state())
+    prompt = llm.invoke.call_args_list[0].args[0]
+    assert "the dot IS the decimal" in prompt
+    assert "never\nremove the dot" in prompt or "never remove the dot" in prompt.replace("\n", " ")
