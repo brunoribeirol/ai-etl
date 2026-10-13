@@ -56,22 +56,41 @@ class StorageBackend(Protocol):
 
 
 class LocalStorageBackend:
-    """Wraps `Path(log_dir) / key` — today's exact behavior, unchanged."""
+    """Files under `log_dir`, one per key. A key that leads outside `log_dir` is refused."""
 
     def __init__(self, log_dir: str):
         self.base_dir = Path(log_dir)
         self.base_dir.mkdir(parents=True, exist_ok=True)
 
+    def _path_for(self, key: str) -> Path:
+        """Return the path of `key`, which must be inside the base directory.
+
+        Keys are built from run ids, and a run id can arrive in the path of a request.
+        The callers check that the run belongs to the tenant before they read
+        (`audit/db/runs.py`); this is the second check, at the place where the file is
+        opened: a key with `..`, an absolute path or a symbolic link that leads outside
+        the base directory raises `ValueError`.
+        """
+        base = os.path.realpath(self.base_dir)
+        full = os.path.realpath(os.path.join(base, key))
+        if not full.startswith(base + os.sep):
+            raise ValueError(f"Storage key leads outside the storage directory: {key!r}")
+        return Path(full)
+
     def write_bytes(self, key: str, data: bytes) -> None:
-        path = self.base_dir / key
+        path = self._path_for(key)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(data)
 
     def read_bytes(self, key: str) -> bytes:
-        return (self.base_dir / key).read_bytes()
+        return self._path_for(key).read_bytes()
 
     def exists(self, key: str) -> bool:
-        return (self.base_dir / key).exists()
+        try:
+            return self._path_for(key).exists()
+        except ValueError:
+            # Nothing outside the base directory is an object of this store.
+            return False
 
     def list_existing_keys(self) -> set[str]:
         # Local disk I/O is cheap per-call (unlike S3's network round-trip),
@@ -85,8 +104,7 @@ class LocalStorageBackend:
         }
 
     def delete_bytes(self, key: str) -> None:
-        path = self.base_dir / key
-        path.unlink(missing_ok=True)
+        self._path_for(key).unlink(missing_ok=True)
 
 
 class S3StorageBackend:
