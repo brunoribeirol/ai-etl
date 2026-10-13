@@ -2,13 +2,21 @@
 
 > Living doc. Updated at the end of meaningful work sessions, not per-commit. Source of truth for repo/code state; the Obsidian vault (`~/Documents/Obsidian Vault/tcc/`) is the source of truth for the academic TCC narrative and product/strategy context.
 
-**Last updated:** 2026-10-13 (02:00 UTC), fourth entry. **Code closed at `d77e13b`.** A
-finalisation round fixed what the functional verification had left open (#327 to #332): the
-Transformer's retry, the cost of a run, texts with figures typed by hand, input with almost no
-data, failure messages, and a decimal point removed by generated code, which a real API run
-showed that night. The case study was run again on the final code: 20 of 20 runs completed,
-output equal to the reference in 20; a further batch of scenario 3 on `d77e13b` gave 3 of 5
-equal, 1 not equal and 1 failure. What remains is stated as limits, not as work in progress. See "2026-10-13: finalisation round" below.
+**Last updated:** 2026-10-13 (16:30 UTC), fifth entry. **Nothing is open around the code.**
+Agent, prompt, sandbox and graph code is unchanged since `d77e13b`; the last commit that
+touches product code is `59851a1` (#336, three security fixes outside the pipeline). A closing
+round dealt with what was still open: the 8 code scanning alerts (4 fixed, 4 dismissed as
+false positives, 0 open), the 11 open pull requests (3 merged, 8 dependency updates closed and
+deferred, 0 open), and version updates, paused until the delivery on 2026-10-30 (#337). The
+Anthropic prices in `core/pricing.py` were compared with the provider's published table and
+are equal. See "2026-10-13: closing round" below.
+
+**Fourth entry (2026-10-13, 02:00 UTC):** finalisation round (#327 to #332): the Transformer's
+retry, the cost of a run, texts with figures typed by hand, input with almost no data, failure
+messages, and a decimal point removed by generated code. The case study was run again on that
+code: 20 of 20 runs completed, output equal to the reference in 20; a further batch of
+scenario 3 on `d77e13b` gave 3 of 5 equal, 1 not equal and 1 failure. See "2026-10-13:
+finalisation round" below.
 
 **Third entry (2026-10-12):** functional verification on production with real data, four
 defects fixed (#321 to #325); see "2026-10-12: functional verification on production".
@@ -107,6 +115,103 @@ _Already closed this arc (were open before): `POST /llm/test-connectivity` is no
 ("Working 1921ms"); the audit's H5/H1/M3/M11 and all other merged items are live-verified — see
 below._
 
+## 2026-10-13: closing round, nothing open around the code
+
+Fifth entry. The owner asked for everything still open to be dealt with, so that the days
+until the delivery are text only.
+
+### Code scanning: 8 alerts open since 2026-09-10, now 0
+
+The data flow of each alert was read in the analysis report before deciding.
+
+| Alert | Rule | Where | Verdict | Outcome |
+|---|---|---|---|---|
+| 7 | `py/polynomial-redos` | `audit/logger.py` | real: the credential scrub was quadratic on a long run of scheme characters (0.45 s for 20,000 characters, four times that for each doubling), and the text can come from a request (the reason of a rejected run) | fixed in #336: the pattern begins at the literal `://` |
+| 5, 6 | `py/path-injection` | `audit/storage.py` | real as a missing second check: callers verify that the run belongs to the tenant before reading, the local backend itself joined the key with no check | fixed in #336: a key that leads outside the base directory is refused |
+| 8 | `py/stack-trace-exposure` | `api/routers/runs.py` | real: when the write failed after an approval, the response repeated the destination driver's text without the scrub the stored copy gets | fixed in #336: fixed sentence in the response, detail in the stored run |
+| 1 (reported again as 9 after the file changed) | `py/clear-text-storage-sensitive-data` | `audit/storage.py` | false positive: the flagged value is the return of `scrub_secrets_in_text`, taken for a secret because of the function's name | dismissed, with the reason written on the alert |
+| 2, 3, 4 | `py/clear-text-logging-sensitive-data` | `core/tenant_context.py` | false positive: the log lines carry the name of a secret and the source type, never the value | dismissed, with the reason written on each alert |
+
+After the merge, the analysis of `main` at `59851a1` reports alerts 5 to 8 as fixed. A
+dismissed alert can be reopened on the alert's page.
+
+### Pull requests: 11 open, now 0
+
+| PR | What | Decision |
+|---|---|---|
+| #335 | README: evaluation summary and link to the deployed app | merged, after each figure was checked against the manifest and the evidence note |
+| #282 | GitHub Actions, minor and patch (5 actions) | merged: CI only |
+| #275 | `astral-sh/setup-uv` 7.6.0 to 10.1.0 | merged: CI and the case-study workflow; exercised by workflow run 38425092704 |
+| #310 | Python, minor and patch group (17 packages) | closed, deferred. Fails type checking: 3 mypy errors in the MongoDB source and destination |
+| #309 | frontend, minor and patch group (8 packages, `@clerk/nextjs` among them) | closed, deferred. Checks pass; it sits in the sign-in path of the deployed app |
+| #268, #277 | pandas 2.3.3 to 3.0.6 and its type stubs | closed, deferred. 7 unit tests fail on pandas 3 (CSV source, Quality agent, SQLite source) |
+| #278 | openai 2.54.0 to 3.26.1 | closed, deferred. Checks pass, but the tests replace the model client; it needs a batch with real models |
+| #269 | plotly 6.8.0 to 7.1.0 | closed, deferred. Imported by generated analysis code; it needs a scenario 4 batch |
+| #296 | AWS provider 5.100.0 to 6.67.0 (Terraform) | closed, deferred. No plan is run against it in CI |
+| #246 | base image `python:3.12-slim` to `3.14-slim` | closed, deferred. Its failing check is an image scan from September (msgpack 1.1.2, since updated on `main`) |
+
+Reason for the deferrals: the code is frozen until the delivery and the evidence was measured
+on the versions pinned in `uv.lock`. None of the eight is a security update (Dependabot
+alerts: 0 open).
+
+**#337 pauses version updates:** `open-pull-requests-limit: 0` on the five ecosystems of
+`.github/dependabot.yml`. Security updates are not affected. **To do after 2026-10-30: set the
+five limits back to 5**, then take up the eight deferred updates (comment `@dependabot reopen`
+on each, or wait for the next version).
+
+### Price table
+
+The six Anthropic entries of `core/pricing.py` were compared on 2026-10-13 with the provider's
+published table (`platform.claude.com/docs/en/about-claude/pricing`): equal, including the
+base tier of `claude-haiku-5-5` (prompts up to 100,000 tokens; this pipeline's prompts are far
+below it). So the difference recorded on 2026-10-12 between the computed cost of the Anthropic
+runs (US$ 3.19) and the credit spent (US$ 5.00) is not a wrong price. It is not explained.
+Anthropic costs remain "computed from the tokens the API reported and the published prices",
+not "billed".
+
+### A behaviour stated, not changed: what happens when the quality gate stops a run
+
+The owner asked about the graph ending at the gate. What the code does today:
+
+- The gate reports "error" when a column of the transformed data has 20% or more missing
+  values (`NULL_ERROR_THRESHOLD`), when two columns have the same name, or when a tenant rule
+  with that severity is violated.
+- The graph then ends without loading (`core/graph.py::route_after_quality`). The run is
+  stored as failed with the reason and the quality report. There is no step that sends the
+  report back to the Transformer and no way for a person to release the run: the approval
+  queue (ADR-028) covers gated writes, not quality blocks.
+- The analysis layer still runs on the data the gate refused: `run_full_analysis` decides only
+  on whether the Transformer produced rows. Checked by calling it with a blocked state: the
+  Planner, the sub-analyses and the Advisor are called. What the page of such a run shows was
+  not checked. No test covers this case.
+
+Not changed: a repair step or an override changes the topology of the graph and what the 30
+scenario 3 runs measured (the gate stopped 1 of them). It is the owner's decision, after the
+delivery.
+
+### Verified
+
+- Local suite without the two macOS-incompatible files: 1,277 passed, 34 skipped. CI green on
+  #336, #337, #282 and #275.
+- Production after the deploy of `59851a1`: `/health/ready` 200, database and Redis ok.
+- Case study on `main` at `50ac372`, default model, 1 run per scenario (workflow run
+  38425092704): 4 of 4 completed, output check `match` in 4, one attempt each, cost reported
+  by the product equal to the cost measured in 4 (total 0.0215). Sub-analyses completed of
+  planned: 4 of 5, 4 of 4, 4 of 5, 4 of 4. One run per scenario is a check that nothing broke,
+  not a measurement.
+- Not verified on production: the approval response after #336 (the changed branch is the
+  failed write; the completed path returns what it returned before, by test).
+
+### Owner's items (not code)
+
+- Database rows of the functional checklist on production: register a database secret, or
+  state that those connectors were exercised in the case-study workflow only.
+- The usage page of the Anthropic console for 2026-10-12, only if an Anthropic cost is to be
+  called "billed".
+- After 2026-10-30: resume version updates (see above) and decide on the quality gate.
+- A paused pipeline was left on production: "Functional check 2026-10-12: Recife weather
+  (Open-Meteo)".
+
 ## 2026-10-13: finalisation round, code closed
 
 Fourth entry. Raw numbers: vault note `tcc/artefact/case-study-evidence-2026-10-12.md`,
@@ -157,12 +262,14 @@ section M.
 8. The checks added in code are narrow: the decimal-point check does not judge values that
    may use the dot as a thousands separator, nor renamed columns; the narrative check does not
    see a string built in another variable.
+9. Added by the fifth entry: a run the quality gate stops ends there for the ETL layer (no
+   repair step, no override), and the analysis layer still runs on the data the gate refused.
 
 ### Owner's items (not code)
 
-- Compare the Anthropic console with the computed cost (evidence note, section J), then
-  correct `core/pricing.py` if a price is wrong. Until then Anthropic costs are "computed",
-  not "billed".
+- Compare the Anthropic console with the computed cost (evidence note, section J). Answered
+  in part by the fifth entry: the prices equal the published table, so `core/pricing.py` needs
+  no correction; the difference from the credit spent is still not explained.
 - Database rows of the checklist on production need a reachable database and a saved secret.
 - A paused pipeline was left on production: "Functional check 2026-10-12: Recife weather
   (Open-Meteo)".
