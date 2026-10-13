@@ -106,6 +106,9 @@ def plan_analysis_tasks(
     )
     llm = get_llm(provider=llm_provider_override, model=llm_model_override)
 
+    # Zero until the call answers: a fallback caused by the call itself failing has
+    # nothing to count, a fallback caused by an unusable answer still paid for it.
+    tokens: TokenUsage = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
     try:
         response = invoke_llm(llm, prompt, llm_provider_override)
         tokens = extract_token_usage(response)
@@ -141,4 +144,4 @@ def plan_analysis_tasks(
             "plan_analysis_tasks: decomposition failed, falling back to one-shot mode",
             exc_info=True,
         )
-        return [{"question": business_question, "type": "descriptive"}], _ZERO_TOKENS
+        return [{"question": business_question, "type": "descriptive"}], tokens
