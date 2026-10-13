@@ -374,15 +374,23 @@ async def create_run(
     return {"task_id": task_id}
 
 
-def _run_summary(state: dict[str, Any]) -> dict[str, Any]:
+# What `POST /runs/{run_id}/approve` answers when the write fails. The Loader's own
+# error is the text of the destination driver's exception; the stored run keeps it,
+# with credentials scrubbed (`audit/db/runs.py`), and `GET /runs/{run_id}` returns
+# that copy. This response does not repeat the unscrubbed text.
+_WRITE_FAILED_AFTER_APPROVAL = "The write failed after approval. Open the run to see the cause."
+
+
+def _run_summary(state: dict[str, Any], error: str | None) -> dict[str, Any]:
     """Small JSON-safe summary of a post-approval/rejection `PipelineState` —
     mirrors `execution_queue.run_full_analysis_task`'s own return shape
     rather than the full `AnalysisRunResult` (no Gold/Science/Advisor result
-    changes here, only the Loader's outcome)."""
+    changes here, only the Loader's outcome). `error` is passed by the caller,
+    which knows whether the state's own error is safe to return."""
     return {
         "run_id": state.get("run_id"),
         "status": state.get("status"),
-        "error": state.get("error"),
+        "error": error,
         "load_result": state.get("load_result"),
     }
 
@@ -404,7 +412,9 @@ def approve_run(
     except ValueError as e:
         status_code = 404 if "not found" in str(e) else 409
         raise HTTPException(status_code=status_code, detail=str(e)) from e
-    return _run_summary(cast("dict[str, Any]", result_state))
+    summary_state = cast("dict[str, Any]", result_state)
+    write_failed = summary_state.get("status") != "completed"
+    return _run_summary(summary_state, error=_WRITE_FAILED_AFTER_APPROVAL if write_failed else None)
 
 
 @router.post("/{run_id}/reject")
@@ -424,4 +434,6 @@ def reject_run(
     except ValueError as e:
         status_code = 404 if "not found" in str(e) else 409
         raise HTTPException(status_code=status_code, detail=str(e)) from e
-    return _run_summary(cast("dict[str, Any]", result_state))
+    # The error of a rejected run is the operator's own reason, not an exception's text.
+    summary_state = cast("dict[str, Any]", result_state)
+    return _run_summary(summary_state, error=summary_state.get("error"))

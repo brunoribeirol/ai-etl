@@ -1,5 +1,10 @@
 """Unit tests for the audit logger."""
 
+import re
+import time
+
+import pytest
+
 from ai_etl.audit.logger import _sanitize, log_action, scrub_secrets_in_text
 from ai_etl.core.state import initial_state
 
@@ -43,6 +48,58 @@ def test_scrub_secrets_in_text_redacts_only_the_password() -> None:
 def test_scrub_secrets_in_text_passthrough_non_str() -> None:
     assert scrub_secrets_in_text(None) is None  # type: ignore[arg-type] -- defensive non-str path
     assert scrub_secrets_in_text("no secret here") == "no secret here"
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "postgresql://tenant:supersecret@db-host:5432/prod",
+        "failed: mysql://root:hunter2@10.0.0.1:3306/app (retrying)",
+        "mongodb+srv://app:p4ss.w0rd@cluster0.example.net/db?retryWrites=true",
+        "two of them: redis://u:one@h1 and amqp://u:two@h2",
+        "https://example.com/path@not-a-credential",
+        "http://host:8080/path@x",
+        "ratio 3:4 and an address user@example.com",
+        "a scheme and nothing else: postgresql://",
+    ],
+)
+def test_scrub_secrets_in_text_gives_what_the_scheme_anchored_pattern_gave(text: str) -> None:
+    """The pattern now begins at "://". On texts whose "://" follows a scheme, the result is
+    the one the earlier pattern (which began at the scheme) produced."""
+    earlier = re.compile(r"(?P<scheme>[a-zA-Z][a-zA-Z0-9+.\-]*://[^\s:/@]+:)[^\s@/]+@")
+
+    assert scrub_secrets_in_text(text) == earlier.sub(r"\g<scheme>***@", text)
+
+
+def test_scrub_secrets_in_text_is_linear_on_a_long_run_of_scheme_characters() -> None:
+    """A long run of letters with no "://" after it took quadratic time with the earlier
+    pattern (0.45 s for 20,000 characters, four times that for each doubling). The text
+    can come from a request: the reason typed
+    when a run is rejected reaches this function."""
+    text = "A" * 200_000
+
+    started = time.monotonic()
+    result = scrub_secrets_in_text(text)
+    elapsed = time.monotonic() - started
+
+    assert result == text
+    assert elapsed < 2.0
+
+
+def test_scrub_secrets_in_text_is_linear_on_many_credential_prefixes() -> None:
+    text = "://a:" * 50_000
+
+    started = time.monotonic()
+    result = scrub_secrets_in_text(text)
+    elapsed = time.monotonic() - started
+
+    assert result == text
+    assert elapsed < 2.0
+
+
+def test_scrub_secrets_in_text_redacts_when_no_scheme_precedes_the_separator() -> None:
+    """Not requiring a scheme can only redact more, never less."""
+    assert scrub_secrets_in_text("1://user:hunter2@host") == "1://user:***@host"
 
 
 def test_log_action_appends_entry() -> None:
