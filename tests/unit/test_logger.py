@@ -74,8 +74,7 @@ def test_scrub_secrets_in_text_gives_what_the_scheme_anchored_pattern_gave(text:
 def test_scrub_secrets_in_text_is_linear_on_a_long_run_of_scheme_characters() -> None:
     """A long run of letters with no "://" after it took quadratic time with the earlier
     pattern (0.45 s for 20,000 characters, four times that for each doubling). The text
-    can come from a request: the reason typed
-    when a run is rejected reaches this function."""
+    can come from a request: the reason typed when a run is rejected reaches this function."""
     text = "A" * 200_000
 
     started = time.monotonic()
