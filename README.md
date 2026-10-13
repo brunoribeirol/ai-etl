@@ -9,9 +9,11 @@ Multi-agent framework for automated ETL pipelines using LLMs.
 
 Describe your data pipeline in plain English. Five specialized agents — Orchestrator, Extractor, Transformer, Quality, and Loader — execute it end-to-end over CSV, PostgreSQL, REST, and PDF/DOCX sources, generating auditable Python code at every step. A second layer — Planner, Analyst (Gold), Science, Advisor — turns the cleaned data into business-question answers, charts, and prescriptive recommendations.
 
+**Live:** [ai-etl.vercel.app](https://ai-etl.vercel.app) (sign-in required to run a pipeline). Results of the case study: [Evaluation](#evaluation).
+
 > **Academic context:** Bachelor's thesis (TCC) at CESAR School, 2026.
 > Methodology: Design Science Research (Hevner et al., 2004).
-> **Full project knowledge base:** `~/Documents/Obsidian Vault/tcc/` — research, decisions, requirements, and technical specs live there. `docs/CURRENT_STATE.md` is this repo's own living state doc.
+> `docs/CURRENT_STATE.md` is this repo's living state document; architecture decisions are in `docs/adr/`.
 
 ---
 
@@ -110,6 +112,31 @@ make run-scenario3
 ```
 
 `tests/e2e/` runs all 4 scenarios against the real stack (Postgres, Celery, sandbox, auth) in CI — see `make test-e2e`.
+
+---
+
+## Evaluation
+
+The case study runs the entry point production uses, with real models, on public data and on a GitHub-hosted runner (`.github/workflows/case-study.yml`). The data is pinned by checksum in `case_study/public_data_manifest.json`: 20,000 NYC yellow-taxi trips from one week of January 2025, the TLC zone table loaded into PostgreSQL, and daily weather from the Open-Meteo archive. The extract is used as published, with its own quality problems (2,485 rows with missing values, 717 fares at or below zero).
+
+This track uses scenarios 1 to 3 of the table above; its scenario 4 is scenario 1 plus a business question, which exercises the analysis layer.
+
+Each run is judged twice: by the outcome class of the run, and by comparing what was written with a reference computed in plain pandas from the same inputs (`case_study/scripts/output_checks.py`). A run can complete and still not match; the second check is what catches it.
+
+Default model (`gpt-4o-mini`), 5 runs per scenario, commit `8505031`, which differs from the final commit only in how the Planner's tokens are counted ([workflow run 38332893793](https://github.com/brunoribeirol/ai-etl/actions/runs/38332893793)):
+
+| Scenario | Completed | Output equal to the reference | Code-generation attempts, per run |
+|---|---|---|---|
+| 1. CSV to CSV | 5 of 5 | 5 of 5 | 1, 1, 1, 1, 1 |
+| 2. CSV + PostgreSQL to PostgreSQL | 5 of 5 | 5 of 5 | 1, 1, 1, 1, 1 |
+| 3. CSV + PostgreSQL + REST to PostgreSQL | 5 of 5 | 5 of 5 | 1, 3, 1, 2, 1 |
+| 4. Scenario 1 plus a business question | 5 of 5 | 5 of 5 | 1, 1, 1, 1, 1 |
+
+Scenario 3 is where the generated code varies. Over six batches with the default model, 22 of 30 runs matched the reference; in the two batches after the last fix to the Transformer's retry, 8 of 10. The batch on the final commit had 3 matches, 1 mismatch and 1 run that failed after three attempts ([workflow run 38334899217](https://github.com/brunoribeirol/ai-etl/actions/runs/38334899217)).
+
+On scenario 1, six models from two providers completed 5 of 5 runs with output equal to the reference (commit `f289ceb`, before the final fixes).
+
+Limits that were kept on purpose are listed in `docs/CURRENT_STATE.md`; the sandbox's are in `SECURITY.md`.
 
 ---
 
