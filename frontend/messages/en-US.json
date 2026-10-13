@@ -164,6 +164,7 @@
   "runDetailPage": {
     "notFound": "Run not found.",
     "questionPrefix": "What to do about: \"{question}\"",
+    "technicalDetails": "Technical details",
     "silverHeading": "Silver"
   },
   "pipelinesPage": {
@@ -225,6 +226,8 @@
     "statusLabel": "Status",
     "completedPrefix": "Completed —",
     "viewRun": "view run {runId}",
+    "viewFailedRun": "see details",
+    "failedNoMessage": "The run failed.",
     "errors": {
       "parseFailed": "Couldn't process the uploaded file. Check the format (CSV, Excel, JSON, PDF, or DOCX) and try again.",
       "network": "Connection to the server failed. Check your internet and try again.",

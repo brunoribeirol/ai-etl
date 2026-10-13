@@ -484,6 +484,29 @@ def run_science_analysis(
 _RepairResultT = TypeVar("_RepairResultT", GoldResult, ScienceResult)
 
 
+_NO_TOKENS: TokenUsage = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+
+# Below this many rows the analysis layer does not run. Real run in production,
+# 2026-10-12: a report template with no data was uploaded with the question "Quais
+# produtos vendem mais?"; the document extraction returned 2 rows, and the run ended with
+# three sub-analyses and three recommendations about "Figura 1" and "Tabela 1". Five rows
+# is a floor, not a test of adequacy: a longer input that has nothing to do with the
+# question is still analysed.
+MIN_ROWS_FOR_ANALYSIS = 5
+
+_TOO_FEW_ROWS_MESSAGE = {
+    "pt-BR": (
+        "Análise não executada: os dados carregados têm {rows} linha(s), e são necessárias "
+        "ao menos {minimum} para analisar. Confira se o arquivo enviado contém os dados "
+        "esperados."
+    ),
+    "en-US": (
+        "Analysis not run: the loaded data has {rows} row(s), and at least {minimum} are "
+        "needed. Check that the uploaded file holds the expected data."
+    ),
+}
+
+
 def _run_with_repair(
     run_fn: Callable[..., _RepairResultT],
     label: str,
@@ -557,10 +580,18 @@ def _run_with_repair(
         ),
     )
 
+    # Both tries called a model, so the result that is returned carries the tokens of
+    # both. It used to carry its own alone: the try that was discarded was not counted.
+    both_tries = sum_token_usage(
+        result.get("tokens") or _NO_TOKENS, repaired.get("tokens") or _NO_TOKENS
+    )
+
     if repaired.get("error"):
+        result["tokens"] = both_tries
         return result  # both failed — surface the original, more specific error
     repaired["task_question"] = task_question
     repaired["repaired"] = True
+    repaired["tokens"] = both_tries
     return repaired
 
 
@@ -852,9 +883,48 @@ def run_full_analysis(
     advisor_result: AdvisorResult | dict[str, Any] = {}
     planner_tokens: TokenUsage = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
 
+    # Model calls of the ETL layer (Orchestrator, Transformer, every attempt), recorded
+    # by the nodes in `PipelineState.llm_usage`. Added below to the tokens that are not
+    # inside a Gold/Science/Advisor result, so the cost stored for the run and debited
+    # from the tenant budget covers both layers. Measured before this change (scenario
+    # 4, gpt-4o): 0.1009 reported for 0.2073 spent.
+    etl_usage = silver_state.get("llm_usage") or {}
+    etl_tokens: TokenUsage = {
+        "input_tokens": int(etl_usage.get("input_tokens", 0)),
+        "output_tokens": int(etl_usage.get("output_tokens", 0)),
+        "total_tokens": int(etl_usage.get("total_tokens", 0)),
+    }
+
     question = business_question.strip()
 
-    if isinstance(silver_df, pd.DataFrame) and not silver_df.empty:
+    if (
+        isinstance(silver_df, pd.DataFrame)
+        and not silver_df.empty
+        and len(silver_df) < MIN_ROWS_FOR_ANALYSIS
+    ):
+        # Too little data to analyse: say so instead of producing sub-analyses and
+        # recommendations. No model is called. See MIN_ROWS_FOR_ANALYSIS.
+        advisor_result = {
+            "recommendations": [],
+            "summary": _TOO_FEW_ROWS_MESSAGE.get(
+                locale, _TOO_FEW_ROWS_MESSAGE[DEFAULT_LOCALE]
+            ).format(rows=len(silver_df), minimum=MIN_ROWS_FOR_ANALYSIS),
+            "error": None,
+            "tokens": dict(_NO_TOKENS),
+        }
+        save_analysis(
+            silver_state["run_id"],
+            [],
+            [],
+            cast(AdvisorResult, advisor_result),
+            etl_tokens,
+            log_dir=run_dir,
+            tenant_id=tenant_id,
+            business_question=question,
+            saved_pipeline_id=saved_pipeline_id,
+            model_name=resolved_model_name,
+        )
+    elif isinstance(silver_df, pd.DataFrame) and not silver_df.empty:
         # ADR-007: every Analyst/Science sandbox call within this analysis run
         # (one per sub-task, plus any repair reruns) appends its latency here,
         # in call order, so save_stage_latencies below can assign an
@@ -886,7 +956,7 @@ def run_full_analysis(
             gold_results,
             science_results,
             advisor_result,
-            planner_tokens,
+            sum_token_usage(planner_tokens, etl_tokens),
             log_dir=run_dir,
             tenant_id=tenant_id,
             business_question=question,
@@ -901,7 +971,9 @@ def run_full_analysis(
             log_dir=run_dir,
         )
 
-    total_tokens = sum_run_tokens(gold_results, science_results, advisor_result, planner_tokens)
+    total_tokens = sum_run_tokens(
+        gold_results, science_results, advisor_result, sum_token_usage(planner_tokens, etl_tokens)
+    )
 
     return {
         "state": silver_state,

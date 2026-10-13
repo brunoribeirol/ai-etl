@@ -1,0 +1,721 @@
+"""Case-study runner over the public datasets. Produces the raw evidence only.
+
+Runs each scenario N independent times per model through
+`ai_etl.services.pipeline_service.run_full_analysis` (the same entry point a real
+production run uses) and writes what happened: one JSON per run, one CSV row per
+run, and a per-(scenario, model) summary of counts and means. It does not
+interpret anything: conclusions belong to the author of the report.
+
+What one run includes, and how it is split
+------------------------------------------
+`run_full_analysis` runs the ETL layer and then, whenever the ETL layer produced
+data, the analysis layer too, with or without a business question (with none, the
+Planner decides what to analyse). So every scenario exercises both layers; what
+makes scenario 4 different is that it asks a question. Each run is therefore
+recorded in two parts: `etl_elapsed_ms` (the ETL layer alone) and
+`analysis_elapsed_ms` (the rest), and the same split for tokens and cost.
+
+Tokens and cost are measured here, call by call, by wrapping the single function
+every agent uses to call a model. The token total the product returns
+(`result["tokens"]`) covers the analysis layer only: the Orchestrator and the
+Transformer do not record their usage. That figure is kept as
+`product_reported_cost_usd` so the difference is visible, and is not used as the
+cost of the run.
+
+Completion is not correctness
+-----------------------------
+`status == "completed"` only says the generated code ran and something was loaded.
+Each completed run's output is therefore read back and compared with a reference
+computed by plain pandas from the same inputs (`output_checks.py`); the verdict
+(`match` / `mismatch`) goes in the `output_check` column and the facts behind it
+in the run's JSON. The output itself is saved next to it as `output.csv.gz`,
+because the PostgreSQL tables of scenarios 2 and 3 do not outlive the job.
+
+Scenarios (specs in `case_study/pipelines/public_scenario*`):
+    1  CSV -> CSV                          rename, cast, filter, deduplicate
+    2  CSV + PostgreSQL -> PostgreSQL      join, filter, aggregate
+    3  CSV + PostgreSQL + REST -> PostgreSQL   join, enrich with daily weather
+    4  scenario 1 + a business question    Planner -> Analyst/Science -> Advisor
+
+Real calls only
+---------------
+Every run here calls a real model. A model whose provider credential is missing
+is recorded as `skipped` with the reason and never replaced by a mocked response,
+because a mocked run measures the surrounding code, not the system under study.
+(`model_comparison.py` and `regression_harness.py` do offer a mocked mode; this
+script deliberately does not.)
+
+Prerequisites
+-------------
+    uv run python case_study/data/fetch_public_data.py       # data + manifest
+    uv run python case_study/data/seed_public_postgres.py    # scenarios 2 and 3
+    POSTGRES_URL and a provider credential (OPENAI_API_KEY / ANTHROPIC_API_KEY) set
+
+Scenario 4 builds plotly figures inside the sandbox, which hangs on macOS (see
+CLAUDE.md), so run it on Linux, e.g. through `.github/workflows/case-study.yml`.
+
+Usage
+-----
+    uv run python case_study/scripts/run_case_study.py
+    uv run python case_study/scripts/run_case_study.py --scenarios 1,2 --runs 3
+    uv run python case_study/scripts/run_case_study.py --models gpt-4o-mini,anthropic:claude-haiku-5-5
+"""
+
+from __future__ import annotations
+
+import argparse
+import csv
+import importlib.util
+import json
+import os
+import platform
+import re
+import resource
+import statistics
+import sys
+import time
+import uuid
+from collections.abc import Callable
+from contextlib import ExitStack
+from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
+from pathlib import Path
+from types import ModuleType
+from typing import Any, cast
+from unittest.mock import patch
+
+import httpx
+import pandas as pd
+from sqlalchemy import create_engine
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+PIPELINES_DIR = REPO_ROOT / "case_study" / "pipelines"
+DATA_DIR = REPO_ROOT / "case_study" / "data"
+RESULTS_ROOT = REPO_ROOT / "case_study" / "results" / "public"
+MANIFEST_PATH = REPO_ROOT / "case_study" / "public_data_manifest.json"
+
+DEFAULT_RUNS = 5  # same convention as case_study/results/tabela-resultados.md
+DEFAULT_MODELS = ["gpt-4o-mini"]
+
+
+# Reuse Sprint 8's helpers instead of duplicating them, with the same loading technique as
+# regression_harness.py, since case_study/scripts/ is not an installed package.
+def _load_sibling(name: str) -> ModuleType:
+    module_spec = importlib.util.spec_from_file_location(
+        name, REPO_ROOT / "case_study" / "scripts" / f"{name}.py"
+    )
+    assert module_spec is not None and module_spec.loader is not None
+    module = importlib.util.module_from_spec(module_spec)
+    sys.modules.setdefault(name, module)
+    module_spec.loader.exec_module(module)
+    return module
+
+
+model_comparison = _load_sibling("model_comparison")
+output_checks = _load_sibling("output_checks")
+score_quality = model_comparison.score_quality
+provider_and_access = model_comparison._provider_and_access
+patch_no_audit_persistence = model_comparison._patch_no_audit_persistence
+
+from ai_etl.core.analysis_types import TokenUsage  # noqa: E402
+from ai_etl.core.llm import extract_token_usage  # noqa: E402
+from ai_etl.core.pricing import compute_cost_usd  # noqa: E402
+from ai_etl.services import pipeline_service  # noqa: E402
+
+SCENARIO1_OUTPUT = "case_study/results/public/scenario1_output.csv"
+
+
+@dataclass(frozen=True)
+class Scenario:
+    scenario_id: int
+    name: str
+    spec_file: str
+    question_file: str | None = None
+    needs_postgres: bool = False
+    output_csv: str | None = None  # destination file, relative to the repository root
+    output_table: str | None = None  # destination table in the `public` schema
+
+    def spec(self) -> str:
+        return (PIPELINES_DIR / self.spec_file).read_text().strip()
+
+    def question(self) -> str:
+        if self.question_file is None:
+            return ""
+        return (PIPELINES_DIR / self.question_file).read_text().strip()
+
+
+SCENARIOS: dict[int, Scenario] = {
+    1: Scenario(1, "CSV -> CSV", "public_scenario1_spec.txt", output_csv=SCENARIO1_OUTPUT),
+    2: Scenario(
+        2,
+        "CSV + PostgreSQL -> PostgreSQL",
+        "public_scenario2_spec.txt",
+        needs_postgres=True,
+        output_table="zone_revenue_summary",
+    ),
+    3: Scenario(
+        3,
+        "CSV + PostgreSQL + REST -> PostgreSQL",
+        "public_scenario3_spec.txt",
+        needs_postgres=True,
+        output_table="trips_weather",
+    ),
+    4: Scenario(
+        4,
+        "CSV -> CSV + business question (analysis layer)",
+        "public_scenario1_spec.txt",
+        question_file="public_scenario4_question.txt",
+        output_csv=SCENARIO1_OUTPUT,
+    ),
+}
+
+
+@dataclass
+class RunRecord:
+    scenario: int
+    model: str
+    provider: str
+    run_index: int
+    status: str  # completed | failed | awaiting_approval | skipped | crashed
+    outcome: str = ""  # classification per case-study.md, see classify_outcome()
+    output_check: str = ""  # match | mismatch | not_checked, see verify_output()
+    elapsed_ms: float | None = None  # whole run: ETL layer plus analysis layer
+    etl_elapsed_ms: float | None = None
+    analysis_elapsed_ms: float | None = None
+    rows_loaded: int | None = None
+    quality_severity: str | None = None
+    transformation_attempts: int | None = None
+    llm_calls: int = 0
+    input_tokens: int = 0  # every model call of the run, both layers
+    output_tokens: int = 0
+    cost_usd: float | None = None
+    etl_input_tokens: int = 0
+    etl_output_tokens: int = 0
+    etl_cost_usd: float | None = None
+    analysis_input_tokens: int = 0
+    analysis_output_tokens: int = 0
+    analysis_cost_usd: float | None = None
+    product_reported_cost_usd: float | None = None  # from result["tokens"]: analysis only
+    # High-water marks of resident memory when this run ended. They never go down:
+    # a value is the largest seen since the batch started, not this run's own peak.
+    process_peak_rss_mb: float | None = None  # the runner process (ETL data lives here)
+    children_peak_rss_mb: float | None = None  # largest sandbox child that has ended
+    quality_score: float | None = None
+    analysis_subtasks: int | None = None
+    analysis_subtasks_ok: int | None = None
+    recommendations: int | None = None
+    stage_durations: dict[str, float] = field(default_factory=dict)
+    note: str = ""
+
+    def to_row(self) -> dict[str, Any]:
+        row = asdict(self)
+        stages = row.pop("stage_durations")
+        row.update({f"stage_{name}_s": seconds for name, seconds in stages.items()})
+        return row
+
+
+def classify_outcome(status: str, quality_severity: str | None, error: str | None) -> str:
+    """Map one run onto the four outcome classes defined in the case-study protocol.
+
+    - complete_success:      ran end to end with no human intervention
+    - partial_success:       ran, but the Quality agent blocked the load (severity
+                             "error"), which is the designed behaviour, not a malfunction
+    - recoverable_failure:   stopped with a recorded, explained error (typically the
+                             Transformer exhausting its attempts)
+    - unrecoverable_failure: the runner itself caught an unhandled exception
+    """
+    if status == "completed":
+        return "complete_success"
+    if status == "crashed":
+        return "unrecoverable_failure"
+    if quality_severity == "error":
+        return "partial_success"
+    if error:
+        return "recoverable_failure"
+    return "unrecoverable_failure"
+
+
+def _analysis_block(result: dict[str, Any]) -> dict[str, Any]:
+    """JSON-safe view of the analysis layer's output: everything except the
+    DataFrames and plotly figures, which are not serialisable and not evidence."""
+
+    def subtask(entry: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "question": entry.get("task_question"),
+            "error": entry.get("error"),
+            "attempts": entry.get("attempts"),
+            "narrative": entry.get("narrative"),
+            "code": entry.get("code"),
+            "sanity_check": entry.get("sanity_check"),
+            "model_info": entry.get("model_info"),
+        }
+
+    advisor = result.get("advisor") or {}
+    return {
+        "gold": [subtask(entry) for entry in result.get("gold") or []],
+        "science": [subtask(entry) for entry in result.get("science") or []],
+        "advisor": {
+            "summary": advisor.get("summary"),
+            "error": advisor.get("error"),
+            "recommendations": advisor.get("recommendations") or [],
+        },
+    }
+
+
+# Every agent that calls a model imports `invoke_llm` into its own module, so that
+# is where it has to be wrapped (the same technique `patch_no_audit_persistence`
+# uses for the persistence functions).
+LLM_AGENT_MODULES = {
+    "orchestrator": "ai_etl.agents.pipeline.orchestrator",
+    "transformer": "ai_etl.agents.pipeline.transformer",
+    "planner": "ai_etl.agents.analysis.planner",
+    "analyst": "ai_etl.agents.analysis.analyst",
+    "science": "ai_etl.agents.analysis.science",
+    "advisor": "ai_etl.agents.analysis.advisor",
+    "reviewer": "ai_etl.agents.analysis.reviewer",
+}
+ETL_AGENTS = frozenset({"orchestrator", "transformer"})
+
+
+def _metered(
+    agent: str, real: Callable[..., Any], calls: list[dict[str, Any]]
+) -> Callable[..., Any]:
+    def call(*args: Any, **kwargs: Any) -> Any:
+        started = time.perf_counter()
+        entry: dict[str, Any] = {
+            "agent": agent,
+            "layer": "etl" if agent in ETL_AGENTS else "analysis",
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "failed": False,
+        }
+        try:
+            response = real(*args, **kwargs)
+        except Exception:
+            entry["failed"] = True
+            raise
+        else:
+            usage = extract_token_usage(response)
+            entry["input_tokens"] = int(usage.get("input_tokens", 0))
+            entry["output_tokens"] = int(usage.get("output_tokens", 0))
+            return response
+        finally:
+            entry["seconds"] = round(time.perf_counter() - started, 3)
+            calls.append(entry)
+
+    return call
+
+
+def meter_llm_calls(stack: ExitStack, calls: list[dict[str, Any]]) -> None:
+    """Record every model call made while `stack` is open: which agent made it, how
+    long it took and the tokens the provider reported. Nothing about the call is
+    changed; a call that raises is recorded as failed and raises as before."""
+    for agent, module_name in LLM_AGENT_MODULES.items():
+        module = importlib.import_module(module_name)
+        stack.enter_context(
+            patch.object(module, "invoke_llm", _metered(agent, module.invoke_llm, calls))
+        )
+
+
+def time_etl_layer(stack: ExitStack, timings: dict[str, float]) -> None:
+    """Record how long the ETL layer alone took inside `run_full_analysis`."""
+    real = pipeline_service.run_silver_pipeline
+
+    def timed(*args: Any, **kwargs: Any) -> Any:
+        started = time.perf_counter()
+        try:
+            return real(*args, **kwargs)
+        finally:
+            timings["etl_ms"] = (time.perf_counter() - started) * 1000
+
+    stack.enter_context(patch.object(pipeline_service, "run_silver_pipeline", timed))
+
+
+def peak_rss_mb(who: int) -> float:
+    """Largest resident set size so far, in MB, of this process (`RUSAGE_SELF`) or of
+    its ended children (`RUSAGE_CHILDREN`, the sandbox processes). The kernel reports
+    kilobytes on Linux and bytes on macOS."""
+    peak = resource.getrusage(who).ru_maxrss
+    return round(peak / (1024 * 1024 if sys.platform == "darwin" else 1024), 1)
+
+
+def usage_of(calls: list[dict[str, Any]], layer: str | None = None) -> TokenUsage:
+    """Token total of the recorded calls, of one layer or of the whole run."""
+    selected = [call for call in calls if layer is None or call["layer"] == layer]
+    input_tokens = sum(int(call["input_tokens"]) for call in selected)
+    output_tokens = sum(int(call["output_tokens"]) for call in selected)
+    return {
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "total_tokens": input_tokens + output_tokens,
+    }
+
+
+def _read_public_table(table: str) -> pd.DataFrame:
+    engine = create_engine(os.environ["POSTGRES_URL"])
+    try:
+        return pd.read_sql_table(table, engine, schema="public")
+    finally:
+        engine.dispose()
+
+
+def _fetch_weather(spec: str) -> tuple[dict[str, tuple[float, float]] | None, str]:
+    """The scenario's own REST source, asked again for the check. Returns the answer
+    and a status for the record. When the source cannot be reached after three
+    tries the answer is `None` and the status says why: the check then reports the
+    weather as not judged instead of guessing."""
+    found = re.search(r"https://\S+", spec)
+    if found is None:
+        return None, "unavailable (no address in the specification)"
+    reason = ""
+    for attempt in range(3):
+        try:
+            response = httpx.get(found.group(0).rstrip(".,"), timeout=30.0)
+            response.raise_for_status()
+            weather = output_checks.weather_from_api_payload(response.json())
+            return cast(dict[str, tuple[float, float]], weather), "fetched"
+        except (httpx.HTTPError, KeyError, ValueError) as exc:
+            reason = f"{type(exc).__name__}: {exc}"[:200]
+            time.sleep(5 * (attempt + 1))
+    return None, f"unavailable ({reason})"
+
+
+def verify_output(scenario: Scenario, run_dir: Path) -> dict[str, Any]:
+    """Read back what a completed run wrote, save it as `output.csv.gz` and compare
+    it with the reference for its scenario. A failure of the check itself is
+    recorded as `not_checked` with the reason, never as a verdict about the run."""
+    try:
+        if scenario.output_table is not None:
+            output = _read_public_table(scenario.output_table)
+        else:
+            assert scenario.output_csv is not None
+            output = pd.read_csv(REPO_ROOT / scenario.output_csv)
+        output.to_csv(run_dir / "output.csv.gz", index=False, compression="gzip")
+
+        trips = pd.read_csv(DATA_DIR / "nyc_taxi_trips.csv")
+        if scenario.scenario_id in (1, 4):
+            return cast(dict[str, Any], output_checks.check_scenario1(output, trips))
+        zones = _read_public_table("taxi_zones")
+        if scenario.scenario_id == 2:
+            return cast(dict[str, Any], output_checks.check_scenario2(output, trips, zones))
+        weather, weather_status = _fetch_weather(scenario.spec())
+        result = cast(dict[str, Any], output_checks.check_scenario3(output, trips, zones, weather))
+        result["facts"]["weather_reference"] = weather_status
+        return result
+    except Exception as exc:  # deliberate catch-all: the check must never end the runner
+        return {
+            "verdict": output_checks.NOT_CHECKED,
+            "facts": {"check_error": f"{type(exc).__name__}: {exc}"},
+        }
+
+
+def run_once(
+    scenario: Scenario,
+    model: str,
+    run_index: int,
+    out_dir: Path,
+    persist_audit: bool,
+) -> RunRecord:
+    provider, has_access = provider_and_access(model)
+    bare_model = model.partition(":")[2] if ":" in model else model
+    record = RunRecord(
+        scenario=scenario.scenario_id,
+        model=bare_model,
+        provider=provider,
+        run_index=run_index,
+        status="skipped",
+    )
+
+    if not has_access:
+        record.note = f"no credential for provider {provider!r}"
+        return record
+    if scenario.needs_postgres and not os.getenv("POSTGRES_URL"):
+        record.note = "POSTGRES_URL is not set"
+        return record
+    if not (DATA_DIR / "nyc_taxi_trips.csv").exists():
+        record.note = "case_study/data/nyc_taxi_trips.csv missing. Run fetch_public_data.py"
+        return record
+
+    run_dir = out_dir / "runs" / f"s{scenario.scenario_id}_{bare_model}_{run_index}"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    spec, question = scenario.spec(), scenario.question()
+
+    saved_env = {key: os.environ.get(key) for key in ("AI_ETL_LLM_MODEL", "AI_ETL_LLM_PROVIDER")}
+    os.environ["AI_ETL_LLM_MODEL"] = bare_model
+    os.environ["AI_ETL_LLM_PROVIDER"] = provider
+    result: dict[str, Any] = {}
+    crash: str | None = None
+    llm_calls: list[dict[str, Any]] = []
+    timings: dict[str, float] = {}
+    start = time.perf_counter()
+    try:
+        with ExitStack() as stack:
+            if not persist_audit:
+                patch_no_audit_persistence(stack)
+            meter_llm_calls(stack, llm_calls)
+            time_etl_layer(stack, timings)
+            result = dict(
+                pipeline_service.run_full_analysis(
+                    spec=spec,
+                    business_question=question,
+                    run_dir=str(run_dir),
+                    tenant_id=f"case_study_{uuid.uuid4().hex[:8]}",
+                )
+            )
+    except Exception as exc:  # deliberate catch-all: an unhandled crash is itself a result
+        crash = f"{type(exc).__name__}: {exc}"
+    finally:
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        for key, value in saved_env.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+    state: dict[str, Any] = dict(result.get("state") or {})
+    product_tokens = cast(TokenUsage, dict(result.get("tokens") or {}))
+    tokens, etl_tokens, analysis_tokens = (
+        usage_of(llm_calls),
+        usage_of(llm_calls, "etl"),
+        usage_of(llm_calls, "analysis"),
+    )
+    quality_report = state.get("quality_report") or {}
+    record.status = "crashed" if crash else str(state.get("status", "unknown"))
+    record.elapsed_ms = round(elapsed_ms, 1)
+    if "etl_ms" in timings:
+        record.etl_elapsed_ms = round(timings["etl_ms"], 1)
+        record.analysis_elapsed_ms = round(elapsed_ms - timings["etl_ms"], 1)
+    record.rows_loaded = (state.get("load_result") or {}).get("rows_loaded")
+    record.quality_severity = quality_report.get("severity")
+    record.transformation_attempts = state.get("transformation_attempts")
+    record.llm_calls = len(llm_calls)
+    record.input_tokens = tokens["input_tokens"]
+    record.output_tokens = tokens["output_tokens"]
+    record.etl_input_tokens = etl_tokens["input_tokens"]
+    record.etl_output_tokens = etl_tokens["output_tokens"]
+    record.analysis_input_tokens = analysis_tokens["input_tokens"]
+    record.analysis_output_tokens = analysis_tokens["output_tokens"]
+    if llm_calls:
+        record.cost_usd = compute_cost_usd(bare_model, tokens)
+        record.etl_cost_usd = compute_cost_usd(bare_model, etl_tokens)
+        record.analysis_cost_usd = compute_cost_usd(bare_model, analysis_tokens)
+    if product_tokens:
+        record.product_reported_cost_usd = compute_cost_usd(bare_model, product_tokens)
+    record.quality_score = score_quality(state) if state else None
+    record.process_peak_rss_mb = peak_rss_mb(resource.RUSAGE_SELF)
+    record.children_peak_rss_mb = peak_rss_mb(resource.RUSAGE_CHILDREN)
+    record.stage_durations = dict(state.get("stage_durations") or {})
+    record.note = crash or str(state.get("error") or "")
+    record.outcome = classify_outcome(
+        record.status, record.quality_severity, crash or state.get("error")
+    )
+
+    check: dict[str, Any] = {"verdict": output_checks.NOT_CHECKED, "facts": {}}
+    if record.status == "completed":
+        check = verify_output(scenario, run_dir)
+    record.output_check = str(check["verdict"])
+
+    analysis = _analysis_block(result)
+    subtasks = analysis["gold"] + analysis["science"]
+    analysis_ran = bool(subtasks) or bool(result.get("advisor"))
+    if analysis_ran:
+        record.analysis_subtasks = len(subtasks)
+        record.analysis_subtasks_ok = sum(1 for entry in subtasks if not entry["error"])
+        record.recommendations = len(analysis["advisor"]["recommendations"])
+
+    (run_dir / "run.json").write_text(
+        json.dumps(
+            {
+                "record": record.to_row(),
+                "spec": spec,
+                "business_question": question,
+                "pipeline_plan": state.get("pipeline_plan"),
+                "transformation_code": state.get("transformation_code"),
+                "transformation_error": state.get("transformation_error"),
+                "quality_report": quality_report,
+                "load_result": state.get("load_result"),
+                "output_check": check,
+                "audit_log": state.get("audit_log"),
+                "error": crash or state.get("error"),
+                "tokens": tokens,
+                "llm_calls": llm_calls,
+                "analysis": analysis if analysis_ran else None,
+            },
+            indent=2,
+            ensure_ascii=False,
+            default=str,
+        )
+    )
+    return record
+
+
+def _stats(values: list[float]) -> dict[str, float] | None:
+    if not values:
+        return None
+    return {
+        "mean": round(statistics.mean(values), 3),
+        "min": round(min(values), 3),
+        "max": round(max(values), 3),
+        "stdev": round(statistics.stdev(values), 3) if len(values) >= 2 else 0.0,
+    }
+
+
+def summarize(records: list[RunRecord]) -> list[dict[str, Any]]:
+    """One entry per (scenario, model): counts and descriptive statistics only."""
+    groups: dict[tuple[int, str], list[RunRecord]] = {}
+    for record in records:
+        groups.setdefault((record.scenario, record.model), []).append(record)
+
+    summary = []
+    for (scenario_id, model), group in sorted(groups.items()):
+        executed = [r for r in group if r.status != "skipped"]
+        completed = [r for r in executed if r.status == "completed"]
+        outcomes: dict[str, int] = {}
+        for record in executed:
+            outcomes[record.outcome] = outcomes.get(record.outcome, 0) + 1
+        severities: dict[str, int] = {}
+        for record in executed:
+            key = record.quality_severity or "none"
+            severities[key] = severities.get(key, 0) + 1
+        output_verdicts: dict[str, int] = {}
+        for record in executed:
+            verdict = record.output_check or output_checks.NOT_CHECKED
+            output_verdicts[verdict] = output_verdicts.get(verdict, 0) + 1
+        summary.append(
+            {
+                "scenario": scenario_id,
+                "scenario_name": SCENARIOS[scenario_id].name,
+                "model": model,
+                "runs_requested": len(group),
+                "runs_executed": len(executed),
+                "runs_completed": len(completed),
+                "outcomes": outcomes,
+                "output_check": output_verdicts,
+                "quality_severity": severities,
+                "elapsed_ms": _stats([r.elapsed_ms for r in completed if r.elapsed_ms is not None]),
+                "etl_elapsed_ms": _stats(
+                    [r.etl_elapsed_ms for r in completed if r.etl_elapsed_ms is not None]
+                ),
+                "analysis_elapsed_ms": _stats(
+                    [r.analysis_elapsed_ms for r in completed if r.analysis_elapsed_ms is not None]
+                ),
+                "transformation_attempts": _stats(
+                    [
+                        float(r.transformation_attempts)
+                        for r in completed
+                        if r.transformation_attempts is not None
+                    ]
+                ),
+                "rows_loaded": _stats(
+                    [float(r.rows_loaded) for r in completed if r.rows_loaded is not None]
+                ),
+                "cost_usd": _stats([r.cost_usd for r in completed if r.cost_usd is not None]),
+                "etl_cost_usd": _stats(
+                    [r.etl_cost_usd for r in completed if r.etl_cost_usd is not None]
+                ),
+                "analysis_cost_usd": _stats(
+                    [r.analysis_cost_usd for r in completed if r.analysis_cost_usd is not None]
+                ),
+                "llm_calls": _stats([float(r.llm_calls) for r in completed]),
+                "analysis_subtasks_ok": _stats(
+                    [
+                        float(r.analysis_subtasks_ok)
+                        for r in completed
+                        if r.analysis_subtasks_ok is not None
+                    ]
+                ),
+                "skipped_reasons": sorted({r.note for r in group if r.status == "skipped"}),
+            }
+        )
+    return summary
+
+
+def write_outputs(records: list[RunRecord], out_dir: Path, meta: dict[str, Any]) -> None:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    rows = [record.to_row() for record in records]
+    fieldnames: list[str] = []
+    for row in rows:
+        for key in row:
+            if key not in fieldnames:
+                fieldnames.append(key)
+    with (out_dir / "runs_log.csv").open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+
+    (out_dir / "summary.json").write_text(
+        json.dumps({"meta": meta, "summary": summarize(records)}, indent=2, ensure_ascii=False)
+        + "\n"
+    )
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    parser.add_argument("--scenarios", default="1,2,3,4", help="Comma-separated scenario ids")
+    parser.add_argument("--runs", type=int, default=DEFAULT_RUNS, help="Runs per scenario/model")
+    parser.add_argument(
+        "--models",
+        default=",".join(DEFAULT_MODELS),
+        help="Comma-separated models; prefix with provider, e.g. anthropic:claude-haiku-5-5",
+    )
+    parser.add_argument("--label", default="", help="Results subfolder (default: UTC timestamp)")
+    parser.add_argument(
+        "--persist-audit",
+        action="store_true",
+        help="Also persist each run to the application database (needs APP_DATABASE_URL)",
+    )
+    args = parser.parse_args()
+
+    scenario_ids = [int(value) for value in args.scenarios.split(",") if value.strip()]
+    unknown = [value for value in scenario_ids if value not in SCENARIOS]
+    if unknown:
+        parser.error(f"unknown scenario id(s): {unknown}")
+    models = [value.strip() for value in args.models.split(",") if value.strip()]
+
+    started = datetime.now(timezone.utc)
+    out_dir = RESULTS_ROOT / (args.label or started.strftime("%Y-%m-%dT%H%M%SZ"))
+    manifest = json.loads(MANIFEST_PATH.read_text()) if MANIFEST_PATH.exists() else None
+
+    records: list[RunRecord] = []
+    for scenario_id in scenario_ids:
+        for model in models:
+            for run_index in range(1, args.runs + 1):
+                record = run_once(
+                    SCENARIOS[scenario_id], model, run_index, out_dir, args.persist_audit
+                )
+                records.append(record)
+                print(
+                    f"scenario {scenario_id} | {record.model} | run {run_index}/{args.runs} | "
+                    f"{record.status} | {record.elapsed_ms or '-'} ms | {record.note[:80]}"
+                )
+
+    meta = {
+        "started_at_utc": started.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "finished_at_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "platform": f"{platform.system()} {platform.release()} / Python {platform.python_version()}",
+        "sandbox_backend": os.getenv("AI_ETL_SANDBOX_BACKEND", "process"),
+        "process_peak_rss_mb": peak_rss_mb(resource.RUSAGE_SELF),
+        "children_peak_rss_mb": peak_rss_mb(resource.RUSAGE_CHILDREN),
+        "runs_per_scenario": args.runs,
+        "models": models,
+        "scenarios": scenario_ids,
+        "data_manifest": {
+            "trips_extract_sha256": manifest["trips"]["extract_sha256"],
+            "trips_selection": manifest["trips"]["selection"],
+            "zones_sha256": manifest["zones"]["sha256"],
+        }
+        if manifest
+        else None,
+    }
+    write_outputs(records, out_dir, meta)
+    print(f"\nWrote {out_dir.relative_to(REPO_ROOT)}/runs_log.csv and summary.json")
+
+    executed = [r for r in records if r.status != "skipped"]
+    if not executed:
+        print("No run was executed: every one was skipped (see the notes above).")
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

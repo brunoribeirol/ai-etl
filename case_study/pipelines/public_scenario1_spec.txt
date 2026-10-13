@@ -1,0 +1,1 @@
+Read the file case_study/data/nyc_taxi_trips.csv. Rename the column "tpep_pickup_datetime" to "pickup_at" and the column "tpep_dropoff_datetime" to "dropoff_at", and convert both to datetime. Keep only rows where fare_amount is greater than 0 and trip_distance is greater than 0. Remove duplicate rows. Save the result to case_study/results/public/scenario1_output.csv.

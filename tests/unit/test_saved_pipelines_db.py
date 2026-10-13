@@ -989,7 +989,7 @@ def test_set_saved_pipeline_llm_config_persists_and_reads_back(engine: Engine) -
 def test_set_saved_pipeline_llm_config_can_clear_back_to_none(engine: Engine) -> None:
     created = db.create_saved_pipeline("tenant-a", "A", "postgres", "spec a", "0 3 * * *")
     db.set_saved_pipeline_llm_config(
-        created["id"], "tenant-a", llm_provider="google", llm_model="gemini-2.0-flash"
+        created["id"], "tenant-a", llm_provider="google", llm_model="gemini-2.5-flash"
     )
 
     cleared = db.set_saved_pipeline_llm_config(

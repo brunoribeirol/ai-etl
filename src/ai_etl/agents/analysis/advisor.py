@@ -18,7 +18,7 @@ from ai_etl.core.analysis_types import (
     ScienceResult,
     TokenUsage,
 )
-from ai_etl.core.llm import extract_token_usage, get_llm, invoke_llm, sum_token_usage
+from ai_etl.core.llm import extract_token_usage, get_llm, invoke_llm, response_text, sum_token_usage
 from ai_etl.core.locale import DEFAULT_LOCALE, narrative_language_instruction, resolve_locale
 
 _PROMPT_TEMPLATE = """\
@@ -338,7 +338,7 @@ def run_advisor(
     for attempt in range(1, 3):
         response = invoke_llm(llm, prompt, llm_provider_override)
         attempt_usages.append(extract_token_usage(response))
-        raw = strip_code_fences(str(response.content))
+        raw = strip_code_fences(response_text(response))
 
         try:
             parsed = json.loads(raw)

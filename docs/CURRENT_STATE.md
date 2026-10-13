@@ -2,14 +2,51 @@
 
 > Living doc. Updated at the end of meaningful work sessions, not per-commit. Source of truth for repo/code state; the Obsidian vault (`~/Documents/Obsidian Vault/tcc/`) is the source of truth for the academic TCC narrative and product/strategy context.
 
-**Last updated:** 2026-09-13 — **Repository/CI governance hardening (13 PRs, #245-#272).** The
+**Last updated:** 2026-10-13 (02:00 UTC), fourth entry. **Code closed at `d77e13b`.** A
+finalisation round fixed what the functional verification had left open (#327 to #332): the
+Transformer's retry, the cost of a run, texts with figures typed by hand, input with almost no
+data, failure messages, and a decimal point removed by generated code, which a real API run
+showed that night. The case study was run again on the final code: 20 of 20 runs completed,
+output equal to the reference in 20; a further batch of scenario 3 on `d77e13b` gave 3 of 5
+equal, 1 not equal and 1 failure. What remains is stated as limits, not as work in progress. See "2026-10-13: finalisation round" below.
+
+**Third entry (2026-10-12):** functional verification on production with real data, four
+defects fixed (#321 to #325); see "2026-10-12: functional verification on production".
+
+**Second entry of the day:** first real runs since 2026-09-10, two defects fixed (#315, #318),
+case-study evidence produced; see "2026-10-12: first real runs".
+
+**Earlier the same day:** code green and zero open security alerts, but nothing validated end
+to end; the evidence matrix of that moment is in "2026-10-12: validation status".
+
+**Previously:** 2026-10-11. **LLM model catalog refreshed, dependency advisories cleared,
+public-data case-study track added (PRs #302-#305); production is still partially down.** The
+Google entries pointed at models Google has shut down, two Anthropic prices were overstated,
+and the Claude 5.5 generation was added. The case study can now run on public, pinned data,
+but **no run has been executed**, because no provider credential is available to CI or locally.
+Redis is still offline, so pipeline execution and schedules do not run in production. Details
+in the 2026-10-10 section below.
+
+**Before that:** 2026-10-01. **No application code changed since #284.** Three things a
+reader needs: production is **partially broken** (Redis has no deployment; worker and
+celery-beat have been `CRASHED` since 2026-09-22), the local test suite has **27 environment
+failures** that are not a regression, and the product-readiness blockers were re-verified
+against the live system. Details in the 2026-10-01 section below.
+
+**Before that:** 2026-09-21. **Operational session, no application code.** The
+`ANTHROPIC_API_KEY` was rotated (12-month expiry, 2027-09-21) after a failed first attempt left
+production briefly holding a revoked key; a credential-rotation runbook now exists. Railway
+spend was investigated and found to be **~$7.52/month of idle RAM against a $5 plan** — a
+structural overrun, not a usage spike. Details in the 2026-09-21 section below.
+
+**Before that:** 2026-09-13 — **Repository/CI governance hardening (13 PRs, #245-#272).** The
 repo went **private again** (it had been public since 2026-08-30), which is what forces CodeQL
 to stay dormant. A `default-branch-protection` ruleset, squash-only merges, signed commits,
 enforced SHA pinning, a real Trivy gate on the production image, and expanded Dependabot
 coverage all landed; the 11 open Dependabot alerts went to **0**. No application code changed.
 Details in `docs/work/2026-09-13-repository-hardening.md`. Prior arc below, unchanged.
 
-**Previously:** 2026-09-10 — **Full 12-persona audit (2026-09-08/09) + its complete wave
+**Before that:** 2026-09-10 — **Full 12-persona audit (2026-09-08/09) + its complete wave
 remediation, all shipped (PRs #226-#242, 18 PRs, all merged + deployed + live-verified).** The
 audit was investigate-only; the owner then said "faça todas as waves" → "ajuste o que precise e
 mergeei" → "faça os 2" (the deterministic guards). Everything implementable is merged, deployed,
@@ -69,6 +106,488 @@ per-item verification). Nothing from the audit is left as pending code.
 _Already closed this arc (were open before): `POST /llm/test-connectivity` is now live-verified
 ("Working 1921ms"); the audit's H5/H1/M3/M11 and all other merged items are live-verified — see
 below._
+
+## 2026-10-13: finalisation round, code closed
+
+Fourth entry. Raw numbers: vault note `tcc/artefact/case-study-evidence-2026-10-12.md`,
+section M.
+
+### What changed
+
+| PR | Layer | Defect, as seen in a real run | Change |
+|---|---|---|---|
+| #327 | ETL, Transformer | A retry received the error and not the code that failed; the same mistake came back in all three attempts (upload with mixed-case headers; scenario 3, 1 of 5 runs on `24f9e12`) | The retry receives the failed code and then its error |
+| #328, #332 | both | Cost reported 0.1009 for 0.2073 measured (scenario 4, gpt-4o): the Orchestrator, the Transformer, the try discarded by a repair and the Planner's unusable answer were not counted | `PipelineState.llm_usage`, set by the two ETL nodes, added to the run total; both tries of a repair counted; the Planner's fallback keeps its tokens |
+| #329 | analysis | Four of four diagnostic texts stated figures typed as text that differed from the computed table; a template with no data ended with recommendations about "Figura 1" | Code whose narrative holds a decimal number or a percentage as literal text is not executed and the model is asked again; fewer than 5 rows are not analysed |
+| #330 | interface | A failed run showed the whole Python traceback, or nothing | First line of the error, the rest under a closed block |
+| #331 | ETL, Transformer | Run `ac2208d7`, public exchange-rate API, tenant locale pt-BR: "5.1570" written as 51570, run completed, no check reported it | A result in which the decimal point of a source column was removed is a failed attempt; the prompt limits the currency pattern to values with a decimal comma |
+
+### Verified on the final code
+
+- Case study, default model, `8505031`: 20 of 20 completed, output check `match` in 20
+  (workflow run 38332893793). Scenario 3: the two runs that needed 3 and 2 attempts completed
+  with `match`.
+- gpt-4o, scenario 4, `8505031`: 5 of 5, 3 of 3 sub-analyses, cost reported 0.0570 for 0.0570
+  measured (workflow run 38332896834).
+- Production: the same exchange-rate spec now converts with `pd.to_numeric` alone; the
+  template with no data is not analysed and says why; in a Telco churn run the figures of the
+  texts equal a plain-pandas computation; a failed run shows one line; approval and
+  rejection of a scheduled run both work (write only after approval; nothing written after
+  rejection).
+- Functional checklist, 57 rows: works 36, partly 4, does not work 1 (PostgreSQL source on
+  production, configuration), not tested 15, noted 1.
+- Cost reported by the product equals the cost measured call by call in 5 of 5 runs on
+  `d77e13b` (workflow run 38334899217), the failed run included.
+- Not repeated on the final code: the Anthropic models (no provider credit). Their figures
+  are those measured on `f289ceb` and `3dca92b`.
+
+### Limits kept as they are, by decision
+
+1. The date rule (ISO first, locale second) exists only as prompt text. No failing case is
+   known after #315; the real API run of this round read day-first dates correctly.
+2. Scenario 3 is where generated code varies: default model, six batches, 22 of 30 runs
+   matched the reference. After #327, 8 of 10: on `8505031` 5 of 5, on `d77e13b` 3 of 5 with
+   one `mismatch` and one failure after three attempts (workflow run 38334899217).
+3. A figure in a narrative is now computed, but the sentence around it is free text: one text
+   gave the rate of a subgroup without naming the subgroup.
+4. An input longer than 4 rows that has nothing to do with the question is still analysed.
+5. The first line of a failure is the backend's text. Status words stay in English.
+6. A run that fails before the analysis layer returns its tokens but stores no cost row.
+7. The stored state of a run is not rewritten when the run is approved.
+8. The checks added in code are narrow: the decimal-point check does not judge values that
+   may use the dot as a thousands separator, nor renamed columns; the narrative check does not
+   see a string built in another variable.
+
+### Owner's items (not code)
+
+- Compare the Anthropic console with the computed cost (evidence note, section J), then
+  correct `core/pricing.py` if a price is wrong. Until then Anthropic costs are "computed",
+  not "billed".
+- Database rows of the checklist on production need a reachable database and a saved secret.
+- A paused pipeline was left on production: "Functional check 2026-10-12: Recife weather
+  (Open-Meteo)".
+
+## 2026-10-12: functional verification on production, four defects fixed
+
+Third entry of the day. Raw numbers and the row-by-row checklist are in the vault note
+`tcc/artefact/case-study-evidence-2026-10-12.md`, sections I to L.
+
+### What changed in the code
+
+| PR | Area | Defect, as seen in a real run | Change |
+|---|---|---|---|
+| #321, #323 | upload flow (`services/spec_builder.py`) | A real file with mixed-case headers (Kaggle Telco churn) failed the Transformer's three attempts in 2 of 4 runs: the generic steps asked for a rename to snake_case, generated code renamed and then used the original names | The generic steps no longer ask for a rename. Stating it last (#321) was not enough: the next run needed 3 attempts |
+| #322 | analysis layer (`agents/_llm_codegen.py`, Analyst, Science) | Code beginning with `import pandas as pd` failed every attempt ("__import__ not found"): all sub-analyses with `gpt-4o` and `claude-haiku-4-5`, and both descriptive sub-analyses of a production run with the default model | A top-level import is dropped when every name it binds is already provided under that name and from that root package. Other imports still fail, and the retry then says imports are not available |
+| #324 | REST source | One request, 30 s timeout, no retry: 6 runs of scenario 3 over four batches ended at extraction with a TLS handshake timeout | Up to three attempts on a connection failure, 10 s limit on connecting. An HTTP error status is not retried |
+| #325 | REST source | httpx 0.28 replaces the query of the address with `params`, and an empty dict removes it: an address with inline parameters was requested without them (Banco Central API, 406) | The query of the address and the separate parameters are merged |
+
+The ETL layer differs from the code of the official case-study batches (`f289ceb`) only in the
+REST source (#324, #325): a request that succeeds at once, with parameters given apart, is sent
+as before. The Orchestrator, the Transformer, the Quality agent and the Loader are unchanged.
+
+### Verified with real models after the fixes
+
+- Upload flow on production, real files: 5 of 5 runs completed with one attempt (Telco three
+  times, NYC TLC extract, Olist payments with 103,886 rows). Before: 2 of 4 failed.
+- Analysis layer: `gpt-4o`, scenario 4, 3 of 3 sub-analyses in 5 of 5 runs (before: 0 of 3),
+  7 model calls instead of 22. `claude-haiku-4-5`, scenario 3, 1 of 1 in 4 of 4 (before: 0 of
+  1). Production, same file and question: 4 of 4 sub-analyses (before: 2 of 4).
+- REST retry: 25 runs of scenario 3 after the fix, none ended at extraction.
+- **Not re-verified live:** #325 with the Banco Central address (the application's limit of 10
+  runs per 60 minutes had been reached). Unit tests cover it.
+- Default model, four scenarios, on `3dca92b`: 20 of 20 completed, output check `match` in 20.
+- Default model, scenario 3, on `24f9e12`: 4 of 5 completed, 3 `match`, 1 `mismatch`, 1 failed
+  after 3 attempts (requested column names not in the output of the generated code).
+
+### Defects and behaviours left as they are
+
+| # | What | Evidence |
+|---|---|---|
+| 1 | The cost the product reports, and debits from the tenant budget, leaves out the Orchestrator and the Transformer and part of the repair calls | unchanged from the entry below |
+| 2 | The date rule (ISO first, locale second) exists only as prompt text | unchanged from the entry below |
+| 3 | The text of a diagnostic sub-analysis is written by the generated code and is not compared with the computed table: figures in the text differed from the table and from a plain-pandas reference | evidence note, K2 |
+| 4 | An input with no data (a report template) completes, with sub-analyses and recommendations about "Figura 1" and "Tabela 1" | evidence note, K2 run 13 |
+| 5 | A failed run shows the Python traceback, or the database driver's message; the run page shows "Failed" with "All phases complete." | evidence note, K3 row 3.8 |
+| 6 | The Transformer's retry sends the error and not the code that failed; scenario 3 with the default model: 14 of 20 runs `match` over the day's four batches | evidence note, I3 and finding 19 |
+| 7 | Scenario 3 remains the place where generated code varies | evidence note, I3 |
+
+### Production configuration, found by the walkthrough
+
+- The default PostgreSQL source points at `localhost`: a pipeline that reads "from postgres"
+  fails on production unless the tenant saved a secret named `postgres_connection_string`.
+  The page of secrets calls it "the shared default". None is configured.
+- No Google credential: the three Gemini identifiers answer "requires GOOGLE_API_KEY".
+- Limits enforced per account: one run at a time (402), 10 runs per 60 minutes (429), monthly
+  cap (402). All three were seen working.
+- A saved pipeline created by the walkthrough is paused: "Functional check 2026-10-12: Recife
+  weather (Open-Meteo)".
+
+### Evidence matrix, end of 2026-10-12
+
+| Evidence | State |
+|---|---|
+| Case study, default model, 4 scenarios, 5 runs | done on `f289ceb` (38224455116) and again on `3dca92b` (38291491429) |
+| Model comparison, 5 runs per cell | gpt-4o-mini, gpt-4o complete; claude-haiku-4-5, claude-haiku-5-5, claude-sonnet-5 complete except scenario 3 (4, 4 and 3 runs: extraction timeouts before #324); claude-sonnet-5-5 scenario 1 only |
+| Connectivity of each model identifier on production | done: 8 answer, 3 Google without credential, local models unreachable |
+| Functional checklist (57 rows) | works 33, partly 3, does not work 3, not tested 17, noted 1 |
+| Cost figures for Anthropic models | computed from the price table; they do not account for the US$ 5.00 of credit spent (computed 3.19). To be checked against the provider's console before use |
+
+### Owner's next steps
+
+1. Check the Anthropic and OpenAI consoles against section J of the evidence note, then
+   correct `core/pricing.py` if a price is wrong.
+2. Decide whether rows 1.2 to 1.5 and 2.2 to 2.5 of the checklist are to be shown on
+   production: that needs a reachable database and a saved secret.
+3. Approval flow (rows 6.1 and 6.2): resume the paused pipeline when the hourly limit allows,
+   approve one run and reject another, then pause or delete it.
+4. Declare the code freeze at `24f9e12`, or name which of the seven items above is to be fixed
+   first.
+
+## 2026-10-12: first real runs, two defects fixed, case-study evidence
+
+Merged: #315, #316, #317, #318, #319. Raw numbers, run identifiers and every error message:
+vault note `tcc/artefact/case-study-evidence-2026-10-12.md`.
+
+### Corrections to the entry below
+
+- **Redis is online.** Restored by the owner on 2026-10-12 at 04:18 UTC (Railway deployment of
+  `redis:8.2`, status `SUCCESS`). `/health/ready` returned 200 with `database: ok` and
+  `redis: ok` at 08:11, 08:38 and 08:59 UTC, the last two after the deploys of this session.
+  The rows "Pipeline execution in production" and "Scheduling in production" of the matrix
+  below describe the state before that.
+- **The repository secrets exist** (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`), confirmed by name.
+- Railway deploys `main` on every merge without any action: after the last of the five PRs
+  the API, the worker and the scheduler are at `394ad30`, status `SUCCESS`.
+
+### What the first real runs found
+
+| # | Finding | State |
+|---|---|---|
+| 1 | The Transformer prompt's strict ISO check was date-only (`format="%Y-%m-%d"`). ISO values with a time part fell to the day-first reading: in the first real run 18,890 of 18,915 output timestamps left the data's week, in a run reported as a success. Third fix of this family (#187, #191, #201). | fixed in #315, re-run on the same input: 0 outside the week |
+| 2 | The case-study runner counted `status == "completed"`, not the content of the output, and the outputs of scenarios 2 and 3 were lost with the job's database. | fixed in #316: each completed run is compared with a plain-pandas reference (`case_study/scripts/output_checks.py`) and its output saved |
+| 3 | Every agent parsed `str(response.content)`. A model that reasons first returns a list of blocks; the first call to `claude-haiku-5-5` failed three times in the Transformer. | fixed in #318 (`core/llm.py::response_text`), re-run: completed, output check `match` |
+| 4 | `run_full_analysis` runs the analysis layer on every run that yields data, with or without a business question. Runner columns that looked like "time of the ETL scenario" included it. | measured apart since #317 (`etl_elapsed_ms`, `analysis_elapsed_ms`); product behaviour unchanged |
+
+### Defects found and left open (code freeze: owner's decision)
+
+1. **The cost the product reports leaves out part of the spend.** The token total returned by
+   `run_full_analysis` is `sum_run_tokens(gold, science, advisor, planner)`. The Orchestrator
+   and the Transformer never call `extract_token_usage` and `PipelineState` has no token field,
+   so the ETL layer's calls are not counted; in runs with repair attempts part of the analysis
+   calls is missing too. Measured: scenario 1 with `gpt-4o-mini`, 0.0047 USD reported against
+   0.0082 spent; scenario 4 with `gpt-4o`, 0.1009 against 0.2073. The same figure feeds the
+   cost per run in the interface and the tenant budget (ADR-019). A fix adds token usage to
+   the state contract and to two graph nodes.
+2. **Analysis code that begins with `import` fails in the sandbox.** With `gpt-4o` (20 of 20
+   runs) and `claude-haiku-4-5` (8 of 8) no sub-analysis completed:
+   `ImportError: __import__ not found`. The Analyst prompt says "Do NOT import anything else",
+   which those models read as permission to import the listed libraries. `gpt-4o` is one of
+   the four models in the interface's picker. The ETL layer is unaffected.
+3. **The REST source has no retry** (`sources/rest_source.py`: one `httpx.get`, 30 s timeout).
+   Two of five runs of scenario 3 in one batch ended at extraction on an SSL handshake timeout.
+4. **The day and month rule is still prompt text only.** No deterministic check runs after
+   the transformation. The runner's output check catches it in the case study, not in the
+   product.
+
+### Evidence matrix, as of this entry
+
+| Area | Evidence | Status |
+|---|---|---|
+| Unit and integration tests | CI on `main` at `394ad30`: 1,254 unit tests passed, coverage 94.41%; integration 6 passed and 27 skipped | ok; most integration tests still self-skip in the required job (H4) |
+| End-to-end tests in CI | 5 passed, with a simulated model | partial, unchanged |
+| Pipeline with a real model | `gpt-4o-mini`: 20 of 20 runs completed over four scenarios, output check `match` in 19 (run 38224455116) | verified |
+| Analysis layer with a real model | scenario 4, `gpt-4o-mini`: 4 of 4 sub-analyses in 5 of 5 runs; works on Linux only (unchanged) | verified |
+| Model comparison | scenario 1 complete for six models, 5 runs each; `gpt-4o` complete for four scenarios; Anthropic models incomplete for scenarios 2 to 4 | partial: the Anthropic credit ran out mid-batch |
+| New model ids | `claude-haiku-5-5`, `claude-sonnet-5-5`, `claude-opus-5-5`, `claude-sonnet-5`, `claude-opus-5` completed at least one real run through the pipeline; the three Google ids were never called (no credential anywhere) | partial |
+| `POST /llm/test-connectivity` in production | not called: needs a signed-in session | not verified |
+| Production | at commit `394ad30` on the API, the worker and the scheduler; `/health/ready` 200; worker log shows the scheduler's task received and succeeded every minute (checked 09:00 UTC, after the last deploy) | ok; no pipeline was submitted through the interface |
+| Functional checklist (52 items) | 5 items that need no session (API, landing page, language, theme); 46 not tested, 1 partly | **not done**: the browser session was not signed in to the application |
+| Memory | runner high-water mark 445.6 MB over one run of each scenario (run 38225048367) | measured |
+
+### Owner's next steps
+
+1. **Top up the Anthropic credit.** Production uses the same key, so every Anthropic model is
+   failing there too. Then finish the comparison (command in the evidence note, section C3).
+2. **Sign in to the application in Chrome** so the functional checklist and the production
+   connectivity tests can be done in an agent session, or walk the checklist by hand.
+3. Decide on the four open defects above: fix, or state them as limitations in the report.
+4. Keep the artefacts of the batches cited in the report: GitHub deletes them after 90 days.
+
+## 2026-10-12: validation status and what is left to close the code
+
+Merged since the 2026-10-10 entry: #312 (wording only: no em-dashes in the text added by
+#302/#305/#311) and #313 (Mako 1.3.12 to 1.4.3, the last open Dependabot alert).
+
+### Evidence matrix
+
+| Area | Evidence | Status |
+|---|---|---|
+| Unit and integration tests | 1174 passed, 34 skipped locally (minus the two macOS-only hangs); CI green on `main` | ok |
+| End-to-end tests in CI | pass, but with a mocked model: CI has never had a real provider key | partial |
+| Security | `pip-audit` and `npm audit` clean; 0 open Dependabot alerts after #313 | ok |
+| Frontend in production | `/` returns 200; protected routes answer a browser navigation with the Clerk handshake redirect, after the Next.js 16.4 upgrade | routing ok; not exercised logged in |
+| API in production | `/health` 200; `/health/ready` reports `database: ok` | ok |
+| Pipeline execution in production | `/health/ready` reports `redis: error`; the worker log shows it retrying the Redis connection | **broken** |
+| Scheduling in production | depends on Redis | **broken** |
+| Full flow with a real model | last live verification 2026-09-10 | not verified since |
+| Functional checklist (52 items) | 0 of 52 | not done |
+| New model ids (Claude 5.5, Gemini 3.8/2.5) | never called | not verified |
+| Public-data case study | tooling merged (#305) | 0 runs |
+
+Note on `curl`: a plain `curl` to a protected frontend route returns 404. That is Clerk's
+answer to a non-navigation request, not a broken route. Send `Accept: text/html` and
+`Sec-Fetch-Dest: document` to see the real 307.
+
+### Next steps, in order
+
+1. **Owner: restore Redis** (Railway dashboard, service `Redis`, Deployments, Redeploy the
+   `REMOVED` deployment `d94fa5e3`). An agent session cannot do it: the production-deploy
+   permission gate denied `mcp__railway__redeploy` twice, the second time after the owner's
+   explicit authorization. Alternative: add a permission rule for that tool.
+2. **Owner: add repository secrets** `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` (the existing
+   one is named `OPEN_API_KEY` and is never read).
+3. Verify production for real: `/health/ready` 200 and a run that is enqueued and consumed.
+4. Dispatch the `Case study` workflow with `runs=1`, `scenarios=1`; fix what breaks; then the
+   full `runs=5`, `scenarios=1,2,3,4`, then the model comparison.
+5. Walk the 52-item functional checklist in production through the owner's logged-in Chrome
+   (authorized by the owner on 2026-10-12), recording works / does not work per item.
+6. Call `POST /llm/test-connectivity` for each new model id.
+
+The code freeze still holds: fix only what blocks the case study or the demonstration.
+
+## 2026-10-10: LLM model catalog refresh; production still partially down
+
+### What changed in code
+
+`core/llm.py` and `core/pricing.py`, plus the tests and the frontend price mirror that pin them.
+
+| Change | Why |
+|---|---|
+| Google allowlist and default: `gemini-2.0-pro`/`gemini-2.0-flash` → `gemini-3.8-flash` (default), `gemini-2.5-pro`, `gemini-2.5-flash` | `gemini-2.0-flash` was shut down by Google on 2026-06-01; `gemini-2.0-pro` is not in Google's published model or deprecation tables. The Google provider could not have worked. |
+| Anthropic allowlist: added `claude-opus-5-5`, `claude-sonnet-5-5`, `claude-haiku-5-5` | Current generation. All three join `_ANTHROPIC_MODELS_WITHOUT_TEMPERATURE` because the API rejects this module's `temperature=0.0`. |
+| Pricing: `claude-opus-5` $15/$75 → $5/$25; `claude-sonnet-5` $3/$15 → $2/$10 | The old values overstated every estimate and budget-cap debit for those models (3x and 1.5x). Cost figures recorded before this date for these two models are overstated by the same factors. |
+| `model_comparison.py` defaults: added `claude-haiku-5-5` and `claude-sonnet-5-5` | So the next comparison run measures them. |
+
+**Not live-verified.** Nothing here was exercised against a real provider: there is no local
+`.env`, and production has no `GOOGLE_API_KEY`. The new ids and the no-temperature rule for the
+5.5 generation come from the providers' published references. Before calling any of them
+supported, run `POST /llm/test-connectivity` for each. `gpt-4o` and `gpt-4o-mini` were checked
+against OpenAI's deprecation table and have no shutdown date; the dated snapshot
+`gpt-4o-2024-05-13` shuts down 2026-10-23, which does not affect the aliases this project uses.
+
+The frontend model picker still lists four models on purpose: its own header requires real
+reliability data per entry, and the new models have none until the comparison is re-run.
+
+### Production: unchanged since 2026-10-01
+
+| Service | State on 2026-10-10 |
+|---|---|
+| `ai-etl` (API) | online |
+| `Redis` | **offline**: one deployment, `REMOVED` on 2026-09-22, redeployable |
+| `tranquil-appreciation` (worker) | **crashed** (re-crashed after the 2026-10-01 redeploy) |
+| `celery-beat` | **crashed** (same) |
+
+Recovery is one action: redeploy Redis deployment `d94fa5e3`, then restart the worker and
+beat. An agent session attempted it and was blocked by the production-deploy permission gate,
+so it remains an owner action. Verify with a real run that is enqueued **and consumed**, not
+with `/health`.
+
+### Verified working
+
+- **AWS:** the `db-backup` workflow has succeeded every day through 2026-10-10 (S3 upload with
+  the repository's AWS credentials). `AWS_*` and `AI_ETL_S3_BUCKET` are set on the API service.
+- **REST source with tenant secrets:** implemented (`ADR-045`, `get_rest_secret`). Any text
+  that describes this integration as "specified but not connected" is out of date.
+- **`AI_ETL_DEFAULT_MONTHLY_BUDGET_USD` is still not set** on Railway (H2 remains open).
+
+### Dependency advisories cleared (2026-10-11, PRs #303 and #304)
+
+Both audits had started failing every PR. Lockfile-only fixes:
+
+| Ecosystem | Package | Was → Now | Advisory |
+|---|---|---|---|
+| npm | next | 16.3.4 → 16.4.0 | critical: RCE in `next/og` ImageResponse, plus cache-poisoning and SSRF advisories |
+| npm | sharp | 0.35.4 → 0.35.5 | high |
+| npm | source-map-js | 1.2.1 → 1.2.2 | high |
+| PyPI | langgraph-sdk | 0.4.2 → 0.4.6 | CVE-2026-104873 |
+| PyPI | pymongo | 4.18.1 → 4.18.3 | CVE-2026-96747/8/9 |
+
+`next` moved one minor version. Lint and `next build` pass; the deployed frontend was not
+exercised in a browser after the change.
+
+### Public-data case-study track (2026-10-11, PR #305)
+
+Closes the two weaknesses recorded in `case_study/results/tabela-resultados.md` (audit M10):
+author-generated data, and results that cannot be reproduced from the repository.
+
+- `case_study/data/fetch_public_data.py`: one month of NYC TLC yellow-taxi trip records plus
+  the zone lookup table; a windowed (2025-01-06 to 2025-01-12), seeded 20,000-row extract with
+  **no value altered**. `--verify` re-fetches and compares hashes.
+- `case_study/public_data_manifest.json`, the committed pin: URLs, SHA-256, selection
+  parameters, and the quality problems present as published (2,485 rows with nulls in five
+  columns, 717 fares <= 0, 437 zero distances, 152 zero-passenger trips, 0 exact duplicates).
+- Four scenarios in `case_study/pipelines/public_scenario*`: CSV→CSV; CSV+PostgreSQL→PostgreSQL;
+  +REST (Open-Meteo archive); scenario 1 plus a business question for the analysis layer.
+- `case_study/scripts/run_case_study.py`: N runs per scenario and model through
+  `run_full_analysis`; one JSON per run, `runs_log.csv`, `summary.json`. **Real calls only**: a
+  model without a credential is recorded as `skipped`, never mocked.
+- `.github/workflows/case-study.yml`: manual dispatch on Linux with a PostgreSQL service, so
+  the analysis layer (which hangs on macOS) can run.
+
+**Nothing has been run against a real model.** Three things stand in the way, all owner actions:
+
+1. **Repository secrets.** The only LLM secret is named `OPEN_API_KEY`. Every workflow reads
+   `secrets.OPENAI_API_KEY`, which therefore resolves to empty, including `ci.yml`'s E2E job
+   and `prompt-regression.yml`, which have only ever run in mocked mode. Add `OPENAI_API_KEY`
+   (and `ANTHROPIC_API_KEY` for the model comparison).
+2. **No local `.env`** in either clone, so no real-model run is possible on this machine either.
+3. **The specs are untested against a model.** Whether the generated transformations match the
+   intent, and whether the workflow passes end to end, is unknown until the first dispatch.
+   Start with `runs=1` and `scenarios=1`.
+
+The script-generated track (`scenario*_spec.txt`, `generate_*.py`) is untouched and still backs
+the committed 2026-06-23 results.
+
+### Local repository note
+
+`~/Documents/ai-etl` sits under iCloud and its `.git` has duplicated files again; `git fetch`
+there took over two minutes. This session's work was done in a second clone at
+`~/dev/ai-etl`, outside iCloud. Nothing was moved or deleted.
+
+## 2026-10-01 — production partially down, test-suite environment failure, readiness re-check
+
+No application code changed. `main` is at #284; the only merges since are #279 (anyio security
+bump) and #284 (docs). This entry records three states a future session must not rediscover.
+
+### Production is partially broken — Redis has no deployment
+
+| Service | State |
+|---|---|
+| `ai-etl` (API) | up, `/health` 200 |
+| `Redis` | **no deployment** (`latestDeployment: null`) |
+| `tranquil-appreciation` (worker) | **CRASHED since 2026-09-22 04:27** |
+| `celery-beat` | **CRASHED since 2026-09-22 04:27** |
+
+```
+kombu.exceptions.OperationalError: Error -2 connecting to
+redis.railway.internal:6379. Name or service not known.
+```
+
+Cause: `railway down` was run on all four services on 2026-09-22 ~01:08 to cut cost. Railway
+recreated three of them but **not Redis**; worker and beat came back, could not resolve the
+Redis host, and died.
+
+**Pipeline execution in production has been broken since then** — runs are enqueued and never
+consumed. It went unnoticed for six days because the check used was `/health`, which only
+exercises the API and touches neither Redis, the queue, nor the worker. **`/health` 200 is not
+a system health check.** The real check is the queue accepting a task and the worker consuming
+it. Fix: restore the Redis deployment; worker and beat recover on their own.
+
+### 27 local test failures — environment, not regression
+
+`make test`: **27 failed, 1178 passed, 34 skipped, coverage 94.20%**, in 3h31min.
+
+All 27 are in `test_analyst.py` (16) and `test_science.py` (11) — the two agents that build
+plotly figures inside the sandbox. `import plotly.express` in the sandbox child process hangs on
+macOS (0.3s without plotly, 120s+ with). The Analyst's 15s timeout expires, auto-repair retries,
+the test mocks run out, and the symptom surfaces as `StopIteration`.
+
+CI (Linux) is green and production is Linux. Full diagnosis and the 30-second reproduction are
+in the Vault at `bugs-solved/plotly-import-hangs-in-sandbox-macos.md`. Practical consequences:
+the Agentic BI layer is not testable on this Mac, the case study for that layer must run on
+Linux, and `make check` is unusable locally.
+
+### Product-readiness blockers re-verified
+
+Against the 2026-09-08 twelve-persona audit verdict, which still holds: *"the engineering is
+finished and defensible; the product is not — and the gap is almost entirely commercial, locale,
+and trust wiring, not core engineering."*
+
+| Blocker | State on 2026-10-01 |
+|---|---|
+| H3 — missing `LICENSE` | closed, file exists |
+| H5 — English UI mid-run in a PT session | closed, verified live |
+| H1 — root container with open sandbox file-read | closed, verified live |
+| H2 — uncapped spend | mechanism exists (`AI_ETL_DEFAULT_MONTHLY_BUDGET_USD`) but **is not set in Railway** |
+| C1 — dev-mode identity provider | **still open** |
+| Billing | **no code at all** |
+| M3 — wrong secondary numbers in recommendations | **still open**; the prompt-only fix did not hold, a deterministic guard is needed |
+
+Setting the default budget cap is a two-minute environment change and closes H2.
+
+## 2026-09-21 — credential rotation + Railway cost analysis — not tied to a sprint
+
+Operational only. **No application code changed**; the only repo change is documentation. This
+session sits inside the code freeze Laura asked for on 2026-09-10 because it was forced
+maintenance (an expiring credential), not scope.
+
+### ANTHROPIC_API_KEY rotated — 12-month expiry, 2027-09-21
+
+The key was rotated across both services that hold it (`ai-etl`, `tranquil-appreciation`).
+`celery-beat` does not hold it and was not touched.
+
+**Expiry was deliberately set to 12 months, not the conventional 90 days.** A 90-day key created
+on 2026-09-21 expires 2026-12-20 — inside the defense window (~18-20 Dec 2026). Six months
+(2027-03-20) was the acceptable stricter alternative. The security cost of the longer window is
+small: the key exists only in two Railway environment variables — never in git, never in CI,
+never in a local `.env` (there is none at the repo root).
+
+**The first attempt failed and the old key had already been revoked**, leaving both services
+returning `401` for a period. Root cause: a `railway variable set --stdin` one-liner silently
+wrote nothing, and "the command didn't error" was treated as verification. The tell was
+structural — no new deployment on either service, while a variable write always triggers one.
+Impact was contained because `AI_ETL_LLM_PROVIDER` is unset in Railway, so the default provider
+is `openai` (`core/llm.py:85`); only pipelines with an explicit `llm_provider=anthropic` override
+were affected. Re-done via the Railway dashboard and verified: HTTP 200 on both services, plus
+`/health` 200.
+
+**Workload Identity Federation was evaluated and rejected.** The Anthropic API supports WIF (GA),
+but **Railway does not issue workload OIDC identity tokens** — there is no identity to federate,
+and a custom issuer would need a long-lived credential to authenticate to it. Revisit only if the
+backend moves to ECS/EKS/Cloud Run/GKE. The genuinely federatable credential is the AWS pair in
+`.github/workflows/db-backup.yml`, since GitHub Actions does issue OIDC tokens — already tracked
+as deferred in `docs/work/2026-09-13-repository-hardening.md`.
+
+New: `docs/runbooks/credential-rotation.md` (inventory, procedure, verification, the WIF analysis,
+and the 2026-09-21 failure as a lesson) and `docs/runbooks/anthropic-key-expiry-2027-09-21.ics`
+(calendar reminder for 2027-08-22). No expiry-monitoring code was written on purpose — a monitor
+for one credential is not worth the maintenance.
+
+### Railway spend: ~$7.52/month against a $5 plan
+
+Measured from live per-service metrics, not estimated. Railway bills **$10/GB-month of RAM and
+$20/vCPU-month, metered per minute of actual consumption** — uptime, not activity. CPU is
+negligible across all four services (<0.01 vCPU combined); the entire bill is idle RAM.
+
+| Service | RAM | Cost/month |
+|---|---|---|
+| `ai-etl` (API) | 0.268 GB | $2.70 |
+| `tranquil-appreciation` (worker) | 0.261 GB | $2.68 |
+| `celery-beat` | 0.177 GB | $1.77 |
+| `Redis` | 0.033 GB | $0.37 |
+| **Total** | **0.74 GB** | **~$7.52** |
+
+Three findings worth carrying into the technical report:
+
+- **A $5 hard cap is not configurable.** Railway's minimum hard limit is $10. Email alerts accept
+  any value; only the automatic cutoff has the floor. Staying under $5 therefore means reducing
+  the footprint, not setting a limit.
+- **Serverless (app-sleeping) would not fire here.** Railway's docs list open database connection
+  pools, persistent queue connections, and telemetry as sleep blockers — this deployment has all
+  three (SQLAlchemy → Supabase, Celery → Redis, `SENTRY_DSN`). Making it work would require
+  changing the pool strategy and dropping Sentry, for an uncertain gain.
+- **`celery-beat` is the worst cost/benefit of the four** — 24% of the bill to run exactly two
+  periodic tasks (`check_scheduled_pipelines`, `cleanup_expired_retention`, see
+  `core/celery_app.py:108`), neither needed outside a demo of the scheduling feature.
+
+**Decision: the environment will be brought down between working sessions and raised on demand**,
+rather than running 24/7. At ~$0.25/day for the full stack, a month of idle uptime costs $7.52
+while a few hours a day costs ~$1.25. The stack must be up for the defense window
+(~18-20 Dec), when the committee will use the product. The button-by-button functional test Laura
+asked for on 2026-09-10 is explicitly scoped to run **locally**, so it does not depend on the
+deployed environment. The real coupling is the Vercel frontend: it calls `NEXT_PUBLIC_API_URL`,
+which points at the Railway API, so bringing Railway down takes the live site down with it — the
+shared demo link stops working until the environment is raised again.
 
 ## 2026-09-13 — repository/CI governance hardening (PRs #245-#272) — not tied to a sprint
 

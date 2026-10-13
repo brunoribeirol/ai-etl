@@ -19,9 +19,11 @@ import { PHASES, stageToPhase } from "@/lib/agents";
 export function AgentProgress({
   meta,
   done,
+  failed = false,
 }: {
   meta: { stage: string; message: string } | null;
   done: boolean;
+  failed?: boolean;
 }) {
   const currentPhase = meta ? stageToPhase(meta.stage) : null;
   const currentIndex = currentPhase ? PHASES.findIndex((p) => p.key === currentPhase) : -1;
@@ -80,7 +82,7 @@ export function AgentProgress({
           aria-live="polite"` region above announce completion to screen
           readers — without it, a screen-reader user gets no signal at all
           once the last stage message disappears. */}
-      {done && <span className="sr-only">All phases complete.</span>}
+      {done && <span className="sr-only">{failed ? "Run failed." : "All phases complete."}</span>}
     </div>
   );
 }

@@ -13,6 +13,7 @@ section below.
 import os
 import threading
 import time
+from collections.abc import Mapping
 from typing import Any
 
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -25,7 +26,7 @@ from ai_etl.core.analysis_types import TokenUsage
 _DEFAULT_MODEL_BY_PROVIDER = {
     "openai": "gpt-4o-mini",
     "anthropic": "claude-sonnet-5",
-    "google": "gemini-2.0-flash",
+    "google": "gemini-3.8-flash",
     "ollama": "llama3.1",
 }
 
@@ -40,10 +41,27 @@ _DEFAULT_MODEL_BY_PROVIDER = {
 # outside this allowlist is rejected at the API layer before it ever reaches
 # `saved_pipelines`, the same defense-in-depth posture `_validate_source_type`
 # already applies to `source_type`.
+#
+# Catalog refresh 2026-10-10: added the Claude 5.5 generation, and replaced the
+# Gemini 2.0 ids: `gemini-2.0-flash` was shut down by Google on 2026-06-01 and
+# `gemini-2.0-pro` is absent from Google's published model and deprecation tables, so
+# both entries (and the Google default) pointed at ids that can no longer be relied
+# on. The new Anthropic/Google ids are NOT yet
+# live-verified through this codebase (no credentialed run). Do that with
+# `POST /llm/test-connectivity` before presenting them as supported.
 ALLOWED_MODELS_BY_PROVIDER: dict[str, frozenset[str]] = {
     "openai": frozenset({"gpt-4o-mini", "gpt-4o"}),
-    "anthropic": frozenset({"claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5"}),
-    "google": frozenset({"gemini-2.0-pro", "gemini-2.0-flash"}),
+    "anthropic": frozenset(
+        {
+            "claude-opus-5-5",
+            "claude-opus-5",
+            "claude-sonnet-5-5",
+            "claude-sonnet-5",
+            "claude-haiku-5-5",
+            "claude-haiku-4-5",
+        }
+    ),
+    "google": frozenset({"gemini-3.8-flash", "gemini-2.5-pro", "gemini-2.5-flash"}),
     "ollama": frozenset({"llama3.1", "llama3.3", "mistral", "qwen2.5"}),
 }
 
@@ -138,7 +156,21 @@ def _build_openai(model: str, temperature: float) -> BaseChatModel:
 # (an older-tier model) still accepts it. Kept as an explicit set rather than a
 # version-string heuristic, matching this module's own "explicit allowlist over
 # pattern-matching" convention (see ALLOWED_MODELS_BY_PROVIDER above).
-_ANTHROPIC_MODELS_WITHOUT_TEMPERATURE = frozenset({"claude-opus-5", "claude-sonnet-5"})
+#
+# The 5.5 generation (added 2026-10-10) keeps the same restriction per Anthropic's
+# published API reference: `claude-opus-5-5` rejects sampling parameters outright, and
+# `claude-sonnet-5-5`/`claude-haiku-5-5` reject any non-default value, and this module's
+# `temperature=0.0` default is one. Unlike the two entries above, these three come from
+# documentation, not from a live call through this codebase.
+_ANTHROPIC_MODELS_WITHOUT_TEMPERATURE = frozenset(
+    {
+        "claude-opus-5-5",
+        "claude-opus-5",
+        "claude-sonnet-5-5",
+        "claude-sonnet-5",
+        "claude-haiku-5-5",
+    }
+)
 
 
 def _build_anthropic(model: str, temperature: float) -> BaseChatModel:
@@ -229,6 +261,39 @@ def get_llm(
     return builder(resolved_model, temperature)
 
 
+def response_text(response: Any) -> str:
+    """The text of a model response, whatever shape the provider gave its content.
+
+    Most models return `content` as one string. A model that reasons before it
+    answers returns a list of blocks instead: a reasoning block (with its signature)
+    followed by the text block or blocks that carry the answer. `str()` of that list
+    is the list's Python repr, not the answer, so every agent that did
+    `str(response.content)` received something it could not parse.
+
+    Found 2026-10-12 by the first real call to `claude-haiku-5-5` (case-study run
+    38221934995): the Transformer failed three times with "No function named
+    'transform' found in generated code" because the "code" it was given was the
+    repr of a list whose first block was the reasoning.
+
+    Only the text blocks are kept, in order. Reasoning is not part of the answer and
+    is never handed to the code that parses or executes it.
+    """
+    content = getattr(response, "content", None)
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for block in content:
+            if isinstance(block, str):
+                parts.append(block)
+            elif isinstance(block, dict) and block.get("type") == "text":
+                parts.append(str(block.get("text", "")))
+        return "".join(parts)
+    return str(content)
+
+
 def extract_token_usage(response: Any) -> TokenUsage:
     """Read token usage off an LLM response, defaulting to zeros if unavailable.
 
@@ -240,6 +305,19 @@ def extract_token_usage(response: Any) -> TokenUsage:
         "input_tokens": int(usage.get("input_tokens", 0)),
         "output_tokens": int(usage.get("output_tokens", 0)),
         "total_tokens": int(usage.get("total_tokens", 0)),
+    }
+
+
+def add_response_usage(current: Mapping[str, int] | None, response: Any) -> dict[str, int]:
+    """`current` plus the token usage of `response`, as the plain dict that
+    `PipelineState.llm_usage` holds (the ETL nodes cannot use `TokenUsage` in the state:
+    `core/analysis_types.py` imports the state)."""
+    usage = extract_token_usage(response)
+    base = current or {}
+    return {
+        "input_tokens": int(base.get("input_tokens", 0)) + usage["input_tokens"],
+        "output_tokens": int(base.get("output_tokens", 0)) + usage["output_tokens"],
+        "total_tokens": int(base.get("total_tokens", 0)) + usage["total_tokens"],
     }
 
 

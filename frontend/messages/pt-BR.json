@@ -164,6 +164,7 @@
   "runDetailPage": {
     "notFound": "Run não encontrado.",
     "questionPrefix": "O que fazer sobre: \"{question}\"",
+    "technicalDetails": "Detalhes técnicos",
     "silverHeading": "Silver"
   },
   "pipelinesPage": {
@@ -225,6 +226,8 @@
     "statusLabel": "Status",
     "completedPrefix": "Concluído —",
     "viewRun": "ver run {runId}",
+    "viewFailedRun": "ver detalhes",
+    "failedNoMessage": "A execução falhou.",
     "errors": {
       "parseFailed": "Não foi possível processar o arquivo enviado. Verifique o formato (CSV, Excel, JSON, PDF ou DOCX) e tente novamente.",
       "network": "Falha de conexão com o servidor. Verifique sua internet e tente novamente.",
