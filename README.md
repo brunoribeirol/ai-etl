@@ -123,7 +123,7 @@ This track uses scenarios 1 to 3 of the table above; its scenario 4 is scenario 
 
 Each run is judged twice: by the outcome class of the run, and by comparing what was written with a reference computed in plain pandas from the same inputs (`case_study/scripts/output_checks.py`). A run can complete and still not match; the second check is what catches it.
 
-Default model (`gpt-4o-mini`), 5 runs per scenario, commit `8505031`, which differs from the final commit only in how the Planner's tokens are counted ([workflow run 38332893793](https://github.com/brunoribeirol/ai-etl/actions/runs/38332893793)):
+Default model (`gpt-4o-mini`), 5 runs per scenario, commit `8505031` ([workflow run 38332893793](https://github.com/brunoribeirol/ai-etl/actions/runs/38332893793)). The commits after it change how the Planner's tokens are counted (#332) and fix three security findings outside the pipeline (#336); no agent, prompt, sandbox or graph code changed:
 
 | Scenario | Completed | Output equal to the reference | Code-generation attempts, per run |
 |---|---|---|---|
