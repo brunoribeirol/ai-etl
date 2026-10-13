@@ -14,7 +14,12 @@ from typing import Any
 import pandas as pd
 
 from ai_etl.agents._llm_codegen import build_column_stats as _build_column_stats
-from ai_etl.agents._llm_codegen import drop_redundant_imports, import_error_hint
+from ai_etl.agents._llm_codegen import (
+    drop_redundant_imports,
+    hand_typed_figures,
+    import_error_hint,
+    typed_figures_error,
+)
 from ai_etl.agents._llm_codegen import strip_code_fences as _strip_fences
 from ai_etl.core.analysis_types import ScienceResult, TokenUsage
 from ai_etl.core.llm import extract_token_usage, get_llm, invoke_llm, response_text, sum_token_usage
@@ -95,6 +100,10 @@ Then write Python code that defines EXACTLY four variables:
    business user. Include: what type of analysis was used, the main finding, and a business
    implication. Be specific with numbers, and the DIRECTION you state (increase/decrease)
    MUST match the actual numbers in `predictions_df` — never claim a trend the data doesn't show.
+   Every decimal number or percentage in the text MUST be inserted with an f-string field
+   that reads it from `predictions_df`, `model_info` or a variable you computed
+   (e.g. `f"... {{rate:.1f}}% ..."`). Never type such a figure as plain text: code that
+   does is rejected without being executed.
 
 4. `model_info` — a Python dict with:
    {{"model_type": str, "task": str, "metrics": dict, "features": list, "target": str}}
@@ -386,6 +395,12 @@ def run_science(
             _strip_fences(response_text(response).strip()), provided_names
         )
         last_code = code
+
+        typed = hand_typed_figures(code)
+        if typed:
+            # Not executed: the text would state figures the code did not compute.
+            last_error = typed_figures_error(typed, "predictions_df")
+            continue
 
         sandbox_result = execute_in_sandbox(
             code,

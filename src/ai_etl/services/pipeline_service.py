@@ -486,6 +486,26 @@ _RepairResultT = TypeVar("_RepairResultT", GoldResult, ScienceResult)
 
 _NO_TOKENS: TokenUsage = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
 
+# Below this many rows the analysis layer does not run. Real run in production,
+# 2026-10-12: a report template with no data was uploaded with the question "Quais
+# produtos vendem mais?"; the document extraction returned 2 rows, and the run ended with
+# three sub-analyses and three recommendations about "Figura 1" and "Tabela 1". Five rows
+# is a floor, not a test of adequacy: a longer input that has nothing to do with the
+# question is still analysed.
+MIN_ROWS_FOR_ANALYSIS = 5
+
+_TOO_FEW_ROWS_MESSAGE = {
+    "pt-BR": (
+        "Análise não executada: os dados carregados têm {rows} linha(s), e são necessárias "
+        "ao menos {minimum} para analisar. Confira se o arquivo enviado contém os dados "
+        "esperados."
+    ),
+    "en-US": (
+        "Analysis not run: the loaded data has {rows} row(s), and at least {minimum} are "
+        "needed. Check that the uploaded file holds the expected data."
+    ),
+}
+
 
 def _run_with_repair(
     run_fn: Callable[..., _RepairResultT],
@@ -877,7 +897,34 @@ def run_full_analysis(
 
     question = business_question.strip()
 
-    if isinstance(silver_df, pd.DataFrame) and not silver_df.empty:
+    if (
+        isinstance(silver_df, pd.DataFrame)
+        and not silver_df.empty
+        and len(silver_df) < MIN_ROWS_FOR_ANALYSIS
+    ):
+        # Too little data to analyse: say so instead of producing sub-analyses and
+        # recommendations. No model is called. See MIN_ROWS_FOR_ANALYSIS.
+        advisor_result = {
+            "recommendations": [],
+            "summary": _TOO_FEW_ROWS_MESSAGE.get(
+                locale, _TOO_FEW_ROWS_MESSAGE[DEFAULT_LOCALE]
+            ).format(rows=len(silver_df), minimum=MIN_ROWS_FOR_ANALYSIS),
+            "error": None,
+            "tokens": dict(_NO_TOKENS),
+        }
+        save_analysis(
+            silver_state["run_id"],
+            [],
+            [],
+            cast(AdvisorResult, advisor_result),
+            etl_tokens,
+            log_dir=run_dir,
+            tenant_id=tenant_id,
+            business_question=question,
+            saved_pipeline_id=saved_pipeline_id,
+            model_name=resolved_model_name,
+        )
+    elif isinstance(silver_df, pd.DataFrame) and not silver_df.empty:
         # ADR-007: every Analyst/Science sandbox call within this analysis run
         # (one per sub-task, plus any repair reruns) appends its latency here,
         # in call order, so save_stage_latencies below can assign an
