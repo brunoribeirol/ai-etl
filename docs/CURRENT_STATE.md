@@ -2,14 +2,19 @@
 
 > Living doc. Updated at the end of meaningful work sessions, not per-commit. Source of truth for repo/code state; the Obsidian vault (`~/Documents/Obsidian Vault/tcc/`) is the source of truth for the academic TCC narrative and product/strategy context.
 
-**Last updated:** 2026-10-13 (16:30 UTC), fifth entry. **Nothing is open around the code.**
-Agent, prompt, sandbox and graph code is unchanged since `d77e13b`; the last commit that
-touches product code is `59851a1` (#336, three security fixes outside the pipeline). A closing
-round dealt with what was still open: the 8 code scanning alerts (4 fixed, 4 dismissed as
-false positives, 0 open), the 11 open pull requests (3 merged, 8 dependency updates closed and
-deferred, 0 open), and version updates, paused until the delivery on 2026-10-30 (#337). The
-Anthropic prices in `core/pricing.py` were compared with the provider's published table and
-are equal. See "2026-10-13: closing round" below.
+**Last updated:** 2026-10-14 (03:00 UTC), sixth entry. **The functional checklist is not
+100% validated: of its 57 rows, 45 work, 4 work in part, 1 does not work on production as
+configured, 6 were not tested and 1 is a note.** The owner asked whether everything had been
+validated; it had not (15 rows untested). Nine of those were closed in this round: the local
+setup on a fresh clone, and MySQL, MongoDB, SQLite and the Parquet destination through a new
+job of the case-study workflow. The 6 that remain each need something only the owner can do
+(a second account, a credential, a notification destination, a permanent deletion). See
+"2026-10-14: what the functional checklist still lacks" below.
+
+**Fifth entry (2026-10-13, 16:30 UTC):** nothing open around the code: code scanning alerts 0
+(4 fixed in #336, 4 dismissed as false positives), pull requests 0 (3 merged, 8 dependency
+updates deferred), version updates paused until the delivery (#337), Anthropic prices equal to
+the published table. See "2026-10-13: closing round" below.
 
 **Fourth entry (2026-10-13, 02:00 UTC):** finalisation round (#327 to #332): the Transformer's
 retry, the cost of a run, texts with figures typed by hand, input with almost no data, failure
@@ -115,6 +120,53 @@ _Already closed this arc (were open before): `POST /llm/test-connectivity` is no
 ("Working 1921ms"); the audit's H5/H1/M3/M11 and all other merged items are live-verified — see
 below._
 
+## 2026-10-14: what the functional checklist still lacks
+
+Sixth entry. No product code changed. Added: `case_study/scripts/connector_check.py` and a
+second job in `.github/workflows/case-study.yml` (input `job: connectors`), started by hand.
+
+### Rows closed in this round
+
+| Row | How it was checked | Result |
+|---|---|---|
+| 0.1 `make install` | fresh clone of `main` at `281aa83`, macOS | exit 0; the package imports from the new environment |
+| 0.2 `make db-up` | same clone | exit 0; PostgreSQL 15.19 accepting connections, database `ai_etl_db` |
+| 1.3 MySQL source, 2.3 MySQL destination | workflow run 38501979139: MySQL 8.4 server, the ETL layer's entry point, `gpt-4o-mini` | completed, one attempt, 69 rows; the destination table read back with the driver equals the plain-pandas reference |
+| 1.4 MongoDB source, 2.4 MongoDB destination | same run: MongoDB 7 server | completed, one attempt, 69 documents; equal to the reference |
+| 1.5 SQLite source | same run: a SQLite file | completed, one attempt, 61 rows; equal to the reference |
+| 2.5 Parquet in S3 | same run, behind an emulator of the S3 API (moto server) | completed, 61 rows, the object read back equals the reference. **Counted as "partly":** the destination's own code path works; AWS itself was not exercised by this destination. An object store (MinIO) was tried first and its image can no longer be pulled |
+| 5.3 History per pipeline | the page, on production, signed in | renders: schedule, 3 runs with status, rows and cost, the comparison of two runs |
+| 6.3 Cost estimate before running | `POST /runs/estimate` on production | answers 200 (0.0034 for 20,000 rows by 20 columns with the default model). **Still "partly":** no page of the interface calls it |
+
+Input of the connector checks: the pinned public taxi-zone table, 265 rows; each
+specification asks for the zones of one borough. One run per pair: a check that the path works
+end to end, not a measurement. The same checks ran twice more while the job was being built
+(38501787166: same result).
+
+### State of the 57 rows
+
+| State | Rows | Which |
+|---|---|---|
+| Works | 45 | 37 on production; 2 local setup (0.1, 0.2); 6 in the workflow against a real service, with no such database behind production (1.3, 1.4, 1.5, 2.2, 2.3, 2.4) |
+| Works in part | 4 | 2.5 (emulated S3 API), 3.9 (an unrelated input with 5 rows or more is still analysed), 4.7 (status words and dates in English in a Portuguese interface), 6.3 (the estimate exists in the API only) |
+| Does not work | 1 | 1.2 PostgreSQL source on production as configured: no database behind the default. It works in the case-study workflow |
+| Not tested | 6 | 5.4, 5.5, 6.5, 6.7, 8.1, 8.2 |
+| Note | 1 | 8.6 |
+
+### The 6 rows not tested, and what each needs
+
+| Row | Why it is still open | What it needs |
+|---|---|---|
+| 5.4 Failure alert reaches the configured destination | no destination is configured; delivery was never checked against a real provider (`services/notifications.py` says so) | a Slack, Teams or Google Chat webhook, or an e-mail address, of the owner |
+| 5.5 Digest and drift detection | same | same |
+| 6.5 Secrets: save a source credential and use it | saving one means typing a credential | the owner types it; with a PostgreSQL connection string this also closes 1.2 and 2.2 on production |
+| 6.7 Deletion of the tenant's data | permanent, and the only account holds the evidence runs | a second, disposable account, and the owner confirming the deletion there |
+| 8.1 `/get-started` on a new tenant | needs a new account | the owner creates it |
+| 8.2 Onboarding checklist on a new analysis | same | same account |
+
+These six have unit tests with simulated services. None was exercised in the running
+application.
+
 ## 2026-10-13: closing round, nothing open around the code
 
 Fifth entry. The owner asked for everything still open to be dealt with, so that the days
@@ -141,7 +193,7 @@ dismissed alert can be reopened on the alert's page.
 |---|---|---|
 | #335 | README: evaluation summary and link to the deployed app | merged, after each figure was checked against the manifest and the evidence note |
 | #282 | GitHub Actions, minor and patch (5 actions) | merged: CI only |
-| #275 | `astral-sh/setup-uv` 7.6.0 to 10.1.0 | merged: CI and the case-study workflow; exercised by workflow run 38425092704 |
+| #275 | `astral-sh/setup-uv` 7.6.0 to 10.1.0 | merged: the CI, prompt-regression and release workflows. Correction of 2026-10-14: the update did not touch `case-study.yml`, which still pins the earlier version, so workflow run 38425092704 did not exercise it |
 | #310 | Python, minor and patch group (17 packages) | closed, deferred. Fails type checking: 3 mypy errors in the MongoDB source and destination |
 | #309 | frontend, minor and patch group (8 packages, `@clerk/nextjs` among them) | closed, deferred. Checks pass; it sits in the sign-in path of the deployed app |
 | #268, #277 | pandas 2.3.3 to 3.0.6 and its type stubs | closed, deferred. 7 unit tests fail on pandas 3 (CSV source, Quality agent, SQLite source) |
