@@ -126,9 +126,9 @@ jobs:
 
   # The sources and destinations the scenarios above do not reach (MySQL, MongoDB, SQLite,
   # Parquet in S3-compatible storage), each run once through the ETL layer's entry point
-  # with a real model, against real services started for this job. The storage is a local
-  # S3-compatible server, not AWS: it checks the destination's own code path (the client
-  # calls over HTTP, the Parquet write, the count read back), not an AWS account.
+  # with a real model. MySQL and MongoDB are real servers started for this job; SQLite is a
+  # file. The S3 side is an emulator of the S3 API: it checks the destination's own code
+  # path (the client calls over HTTP, the Parquet write, the count read back), not AWS.
   connectors:
     name: "Connectors the case study does not reach"
     if: ${{ inputs.job == 'connectors' }}
@@ -138,8 +138,6 @@ jobs:
       CHECK_DB_USER: root
       CHECK_DB_PASSWORD: connector_check
       CHECK_DB_NAME: connector_check
-      CHECK_S3_USER: connector_check
-      CHECK_S3_PASSWORD: connector_check_storage
     services:
       mysql:
         image: mysql:8.4
@@ -177,28 +175,17 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras
 
-      - name: Start the S3-compatible storage
-        # A service container cannot be given the server's start command, so the storage
-        # is started here. First choice: an object store (MinIO, from its registry on
-        # Quay; the image is no longer on Docker Hub). If that image cannot be pulled:
-        # an emulator of the S3 API (moto server). The summary records which one ran.
+      - name: Start the emulator of the S3 API
+        # moto server answers the S3 HTTP API on the runner. It is an emulator, not an
+        # object store and not AWS. An object store was tried first (MinIO): its image
+        # can no longer be pulled from Docker Hub or from Quay.
         run: |
-          if docker run -d --name storage -p 9000:9000 \
-            -e MINIO_ROOT_USER="$CHECK_S3_USER" \
-            -e MINIO_ROOT_PASSWORD="$CHECK_S3_PASSWORD" \
-            quay.io/minio/minio:latest server /data; then
-            echo "CONNECTOR_CHECK_STORAGE=MinIO object store (quay.io/minio/minio)" >> "$GITHUB_ENV"
-            health="http://127.0.0.1:9000/minio/health/live"
-          else
-            nohup uvx --from 'moto[server]' moto_server -H 127.0.0.1 -p 9000 > moto.log 2>&1 &
-            echo "CONNECTOR_CHECK_STORAGE=moto server (emulator of the S3 API)" >> "$GITHUB_ENV"
-            health="http://127.0.0.1:9000/moto-api/"
-          fi
+          nohup uvx --from 'moto[server]' moto_server -H 127.0.0.1 -p 9000 > moto.log 2>&1 &
           for attempt in $(seq 1 45); do
-            if curl -sf "$health" > /dev/null; then exit 0; fi
+            if curl -sf "http://127.0.0.1:9000/moto-api/" > /dev/null; then exit 0; fi
             sleep 2
           done
-          docker logs storage 2>/dev/null || cat moto.log
+          cat moto.log
           exit 1
 
       - name: Point the pipeline at the services
@@ -207,10 +194,11 @@ jobs:
             echo "MYSQL_URL=mysql+pymysql://${CHECK_DB_USER}:${CHECK_DB_PASSWORD}@127.0.0.1:3306/${CHECK_DB_NAME}"
             echo "MONGODB_URI=mongodb://127.0.0.1:27017"
             echo "AWS_ENDPOINT_URL=http://127.0.0.1:9000"
-            echo "AWS_ACCESS_KEY_ID=${CHECK_S3_USER}"
-            echo "AWS_SECRET_ACCESS_KEY=${CHECK_S3_PASSWORD}"
+            echo "AWS_ACCESS_KEY_ID=connector-check"
+            echo "AWS_SECRET_ACCESS_KEY=connector-check"
             echo "AWS_DEFAULT_REGION=us-east-1"
             echo "CONNECTOR_CHECK_BUCKET=connector-check"
+            echo "CONNECTOR_CHECK_STORAGE=moto server (emulator of the S3 API)"
           } >> "$GITHUB_ENV"
 
       - name: Fetch the public data and check it against the manifest

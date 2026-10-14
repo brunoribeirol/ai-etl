@@ -7,7 +7,11 @@ services, through the ETL layer's own entry point
 
     1. MySQL table        -> MySQL table
     2. MongoDB collection -> MongoDB collection
-    3. SQLite file        -> Parquet object in S3-compatible storage
+    3. SQLite file        -> Parquet object behind the S3 API
+
+In the workflow, MySQL and MongoDB are real servers and the S3 API is answered by an
+emulator (moto server), so the third check covers the destination's own code path and
+not AWS itself.
 
 Input of the three checks: the pinned public taxi-zone table
 (`case_study/data/taxi_zones.csv`, 265 rows). Each specification asks for the zones of
