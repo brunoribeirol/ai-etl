@@ -122,6 +122,27 @@ class TestGetLlmProviderSelection:
             assert llm.model == model
             assert llm.temperature is None
 
+    def test_openai_gpt_6_reasoning_models_omit_temperature(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Catalog refresh 2026-10-14: `gpt-6-luna` and `gpt-6.1-sol` are reasoning
+        models, which take a reasoning effort instead of sampling parameters, so
+        get_llm() must not send the module's `temperature=0.0` for them."""
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-fake")
+        for model in ("gpt-6-luna", "gpt-6.1-sol"):
+            llm = get_llm(provider="openai", model=model, temperature=0.3)
+            assert isinstance(llm, ChatOpenAI)
+            assert llm.model_name == model
+            assert llm.temperature is None
+
+    def test_openai_gpt_4o_still_receives_temperature(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-fake")
+        for model in ("gpt-4o-mini", "gpt-4o"):
+            llm = get_llm(provider="openai", model=model, temperature=0.3)
+            assert llm.temperature == 0.3
+
     def test_anthropic_haiku_still_accepts_temperature(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
