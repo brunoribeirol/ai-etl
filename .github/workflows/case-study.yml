@@ -25,6 +25,13 @@ on:
         description: "Comma-separated scenario ids (1-4)"
         type: string
         default: "1,2,3,4"
+      job:
+        description: "case-study: the scenarios above. connectors: one run per connector the scenarios do not reach"
+        type: choice
+        options:
+          - case-study
+          - connectors
+        default: case-study
 
 permissions:
   contents: read
@@ -32,6 +39,7 @@ permissions:
 jobs:
   case-study:
     name: "Case study over public data"
+    if: ${{ inputs.job != 'connectors' }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
@@ -113,5 +121,120 @@ jobs:
           path: |
             case_study/results/public/
             case_study/public_data_manifest.json
+          if-no-files-found: warn
+          retention-days: 90
+
+  # The sources and destinations the scenarios above do not reach (MySQL, MongoDB, SQLite,
+  # Parquet in S3-compatible storage), each run once through the ETL layer's entry point
+  # with a real model, against real services started for this job. The storage is a local
+  # S3-compatible server, not AWS: it checks the destination's own code path (the client
+  # calls, the Parquet write, the count read back), not an AWS account.
+  connectors:
+    name: "Connectors the case study does not reach"
+    if: ${{ inputs.job == 'connectors' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CHECK_DB_USER: root
+      CHECK_DB_PASSWORD: connector_check
+      CHECK_DB_NAME: connector_check
+      CHECK_S3_USER: connector_check
+      CHECK_S3_PASSWORD: connector_check_storage
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: connector_check
+          MYSQL_DATABASE: connector_check
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h localhost -u root -pconnector_check"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      mongodb:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.runCommand(\"ping\").ok' --quiet"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        with:
+          version: "latest"
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Start the S3-compatible storage
+        # A service container cannot be given the server's start command, so it is
+        # started here.
+        run: |
+          docker run -d --name storage -p 9000:9000 \
+            -e MINIO_ROOT_USER="$CHECK_S3_USER" \
+            -e MINIO_ROOT_PASSWORD="$CHECK_S3_PASSWORD" \
+            minio/minio:RELEASE.2025-04-22T22-12-26Z server /data
+          for attempt in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:9000/minio/health/live; then exit 0; fi
+            sleep 2
+          done
+          docker logs storage
+          exit 1
+
+      - name: Point the pipeline at the services
+        run: |
+          {
+            echo "MYSQL_URL=mysql+pymysql://${CHECK_DB_USER}:${CHECK_DB_PASSWORD}@127.0.0.1:3306/${CHECK_DB_NAME}"
+            echo "MONGODB_URI=mongodb://127.0.0.1:27017"
+            echo "AWS_ENDPOINT_URL=http://127.0.0.1:9000"
+            echo "AWS_ACCESS_KEY_ID=${CHECK_S3_USER}"
+            echo "AWS_SECRET_ACCESS_KEY=${CHECK_S3_PASSWORD}"
+            echo "AWS_DEFAULT_REGION=us-east-1"
+            echo "CONNECTOR_CHECK_BUCKET=connector-check"
+          } >> "$GITHUB_ENV"
+
+      - name: Fetch the public data and check it against the manifest
+        run: uv run python case_study/data/fetch_public_data.py --verify
+
+      - name: Run the connector check
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CASE_STUDY_MODELS: ${{ inputs.models }}
+        run: |
+          uv run python case_study/scripts/connector_check.py \
+            --model "$CASE_STUDY_MODELS" \
+            --label "run-${GITHUB_RUN_ID}"
+
+      - name: Publish the summary
+        if: always()
+        run: |
+          summary="case_study/results/connectors/run-${GITHUB_RUN_ID}/summary.json"
+          if [ -f "$summary" ]; then
+            {
+              echo '### Connector check: raw summary'
+              echo '```json'
+              cat "$summary"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload run artefacts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: connector-check-run-${{ github.run_id }}
+          path: case_study/results/connectors/
           if-no-files-found: warn
           retention-days: 90
