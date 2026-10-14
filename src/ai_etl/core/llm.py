@@ -49,8 +49,14 @@ _DEFAULT_MODEL_BY_PROVIDER = {
 # on. The new Anthropic/Google ids are NOT yet
 # live-verified through this codebase (no credentialed run). Do that with
 # `POST /llm/test-connectivity` before presenting them as supported.
+#
+# Catalog refresh 2026-10-14: added OpenAI's current generation, `gpt-6-luna` (its
+# small, cheap model) and `gpt-6.1-sol` (its middle tier), so the model comparison has
+# a current OpenAI pair beside the 2024 pair (`gpt-4o-mini`, `gpt-4o`), in the same way
+# the Anthropic list has two generations. `gpt-6-astra` (US$ 10 / 50 per million) was
+# left out on cost. Both are reasoning models; see `_OPENAI_MODELS_WITHOUT_TEMPERATURE`.
 ALLOWED_MODELS_BY_PROVIDER: dict[str, frozenset[str]] = {
-    "openai": frozenset({"gpt-4o-mini", "gpt-4o"}),
+    "openai": frozenset({"gpt-4o-mini", "gpt-4o", "gpt-6-luna", "gpt-6.1-sol"}),
     "anthropic": frozenset(
         {
             "claude-opus-5-5",
@@ -143,9 +149,19 @@ def _require_env(var_name: str, provider: str) -> str:
     return value
 
 
+# OpenAI's reasoning models take a reasoning effort instead of sampling parameters, and
+# its reasoning models so far accept only the default temperature, so the `temperature=0.0`
+# default of this module is not sent for them. Their model pages list the reasoning
+# effort (default "medium", left as it is) and say nothing about temperature: this entry
+# comes from that pattern, not from a live call through this codebase.
+_OPENAI_MODELS_WITHOUT_TEMPERATURE = frozenset({"gpt-6-luna", "gpt-6.1-sol"})
+
+
 def _build_openai(model: str, temperature: float) -> BaseChatModel:
     from langchain_openai import ChatOpenAI
 
+    if model in _OPENAI_MODELS_WITHOUT_TEMPERATURE:
+        return ChatOpenAI(model=model)
     return ChatOpenAI(model=model, temperature=temperature)
 
 

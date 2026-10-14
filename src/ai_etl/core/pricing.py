@@ -26,6 +26,11 @@ MODEL_PRICING_USD_PER_MILLION_TOKENS: dict[str, dict[str, float]] = {
     # OpenAI (Sprint 3).
     "gpt-4o-mini": {"input": 0.15, "output": 0.60},
     "gpt-4o": {"input": 2.50, "output": 10.00},
+    # Added 2026-10-14 from OpenAI's published pricing (standard tier, prompts up to
+    # 272K tokens; this pipeline's prompts sit far below that). Reasoning tokens are
+    # billed and reported as output tokens.
+    "gpt-6-luna": {"input": 0.10, "output": 0.50},
+    "gpt-6.1-sol": {"input": 2.00, "output": 10.00},
     # Anthropic (Sprint 30, ADR-031) — matches core/llm.py's
     # _DEFAULT_MODEL_BY_PROVIDER["anthropic"] and ALLOWED_MODELS_BY_PROVIDER.
     #
