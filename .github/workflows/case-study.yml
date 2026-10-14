@@ -128,7 +128,7 @@ jobs:
   # Parquet in S3-compatible storage), each run once through the ETL layer's entry point
   # with a real model, against real services started for this job. The storage is a local
   # S3-compatible server, not AWS: it checks the destination's own code path (the client
-  # calls, the Parquet write, the count read back), not an AWS account.
+  # calls over HTTP, the Parquet write, the count read back), not an AWS account.
   connectors:
     name: "Connectors the case study does not reach"
     if: ${{ inputs.job == 'connectors' }}
@@ -178,18 +178,27 @@ jobs:
         run: uv sync --all-extras
 
       - name: Start the S3-compatible storage
-        # A service container cannot be given the server's start command, so it is
-        # started here.
+        # A service container cannot be given the server's start command, so the storage
+        # is started here. First choice: an object store (MinIO, from its registry on
+        # Quay; the image is no longer on Docker Hub). If that image cannot be pulled:
+        # an emulator of the S3 API (moto server). The summary records which one ran.
         run: |
-          docker run -d --name storage -p 9000:9000 \
+          if docker run -d --name storage -p 9000:9000 \
             -e MINIO_ROOT_USER="$CHECK_S3_USER" \
             -e MINIO_ROOT_PASSWORD="$CHECK_S3_PASSWORD" \
-            minio/minio:RELEASE.2025-04-22T22-12-26Z server /data
-          for attempt in $(seq 1 30); do
-            if curl -sf http://127.0.0.1:9000/minio/health/live; then exit 0; fi
+            quay.io/minio/minio:latest server /data; then
+            echo "CONNECTOR_CHECK_STORAGE=MinIO object store (quay.io/minio/minio)" >> "$GITHUB_ENV"
+            health="http://127.0.0.1:9000/minio/health/live"
+          else
+            nohup uvx --from 'moto[server]' moto_server -H 127.0.0.1 -p 9000 > moto.log 2>&1 &
+            echo "CONNECTOR_CHECK_STORAGE=moto server (emulator of the S3 API)" >> "$GITHUB_ENV"
+            health="http://127.0.0.1:9000/moto-api/"
+          fi
+          for attempt in $(seq 1 45); do
+            if curl -sf "$health" > /dev/null; then exit 0; fi
             sleep 2
           done
-          docker logs storage
+          docker logs storage 2>/dev/null || cat moto.log
           exit 1
 
       - name: Point the pipeline at the services

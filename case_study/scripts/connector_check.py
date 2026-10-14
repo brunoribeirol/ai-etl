@@ -326,7 +326,11 @@ def main() -> int:
 
     (out_dir / "summary.json").write_text(
         json.dumps(
-            {"model": args.model, "checks": [asdict(record) for record in records]},
+            {
+                "model": args.model,
+                "s3_storage": os.getenv("CONNECTOR_CHECK_STORAGE", "not stated"),
+                "checks": [asdict(record) for record in records],
+            },
             indent=2,
             default=str,
         )
