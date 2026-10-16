@@ -27,7 +27,7 @@ export async function AnalysisSection({
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           {title}
-          {entry.task_question ? ` — ${entry.task_question}` : ""}
+          {entry.task_question ? `: ${entry.task_question}` : ""}
           {entry.repaired && (
             <Badge variant="outline" className="text-amber-400 border-amber-500/30 bg-amber-500/10">
               {t("repaired")}

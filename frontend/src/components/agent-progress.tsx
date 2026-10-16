@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "motion/react";
+import { useTranslations } from "next-intl";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PHASES, stageToPhase } from "@/lib/agents";
@@ -25,6 +26,7 @@ export function AgentProgress({
   done: boolean;
   failed?: boolean;
 }) {
+  const t = useTranslations("agentProgress");
   const currentPhase = meta ? stageToPhase(meta.stage) : null;
   const currentIndex = currentPhase ? PHASES.findIndex((p) => p.key === currentPhase) : -1;
 
@@ -82,7 +84,7 @@ export function AgentProgress({
           aria-live="polite"` region above announce completion to screen
           readers — without it, a screen-reader user gets no signal at all
           once the last stage message disappears. */}
-      {done && <span className="sr-only">{failed ? "Run failed." : "All phases complete."}</span>}
+      {done && <span className="sr-only">{failed ? t("srFailed") : t("srDone")}</span>}
     </div>
   );
 }

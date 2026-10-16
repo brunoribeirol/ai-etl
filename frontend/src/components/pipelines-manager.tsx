@@ -2,7 +2,7 @@
 
 import { useAuth } from "@clerk/nextjs";
 import { FileText, LineChart, PauseCircle, PlayCircle, Plus, Trash2 } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -15,6 +15,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { ModelPicker } from "@/components/model-picker";
 import { NotificationConfig } from "@/components/notification-config";
 import { SCHEDULABLE_SOURCE_TYPES, type QualityRule, type SavedPipeline } from "@/lib/types";
+import { formatDateTime } from "@/lib/format-date";
 
 /**
  * Sprint 13 (ADR-016) — minimal CRUD UI for saved (recurring) pipelines,
@@ -30,6 +31,7 @@ import { SCHEDULABLE_SOURCE_TYPES, type QualityRule, type SavedPipeline } from "
  */
 export function PipelinesManager() {
   const t = useTranslations("pipelinesManager");
+  const locale = useLocale();
   const { getToken } = useAuth();
   const apiUrl = process.env.NEXT_PUBLIC_API_URL;
 
@@ -617,9 +619,9 @@ export function PipelinesManager() {
                 </span>
               )}
               <div className="flex justify-between items-center text-xs text-muted-foreground">
-                <span>{t("nextRun", { when: new Date(pipeline.next_run_at).toLocaleString() })}</span>
+                <span>{t("nextRun", { when: formatDateTime(pipeline.next_run_at, locale) })}</span>
                 {pipeline.last_run_at && (
-                  <span>{t("lastRun", { when: new Date(pipeline.last_run_at).toLocaleString() })}</span>
+                  <span>{t("lastRun", { when: formatDateTime(pipeline.last_run_at, locale) })}</span>
                 )}
               </div>
               {/* Sprint 15 (ADR-020) — minimal health badge, no dedicated page
@@ -632,7 +634,7 @@ export function PipelinesManager() {
                   {pipeline.consecutive_failures === 1
                     ? t("consecutiveFailureOne")
                     : t("consecutiveFailureOther")}
-                  {pipeline.last_error && ` — ${pipeline.last_error}`}
+                  {pipeline.last_error && `: ${pipeline.last_error}`}
                 </div>
               )}
               <div className="flex gap-2 pt-1">

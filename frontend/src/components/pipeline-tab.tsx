@@ -112,12 +112,12 @@ export async function PipelineTab({
                     {/* Sprint 16 (ADR-023) — custom rule detail: either an evaluation
                         error (unknown column / incompatible type) or the violation count. */}
                     {check.check === "custom_rule" && check.error && (
-                      <span className="text-muted-foreground"> — {check.error}</span>
+                      <span className="text-muted-foreground">: {check.error}</span>
                     )}
                     {check.check === "custom_rule" && check.error == null && (
                       <span className="text-muted-foreground">
                         {" "}
-                        — {check.operator} {String(check.value ?? "")} —{" "}
+                        ({check.operator} {String(check.value ?? "")}):{" "}
                         {check.violation_count === 0
                           ? t("noViolations")
                           : t("violationsCount", { count: check.violation_count ?? 0 })}

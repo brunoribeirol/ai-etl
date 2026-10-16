@@ -2,7 +2,7 @@
 
 import { useAuth } from "@clerk/nextjs";
 import { ArrowRight } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Figure } from "react-plotly.js";
 import { PlotlyChart } from "@/components/plotly-chart";
@@ -10,6 +10,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import type { AnalysisEntry, FullResult, PipelineRunHistoryEntry } from "@/lib/types";
+import { formatDateTime } from "@/lib/format-date";
 
 /**
  * Sprint 17 (ADR-017) — time-series KPI view + two-run diff for one saved
@@ -36,6 +37,7 @@ const HISTORY_LIMIT = 200;
 
 export function PipelineHistory({ pipelineId }: { pipelineId: string }) {
   const t = useTranslations("pipelineHistory");
+  const locale = useLocale();
   const { getToken } = useAuth();
   const apiUrl = process.env.NEXT_PUBLIC_API_URL;
 
@@ -204,15 +206,15 @@ export function PipelineHistory({ pipelineId }: { pipelineId: string }) {
               <StatusBadge status={run.status} />
               <span className="font-mono text-xs truncate flex-1">{run.run_id}</span>
               <span className="text-xs text-muted-foreground">
-                {new Date(run.timestamp).toLocaleString()}
+                {formatDateTime(run.timestamp, locale)}
               </span>
               <span className="text-xs text-muted-foreground w-20 text-right">
                 {run.rows_loaded != null
                   ? t("rowsSuffix", { count: run.rows_loaded })
-                  : "—"}
+                  : "-"}
               </span>
               <span className="text-xs text-muted-foreground w-24 text-right">
-                {run.cost_usd != null ? `US$ ${run.cost_usd.toFixed(4)}` : "—"}
+                {run.cost_usd != null ? `US$ ${run.cost_usd.toFixed(4)}` : "-"}
               </span>
               <div className="flex gap-1">
                 <Button
@@ -277,9 +279,9 @@ function DeltaRow({
     <div className="flex items-center justify-between text-sm py-1.5 border-b border-border/40 last:border-0">
       <span className="text-muted-foreground">{label}</span>
       <div className="flex items-center gap-2 font-mono">
-        <span>{a !== null ? format(a) : "—"}</span>
+        <span>{a !== null ? format(a) : "-"}</span>
         <ArrowRight className="h-3 w-3 text-muted-foreground" />
-        <span>{b !== null ? format(b) : "—"}</span>
+        <span>{b !== null ? format(b) : "-"}</span>
         {delta !== null && delta !== 0 && (
           <span className={delta > 0 ? "text-emerald-400" : "text-red-400"}>
             ({delta > 0 ? "+" : ""}

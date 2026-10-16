@@ -1,7 +1,7 @@
 {
   "metadata": {
-    "title": "AI-ETL — Pipelines de dados que se explicam",
-    "description": "Descreva o pipeline em linguagem natural. Agentes de IA extraem, limpam e carregam seus dados heterogêneos gerando código Python auditável — não uma resposta de chat que some quando você fecha a aba."
+    "title": "AI-ETL: pipelines de dados que se explicam",
+    "description": "Descreva o pipeline em linguagem natural. Agentes de IA extraem, limpam e carregam seus dados heterogêneos gerando código Python auditável, e não uma resposta de chat que some quando você fecha a aba."
   },
   "localeToggle": {
     "switchToEnglish": "Mudar para inglês",
@@ -30,29 +30,29 @@
     "secrets": "Segredos"
   },
   "marketingLayout": {
-    "footer": "AI-ETL — framework multiagente de ETL, código auditável."
+    "footer": "AI-ETL: framework multiagente de ETL, código auditável."
   },
   "landing": {
     "heroBadge": "Multiagente · código auditável",
     "heroTitleLine1": "Descreva o pipeline.",
-    "heroTitleLine2": "Os agentes constroem — você audita.",
-    "heroSubtitle": "Uma especificação em linguagem natural vira extração, limpeza e carga de dados heterogêneos. Cada etapa gera código Python real, revisável — não uma resposta de chat que some quando você fecha a aba.",
+    "heroTitleLine2": "Os agentes constroem. Você audita.",
+    "heroSubtitle": "Uma especificação em linguagem natural vira extração, limpeza e carga de dados heterogêneos. Cada etapa gera código Python real e revisável, e não uma resposta de chat que some quando você fecha a aba.",
     "ctaPrimary": "Entrar e rodar um pipeline",
     "ctaSecondary": "Ver como funciona",
     "whyTitle": "“Por que não subo a planilha num chat e pergunto?”",
-    "whyBody": "Pergunta justa. Pra um arquivo isolado e uma pergunta pontual, um Code Interpreter genérico já resolve — e é grátis. O AI-ETL existe pra onde isso para de funcionar.",
+    "whyBody": "Pergunta justa. Para um arquivo isolado e uma pergunta pontual, um Code Interpreter genérico já resolve, e é grátis. O AI-ETL existe para onde isso para de funcionar.",
     "differentiators": [
       {
         "title": "Multi-fonte heterogênea, não um arquivo por vez",
-        "body": "CSV, conexão real a Postgres/MySQL/MongoDB, REST autenticado e PDF/DOCX numa spec só — um agente decide como combinar. Não dá pra colar isso num chat."
+        "body": "CSV, conexão real a Postgres/MySQL/MongoDB, REST autenticado e PDF/DOCX numa spec só, e um agente decide como combinar. Não dá para colar isso num chat."
       },
       {
         "title": "Pipeline auditável e persistido, não uma resposta efêmera",
-        "body": "Cada execução gera código real — Transformer, Analyst, Science — salvo, revisável, versionável. Sobrevive a fechar a aba; a resposta de um chat não."
+        "body": "Cada execução gera código real (Transformer, Analyst, Science), salvo, revisável e versionável. Sobrevive a fechar a aba; a resposta de um chat não."
       },
       {
         "title": "API-first, não chat-first",
-        "body": "O pipeline é um endpoint chamável, agendável, integrável a outro sistema — infraestrutura de dados, não uma conversa que alguém precisa lembrar de repetir toda semana."
+        "body": "O pipeline é um endpoint chamável, agendável, integrável a outro sistema: infraestrutura de dados, não uma conversa que alguém precisa lembrar de repetir toda semana."
       },
       {
         "title": "Governança e isolamento por tenant",
@@ -60,16 +60,16 @@
       }
     ],
     "howTitle": "Do dado bruto à recomendação, uma pirâmide de agentes",
-    "howBody": "Nove agentes especializados, cada um com uma responsabilidade só — o estado do pipeline passa de um pro outro, nunca escondido numa caixa-preta.",
-    "howPlainLanguage": "Em termos simples: cada etapa refina os dados um pouco mais — entra um arquivo bruto, sai um dado limpo e sem duplicatas, depois insights de negócio, depois previsões, e no topo uma recomendação em português claro. Você não precisa saber o nome das etapas para ler o resultado — elas importam para quem for auditar como ele foi produzido.",
+    "howBody": "Nove agentes especializados, cada um com uma única responsabilidade. O estado do pipeline passa de um para o outro e nunca fica escondido numa caixa-preta.",
+    "howPlainLanguage": "Em termos simples: cada etapa refina os dados um pouco mais. Entra um arquivo bruto, sai um dado limpo e sem duplicatas, depois insights de negócio, depois previsões e, no topo, uma recomendação em português claro. Você não precisa saber o nome das etapas para ler o resultado; elas importam para quem for auditar como ele foi produzido.",
     "rosterHeading": "Os nove agentes por trás da pirâmide",
     "dualTitle": "Feito pra duas pessoas na mesma empresa",
     "dualOperatorBadge": "Operador técnico",
     "dualOperatorTitle": "Quem hoje monta o relatório na mão",
-    "dualOperatorBody": "Configura a fonte, escreve a spec, audita o código gerado antes de confiar nele. Sabe ler Python/pandas — não precisa escrever do zero toda semana.",
+    "dualOperatorBody": "Configura a fonte, escreve a spec, audita o código gerado antes de confiar nele. Sabe ler Python/pandas, mas não precisa escrever do zero toda semana.",
     "dualExecBadge": "Consumidor executivo",
     "dualExecTitle": "Quem recebe o resultado, não configura nada",
-    "dualExecBody": "Quer a resposta e a recomendação, sem virar refém de um número que a IA pode ter inventado — porque alguém do time já pôde auditar de onde ele veio.",
+    "dualExecBody": "Quer a resposta e a recomendação sem virar refém de um número que a IA pode ter inventado, porque alguém do time já pôde auditar de onde ele veio.",
     "techTitle": "Construído pra produção, não só pra demo",
     "techFacts": [
       "Orquestração multiagente via LangGraph, estado explícito",
@@ -112,7 +112,7 @@
         "description": "Extrai e inspeciona os dados de cada fonte (CSV, Postgres, REST, PDF/DOCX)."
       },
       {
-        "description": "Gera e executa (em sandbox) o código de limpeza/transformação — a camada Silver."
+        "description": "Gera e executa (em sandbox) o código de limpeza e transformação: a camada Silver."
       },
       {
         "description": "Verifica nulos, duplicatas e outliers nos dados transformados."
@@ -148,12 +148,12 @@
   },
   "getStartedPage": {
     "title": "Comece em poucos minutos",
-    "subtitle": "Conecte uma fonte, descreva o que você quer e veja o resultado — sem precisar de instrução prévia."
+    "subtitle": "Conecte uma fonte, descreva o que você quer e veja o resultado, sem precisar de instrução prévia."
   },
   "historyPage": {
     "title": "Histórico",
     "subtitle": "Runs anteriores desta conta.",
-    "columnRun": "Run",
+    "columnRun": "Execução",
     "columnStatus": "Status",
     "columnModel": "Modelo",
     "columnCost": "Custo",
@@ -177,7 +177,7 @@
   },
   "summaryIndexPage": {
     "title": "Resumo executivo",
-    "subtitle": "O resultado dos seus pipelines, em linguagem simples — sem código, sem termos técnicos.",
+    "subtitle": "O resultado dos seus pipelines em linguagem simples, sem código e sem termos técnicos.",
     "emptyState": "Nenhum pipeline agendado ainda. Crie um em “Pipelines” para ver o resumo aqui depois da primeira execução.",
     "needsAttention": "Precisa de atenção"
   },
@@ -195,10 +195,10 @@
   },
   "codeTab": {
     "empty": "Nenhum código disponível para este run.",
-    "transformerHeading": "Transformer — Silver",
-    "analystHeading": "Analyst — {question}",
+    "transformerHeading": "Transformer (Silver)",
+    "analystHeading": "Analyst: {question}",
     "analystFallback": "Gold {index}",
-    "scienceHeading": "Science Agent — {question}",
+    "scienceHeading": "Science Agent: {question}",
     "scienceFallback": "Science {index}"
   },
   "dataTable": {
@@ -208,11 +208,11 @@
     "fileLabel": "Arquivo (CSV, Excel, JSON, PDF, DOCX)",
     "fileCta": "Clique para selecionar um arquivo",
     "sheetLabel": "Aba",
-    "sheetHint": "(esta planilha tem mais de uma aba — escolha qual usar)",
+    "sheetHint": "(esta planilha tem mais de uma aba; escolha qual usar)",
     "sheetPlaceholder": "Escolha uma aba...",
     "sheetCheckFailed": "Não foi possível ler as abas desta planilha. Confira o arquivo e tente de novo.",
     "specLabel": "Ou: spec manual",
-    "specOptionalHint": "(opcional se um arquivo foi anexado — ainda é seguida como instrução extra além do arquivo)",
+    "specOptionalHint": "(opcional se um arquivo foi anexado; se preenchida, é seguida como instrução extra)",
     "businessQuestionLabel": "Pergunta de negócio (opcional)",
     "businessQuestionPlaceholder": "Quais produtos vendem mais?",
     "modelLabel": "Modelo de IA (opcional)",
@@ -222,9 +222,9 @@
     "missingApiUrl": "NEXT_PUBLIC_API_URL não está configurada.",
     "missingInput": "Anexe um arquivo ou escreva um spec manual.",
     "toastSuccess": "Análise concluída.",
-    "taskLabel": "Task",
+    "taskLabel": "Tarefa",
     "statusLabel": "Status",
-    "completedPrefix": "Concluído —",
+    "completedPrefix": "Concluído:",
     "viewRun": "ver run {runId}",
     "viewFailedRun": "ver detalhes",
     "failedNoMessage": "A execução falhou.",
@@ -236,7 +236,7 @@
     }
   },
   "onboardingWizard": {
-    "step1Title": "Passo 1 — escolha uma fonte",
+    "step1Title": "Passo 1: escolha uma fonte",
     "step1Hint": "Sem dado próprio ainda? Use o exemplo pré-carregado para ver o pipeline completo rodar em minutos.",
     "useExample": "Usar exemplo (vendas)",
     "useOwnFile": "Enviar meu próprio arquivo",
@@ -265,7 +265,7 @@
     "statusRunning": "Em execução",
     "statusPending": "Aguardando execução",
     "loading": "Carregando resumo...",
-    "emptyHistory": "Este pipeline ainda não executou — volte aqui depois da primeira execução agendada.",
+    "emptyHistory": "Este pipeline ainda não executou. Volte aqui depois da primeira execução agendada.",
     "lastUpdated": "Última atualização: {when}",
     "failedNotice": "A última execução deste pipeline não terminou com sucesso. A equipe técnica já foi avisada e está verificando o que aconteceu.",
     "kpiRowsLoaded": "Linhas processadas",
@@ -276,7 +276,7 @@
     "deltaUnchanged": "sem mudança",
     "whatHappenedHeading": "O que aconteceu",
     "recommendationsHeading": "Recomendações",
-    "noSummary": "Este pipeline não tem uma pergunta de negócio configurada, então não há um resumo de análise para mostrar aqui — apenas os números acima."
+    "noSummary": "Este pipeline não tem uma pergunta de negócio configurada, então não há um resumo de análise para mostrar aqui, apenas os números acima."
   },
   "pipelineHistory": {
     "seriesRowsLoaded": "Linhas carregadas",
@@ -290,7 +290,7 @@
     "kpiHeading": "KPIs ao longo do tempo",
     "kpiLimitNote": "Últimas {limit} execuções.",
     "executionsHeading": "Execuções ({count})",
-    "executionsLimitNote": "Mostrando as últimas {limit} execuções — este pipeline pode ter mais no histórico.",
+    "executionsLimitNote": "Mostrando as últimas {limit} execuções; este pipeline pode ter mais no histórico.",
     "rowsSuffix": "{count} linhas",
     "diffHeading": "Diff entre execuções",
     "diffCompareButton": "Comparar A → B",
@@ -308,9 +308,9 @@
     "pipelinePlanHeading": "Plano do pipeline",
     "customRuleFallback": "regra customizada",
     "inPreposition": "em",
-    "nullRatioSuffix": "— razão de nulos: {pct}%",
-    "duplicatesSuffix": "— {count} duplicatas",
-    "outliersSuffix": "— {count} outliers",
+    "nullRatioSuffix": "(razão de nulos: {pct}%)",
+    "duplicatesSuffix": "({count} duplicatas)",
+    "outliersSuffix": "({count} valores atípicos)",
     "noViolations": "sem violações",
     "violationsCount": "{count} violação(ões)"
   },
@@ -320,7 +320,7 @@
     "nameLabel": "Nome",
     "namePlaceholder": "Sincronização noturna de pedidos",
     "sourceTypeLabel": "Tipo de fonte",
-    "sourceTypeHint": "(apenas fontes que podem ser verificadas automaticamente, como banco de dados ou API, podem ser agendadas — um upload de arquivo avulso não pode ser executado novamente depois)",
+    "sourceTypeHint": "(só fontes que podem ser consultadas de novo automaticamente, como banco de dados ou API, podem ser agendadas; um upload de arquivo avulso não pode ser executado de novo depois)",
     "specLabel": "Spec (linguagem natural)",
     "businessQuestionLabel": "Pergunta de negócio (opcional)",
     "businessQuestionPlaceholder": "Quais produtos vendem mais?",
@@ -364,7 +364,7 @@
     "invalidJsonShape": "Regras de qualidade: deve ser uma lista (array JSON), ex: [].",
     "missingApiUrl": "NEXT_PUBLIC_API_URL não está configurada.",
     "modelLabel": "Modelo de IA",
-    "modelHint": "(custo e confiabilidade por modelo — Sprint 30/35)",
+    "modelHint": "(custo e confiabilidade de cada modelo)",
     "toastModelUpdated": "Modelo atualizado.",
     "notificationLabel": "Notificações",
     "toastNotificationUpdated": "Destino de notificação atualizado.",
@@ -381,7 +381,7 @@
   },
   "modelPicker": {
     "priceLine": "${input}/${output} por 1M tokens (entrada/saída)",
-    "reliabilityVerified": "Verificado — comparação real",
+    "reliabilityVerified": "Verificado em comparação real",
     "testButton": "Testar conexão",
     "testing": "Testando...",
     "testSuccess": "Funcionando ({latency}ms)",
@@ -389,10 +389,10 @@
   },
   "notificationConfig": {
     "configuredHint": "Um destino do tipo {channel} está configurado para este pipeline.",
-    "notConfiguredHint": "Nenhum override configurado — este pipeline usa o(s) canal(is) de notificação padrão deste ambiente.",
+    "notConfiguredHint": "Nenhum destino próprio configurado. Este pipeline usa o(s) canal(is) de notificação padrão deste ambiente.",
     "channelLabel": "Canal",
     "channelName": {
-      "email": "Email",
+      "email": "E-mail",
       "slack": "Slack",
       "teams": "Microsoft Teams",
       "google_chat": "Google Chat"
@@ -401,14 +401,14 @@
     "targetLabelWebhook": "URL do webhook",
     "targetPlaceholderEmail": "time@exemplo.com",
     "targetPlaceholderWebhook": "https://hooks.exemplo.com/...",
-    "hint": "Por segurança, um destino salvo anteriormente nunca é exibido aqui — digite-o novamente para substituí-lo. Isso também é necessário para alterar só o toggle abaixo, já que o destino e seu estado ativo são sempre salvos juntos.",
+    "hint": "Por segurança, um destino salvo anteriormente nunca é exibido aqui; digite-o novamente para substituí-lo. Isso também é necessário para alterar só o toggle abaixo, já que o destino e seu estado ativo são sempre salvos juntos.",
     "activeLabel": "Ativo",
     "saveButton": "Salvar destino",
     "clearButton": "Remover override"
   },
   "adminPage": {
     "title": "Painel admin",
-    "subtitle": "Acesso cross-tenant só leitura — toda consulta fica registrada no log de auditoria.",
+    "subtitle": "Acesso somente leitura entre contas. Toda consulta fica registrada no log de auditoria.",
     "noPermission": "Você não tem permissão para acessar esta página."
   },
   "adminManager": {
@@ -449,7 +449,7 @@
     "columnSpec": "Especificação",
     "columnWhen": "Quando",
     "columnActions": "Ações",
-    "unnamedPipeline": "—",
+    "unnamedPipeline": "(sem nome)",
     "toggleDetail": "Ver detalhes",
     "approve": "Aprovar",
     "confirmApprove": "Confirmar aprovação?",
@@ -457,8 +457,8 @@
     "confirmReject": "Confirmar rejeição?",
     "cancel": "Cancelar",
     "reasonPlaceholder": "Motivo da rejeição (opcional)",
-    "toastApproved": "Execução aprovada — escrita realizada.",
-    "toastRejected": "Execução rejeitada — nada foi escrito.",
+    "toastApproved": "Execução aprovada. Os dados foram gravados.",
+    "toastRejected": "Execução rejeitada. Nada foi gravado.",
     "loadingDetail": "Carregando detalhes...",
     "previewHeading": "O que seria escrito",
     "previewDestination": "Destino",
@@ -469,17 +469,17 @@
   },
   "secretsPage": {
     "title": "Segredos",
-    "subtitle": "Credenciais de fontes externas do seu tenant — o valor nunca é exibido depois de salvo.",
+    "subtitle": "Credenciais de fontes externas da sua conta. O valor nunca é exibido depois de salvo.",
     "noPermission": "Você não tem permissão para acessar esta página."
   },
   "secretsManager": {
     "formHeading": "Salvar ou rotacionar segredo",
     "nameLabel": "Nome",
     "namePlaceholder": "ex: postgres_prod_password",
-    "nameHint": "Para usar seu próprio banco de dados em um pipeline em vez do padrão compartilhado, nomeie o segredo exatamente como postgres_connection_string, mysql_connection_string ou mongodb_connection_string — o valor é a connection string completa.",
+    "nameHint": "Para usar seu próprio banco de dados em um pipeline em vez do padrão compartilhado, nomeie o segredo exatamente como postgres_connection_string, mysql_connection_string ou mongodb_connection_string; o valor é a connection string completa.",
     "valueLabel": "Valor",
     "valuePlaceholder": "Digite o valor do segredo",
-    "valueHint": "Só é exibido enquanto você digita — depois de salvo, nunca mais aparece aqui.",
+    "valueHint": "Só é exibido enquanto você digita. Depois de salvo, nunca mais aparece aqui.",
     "submitButton": "Salvar segredo",
     "toastStored": "Segredo salvo.",
     "toastRotated": "Segredo rotacionado.",
@@ -492,7 +492,7 @@
   },
   "budgetPage": {
     "title": "Orçamento",
-    "subtitle": "Teto de gasto mensal e consumo até agora — aplicado a cada nova execução."
+    "subtitle": "Teto de gasto mensal e consumo até agora, aplicado a cada nova execução."
   },
   "budgetManager": {
     "budgetCap": "Teto mensal",
@@ -511,7 +511,7 @@
     "confirmClear": "Confirmar remoção?",
     "cancel": "Cancelar",
     "toastSaved": "Teto de orçamento atualizado.",
-    "toastCleared": "Teto removido — orçamento agora ilimitado."
+    "toastCleared": "Teto removido. O orçamento agora é ilimitado."
   },
   "dataExportPage": {
     "title": "Dados e privacidade",
@@ -520,7 +520,7 @@
   "dataExportManager": {
     "retentionHeading": "Retenção automática",
     "retentionWindow": "Artefatos de armazenamento com mais de {days} dias são excluídos automaticamente",
-    "retentionKeepForever": "Mantido para sempre — nenhuma janela de retenção automática definida",
+    "retentionKeepForever": "Mantido para sempre (nenhuma janela de retenção automática definida)",
     "retentionExplainer": "A retenção remove apenas artefatos de execução armazenados (arquivos); o histórico de execuções e os registros da conta nunca são excluídos automaticamente.",
     "retentionFormHeading": "Definir janela de retenção",
     "retentionInputLabel": "Janela de retenção (dias)",
@@ -530,9 +530,9 @@
     "clearRetention": "Remover janela",
     "confirmClearRetention": "Confirmar remoção?",
     "toastRetentionSaved": "Janela de retenção atualizada.",
-    "toastRetentionCleared": "Janela de retenção removida — os dados agora são mantidos para sempre.",
+    "toastRetentionCleared": "Janela de retenção removida. Os dados agora são mantidos para sempre.",
     "exportHeading": "Exportar seus dados",
-    "exportExplainer": "Baixa um arquivo JSON com suas execuções, análises, pipelines salvos, nomes de segredos (nunca seus valores) e chaves de artefatos armazenados — tudo o que a exportação de acesso a dados desta conta cobre.",
+    "exportExplainer": "Baixa um arquivo JSON com suas execuções, análises, pipelines salvos, nomes de segredos (nunca seus valores) e chaves de artefatos armazenados: tudo o que a exportação de acesso a dados desta conta cobre.",
     "exportButton": "Exportar dados",
     "confirmExport": "Confirmar exportação?",
     "cancel": "Cancelar",
@@ -551,5 +551,16 @@
     "deletionCountSavedPipelines": "{count} pipelines salvos excluídos",
     "deletionCountSecrets": "{count} segredos excluídos",
     "deletionCompleteBackLink": "Voltar para a página inicial"
+  },
+  "status": {
+    "completed": "Concluída",
+    "failed": "Falhou",
+    "running": "Em execução",
+    "pending": "Pendente",
+    "awaitingApproval": "Aguardando aprovação"
+  },
+  "agentProgress": {
+    "srFailed": "A execução falhou.",
+    "srDone": "Todas as fases concluídas."
   }
 }
