@@ -320,6 +320,8 @@ export type OnboardingStatus = {
   has_completed_run: boolean;
   saved_pipeline_count: number;
   has_saved_pipeline: boolean;
+  /** A saved pipeline has run at least once (step 3, the executive summary). */
+  has_pipeline_run: boolean;
 };
 
 /** `GET /tenant/retention` (Sprint 36, ADR-035) — the tenant's automatic

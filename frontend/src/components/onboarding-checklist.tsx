@@ -15,6 +15,12 @@ import type { OnboardingStatus } from "@/lib/types";
  * `saved_pipelines` (no dedicated table, see the ADR). Deliberately scoped
  * to this one page rather than repeated in the header on every route — a
  * known, flagged scope cut, same posture Sprint 13's manager took.
+ *
+ * 2026-10-16, the advisor's remark of 2026-09-10: a returning user who opened this page for a
+ * new analysis saw every step struck through under "what is left to be ready". The list now
+ * shows only the steps still missing; once all are done it becomes a closed "all set" box
+ * whose steps can be opened. Nothing is shown until the status has loaded, so steps do not
+ * flash as missing.
  */
 export function OnboardingChecklist() {
   const t = useTranslations("onboardingChecklist");
@@ -22,6 +28,7 @@ export function OnboardingChecklist() {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL;
   const [status, setStatus] = useState<OnboardingStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showAll, setShowAll] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -62,24 +69,57 @@ export function OnboardingChecklist() {
       href: "/pipelines",
     },
     {
-      done: status?.has_saved_pipeline ?? false,
+      done: status?.has_pipeline_run ?? false,
       label: t("item3Label"),
       hint: t("item3Hint"),
       href: "/summary",
     },
   ];
 
-  return (
-    <Card>
-      <CardContent className="flex flex-col gap-3">
-        <span className="text-sm font-medium">{t("heading")}</span>
-        {error && (
+  if (error) {
+    return (
+      <Card>
+        <CardContent>
           <p className="text-destructive text-xs" role="alert">
             {error}
           </p>
+        </CardContent>
+      </Card>
+    );
+  }
+  if (!status) {
+    return null;
+  }
+
+  const doneCount = items.filter((item) => item.done).length;
+  const allDone = doneCount === items.length;
+  const shownItems = allDone ? (showAll ? items : []) : items.filter((item) => !item.done);
+
+  return (
+    <Card>
+      <CardContent className="flex flex-col gap-3">
+        <span className="text-sm font-medium">{allDone ? t("allDoneHeading") : t("heading")}</span>
+        {allDone ? (
+          <>
+            <p className="text-xs text-muted-foreground">{t("allDoneBody")}</p>
+            <button
+              type="button"
+              onClick={() => setShowAll((open) => !open)}
+              className="self-start text-xs text-muted-foreground hover:underline"
+              aria-expanded={showAll}
+            >
+              {showAll ? t("hideSteps") : t("showSteps")}
+            </button>
+          </>
+        ) : (
+          doneCount > 0 && (
+            <p className="text-xs text-muted-foreground">
+              {t("doneCount", { done: doneCount, total: items.length })}
+            </p>
+          )
         )}
         <ul className="flex flex-col gap-3">
-          {items.map((item) => (
+          {shownItems.map((item) => (
             <li key={item.label} className="flex gap-3 items-start">
               {item.done ? (
                 <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />

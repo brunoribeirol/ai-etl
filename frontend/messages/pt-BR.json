@@ -258,11 +258,16 @@
     "heading": "O que falta para estar pronto",
     "missingApiUrl": "NEXT_PUBLIC_API_URL não está configurada.",
     "item1Label": "Rode seu primeiro pipeline",
-    "item1Hint": "Use o exemplo pré-carregado abaixo ou envie seu próprio arquivo.",
+    "item1Hint": "Use o exemplo pré-carregado ou envie seu próprio arquivo.",
     "item2Label": "Crie um pipeline agendado",
     "item2Hint": "Conecte uma fonte viva (Postgres, REST...) para rodar sozinho no horário certo.",
     "item3Label": "Veja o resumo executivo",
-    "item3Hint": "Disponível assim que um pipeline agendado tiver ao menos uma execução."
+    "item3Hint": "Disponível assim que um pipeline agendado tiver ao menos uma execução.",
+    "allDoneHeading": "Tudo pronto",
+    "allDoneBody": "Você já rodou um pipeline, agendou outro e ele já tem um resumo executivo.",
+    "showSteps": "Ver os passos",
+    "hideSteps": "Esconder os passos",
+    "doneCount": "{done} de {total} passos já feitos."
   },
   "executiveErrors": {
     "notFound": "Não encontramos esse pipeline. Ele pode ter sido removido ou o link estar incorreto.",
