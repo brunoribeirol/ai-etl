@@ -368,3 +368,15 @@ export type TenantDeletionSummary = {
   status: string;
   error: string | null;
 };
+
+/** `POST /runs/estimate` (Sprint 35): mirrors `services/cost_estimation.py::CostEstimate`. */
+export type CostEstimate = {
+  estimated_cost_usd: number;
+  provider: string;
+  model: string;
+  basis: "heuristic_only" | "heuristic_and_tenant_history" | "heuristic_and_global_history";
+  heuristic_cost_usd: number;
+  historical_avg_cost_usd: number | null;
+  estimated_input_tokens: number;
+  estimated_output_tokens: number;
+};
