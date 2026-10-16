@@ -19,6 +19,9 @@ const STATUS_STYLES: Record<string, string> = {
   failure: "bg-red-500/15 text-red-400 border-red-500/30",
   error: "bg-red-500/15 text-red-400 border-red-500/30",
   awaiting_approval: "bg-amber-500/15 text-amber-400 border-amber-500/30",
+  // A saved pipeline's schedule state, not a run status.
+  active: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
+  paused: "text-muted-foreground",
 };
 
 // The API status values mapped to the labels of the `status` messages, so the badge speaks the
@@ -34,6 +37,8 @@ const STATUS_LABEL_KEYS: Record<string, string> = {
   failure: "failed",
   error: "failed",
   awaiting_approval: "awaitingApproval",
+  active: "active",
+  paused: "paused",
 };
 
 export function StatusBadge({ status }: { status: string }) {

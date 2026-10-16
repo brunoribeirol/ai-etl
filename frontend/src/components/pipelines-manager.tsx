@@ -14,7 +14,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/status-badge";
 import { ModelPicker } from "@/components/model-picker";
 import { NotificationConfig } from "@/components/notification-config";
-import { SCHEDULABLE_SOURCE_TYPES, type QualityRule, type SavedPipeline } from "@/lib/types";
+import {
+  SCHEDULABLE_SOURCE_TYPES,
+  type QualityRule,
+  type SavedPipeline,
+  type SchedulableSourceType,
+} from "@/lib/types";
 import { formatDateTime } from "@/lib/format-date";
 
 /**
@@ -34,6 +39,21 @@ export function PipelinesManager() {
   const locale = useLocale();
   const { getToken } = useAuth();
   const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+
+  // The stored source type ("postgres", "rest") shown by its product name; a type that is
+  // not in the list (an older pipeline) is shown as it is.
+  const sourceTypeName = (type: string): string =>
+    (SCHEDULABLE_SOURCE_TYPES as readonly string[]).includes(type)
+      ? t(`sourceTypeNames.${type as SchedulableSourceType}`)
+      : type;
+
+  // `services/pipeline_service.py` writes "Rejected by operator." (or "...: <reason>") when a
+  // run is rejected in the approval queue; the rest of the backend's messages stay as they are.
+  const lastErrorText = (error: string): string => {
+    const match = error.match(/^Rejected by operator(?:: ([\s\S]*)|\.)$/);
+    if (!match) return error;
+    return match[1] ? t("rejectedByOperatorWithReason", { reason: match[1] }) : t("rejectedByOperator");
+  };
 
   const [pipelines, setPipelines] = useState<SavedPipeline[]>([]);
   const [loading, setLoading] = useState(true);
@@ -401,7 +421,7 @@ export function PipelinesManager() {
               >
                 {SCHEDULABLE_SOURCE_TYPES.map((type) => (
                   <option key={type} value={type}>
-                    {type}
+                    {t(`sourceTypeNames.${type}`)}
                   </option>
                 ))}
               </select>
@@ -603,11 +623,12 @@ export function PipelinesManager() {
               <div className="flex justify-between items-start gap-3">
                 <div className="flex flex-col gap-1">
                   <span className="font-medium">{pipeline.name}</span>
-                  <span className="text-xs text-muted-foreground font-mono">
-                    {pipeline.source_type} · {pipeline.cron_schedule}
+                  <span className="text-xs text-muted-foreground">
+                    {sourceTypeName(pipeline.source_type)} ·{" "}
+                    <span className="font-mono">{pipeline.cron_schedule}</span>
                   </span>
                 </div>
-                <StatusBadge status={pipeline.is_active ? "running" : "pending"} />
+                <StatusBadge status={pipeline.is_active ? "active" : "paused"} />
               </div>
               <p className="text-xs text-muted-foreground truncate">{pipeline.spec}</p>
               {pipeline.quality_rules?.length > 0 && (
@@ -619,7 +640,11 @@ export function PipelinesManager() {
                 </span>
               )}
               <div className="flex justify-between items-center text-xs text-muted-foreground">
-                <span>{t("nextRun", { when: formatDateTime(pipeline.next_run_at, locale) })}</span>
+                <span>
+                  {pipeline.is_active
+                    ? t("nextRun", { when: formatDateTime(pipeline.next_run_at, locale) })
+                    : t("pausedNoNextRun")}
+                </span>
                 {pipeline.last_run_at && (
                   <span>{t("lastRun", { when: formatDateTime(pipeline.last_run_at, locale) })}</span>
                 )}
@@ -634,7 +659,7 @@ export function PipelinesManager() {
                   {pipeline.consecutive_failures === 1
                     ? t("consecutiveFailureOne")
                     : t("consecutiveFailureOther")}
-                  {pipeline.last_error && `: ${pipeline.last_error}`}
+                  {pipeline.last_error && `: ${lastErrorText(pipeline.last_error)}`}
                 </div>
               )}
               <div className="flex gap-2 pt-1">

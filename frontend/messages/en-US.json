@@ -165,7 +165,12 @@
     "notFound": "Run not found.",
     "questionPrefix": "What to do about: \"{question}\"",
     "technicalDetails": "Technical details",
-    "silverHeading": "Silver"
+    "silverHeading": "Silver",
+    "priority": {
+      "high": "high",
+      "medium": "medium",
+      "low": "low"
+    }
   },
   "pipelinesPage": {
     "title": "Scheduled pipelines",
@@ -267,7 +272,7 @@
     "loading": "Loading summary...",
     "emptyHistory": "This pipeline hasn't run yet. Check back after its first scheduled run.",
     "lastUpdated": "Last updated: {when}",
-    "failedNotice": "This pipeline's last run didn't finish successfully. The technical team has already been notified and is looking into it.",
+    "failedNotice": "This pipeline's last run didn't finish successfully. The reason is in the pipeline's history.",
     "kpiRowsLoaded": "Rows processed",
     "kpiCost": "Run cost",
     "kpiTokens": "Volume processed by the AI",
@@ -276,7 +281,8 @@
     "deltaUnchanged": "no change",
     "whatHappenedHeading": "What happened",
     "recommendationsHeading": "Recommendations",
-    "noSummary": "This pipeline has no business question configured, so there's no analysis summary to show here, just the numbers above."
+    "noSummary": "This pipeline has no business question configured, so there's no analysis summary to show here, just the numbers above.",
+    "tokensValue": "{count} tokens"
   },
   "pipelineHistory": {
     "seriesRowsLoaded": "Rows loaded",
@@ -312,7 +318,16 @@
     "duplicatesSuffix": "({count} duplicates)",
     "outliersSuffix": "({count} outliers)",
     "noViolations": "no violations",
-    "violationsCount": "{count} violation(s)"
+    "violationsCount": "{count} violation(s)",
+    "checkNames": {
+      "null": "missing values",
+      "duplicate": "duplicate rows",
+      "duplicate_by_column": "repeated values in an identifier column",
+      "duplicate_columns": "columns with the same name",
+      "coerced_numeric_loss": "values lost in the numeric conversion",
+      "type_mismatch": "type different from the source",
+      "outlier_iqr": "outliers"
+    }
   },
   "pipelinesManager": {
     "editHeading": "Edit pipeline",
@@ -368,7 +383,17 @@
     "toastModelUpdated": "Model updated.",
     "notificationLabel": "Notifications",
     "toastNotificationUpdated": "Notification destination updated.",
-    "toastNotificationCleared": "Notification override cleared."
+    "toastNotificationCleared": "Notification override cleared.",
+    "pausedNoNextRun": "Paused: does not run until resumed.",
+    "rejectedByOperator": "rejected in the approval queue.",
+    "rejectedByOperatorWithReason": "rejected in the approval queue: {reason}",
+    "sourceTypeNames": {
+      "postgres": "PostgreSQL",
+      "sqlite": "SQLite",
+      "mysql": "MySQL",
+      "mongodb": "MongoDB",
+      "rest": "REST API"
+    }
   },
   "runSections": {
     "code": "Code",
@@ -476,7 +501,7 @@
     "formHeading": "Save or rotate a secret",
     "nameLabel": "Name",
     "namePlaceholder": "e.g. postgres_prod_password",
-    "nameHint": "To use your own database in a pipeline instead of the shared default, name the secret exactly postgres_connection_string, mysql_connection_string, or mongodb_connection_string; the value is the full connection string.",
+    "nameHint": "To read from or write to your own database in a pipeline, name the secret exactly postgres_connection_string, mysql_connection_string, or mongodb_connection_string; the value is the full connection string.",
     "valueLabel": "Value",
     "valuePlaceholder": "Type the secret's value",
     "valueHint": "Only shown while you type it. Once saved, it never appears here again.",
@@ -557,7 +582,9 @@
     "failed": "Failed",
     "running": "Running",
     "pending": "Pending",
-    "awaitingApproval": "Awaiting approval"
+    "awaitingApproval": "Awaiting approval",
+    "active": "Active",
+    "paused": "Paused"
   },
   "agentProgress": {
     "srFailed": "Run failed.",
