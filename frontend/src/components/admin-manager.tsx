@@ -21,6 +21,7 @@ import {
 import { useAuthedFetch } from "@/lib/authed-fetch";
 import type { AdminActionRecord, AdminTenantSummary, BudgetStatus, RunSummary } from "@/lib/types";
 import { formatDateTime } from "@/lib/format-date";
+import { formatUsd } from "@/lib/format-number";
 
 /**
  * `/admin` page's actual data + interaction layer (Wave 6, 2026-08-25 admin
@@ -263,12 +264,12 @@ export function AdminManager() {
               <div className="flex flex-col gap-1">
                 <span className="text-xs text-muted-foreground">{t("budgetCap")}</span>
                 <span className="font-mono">
-                  {tenantBudget.cap_usd != null ? `$${tenantBudget.cap_usd.toFixed(2)}` : "-"}
+                  {tenantBudget.cap_usd != null ? formatUsd(tenantBudget.cap_usd, locale, 2) : "-"}
                 </span>
               </div>
               <div className="flex flex-col gap-1">
                 <span className="text-xs text-muted-foreground">{t("budgetSpent")}</span>
-                <span className="font-mono">${tenantBudget.spent_usd.toFixed(2)}</span>
+                <span className="font-mono">{formatUsd(tenantBudget.spent_usd, locale, 2)}</span>
               </div>
               {tenantBudget.cap_usd != null && (
                 <div className="flex flex-col gap-1">
@@ -326,7 +327,7 @@ export function AdminManager() {
                       {run.model_name ?? "-"}
                     </TableCell>
                     <TableCell className="text-right font-mono text-xs">
-                      {run.cost_usd != null ? `$${run.cost_usd.toFixed(6)}` : "-"}
+                      {run.cost_usd != null ? formatUsd(run.cost_usd, locale) : "-"}
                     </TableCell>
                     <TableCell className="text-right text-xs text-muted-foreground">
                       {formatDateTime(run.timestamp, locale)}

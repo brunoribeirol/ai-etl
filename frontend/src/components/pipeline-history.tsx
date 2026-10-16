@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import type { AnalysisEntry, FullResult, PipelineRunHistoryEntry } from "@/lib/types";
 import { formatDateTime } from "@/lib/format-date";
+import { formatUsd } from "@/lib/format-number";
 
 /**
  * Sprint 17 (ADR-017) — time-series KPI view + two-run diff for one saved
@@ -214,7 +215,7 @@ export function PipelineHistory({ pipelineId }: { pipelineId: string }) {
                   : "-"}
               </span>
               <span className="text-xs text-muted-foreground w-24 text-right">
-                {run.cost_usd != null ? `US$ ${run.cost_usd.toFixed(4)}` : "-"}
+                {run.cost_usd != null ? formatUsd(run.cost_usd, locale) : "-"}
               </span>
               <div className="flex gap-1">
                 <Button

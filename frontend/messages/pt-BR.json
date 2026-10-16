@@ -66,7 +66,7 @@
     "dualTitle": "Feito pra duas pessoas na mesma empresa",
     "dualOperatorBadge": "Operador técnico",
     "dualOperatorTitle": "Quem hoje monta o relatório na mão",
-    "dualOperatorBody": "Configura a fonte, escreve a spec, audita o código gerado antes de confiar nele. Sabe ler Python/pandas, mas não precisa escrever do zero toda semana.",
+    "dualOperatorBody": "Configura a fonte, escreve a especificação, audita o código gerado antes de confiar nele. Sabe ler Python/pandas, mas não precisa escrever do zero toda semana.",
     "dualExecBadge": "Consumidor executivo",
     "dualExecTitle": "Quem recebe o resultado, não configura nada",
     "dualExecBody": "Quer a resposta e a recomendação sem virar refém de um número que a IA pode ter inventado, porque alguém do time já pôde auditar de onde ele veio.",
@@ -144,7 +144,7 @@
   },
   "runPage": {
     "title": "Executar análise",
-    "subtitle": "Suba um arquivo ou escreva um spec manual, opcionalmente com uma pergunta de negócio. O pipeline agente cuida do resto."
+    "subtitle": "Suba um arquivo ou escreva uma especificação, opcionalmente com uma pergunta de negócio. Os agentes cuidam do resto."
   },
   "getStartedPage": {
     "title": "Comece em poucos minutos",
@@ -152,20 +152,25 @@
   },
   "historyPage": {
     "title": "Histórico",
-    "subtitle": "Runs anteriores desta conta.",
+    "subtitle": "Execuções anteriores desta conta.",
     "columnRun": "Execução",
     "columnStatus": "Status",
     "columnModel": "Modelo",
     "columnCost": "Custo",
     "columnWhen": "Quando",
-    "emptyState": "Nenhum run ainda.",
+    "emptyState": "Nenhuma execução ainda.",
     "runTitleFile": "Arquivo: {name}"
   },
   "runDetailPage": {
     "notFound": "Run não encontrado.",
     "questionPrefix": "O que fazer sobre: \"{question}\"",
     "technicalDetails": "Detalhes técnicos",
-    "silverHeading": "Silver"
+    "silverHeading": "Silver",
+    "priority": {
+      "high": "alta",
+      "medium": "média",
+      "low": "baixa"
+    }
   },
   "pipelinesPage": {
     "title": "Pipelines agendados",
@@ -188,13 +193,13 @@
   "analysisSection": {
     "repaired": "reparado",
     "caveat": "ressalva",
-    "caveatHeading": "Resultado com ressalva de sanity-check"
+    "caveatHeading": "Resultado com ressalva da revisão automática"
   },
   "codeBlock": {
     "copyLabel": "Copiar código"
   },
   "codeTab": {
-    "empty": "Nenhum código disponível para este run.",
+    "empty": "Nenhum código disponível para esta execução.",
     "transformerHeading": "Transformer (Silver)",
     "analystHeading": "Analyst: {question}",
     "analystFallback": "Gold {index}",
@@ -211,7 +216,7 @@
     "sheetHint": "(esta planilha tem mais de uma aba; escolha qual usar)",
     "sheetPlaceholder": "Escolha uma aba...",
     "sheetCheckFailed": "Não foi possível ler as abas desta planilha. Confira o arquivo e tente de novo.",
-    "specLabel": "Ou: spec manual",
+    "specLabel": "Ou: especificação escrita",
     "specOptionalHint": "(opcional se um arquivo foi anexado; se preenchida, é seguida como instrução extra)",
     "businessQuestionLabel": "Pergunta de negócio (opcional)",
     "businessQuestionPlaceholder": "Quais produtos vendem mais?",
@@ -220,12 +225,12 @@
     "submitIdle": "Analisar dados",
     "submitLoading": "Executando...",
     "missingApiUrl": "NEXT_PUBLIC_API_URL não está configurada.",
-    "missingInput": "Anexe um arquivo ou escreva um spec manual.",
+    "missingInput": "Anexe um arquivo ou escreva uma especificação.",
     "toastSuccess": "Análise concluída.",
     "taskLabel": "Tarefa",
     "statusLabel": "Status",
     "completedPrefix": "Concluído:",
-    "viewRun": "ver run {runId}",
+    "viewRun": "ver execução {runId}",
     "viewFailedRun": "ver detalhes",
     "failedNoMessage": "A execução falhou.",
     "errors": {
@@ -272,7 +277,7 @@
     "loading": "Carregando resumo...",
     "emptyHistory": "Este pipeline ainda não executou. Volte aqui depois da primeira execução agendada.",
     "lastUpdated": "Última atualização: {when}",
-    "failedNotice": "A última execução deste pipeline não terminou com sucesso. A equipe técnica já foi avisada e está verificando o que aconteceu.",
+    "failedNotice": "A última execução deste pipeline não terminou com sucesso. O motivo está no histórico do pipeline.",
     "kpiRowsLoaded": "Linhas processadas",
     "kpiCost": "Custo da execução",
     "kpiTokens": "Volume processado pela IA",
@@ -281,7 +286,8 @@
     "deltaUnchanged": "sem mudança",
     "whatHappenedHeading": "O que aconteceu",
     "recommendationsHeading": "Recomendações",
-    "noSummary": "Este pipeline não tem uma pergunta de negócio configurada, então não há um resumo de análise para mostrar aqui, apenas os números acima."
+    "noSummary": "Este pipeline não tem uma pergunta de negócio configurada, então não há um resumo de análise para mostrar aqui, apenas os números acima.",
+    "tokensValue": "{count} tokens"
   },
   "pipelineHistory": {
     "seriesRowsLoaded": "Linhas carregadas",
@@ -297,7 +303,7 @@
     "executionsHeading": "Execuções ({count})",
     "executionsLimitNote": "Mostrando as últimas {limit} execuções; este pipeline pode ter mais no histórico.",
     "rowsSuffix": "{count} linhas",
-    "diffHeading": "Diff entre execuções",
+    "diffHeading": "Comparação entre execuções",
     "diffCompareButton": "Comparar A → B",
     "diffComparing": "Comparando...",
     "silverHeading": "Silver",
@@ -307,7 +313,7 @@
     "resultRowsLabel": "Linhas no resultado"
   },
   "pipelineTab": {
-    "emptyState": "Nenhum detalhe de execução disponível para este run.",
+    "emptyState": "Nenhum detalhe de execução disponível para esta execução.",
     "silverExecutionHeading": "Execução dos agentes Silver",
     "qualityReportHeading": "Relatório de qualidade",
     "pipelinePlanHeading": "Plano do pipeline",
@@ -317,7 +323,16 @@
     "duplicatesSuffix": "({count} duplicatas)",
     "outliersSuffix": "({count} valores atípicos)",
     "noViolations": "sem violações",
-    "violationsCount": "{count} violação(ões)"
+    "violationsCount": "{count} violação(ões)",
+    "checkNames": {
+      "null": "valores ausentes",
+      "duplicate": "linhas duplicadas",
+      "duplicate_by_column": "valores repetidos numa coluna de identificador",
+      "duplicate_columns": "colunas com o mesmo nome",
+      "coerced_numeric_loss": "valores perdidos na conversão para número",
+      "type_mismatch": "tipo diferente do da origem",
+      "outlier_iqr": "valores atípicos"
+    }
   },
   "pipelinesManager": {
     "editHeading": "Editar pipeline",
@@ -326,7 +341,7 @@
     "namePlaceholder": "Sincronização noturna de pedidos",
     "sourceTypeLabel": "Tipo de fonte",
     "sourceTypeHint": "(só fontes que podem ser consultadas de novo automaticamente, como banco de dados ou API, podem ser agendadas; um upload de arquivo avulso não pode ser executado de novo depois)",
-    "specLabel": "Spec (linguagem natural)",
+    "specLabel": "Especificação (linguagem natural)",
     "businessQuestionLabel": "Pergunta de negócio (opcional)",
     "businessQuestionPlaceholder": "Quais produtos vendem mais?",
     "cronLabel": "Agendamento (cron)",
@@ -334,7 +349,7 @@
     "qualityRulesLabel": "Regras de qualidade (opcional)",
     "qualityRulesHelp": "Operadores: not_null, gte, lte, gt, lt, eq, ne. Severidade padrão: error (bloqueia o pipeline quando violada).",
     "requireApprovalLabel": "Exigir aprovação antes de gravar",
-    "requireApprovalHelp": "O pipeline roda e mostra uma prévia do resultado, mas a gravação no destino fica esperando sua aprovação na página Approvals.",
+    "requireApprovalHelp": "O pipeline roda e mostra uma prévia do resultado, mas a gravação no destino fica esperando sua aprovação na página Aprovações.",
     "approvalThresholdLabel": "Dispensar aprovação abaixo de (linhas, opcional)",
     "approvalThresholdHint": "Depois da primeira aprovação, uma gravação futura com menos linhas que isso passa direto. Deixe em branco para sempre exigir aprovação.",
     "approvalThresholdPlaceholder": "ex: 100",
@@ -373,7 +388,17 @@
     "toastModelUpdated": "Modelo atualizado.",
     "notificationLabel": "Notificações",
     "toastNotificationUpdated": "Destino de notificação atualizado.",
-    "toastNotificationCleared": "Override de notificação removido."
+    "toastNotificationCleared": "Override de notificação removido.",
+    "pausedNoNextRun": "Pausado: não roda até ser retomado.",
+    "rejectedByOperator": "rejeitada na fila de aprovação.",
+    "rejectedByOperatorWithReason": "rejeitada na fila de aprovação: {reason}",
+    "sourceTypeNames": {
+      "postgres": "PostgreSQL",
+      "sqlite": "SQLite",
+      "mysql": "MySQL",
+      "mongodb": "MongoDB",
+      "rest": "API REST"
+    }
   },
   "runSections": {
     "code": "Código",
@@ -481,7 +506,7 @@
     "formHeading": "Salvar ou rotacionar segredo",
     "nameLabel": "Nome",
     "namePlaceholder": "ex: postgres_prod_password",
-    "nameHint": "Para usar seu próprio banco de dados em um pipeline em vez do padrão compartilhado, nomeie o segredo exatamente como postgres_connection_string, mysql_connection_string ou mongodb_connection_string; o valor é a connection string completa.",
+    "nameHint": "Para ler ou gravar no seu próprio banco de dados num pipeline, nomeie o segredo exatamente como postgres_connection_string, mysql_connection_string ou mongodb_connection_string; o valor é o endereço de conexão completo.",
     "valueLabel": "Valor",
     "valuePlaceholder": "Digite o valor do segredo",
     "valueHint": "Só é exibido enquanto você digita. Depois de salvo, nunca mais aparece aqui.",
@@ -562,7 +587,9 @@
     "failed": "Falhou",
     "running": "Em execução",
     "pending": "Pendente",
-    "awaitingApproval": "Aguardando aprovação"
+    "awaitingApproval": "Aguardando aprovação",
+    "active": "Ativo",
+    "paused": "Pausado"
   },
   "agentProgress": {
     "srFailed": "A execução falhou.",

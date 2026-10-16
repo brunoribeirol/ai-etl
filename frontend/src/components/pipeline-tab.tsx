@@ -1,8 +1,9 @@
 import { CheckCircle2, AlertTriangle, XCircle } from "lucide-react";
-import { getTranslations } from "next-intl/server";
+import { getLocale, getTranslations } from "next-intl/server";
 import type { ReactNode } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AGENTS } from "@/lib/agents";
+import { formatDecimal } from "@/lib/format-number";
 import type { QualityCheck } from "@/lib/types";
 
 const SEVERITY_ICON: Record<string, ReactNode> = {
@@ -14,6 +15,22 @@ const SEVERITY_ICON: Record<string, ReactNode> = {
 // Silver/LangGraph node keys, in execution order — matches
 // `services/pipeline_service.py::AGENT_STEPS` and `core/graph.py`'s edges.
 const SILVER_NODES = ["orchestrator", "extractor", "transformer", "quality", "loader"];
+
+// Check identifiers written by `agents/pipeline/quality.py`; each has a label in the
+// `pipelineTab.checkNames` messages. An identifier missing here is shown as it is.
+const CHECK_NAMES = [
+  "null",
+  "duplicate",
+  "duplicate_by_column",
+  "duplicate_columns",
+  "coerced_numeric_loss",
+  "type_mismatch",
+  "outlier_iqr",
+] as const;
+
+function isKnownCheck(check: string): check is (typeof CHECK_NAMES)[number] {
+  return (CHECK_NAMES as readonly string[]).includes(check);
+}
 
 function agentLabel(node: string): string {
   const match = AGENTS.find((a) => a.name.toLowerCase() === node);
@@ -38,6 +55,7 @@ export async function PipelineTab({
   qualityReport?: { checks?: QualityCheck[]; severity?: string; summary?: string };
 }) {
   const t = await getTranslations("pipelineTab");
+  const locale = await getLocale();
   const hasAny =
     (stageDurations && Object.keys(stageDurations).length > 0) ||
     (qualityReport?.checks && qualityReport.checks.length > 0) ||
@@ -60,7 +78,7 @@ export async function PipelineTab({
                 <li key={node} className="flex items-center justify-between text-sm">
                   <span>{agentLabel(node)}</span>
                   <span className="text-muted-foreground font-mono text-xs">
-                    {stageDurations[node].toFixed(2)}s
+                    {formatDecimal(stageDurations[node], locale, 2)} s
                   </span>
                 </li>
               ))}
@@ -83,7 +101,9 @@ export async function PipelineTab({
                     <span className="font-medium">
                       {check.check === "custom_rule"
                         ? check.rule_name ?? t("customRuleFallback")
-                        : check.check}
+                        : isKnownCheck(check.check)
+                          ? t(`checkNames.${check.check}`)
+                          : check.check}
                     </span>
                     {check.column && (
                       <>
@@ -94,7 +114,7 @@ export async function PipelineTab({
                     {check.null_ratio != null && (
                       <span className="text-muted-foreground">
                         {" "}
-                        {t("nullRatioSuffix", { pct: (check.null_ratio * 100).toFixed(1) })}
+                        {t("nullRatioSuffix", { pct: formatDecimal(check.null_ratio * 100, locale, 1) })}
                       </span>
                     )}
                     {check.count != null && (
