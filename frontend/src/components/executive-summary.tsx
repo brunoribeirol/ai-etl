@@ -3,6 +3,7 @@
 import { useAuth } from "@clerk/nextjs";
 import { ArrowDown, ArrowUp, Minus } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
+import { formatUsd } from "@/lib/format-number";
 import { useCallback, useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { friendlyExecutiveError } from "@/lib/friendly-error";
@@ -63,12 +64,15 @@ function KpiCard({
   previous,
   format,
   t,
+  higherIsBetter = true,
 }: {
   label: string;
   current: number | null;
   previous: number | null;
   format: (v: number) => string;
   t: ReturnType<typeof useTranslations>;
+  // Cost and tokens going up is not good news: the arrow keeps its direction, the color flips.
+  higherIsBetter?: boolean;
 }) {
   const delta = current !== null && previous !== null ? current - previous : null;
   const pctChange =
@@ -84,7 +88,7 @@ function KpiCard({
         {delta !== null && delta !== 0 && (
           <span
             className={`flex items-center gap-1 text-xs ${
-              delta > 0 ? "text-emerald-400" : "text-red-400"
+              delta > 0 === higherIsBetter ? "text-emerald-400" : "text-red-400"
             }`}
           >
             {delta > 0 ? (
@@ -225,22 +229,24 @@ export function ExecutiveSummary({ pipeline }: { pipeline: SavedPipeline }) {
           label={t("kpiRowsLoaded")}
           current={latest.rows_loaded}
           previous={previous?.rows_loaded ?? null}
-          format={(v) => v.toLocaleString("pt-BR")}
+          format={(v) => v.toLocaleString(locale)}
           t={t}
         />
         <KpiCard
           label={t("kpiCost")}
           current={latest.cost_usd}
           previous={previous?.cost_usd ?? null}
-          format={(v) => `US$ ${v.toFixed(4)}`}
+          format={(v) => formatUsd(v, locale)}
           t={t}
+          higherIsBetter={false}
         />
         <KpiCard
           label={t("kpiTokens")}
           current={latest.total_tokens}
           previous={previous?.total_tokens ?? null}
-          format={(v) => v.toLocaleString("pt-BR")}
+          format={(v) => t("tokensValue", { count: v.toLocaleString(locale) })}
           t={t}
+          higherIsBetter={false}
         />
       </div>
 

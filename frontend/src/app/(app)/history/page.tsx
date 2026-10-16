@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Inbox } from "lucide-react";
 import { getLocale, getTranslations } from "next-intl/server";
 import { formatDateTime } from "@/lib/format-date";
+import { formatUsd } from "@/lib/format-number";
 import { apiFetch } from "@/lib/api";
 import type { RunSummary } from "@/lib/types";
 import { StatusBadge } from "@/components/status-badge";
@@ -21,6 +22,14 @@ function isFilePath(spec: string): boolean {
   return spec.includes("/") && /\.[a-zA-Z0-9]{1,8}$/.test(spec);
 }
 
+/** The stored name of an uploaded file when `spec` is the instruction the backend writes
+ * for an upload ("Read the file at runs/uploads/01bef84bf765.csv. The file has ..."), so
+ * the history shows the file rather than an English sentence with an internal path. */
+function uploadedFileName(spec: string): string | null {
+  const match = spec.match(/runs\/uploads\/([\w.-]+\.[a-zA-Z0-9]{1,8})\b/);
+  return match ? match[1] : null;
+}
+
 /** Human-readable title for a run row. A file-path spec becomes "File:
  * <basename>"; a natural-language spec (business question) is shown as-is;
  * an empty spec falls back to the formatted run timestamp. The raw
@@ -34,6 +43,10 @@ function runTitle(
   if (run.spec && isFilePath(run.spec)) {
     const filename = run.spec.split("/").pop() || run.spec;
     return fileLabel.replace("{name}", filename);
+  }
+  const uploaded = run.spec ? uploadedFileName(run.spec) : null;
+  if (uploaded) {
+    return fileLabel.replace("{name}", uploaded);
   }
   if (run.spec) {
     return run.spec;
@@ -124,7 +137,7 @@ export default async function History() {
                   </TableCell>
                   <TableCell className="text-muted-foreground">{run.model_name ?? "-"}</TableCell>
                   <TableCell className="text-right font-mono text-xs">
-                    {run.cost_usd != null ? `$${run.cost_usd.toFixed(6)}` : "-"}
+                    {run.cost_usd != null ? formatUsd(run.cost_usd, locale) : "-"}
                   </TableCell>
                   <TableCell className="text-right text-muted-foreground text-xs">
                     {formatDateTime(run.timestamp, locale)}

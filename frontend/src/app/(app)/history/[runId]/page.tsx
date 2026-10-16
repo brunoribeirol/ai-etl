@@ -118,7 +118,9 @@ export default async function RunDetail({
                     <p className="font-medium">
                       {rec.action}{" "}
                       <span className="text-xs text-muted-foreground font-normal">
-                        ({rec.priority})
+                        ({["high", "medium", "low"].includes(rec.priority)
+                          ? t(`priority.${rec.priority}`)
+                          : rec.priority})
                       </span>
                     </p>
                     <p className="text-muted-foreground">{rec.rationale}</p>

@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
+import { formatUsd } from "@/lib/format-number";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -36,6 +37,7 @@ import type { BudgetStatus } from "@/lib/types";
  */
 export function BudgetManager({ canEdit }: { canEdit: boolean }) {
   const t = useTranslations("budgetManager");
+  const locale = useLocale();
   const authedFetch = useAuthedFetch();
 
   const [status, setStatus] = useState<BudgetStatus | null>(null);
@@ -110,13 +112,13 @@ export function BudgetManager({ canEdit }: { canEdit: boolean }) {
           <div className="flex flex-col gap-1">
             <span className="text-xs text-muted-foreground">{t("budgetCap")}</span>
             <span className="font-mono">
-              {loading ? "…" : status?.cap_usd != null ? `$${status.cap_usd.toFixed(2)}` : t("noCap")}
+              {loading ? "…" : status?.cap_usd != null ? formatUsd(status.cap_usd, locale, 2) : t("noCap")}
             </span>
           </div>
           <div className="flex flex-col gap-1">
             <span className="text-xs text-muted-foreground">{t("budgetSpent")}</span>
             <span className="font-mono">
-              {loading ? "…" : `$${(status?.spent_usd ?? 0).toFixed(2)}`}
+              {loading ? "…" : formatUsd(status?.spent_usd ?? 0, locale, 2)}
             </span>
           </div>
           {!loading && status?.cap_usd != null && (
