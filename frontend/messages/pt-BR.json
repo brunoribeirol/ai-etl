@@ -233,6 +233,12 @@
       "network": "Falha de conexão com o servidor. Verifique sua internet e tente novamente.",
       "http": "Erro ao comunicar com o servidor (HTTP {status}). Tente novamente em instantes.",
       "generic": "Ocorreu um erro ao processar a solicitação. Detalhe técnico: {detail}"
+    },
+    "estimateLabel": "Custo estimado desta execução: {cost}",
+    "estimateBasis": {
+      "heuristic_only": "Estimativa a partir do tamanho do arquivo ({rows} linhas, {cols} colunas) e do preço do modelo.",
+      "heuristic_and_tenant_history": "Estimativa a partir do tamanho do arquivo ({rows} linhas, {cols} colunas), do preço do modelo e do custo das suas execuções anteriores.",
+      "heuristic_and_global_history": "Estimativa a partir do tamanho do arquivo ({rows} linhas, {cols} colunas), do preço do modelo e do custo das execuções anteriores do sistema."
     }
   },
   "onboardingWizard": {

@@ -233,6 +233,12 @@
       "network": "Connection to the server failed. Check your internet and try again.",
       "http": "Error communicating with the server (HTTP {status}). Try again in a moment.",
       "generic": "An error occurred while processing the request. Technical detail: {detail}"
+    },
+    "estimateLabel": "Estimated cost of this run: {cost}",
+    "estimateBasis": {
+      "heuristic_only": "Estimated from the file size ({rows} rows, {cols} columns) and the model price.",
+      "heuristic_and_tenant_history": "Estimated from the file size ({rows} rows, {cols} columns), the model price, and the cost of your earlier runs.",
+      "heuristic_and_global_history": "Estimated from the file size ({rows} rows, {cols} columns), the model price, and the cost of the system's earlier runs."
     }
   },
   "onboardingWizard": {
