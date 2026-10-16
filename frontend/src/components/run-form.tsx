@@ -17,7 +17,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/status-badge";
 import { splitErrorMessage } from "@/lib/error-message";
 import { describeSubmitError } from "@/lib/form-error";
-import type { TaskStatus } from "@/lib/types";
+import { formatUsd } from "@/lib/format-number";
+import type { CostEstimate, TaskStatus } from "@/lib/types";
 
 /**
  * PR 4 (Sprint 6, ADR-011), restyled in Sprint 7 — the API contract, polling
@@ -32,6 +33,19 @@ import type { TaskStatus } from "@/lib/types";
  */
 
 const POLL_INTERVAL_MS = 2000;
+
+/** Rows and columns of a CSV file, counted in the browser for `POST /runs/estimate`, which
+ * needs the dataset's shape and never reads the data. The delimiter is the one the header
+ * uses more of (comma or semicolon). Quoted fields that span lines are counted as more rows:
+ * this feeds an estimate, not a validation. Other formats return null and get no estimate. */
+async function csvShape(file: File): Promise<{ rows: number; cols: number } | null> {
+  if (!/\.csv$/i.test(file.name)) return null;
+  const lines = (await file.text()).split(/\r?\n/).filter((line) => line.trim() !== "");
+  if (lines.length < 2) return null;
+  const header = lines[0];
+  const delimiter = (header.match(/;/g)?.length ?? 0) > (header.match(/,/g)?.length ?? 0) ? ";" : ",";
+  return { rows: lines.length - 1, cols: header.split(delimiter).length };
+}
 
 type RunFormProps = {
   /**
@@ -79,6 +93,13 @@ export function RunForm({
   const [status, setStatus] = useState<TaskStatus | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 2026-10-16: the estimate existed only in the API (functional checklist row 6.3). Shown
+  // for a CSV upload, before the run, for the model chosen or the default one.
+  const [shape, setShape] = useState<{ rows: number; cols: number } | null>(null);
+  // Kept with the inputs it was computed for, so a stale answer is never shown after the
+  // file or the model changes (no reset inside the effect).
+  const [estimate, setEstimate] = useState<{ key: string; value: CostEstimate } | null>(null);
+  const estimateKey = shape ? `${shape.rows}x${shape.cols}|${llmProvider}|${llmModel}` : null;
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -87,11 +108,47 @@ export function RunForm({
     };
   }, []);
 
+  useEffect(() => {
+    if (!initialFile) return;
+    csvShape(initialFile)
+      .then(setShape)
+      .catch(() => setShape(null));
+  }, [initialFile]);
+
+  useEffect(() => {
+    if (!shape || !estimateKey || !apiUrl) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await getToken();
+        const response = await fetch(`${apiUrl}/runs/estimate`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            row_count: shape.rows,
+            col_count: shape.cols,
+            provider: llmProvider,
+            model: llmModel,
+          }),
+        });
+        if (!response.ok) return;
+        const data: CostEstimate = await response.json();
+        if (!cancelled) setEstimate({ key: estimateKey, value: data });
+      } catch {
+        // Non-fatal: the run can be started without an estimate.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [shape, estimateKey, llmProvider, llmModel, apiUrl, getToken]);
+
   async function handleFileChange(selected: File | null) {
     setFile(selected);
     setSheetOptions(null);
     setSelectedSheet("");
     setError(null);
+    setShape(selected ? await csvShape(selected).catch(() => null) : null);
 
     if (!selected || !/\.(xlsx|xls)$/i.test(selected.name) || !apiUrl) {
       return;
@@ -336,6 +393,20 @@ export function RunForm({
                 disabled={submitting}
               />
             </div>
+
+            {estimate && shape && estimate.key === estimateKey && (
+              <div className="flex flex-col gap-0.5 text-sm" aria-live="polite">
+                <span>
+                  {t("estimateLabel", { cost: formatUsd(estimate.value.estimated_cost_usd, locale) })}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {t(`estimateBasis.${estimate.value.basis}`, {
+                    rows: shape.rows.toLocaleString(locale),
+                    cols: shape.cols.toLocaleString(locale),
+                  })}
+                </span>
+              </div>
+            )}
 
             <Button
               type="submit"
