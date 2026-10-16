@@ -195,11 +195,17 @@ def _decimal_point_removed(sources: dict[str, pd.DataFrame], result: pd.DataFram
     and the quality checks had nothing to say.
 
     The check is narrow on purpose. It reports a column only when all of this holds: a
-    source column of the same name holds text in which every value is digits, one dot,
-    digits; at least one of those values has a fractional part that is not exactly three
-    digits (so the dot cannot be a thousands separator); the output column is numeric; and
-    every value written is a source value with the dot taken out, while not every value
-    written is a source value read as it is. A column that was renamed is not seen.
+    source column of the same name holds text in which every non-blank value is digits,
+    optionally followed by one dot and digits; at least one value has a dot, and at least
+    one of the dotted values has a fractional part that is not exactly three digits (so the
+    dot cannot be a thousands separator); the output column is numeric; and every value
+    written is a source value with the dot taken out, while not every value written is a
+    source value read as it is. A column that was renamed is not seen.
+
+    Blank values and whole numbers are allowed since a second real run, 2026-10-13: the
+    Telco churn file's `TotalCharges` has 11 blank values and 324 whole numbers, so the
+    first version of this check, which required a dot in every value, said nothing while
+    "29.85" was written as 2985.
     """
     for source in sources.values():
         for column in source.columns:
@@ -209,9 +215,11 @@ def _decimal_point_removed(sources: dict[str, pd.DataFrame], result: pd.DataFram
             if values.empty or not values.map(lambda value: isinstance(value, str)).all():
                 continue
             texts = values.str.strip()
-            if not texts.str.fullmatch(r"-?\d+\.\d+").all():
+            texts = texts[texts != ""]
+            if texts.empty or not texts.str.fullmatch(r"-?\d+(?:\.\d+)?").all():
                 continue
-            if texts.str.split(".").str[1].str.len().eq(3).all():
+            dotted = texts[texts.str.contains(".", regex=False)]
+            if dotted.empty or dotted.str.split(".").str[1].str.len().eq(3).all():
                 continue
             written = set(pd.to_numeric(result[column], errors="coerce").dropna().round(9))
             if not written:
@@ -219,7 +227,7 @@ def _decimal_point_removed(sources: dict[str, pd.DataFrame], result: pd.DataFram
             as_read = set(pd.to_numeric(texts).round(9))
             point_removed = set(pd.to_numeric(texts.str.replace(".", "", regex=False)).round(9))
             if written <= point_removed and not written <= as_read:
-                example = str(texts.iloc[0])
+                example = str(dotted.iloc[0])
                 return (
                     f"Column '{column}': the source values use a dot as the decimal separator "
                     f"(for example '{example}'), and the code removed the dot, writing "

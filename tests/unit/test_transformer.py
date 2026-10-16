@@ -555,6 +555,32 @@ def test_decimal_point_removed_accepts_values_read_as_they_are() -> None:
     assert _decimal_point_removed(source, pd.DataFrame({"valor": [5.157, 5.1273]})) is None
 
 
+def test_decimal_point_removed_is_reported_with_blanks_and_whole_numbers() -> None:
+    from ai_etl.agents.pipeline.transformer import _decimal_point_removed
+
+    # Real run in production, 2026-10-13 (dbc6f480): Telco churn file, column TotalCharges,
+    # text with 11 blank values and 324 whole numbers; written as 2985 for "29.85".
+    source = {"telco": pd.DataFrame({"TotalCharges": ["29.85", "1889.5", " ", "20", "108.15"]})}
+    written = pd.DataFrame({"TotalCharges": [2985.0, 18895.0, float("nan"), 20.0, 10815.0]})
+    message = _decimal_point_removed(source, written)
+    assert message is not None
+    assert "'TotalCharges'" in message and "'29.85'" in message and "2985 for 29.85" in message
+
+    read_as_they_are = pd.DataFrame({"TotalCharges": [29.85, 1889.5, float("nan"), 20.0, 108.15]})
+    assert _decimal_point_removed(source, read_as_they_are) is None
+
+
+def test_decimal_point_removed_says_nothing_without_a_decimal_value() -> None:
+    from ai_etl.agents.pipeline.transformer import _decimal_point_removed
+
+    source = {"s": pd.DataFrame({"qty": ["20", " ", "45"]})}
+    assert _decimal_point_removed(source, pd.DataFrame({"qty": [20.0, float("nan"), 45.0]})) is None
+    # Whole numbers beside values with a three-digit fraction: the dot may still be a
+    # thousands separator, so nothing is judged.
+    source = {"s": pd.DataFrame({"total": ["1.234", "20", "2.500"]})}
+    assert _decimal_point_removed(source, pd.DataFrame({"total": [1234.0, 20.0, 2500.0]})) is None
+
+
 def test_decimal_point_removed_says_nothing_when_the_dot_may_be_a_thousands_separator() -> None:
     from ai_etl.agents.pipeline.transformer import _decimal_point_removed
 
