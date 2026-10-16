@@ -604,7 +604,7 @@ def test_run_gold_analysis_emits_progress_events(monkeypatch) -> None:
     assert result["task_question"] == "pergunta"
     assert result["error"] is None
     assert {stage for stage, _ in events} == {"gold:0"}
-    assert events[0][1] == "🏅 Gold — pergunta"
+    assert events[0][1] == "🏅 Gold: pergunta"
     assert events[-1][1].startswith("✅ Gold pronto")
 
 

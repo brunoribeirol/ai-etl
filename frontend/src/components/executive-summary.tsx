@@ -2,11 +2,12 @@
 
 import { useAuth } from "@clerk/nextjs";
 import { ArrowDown, ArrowUp, Minus } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { friendlyExecutiveError } from "@/lib/friendly-error";
 import type { FullResult, PipelineRunHistoryEntry, SavedPipeline } from "@/lib/types";
+import { formatDateTime } from "@/lib/format-date";
 
 /**
  * Sprint 18 (ADR-024) — the executive-facing counterpart to the technical
@@ -78,7 +79,7 @@ function KpiCard({
       <CardContent className="flex flex-col gap-1">
         <span className="text-xs text-muted-foreground">{label}</span>
         <span className="text-2xl font-semibold tabular-nums">
-          {current !== null ? format(current) : "—"}
+          {current !== null ? format(current) : "-"}
         </span>
         {delta !== null && delta !== 0 && (
           <span
@@ -108,6 +109,7 @@ function KpiCard({
 
 export function ExecutiveSummary({ pipeline }: { pipeline: SavedPipeline }) {
   const t = useTranslations("executiveSummary");
+  const locale = useLocale();
   const tErrors = useTranslations("executiveErrors");
   const statusLabels = buildStatusLabels(t);
   const statusLabel = (status: string) => statusLabels[status.toLowerCase()] ?? status;
@@ -200,7 +202,7 @@ export function ExecutiveSummary({ pipeline }: { pipeline: SavedPipeline }) {
           {statusLabel(latest.status)}
         </span>
         <span className="text-xs text-muted-foreground">
-          {t("lastUpdated", { when: new Date(latest.timestamp).toLocaleString() })}
+          {t("lastUpdated", { when: formatDateTime(latest.timestamp, locale) })}
         </span>
       </div>
 

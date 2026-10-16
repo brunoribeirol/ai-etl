@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { CheckCircle2, ChevronDown, ChevronRight, Inbox, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/table";
 import { useAuthedFetch } from "@/lib/authed-fetch";
 import type { FullResult, PendingApproval } from "@/lib/types";
+import { formatDateTime } from "@/lib/format-date";
 
 type ConfirmState = { runId: string; action: "approve" | "reject" } | null;
 
@@ -40,6 +41,7 @@ type ConfirmState = { runId: string; action: "approve" | "reject" } | null;
  */
 export function ApprovalQueue() {
   const t = useTranslations("approvalQueue");
+  const locale = useLocale();
   const authedFetch = useAuthedFetch();
 
   const [pending, setPending] = useState<PendingApproval[]>([]);
@@ -184,7 +186,7 @@ export function ApprovalQueue() {
                     {run.spec}
                   </TableCell>
                   <TableCell className="text-right text-xs text-muted-foreground">
-                    {new Date(run.timestamp).toLocaleString()}
+                    {formatDateTime(run.timestamp, locale)}
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
@@ -313,7 +315,7 @@ function ApprovalDetail({
 
       {quality && (
         <div className="text-xs text-muted-foreground">
-          {t("qualitySummary")}: {quality.summary ?? "—"}
+          {t("qualitySummary")}: {quality.summary ?? "-"}
         </div>
       )}
 

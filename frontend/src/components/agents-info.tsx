@@ -72,7 +72,7 @@ export function AgentsInfo({ modelName }: { modelName: string | null }) {
                   <span>{tier.emoji}</span>
                   <div>
                     <span className="font-medium">{pyramidText[i].label}</span>
-                    <span className="text-muted-foreground"> — {pyramidText[i].description}</span>
+                    <span className="text-muted-foreground">: {pyramidText[i].description}</span>
                   </div>
                 </li>
               ))}

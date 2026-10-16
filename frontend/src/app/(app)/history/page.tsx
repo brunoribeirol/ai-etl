@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Inbox } from "lucide-react";
-import { getTranslations } from "next-intl/server";
+import { getLocale, getTranslations } from "next-intl/server";
+import { formatDateTime } from "@/lib/format-date";
 import { apiFetch } from "@/lib/api";
 import type { RunSummary } from "@/lib/types";
 import { StatusBadge } from "@/components/status-badge";
@@ -28,6 +29,7 @@ function isFilePath(spec: string): boolean {
 function runTitle(
   run: Pick<RunSummary, "spec" | "timestamp">,
   fileLabel: string,
+  locale: string,
 ): string {
   if (run.spec && isFilePath(run.spec)) {
     const filename = run.spec.split("/").pop() || run.spec;
@@ -36,7 +38,7 @@ function runTitle(
   if (run.spec) {
     return run.spec;
   }
-  return new Date(run.timestamp).toLocaleString();
+  return formatDateTime(run.timestamp, locale);
 }
 
 /**
@@ -47,6 +49,7 @@ function runTitle(
  */
 export default async function History() {
   const t = await getTranslations("historyPage");
+  const locale = await getLocale();
   let runs: RunSummary[] = [];
   let error: string | null = null;
 
@@ -109,7 +112,7 @@ export default async function History() {
                       className="flex flex-col gap-0.5 px-2 py-2"
                     >
                       <span className="text-sm truncate max-w-xs" title={run.run_id}>
-                        {runTitle(run, t("runTitleFile"))}
+                        {runTitle(run, t("runTitleFile"), locale)}
                       </span>
                       <span className="font-mono text-[10px] text-muted-foreground/70 truncate max-w-xs">
                         {run.run_id}
@@ -119,12 +122,12 @@ export default async function History() {
                   <TableCell>
                     <StatusBadge status={run.status} />
                   </TableCell>
-                  <TableCell className="text-muted-foreground">{run.model_name ?? "—"}</TableCell>
+                  <TableCell className="text-muted-foreground">{run.model_name ?? "-"}</TableCell>
                   <TableCell className="text-right font-mono text-xs">
-                    {run.cost_usd != null ? `$${run.cost_usd.toFixed(6)}` : "—"}
+                    {run.cost_usd != null ? `$${run.cost_usd.toFixed(6)}` : "-"}
                   </TableCell>
                   <TableCell className="text-right text-muted-foreground text-xs">
-                    {new Date(run.timestamp).toLocaleString()}
+                    {formatDateTime(run.timestamp, locale)}
                   </TableCell>
                 </TableRow>
               ))}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { Inbox } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/table";
 import { useAuthedFetch } from "@/lib/authed-fetch";
 import type { AdminActionRecord, AdminTenantSummary, BudgetStatus, RunSummary } from "@/lib/types";
+import { formatDateTime } from "@/lib/format-date";
 
 /**
  * `/admin` page's actual data + interaction layer (Wave 6, 2026-08-25 admin
@@ -41,6 +42,7 @@ import type { AdminActionRecord, AdminTenantSummary, BudgetStatus, RunSummary } 
  */
 export function AdminManager() {
   const t = useTranslations("adminManager");
+  const locale = useLocale();
   const authedFetch = useAuthedFetch();
 
   const [tab, setTab] = useState("audit");
@@ -213,14 +215,14 @@ export function AdminManager() {
                           {entry.target_tenant_id}
                         </button>
                       ) : (
-                        "—"
+                        "-"
                       )}
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground max-w-xs truncate">
-                      {entry.detail ?? "—"}
+                      {entry.detail ?? "-"}
                     </TableCell>
                     <TableCell className="text-right text-xs text-muted-foreground">
-                      {new Date(entry.created_at).toLocaleString()}
+                      {formatDateTime(entry.created_at, locale)}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -261,7 +263,7 @@ export function AdminManager() {
               <div className="flex flex-col gap-1">
                 <span className="text-xs text-muted-foreground">{t("budgetCap")}</span>
                 <span className="font-mono">
-                  {tenantBudget.cap_usd != null ? `$${tenantBudget.cap_usd.toFixed(2)}` : "—"}
+                  {tenantBudget.cap_usd != null ? `$${tenantBudget.cap_usd.toFixed(2)}` : "-"}
                 </span>
               </div>
               <div className="flex flex-col gap-1">
@@ -321,13 +323,13 @@ export function AdminManager() {
                       <StatusBadge status={run.status} />
                     </TableCell>
                     <TableCell className="text-muted-foreground text-xs">
-                      {run.model_name ?? "—"}
+                      {run.model_name ?? "-"}
                     </TableCell>
                     <TableCell className="text-right font-mono text-xs">
-                      {run.cost_usd != null ? `$${run.cost_usd.toFixed(6)}` : "—"}
+                      {run.cost_usd != null ? `$${run.cost_usd.toFixed(6)}` : "-"}
                     </TableCell>
                     <TableCell className="text-right text-xs text-muted-foreground">
-                      {new Date(run.timestamp).toLocaleString()}
+                      {formatDateTime(run.timestamp, locale)}
                     </TableCell>
                   </TableRow>
                 ))}

@@ -1,3 +1,4 @@
+import { useTranslations } from "next-intl";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
@@ -17,16 +18,38 @@ const STATUS_STYLES: Record<string, string> = {
   failed: "bg-red-500/15 text-red-400 border-red-500/30",
   failure: "bg-red-500/15 text-red-400 border-red-500/30",
   error: "bg-red-500/15 text-red-400 border-red-500/30",
+  awaiting_approval: "bg-amber-500/15 text-amber-400 border-amber-500/30",
+};
+
+// The API status values mapped to the labels of the `status` messages, so the badge speaks the
+// interface's language instead of showing the raw value ("awaiting_approval"). Unknown values
+// still render as they come.
+const STATUS_LABEL_KEYS: Record<string, string> = {
+  completed: "completed",
+  success: "completed",
+  running: "running",
+  started: "running",
+  pending: "pending",
+  failed: "failed",
+  failure: "failed",
+  error: "failed",
+  awaiting_approval: "awaitingApproval",
 };
 
 export function StatusBadge({ status }: { status: string }) {
+  const t = useTranslations("status");
   const key = status.toLowerCase();
+  const labelKey = STATUS_LABEL_KEYS[key];
   return (
     <Badge
       variant="outline"
-      className={cn("capitalize font-medium", STATUS_STYLES[key] ?? "text-muted-foreground")}
+      className={cn(
+        "font-medium",
+        !labelKey && "capitalize",
+        STATUS_STYLES[key] ?? "text-muted-foreground",
+      )}
     >
-      {status}
+      {labelKey ? t(labelKey) : status}
     </Badge>
   );
 }

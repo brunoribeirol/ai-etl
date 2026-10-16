@@ -1,7 +1,7 @@
 {
   "metadata": {
-    "title": "AI-ETL — Data pipelines that explain themselves",
-    "description": "Describe the pipeline in natural language. AI agents extract, clean, and load your heterogeneous data, generating auditable Python code — not a chat answer that disappears when you close the tab."
+    "title": "AI-ETL: data pipelines that explain themselves",
+    "description": "Describe the pipeline in natural language. AI agents extract, clean, and load your heterogeneous data, generating auditable Python code, not a chat answer that disappears when you close the tab."
   },
   "localeToggle": {
     "switchToEnglish": "Switch to English",
@@ -30,29 +30,29 @@
     "secrets": "Secrets"
   },
   "marketingLayout": {
-    "footer": "AI-ETL — multi-agent ETL framework, auditable code."
+    "footer": "AI-ETL: multi-agent ETL framework, auditable code."
   },
   "landing": {
     "heroBadge": "Multi-agent · auditable code",
     "heroTitleLine1": "Describe the pipeline.",
-    "heroTitleLine2": "The agents build it — you audit it.",
-    "heroSubtitle": "A natural-language specification becomes extraction, cleaning, and loading of heterogeneous data. Every step generates real, reviewable Python code — not a chat answer that disappears when you close the tab.",
+    "heroTitleLine2": "The agents build it. You audit it.",
+    "heroSubtitle": "A natural-language specification becomes extraction, cleaning, and loading of heterogeneous data. Every step generates real, reviewable Python code, not a chat answer that disappears when you close the tab.",
     "ctaPrimary": "Sign in and run a pipeline",
     "ctaSecondary": "See how it works",
     "whyTitle": "“Why not just upload the spreadsheet to a chat and ask?”",
-    "whyBody": "Fair question. For a single file and a one-off question, a generic Code Interpreter already handles it — and it's free. AI-ETL exists for where that stops working.",
+    "whyBody": "Fair question. For a single file and a one-off question, a generic Code Interpreter already handles it, and it's free. AI-ETL exists for where that stops working.",
     "differentiators": [
       {
         "title": "Heterogeneous multi-source, not one file at a time",
-        "body": "CSV, a real connection to Postgres/MySQL/MongoDB, authenticated REST, and PDF/DOCX in a single spec — one agent decides how to combine them. You can't paste that into a chat."
+        "body": "CSV, a real connection to Postgres/MySQL/MongoDB, authenticated REST, and PDF/DOCX in a single spec, and one agent decides how to combine them. You can't paste that into a chat."
       },
       {
         "title": "An auditable, persisted pipeline, not an ephemeral answer",
-        "body": "Every run generates real code — Transformer, Analyst, Science — saved, reviewable, versionable. It survives closing the tab; a chat answer doesn't."
+        "body": "Every run generates real code (Transformer, Analyst, Science), saved, reviewable, and versionable. It survives closing the tab; a chat answer doesn't."
       },
       {
         "title": "API-first, not chat-first",
-        "body": "The pipeline is a callable, schedulable endpoint you can integrate into another system — data infrastructure, not a conversation someone has to remember to repeat every week."
+        "body": "The pipeline is a callable, schedulable endpoint you can integrate into another system: data infrastructure, not a conversation someone has to remember to repeat every week."
       },
       {
         "title": "Governance and tenant isolation",
@@ -60,16 +60,16 @@
       }
     ],
     "howTitle": "From raw data to a recommendation, a pyramid of agents",
-    "howBody": "Nine specialized agents, each with a single responsibility — the pipeline's state passes from one to the next, never hidden inside a black box.",
-    "howPlainLanguage": "In plain terms: each stage refines the data a bit further — raw file in, clean and de-duplicated data out, then business insights, then forecasts, then a plain-English recommendation at the top. You don't need to know the stage names to read the result — they matter if you're the one auditing how it was produced.",
+    "howBody": "Nine specialized agents, each with a single responsibility. The pipeline's state passes from one to the next and is never hidden inside a black box.",
+    "howPlainLanguage": "In plain terms: each stage refines the data a bit further. Raw file in, clean and de-duplicated data out, then business insights, then forecasts and, at the top, a plain-English recommendation. You don't need to know the stage names to read the result; they matter if you're the one auditing how it was produced.",
     "rosterHeading": "The nine agents behind the pyramid",
     "dualTitle": "Built for two people at the same company",
     "dualOperatorBadge": "Technical operator",
     "dualOperatorTitle": "Whoever builds the report by hand today",
-    "dualOperatorBody": "Configures the source, writes the spec, audits the generated code before trusting it. Reads Python/pandas — doesn't need to write it from scratch every week.",
+    "dualOperatorBody": "Configures the source, writes the spec, audits the generated code before trusting it. Reads Python/pandas, but doesn't need to write it from scratch every week.",
     "dualExecBadge": "Executive consumer",
     "dualExecTitle": "Whoever receives the result, configures nothing",
-    "dualExecBody": "Wants the answer and the recommendation, without becoming hostage to a number the AI might have made up — because someone on the team could already audit where it came from.",
+    "dualExecBody": "Wants the answer and the recommendation without becoming hostage to a number the AI might have made up, because someone on the team could already audit where it came from.",
     "techTitle": "Built for production, not just a demo",
     "techFacts": [
       "Multi-agent orchestration via LangGraph, explicit state",
@@ -112,7 +112,7 @@
         "description": "Extracts and inspects the data from each source (CSV, Postgres, REST, PDF/DOCX)."
       },
       {
-        "description": "Generates and runs (in a sandbox) the cleaning/transformation code — the Silver layer."
+        "description": "Generates and runs (in a sandbox) the cleaning and transformation code: the Silver layer."
       },
       {
         "description": "Checks for nulls, duplicates, and outliers in the transformed data."
@@ -148,7 +148,7 @@
   },
   "getStartedPage": {
     "title": "Get started in a few minutes",
-    "subtitle": "Connect a source, describe what you want, and see the result — no prior training needed."
+    "subtitle": "Connect a source, describe what you want, and see the result, with no prior training needed."
   },
   "historyPage": {
     "title": "History",
@@ -177,7 +177,7 @@
   },
   "summaryIndexPage": {
     "title": "Executive summary",
-    "subtitle": "Your pipelines' results, in plain language — no code, no technical jargon.",
+    "subtitle": "Your pipelines' results in plain language, with no code and no technical jargon.",
     "emptyState": "No scheduled pipeline yet. Create one in \"Pipelines\" to see its summary here after the first run.",
     "needsAttention": "Needs attention"
   },
@@ -195,10 +195,10 @@
   },
   "codeTab": {
     "empty": "No code available for this run.",
-    "transformerHeading": "Transformer — Silver",
-    "analystHeading": "Analyst — {question}",
+    "transformerHeading": "Transformer (Silver)",
+    "analystHeading": "Analyst: {question}",
     "analystFallback": "Gold {index}",
-    "scienceHeading": "Science Agent — {question}",
+    "scienceHeading": "Science Agent: {question}",
     "scienceFallback": "Science {index}"
   },
   "dataTable": {
@@ -208,11 +208,11 @@
     "fileLabel": "File (CSV, Excel, JSON, PDF, DOCX)",
     "fileCta": "Click to select a file",
     "sheetLabel": "Sheet",
-    "sheetHint": "(this workbook has more than one sheet — choose which one to use)",
+    "sheetHint": "(this workbook has more than one sheet; choose which one to use)",
     "sheetPlaceholder": "Choose a sheet...",
     "sheetCheckFailed": "Couldn't read this workbook's sheets. Check the file and try again.",
     "specLabel": "Or: manual spec",
-    "specOptionalHint": "(optional if a file was attached — still followed as extra instructions on top of the file)",
+    "specOptionalHint": "(optional if a file was attached; if filled in, it is followed as extra instructions)",
     "businessQuestionLabel": "Business question (optional)",
     "businessQuestionPlaceholder": "Which products sell the most?",
     "modelLabel": "AI model (optional)",
@@ -224,7 +224,7 @@
     "toastSuccess": "Analysis completed.",
     "taskLabel": "Task",
     "statusLabel": "Status",
-    "completedPrefix": "Completed —",
+    "completedPrefix": "Completed:",
     "viewRun": "view run {runId}",
     "viewFailedRun": "see details",
     "failedNoMessage": "The run failed.",
@@ -236,7 +236,7 @@
     }
   },
   "onboardingWizard": {
-    "step1Title": "Step 1 — choose a source",
+    "step1Title": "Step 1: choose a source",
     "step1Hint": "No data of your own yet? Use the preloaded example to see the full pipeline run in minutes.",
     "useExample": "Use example (sales)",
     "useOwnFile": "Upload my own file",
@@ -265,7 +265,7 @@
     "statusRunning": "Running",
     "statusPending": "Awaiting run",
     "loading": "Loading summary...",
-    "emptyHistory": "This pipeline hasn't run yet — check back after its first scheduled run.",
+    "emptyHistory": "This pipeline hasn't run yet. Check back after its first scheduled run.",
     "lastUpdated": "Last updated: {when}",
     "failedNotice": "This pipeline's last run didn't finish successfully. The technical team has already been notified and is looking into it.",
     "kpiRowsLoaded": "Rows processed",
@@ -276,7 +276,7 @@
     "deltaUnchanged": "no change",
     "whatHappenedHeading": "What happened",
     "recommendationsHeading": "Recommendations",
-    "noSummary": "This pipeline has no business question configured, so there's no analysis summary to show here — just the numbers above."
+    "noSummary": "This pipeline has no business question configured, so there's no analysis summary to show here, just the numbers above."
   },
   "pipelineHistory": {
     "seriesRowsLoaded": "Rows loaded",
@@ -290,7 +290,7 @@
     "kpiHeading": "KPIs over time",
     "kpiLimitNote": "Last {limit} runs.",
     "executionsHeading": "Runs ({count})",
-    "executionsLimitNote": "Showing the last {limit} runs — this pipeline may have more in its history.",
+    "executionsLimitNote": "Showing the last {limit} runs; this pipeline may have more in its history.",
     "rowsSuffix": "{count} rows",
     "diffHeading": "Diff between runs",
     "diffCompareButton": "Compare A → B",
@@ -308,9 +308,9 @@
     "pipelinePlanHeading": "Pipeline plan",
     "customRuleFallback": "custom rule",
     "inPreposition": "on",
-    "nullRatioSuffix": "— null ratio: {pct}%",
-    "duplicatesSuffix": "— {count} duplicates",
-    "outliersSuffix": "— {count} outliers",
+    "nullRatioSuffix": "(null ratio: {pct}%)",
+    "duplicatesSuffix": "({count} duplicates)",
+    "outliersSuffix": "({count} outliers)",
     "noViolations": "no violations",
     "violationsCount": "{count} violation(s)"
   },
@@ -320,7 +320,7 @@
     "nameLabel": "Name",
     "namePlaceholder": "Nightly order sync",
     "sourceTypeLabel": "Source type",
-    "sourceTypeHint": "(only sources that can be re-checked automatically, like a database or API, can be scheduled — a one-off file upload can't be re-run later)",
+    "sourceTypeHint": "(only sources that can be re-checked automatically, like a database or API, can be scheduled; a one-off file upload can't be re-run later)",
     "specLabel": "Spec (natural language)",
     "businessQuestionLabel": "Business question (optional)",
     "businessQuestionPlaceholder": "Which products sell the most?",
@@ -364,7 +364,7 @@
     "invalidJsonShape": "Quality rules: must be a list (JSON array), e.g. [].",
     "missingApiUrl": "NEXT_PUBLIC_API_URL is not configured.",
     "modelLabel": "AI model",
-    "modelHint": "(cost and reliability shown per model — Sprint 30/35)",
+    "modelHint": "(cost and reliability of each model)",
     "toastModelUpdated": "Model updated.",
     "notificationLabel": "Notifications",
     "toastNotificationUpdated": "Notification destination updated.",
@@ -381,7 +381,7 @@
   },
   "modelPicker": {
     "priceLine": "${input}/${output} per 1M tokens (input/output)",
-    "reliabilityVerified": "Verified — real comparison run",
+    "reliabilityVerified": "Verified in a real comparison run",
     "testButton": "Test connection",
     "testing": "Testing...",
     "testSuccess": "Working ({latency}ms)",
@@ -389,7 +389,7 @@
   },
   "notificationConfig": {
     "configuredHint": "A {channel} destination is currently configured for this pipeline.",
-    "notConfiguredHint": "No override configured — this pipeline uses this deployment's default notification channel(s).",
+    "notConfiguredHint": "No override configured. This pipeline uses this deployment's default notification channel(s).",
     "channelLabel": "Channel",
     "channelName": {
       "email": "Email",
@@ -401,14 +401,14 @@
     "targetLabelWebhook": "Webhook URL",
     "targetPlaceholderEmail": "team@example.com",
     "targetPlaceholderWebhook": "https://hooks.example.com/...",
-    "hint": "For security, a previously saved destination is never shown here — enter it again to replace it. This is also required to change just the toggle below, since the destination and its active state are always saved together.",
+    "hint": "For security, a previously saved destination is never shown here; enter it again to replace it. This is also required to change just the toggle below, since the destination and its active state are always saved together.",
     "activeLabel": "Active",
     "saveButton": "Save destination",
     "clearButton": "Clear override"
   },
   "adminPage": {
     "title": "Admin panel",
-    "subtitle": "Read-only cross-tenant access — every lookup is written to the audit log.",
+    "subtitle": "Read-only cross-tenant access. Every lookup is written to the audit log.",
     "noPermission": "You don't have permission to access this page."
   },
   "adminManager": {
@@ -449,7 +449,7 @@
     "columnSpec": "Spec",
     "columnWhen": "When",
     "columnActions": "Actions",
-    "unnamedPipeline": "—",
+    "unnamedPipeline": "(unnamed)",
     "toggleDetail": "View details",
     "approve": "Approve",
     "confirmApprove": "Confirm approve?",
@@ -457,8 +457,8 @@
     "confirmReject": "Confirm reject?",
     "cancel": "Cancel",
     "reasonPlaceholder": "Rejection reason (optional)",
-    "toastApproved": "Run approved — write completed.",
-    "toastRejected": "Run rejected — nothing was written.",
+    "toastApproved": "Run approved. The data was written.",
+    "toastRejected": "Run rejected. Nothing was written.",
     "loadingDetail": "Loading details...",
     "previewHeading": "What would be written",
     "previewDestination": "Destination",
@@ -469,17 +469,17 @@
   },
   "secretsPage": {
     "title": "Secrets",
-    "subtitle": "Your tenant's external-source credentials — the value is never shown again once saved.",
+    "subtitle": "Your account's external-source credentials. The value is never shown again once saved.",
     "noPermission": "You don't have permission to access this page."
   },
   "secretsManager": {
     "formHeading": "Save or rotate a secret",
     "nameLabel": "Name",
     "namePlaceholder": "e.g. postgres_prod_password",
-    "nameHint": "To use your own database in a pipeline instead of the shared default, name the secret exactly postgres_connection_string, mysql_connection_string, or mongodb_connection_string — the value is the full connection string.",
+    "nameHint": "To use your own database in a pipeline instead of the shared default, name the secret exactly postgres_connection_string, mysql_connection_string, or mongodb_connection_string; the value is the full connection string.",
     "valueLabel": "Value",
     "valuePlaceholder": "Type the secret's value",
-    "valueHint": "Only shown while you type it — once saved, it never appears here again.",
+    "valueHint": "Only shown while you type it. Once saved, it never appears here again.",
     "submitButton": "Save secret",
     "toastStored": "Secret stored.",
     "toastRotated": "Secret rotated.",
@@ -492,7 +492,7 @@
   },
   "budgetPage": {
     "title": "Budget",
-    "subtitle": "Monthly spend cap and consumption so far — enforced on every new run."
+    "subtitle": "Monthly spend cap and consumption so far, enforced on every new run."
   },
   "budgetManager": {
     "budgetCap": "Monthly cap",
@@ -511,7 +511,7 @@
     "confirmClear": "Confirm clear?",
     "cancel": "Cancel",
     "toastSaved": "Budget cap updated.",
-    "toastCleared": "Cap cleared — budget is now unlimited."
+    "toastCleared": "Cap cleared. The budget is now unlimited."
   },
   "dataExportPage": {
     "title": "Data & privacy",
@@ -520,7 +520,7 @@
   "dataExportManager": {
     "retentionHeading": "Automatic retention",
     "retentionWindow": "Storage artifacts older than {days} days are automatically deleted",
-    "retentionKeepForever": "Kept forever — no automatic-retention window set",
+    "retentionKeepForever": "Kept forever (no automatic-retention window set)",
     "retentionExplainer": "Retention only removes stored run artifacts (files); run history and account records are never deleted automatically.",
     "retentionFormHeading": "Set retention window",
     "retentionInputLabel": "Retention window (days)",
@@ -530,9 +530,9 @@
     "clearRetention": "Clear window",
     "confirmClearRetention": "Confirm clear?",
     "toastRetentionSaved": "Retention window updated.",
-    "toastRetentionCleared": "Retention window cleared — data is now kept forever.",
+    "toastRetentionCleared": "Retention window cleared. Data is now kept forever.",
     "exportHeading": "Export your data",
-    "exportExplainer": "Downloads a JSON file with your runs, analyses, saved pipelines, secret names (never their values), and storage artifact keys — everything this account's data-access export covers.",
+    "exportExplainer": "Downloads a JSON file with your runs, analyses, saved pipelines, secret names (never their values), and storage artifact keys: everything this account's data-access export covers.",
     "exportButton": "Export data",
     "confirmExport": "Confirm export?",
     "cancel": "Cancel",
@@ -551,5 +551,16 @@
     "deletionCountSavedPipelines": "{count} saved pipelines deleted",
     "deletionCountSecrets": "{count} secrets deleted",
     "deletionCompleteBackLink": "Return to the homepage"
+  },
+  "status": {
+    "completed": "Completed",
+    "failed": "Failed",
+    "running": "Running",
+    "pending": "Pending",
+    "awaitingApproval": "Awaiting approval"
+  },
+  "agentProgress": {
+    "srFailed": "Run failed.",
+    "srDone": "All phases complete."
   }
 }
