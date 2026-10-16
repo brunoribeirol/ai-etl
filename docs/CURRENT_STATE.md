@@ -2,14 +2,17 @@
 
 > Living doc. Updated at the end of meaningful work sessions, not per-commit. Source of truth for repo/code state; the Obsidian vault (`~/Documents/Obsidian Vault/tcc/`) is the source of truth for the academic TCC narrative and product/strategy context.
 
-**Last updated:** 2026-10-14 (03:00 UTC), sixth entry. **The functional checklist is not
-100% validated: of its 57 rows, 45 work, 4 work in part, 1 does not work on production as
-configured, 6 were not tested and 1 is a note.** The owner asked whether everything had been
-validated; it had not (15 rows untested). Nine of those were closed in this round: the local
-setup on a fresh clone, and MySQL, MongoDB, SQLite and the Parquet destination through a new
-job of the case-study workflow. The 6 that remain each need something only the owner can do
-(a second account, a credential, a notification destination, a permanent deletion). See
-"2026-10-14: what the functional checklist still lacks" below.
+**Last updated:** 2026-10-16, seventh entry. **Two product changes since the sixth entry, both
+verified live:** OpenAI's current generation in the catalog (#340: `gpt-6-luna`, `gpt-6.1-sol`,
+one real run each, output equal to the reference) and the interface text (#341: no em-dashes,
+status labels and dates in the chosen language; the production landing page checked after the
+deploy). The owner decided that the model comparison uses only current models (four) and that
+the product's default model is chosen from that batch. Still open: the comparison (waits for
+provider credit), four checklist rows that need the owner (prepared), and a full pass over the
+interface. See "2026-10-16: current models, interface text, and what is left" below.
+
+**Sixth entry (2026-10-14):** the functional checklist row by row (45 of 57 work, 6 not tested)
+and the connector check of MySQL, MongoDB, SQLite and Parquet (#339).
 
 **Fifth entry (2026-10-13, 16:30 UTC):** nothing open around the code: code scanning alerts 0
 (4 fixed in #336, 4 dismissed as false positives), pull requests 0 (3 merged, 8 dependency
@@ -119,6 +122,51 @@ per-item verification). Nothing from the audit is left as pending code.
 _Already closed this arc (were open before): `POST /llm/test-connectivity` is now live-verified
 ("Working 1921ms"); the audit's H5/H1/M3/M11 and all other merged items are live-verified — see
 below._
+
+## 2026-10-16: current models, interface text, and what is left
+
+Seventh entry.
+
+### Changes
+
+| PR | What | Verified |
+|---|---|---|
+| #340 | `gpt-6-luna` and `gpt-6.1-sol` in `ALLOWED_MODELS_BY_PROVIDER` and in `core/pricing.py` (OpenAI's published prices, 0.10 / 0.50 and 2.00 / 10.00 per million); both are reasoning models, so the module's `temperature=0.0` is not sent to them | One run each on the branch: workflow runs 38631616991 (scenario 1, `match`, 0.0071) and 38631621995 (scenario 2, `match`, 0.0400); cost reported equal to cost measured |
+| #341 | Interface text: 46 messages rewritten without em-dashes; status badge translated (it showed "Awaiting_approval"); dates in the interface's language (`lib/format-date.ts`); empty values shown as "-"; backend progress messages without em-dashes. No prompt sent to a model changed | Type check, lint, 70 backend tests; production landing page after the deploy: 0 em-dashes, new title |
+
+### Decisions of the owner
+
+- **Only current models in the comparison:** `gpt-6-luna`, `gpt-6.1-sol`, `claude-haiku-5-5`,
+  `claude-sonnet-5-5` (two providers, two price tiers, the same prices across providers), 4
+  scenarios, 5 runs. Credit asked: OpenAI US$ 5, Anthropic US$ 10. Not dispatched yet.
+- **The product's default model** (today `gpt-4o-mini`) is chosen from that batch by a rule fixed
+  before the results: most outputs equal to the reference, then lowest cost per run, then
+  shortest time. Its 20 runs become the main results table. The interface's model selector then
+  offers the four current models, with the measured figures on the cards.
+- The measurements with `gpt-4o-mini`, `gpt-4o`, `claude-haiku-4-5` and `claude-sonnet-5` stay
+  as the record of development; the defects they found were real.
+
+### Infrastructure and accounts
+
+- The AWS account that holds the storage bucket and the only database backups was on the free
+  plan ending 2026-10-27; the owner upgraded it to the paid plan on 2026-10-14.
+- Railway (Hobby): previous bills US$ 5.25 and US$ 5.48. A soft limit of US$ 8 and a hard limit of
+  US$ 15 were set; at the hard limit every service of the workspace stops. The Railway CLI warns
+  that `railway.json` stops being read on 2026-12-01, before the defense.
+- A disposable Supabase project (`ai-etl-checklist-db`, 60 rows of the public taxi-zone table)
+  is ready for the checklist rows that need a saved PostgreSQL credential.
+
+### What is left
+
+1. The four-model comparison, after the credit; then the default model, the selector and the
+   results tables.
+2. Checklist rows 8.1, 8.2, 6.5 and 6.7 (and 1.2, 2.2 on production), with the owner, about 25
+   minutes; prepared in the vault runbook `tcc/artefact/runbook-functional-rows-with-the-owner.md`.
+3. A full pass over every screen of the interface, at the owner's request, listing and fixing
+   what is still incomplete (known: the model selector and its cards, the onboarding checklist
+   the advisor pointed out, the cost estimate that exists only in the API).
+4. After 2026-10-30: resume Dependabot (#337), the eight deferred updates, `railway.json`
+   before 2026-12-01, the quality-gate decision, the credit check before the defense.
 
 ## 2026-10-14: what the functional checklist still lacks
 
