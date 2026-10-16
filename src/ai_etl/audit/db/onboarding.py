@@ -24,16 +24,24 @@ def get_onboarding_status(tenant_id: str) -> dict[str, Any]:
     the guided flow's own example-dataset run is an avulso upload, same as
     any other `POST /runs`. `has_saved_pipeline` is a separate, later step
     (ADR-016 Decision 3: only live sources are schedulable, so the guided
-    flow's own upload can never satisfy this one directly)."""
+    flow's own upload can never satisfy this one directly).
+
+    `has_pipeline_run` (2026-10-16) is the third step, "see the executive summary", which
+    exists only once a saved pipeline has run. Before it, the interface ticked that step
+    with `has_saved_pipeline`, so a pipeline that never ran showed it as done."""
     run_count_stmt = select(func.count()).where(runs.c.tenant_id == tenant_id)
     completed_run_count_stmt = select(func.count()).where(
         runs.c.tenant_id == tenant_id, runs.c.status == "completed"
     )
     saved_pipeline_count_stmt = select(func.count()).where(saved_pipelines.c.tenant_id == tenant_id)
+    pipeline_run_count_stmt = select(func.count()).where(
+        saved_pipelines.c.tenant_id == tenant_id, saved_pipelines.c.last_run_at.is_not(None)
+    )
     with tenant_scope(tenant_id) as conn:
         run_count = conn.execute(run_count_stmt).scalar() or 0
         completed_run_count = conn.execute(completed_run_count_stmt).scalar() or 0
         saved_pipeline_count = conn.execute(saved_pipeline_count_stmt).scalar() or 0
+        pipeline_run_count = conn.execute(pipeline_run_count_stmt).scalar() or 0
 
     return {
         "run_count": int(run_count),
@@ -41,4 +49,5 @@ def get_onboarding_status(tenant_id: str) -> dict[str, Any]:
         "has_completed_run": completed_run_count > 0,
         "saved_pipeline_count": int(saved_pipeline_count),
         "has_saved_pipeline": saved_pipeline_count > 0,
+        "has_pipeline_run": pipeline_run_count > 0,
     }

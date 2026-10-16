@@ -247,11 +247,16 @@
     "heading": "What's left to be ready",
     "missingApiUrl": "NEXT_PUBLIC_API_URL is not configured.",
     "item1Label": "Run your first pipeline",
-    "item1Hint": "Use the preloaded example below or upload your own file.",
+    "item1Hint": "Use the preloaded example or upload your own file.",
     "item2Label": "Create a scheduled pipeline",
     "item2Hint": "Connect a live source (Postgres, REST...) to run on its own on the right schedule.",
     "item3Label": "Check the executive summary",
-    "item3Hint": "Available as soon as a scheduled pipeline has at least one run."
+    "item3Hint": "Available as soon as a scheduled pipeline has at least one run.",
+    "allDoneHeading": "All set",
+    "allDoneBody": "You have run a pipeline, scheduled one, and it already has an executive summary.",
+    "showSteps": "Show the steps",
+    "hideSteps": "Hide the steps",
+    "doneCount": "{done} of {total} steps already done."
   },
   "executiveErrors": {
     "notFound": "We couldn't find that pipeline. It may have been removed, or the link is incorrect.",

@@ -18,6 +18,7 @@ from ai_etl.audit.db import onboarding as onboarding_db
 from ai_etl.audit.db import pipelines as pipelines_db
 from ai_etl.audit.models import metadata as audit_metadata
 from ai_etl.audit.models import runs as runs_table
+from ai_etl.audit.models import saved_pipelines as saved_pipelines_table
 
 
 def _make_sqlite_engine() -> Engine:
@@ -71,6 +72,7 @@ def test_new_tenant_has_no_activation_yet(engine: Engine) -> None:
         "has_completed_run": False,
         "saved_pipeline_count": 0,
         "has_saved_pipeline": False,
+        "has_pipeline_run": False,
     }
 
 
@@ -120,3 +122,28 @@ def test_a_saved_pipeline_activates_the_second_checklist_item(engine: Engine) ->
 
     assert status["saved_pipeline_count"] == 1
     assert status["has_saved_pipeline"] is True
+
+
+def test_a_saved_pipeline_that_has_run_activates_the_third_checklist_item(engine: Engine) -> None:
+    # The third step ("see the executive summary") is available only once a scheduled
+    # pipeline has run; before 2026-10-16 it was ticked by `has_saved_pipeline` alone.
+    created = db.create_saved_pipeline(
+        tenant_id="tenant-a",
+        name="Nightly sync",
+        source_type="postgres",
+        spec="Read schema.orders from postgres",
+        cron_schedule="0 3 * * *",
+    )
+    assert db.get_onboarding_status("tenant-a")["has_pipeline_run"] is False
+
+    with engine.begin() as conn:
+        conn.execute(
+            saved_pipelines_table.update()
+            .where(saved_pipelines_table.c.id == created["id"])
+            .values(last_run_at=datetime.now(tz=timezone.utc))
+        )
+
+    status = db.get_onboarding_status("tenant-a")
+    assert status["has_saved_pipeline"] is True
+    assert status["has_pipeline_run"] is True
+    assert db.get_onboarding_status("tenant-other")["has_pipeline_run"] is False
