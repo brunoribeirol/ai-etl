@@ -19,7 +19,7 @@ introspection (e.g., ().__class__.__mro__[1].__subclasses__()). The
 only, see ``_install_seccomp_filter``) before running any sandboxed code,
 denying the `execve`/`execveat` syscalls with `EPERM` — this closes the
 specific arbitrary-command-execution vector the 2026-09-04 Red Team audit
-demonstrated (``docs/work/2026-09-04-persona-audit/red-team.md``: reaching
+demonstrated (``docs/archive/work/2026-09-04-persona-audit/red-team.md``: reaching
 `subprocess.run` via the introspection bypass above and using it to run
 `whoami`), without requiring Docker/Vercel Sandbox.
 
@@ -144,7 +144,7 @@ _TERMINATE_GRACE_SECONDS = 2
 _SANDBOX_BACKEND_ENV_VAR = "AI_ETL_SANDBOX_BACKEND"
 
 # Sprint 12 (ADR-012): real profiling against a 200k-row x 300-col benchmark
-# (docs/work/2026-08-19-sprint12-scale-profiling.md) confirmed the fixed
+# (docs/archive/work/2026-08-19-sprint12-scale-profiling.md) confirmed the fixed
 # per-call-site timeout (Transformer 30s default, Analyst 15s, Science 20s) does
 # NOT scale with input size — at 204,000 rows, representative Science-style code
 # (a real RandomForestRegressor fit, the exact operation Science's own prompt asks
@@ -297,9 +297,9 @@ def _install_seccomp_filter() -> None:
     """Deny `execve`/`execveat` (EPERM) for the calling process, Linux only.
 
     ADR-046. Wave 0 item 1, 2026-09-05 mega-audit remediation
-    (docs/work/2026-09-05-mega-audit-remediation-plan.md): closes the
+    (docs/archive/work/2026-09-05-mega-audit-remediation-plan.md): closes the
     arbitrary-command-execution vector the Red Team audit demonstrated
-    (docs/work/2026-09-04-persona-audit/red-team.md — reaching
+    (docs/archive/work/2026-09-04-persona-audit/red-team.md — reaching
     `subprocess.run` via `().__class__.__base__.__subclasses__()` and
     calling it to run `whoami`, no `import` needed) at the kernel syscall
     level — it doesn't matter which Python object the introspection bypass

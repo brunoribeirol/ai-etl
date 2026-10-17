@@ -95,7 +95,7 @@ tenant config, budget) sem `require_role`/`require_admin`.
 ## Já era conhecido pelas auditorias anteriores? (sim/não + link)
 
 - **Achado #1** (redação recursiva funcionando): **sim, indiretamente** —
-  `docs/work/2026-08-24-full-technical-product-audit.md` linha 196 registrou o problema ORIGINAL
+  `docs/archive/work/2026-08-24-full-technical-product-audit.md` linha 196 registrou o problema ORIGINAL
   (na época, `_sanitize` não recursava e não pegava `authorization`/`Bearer`). Esta auditoria
   confirma, por execução real, que o fix já foi aplicado e funciona corretamente hoje — não é um
   achado novo, é a verificação de que uma correção anterior é real e não apenas cosmética.

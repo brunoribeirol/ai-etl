@@ -15,7 +15,7 @@ getting the backup workflow to a clean run.
 Close the real remaining gaps between today's state and a monetization-ready
 MVP, so the owner needs to adjust as little as possible before onboarding a
 paying tenant. Triggered by the owner asking for "an MVP FODA" after the
-mega-audit remediation plan (`docs/work/2026-09-05-mega-audit-remediation-plan.md`)
+mega-audit remediation plan (`docs/archive/work/2026-09-05-mega-audit-remediation-plan.md`)
 closed — this plan picks up from there, scoped only to what is actually still
 open (verified against current code/docs on 2026-09-06, not assumed from the
 2026-08-21 SOC2 self-assessment, which is stale on two points — see below).

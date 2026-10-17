@@ -1,7 +1,7 @@
 # AI-ETL — AWS deploy (Sprint 10 portability proof)
 
 > Companion to `docs/adr/ADR-015-multi-cloud-deploy-aws-portability.md` and
-> `docs/deploy-diff-railway-vs-aws.md`.
+> `docs/architecture/deploy-diff-railway-vs-aws.md`.
 
 ## STOP — before you run `apply`
 
@@ -19,7 +19,7 @@ That the same Docker image and application code that runs on Railway also
 runs on AWS, with a deploy topology that mirrors Railway's two-service
 shape (public web + unexposed worker) closely enough that the diff is
 mostly *where config lives*, not *what the app needs*. See
-`docs/deploy-diff-railway-vs-aws.md` for the full comparison.
+`docs/architecture/deploy-diff-railway-vs-aws.md` for the full comparison.
 
 ## What gets created (if applied)
 
@@ -101,7 +101,7 @@ requesting an `apply` decision.
 
 ## Known simplifications
 
-See `docs/deploy-diff-railway-vs-aws.md`'s "Known simplifications" section
+See `docs/architecture/deploy-diff-railway-vs-aws.md`'s "Known simplifications" section
 — default VPC/public subnets, HTTP-only ALB, no autoscaling, no remote
 state backend. All intentional scope cuts for a portability *proof*, not
 gaps to silently carry into a real production cutover.

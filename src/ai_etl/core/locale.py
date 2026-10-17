@@ -99,7 +99,7 @@ def date_parse_hint(locale: str) -> str:
     check — see the prompt's own RIGHT example for the exact pattern.
 
     Wave 3 item 16, 2026-09-05 mega-audit remediation
-    (docs/work/2026-09-05-mega-audit-remediation-plan.md): live-verified
+    (docs/archive/work/2026-09-05-mega-audit-remediation-plan.md): live-verified
     real gap — the strict-ISO check above only helps a column that is
     *purely* ISO; a column genuinely MIXING ISO and non-ISO strings still
     fell to a whole-column `pd.to_datetime(...)` call for the non-ISO

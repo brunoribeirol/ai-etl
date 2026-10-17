@@ -79,7 +79,7 @@ export function PipelinesManager() {
   const [requireApproval, setRequireApproval] = useState(false);
   const [approvalThresholdRows, setApprovalThresholdRows] = useState("");
   // Wave 2 item 8, 2026-09-05 mega-audit remediation
-  // (docs/work/2026-09-05-mega-audit-remediation-plan.md) — a valid, accepted
+  // (docs/archive/work/2026-09-05-mega-audit-remediation-plan.md) — a valid, accepted
   // API field (`gt=0`, server default 20.0) with no UI to set it until now.
   const [driftThresholdPct, setDriftThresholdPct] = useState("20");
   const [submitting, setSubmitting] = useState(false);
@@ -527,7 +527,7 @@ export function PipelinesManager() {
             </div>
 
             {/* Wave 2 item 8, 2026-09-05 mega-audit remediation
-                (docs/work/2026-09-05-mega-audit-remediation-plan.md) —
+                (docs/archive/work/2026-09-05-mega-audit-remediation-plan.md) —
                 already a valid, accepted API field (`gt=0`, server default
                 20.0) with no UI to set it until now. */}
             <div className="flex flex-col gap-2">

@@ -50,7 +50,7 @@ All orchestration logic lived inside `app.py`, mixed directly with Streamlit cal
 | `app.py` | Removed `_run_silver_pipeline`, `_run_gold_analysis`, `_run_science_analysis`, `_run_gold_with_repair`, `_run_science_with_repair`, `_run_analysis_tasks`, `_run_advisor_analysis`, `_sum_run_tokens`, and the local `AGENT_STEPS` dict. Added `_make_progress_adapter()` (Streamlit `st.status` adapter) and rewired the button handler to call `run_full_analysis`. |
 | `tests/unit/test_app.py` | Removed `test_sum_run_tokens_*` (moved to `test_pipeline_service.py`, since the function moved). Added 3 tests for `_make_progress_adapter`. |
 | `tests/unit/test_pipeline_service.py` | **New.** 16 tests covering the extracted service (see section 7). |
-| `docs/PHASE_0_SERVICE_EXTRACTION.md` | **New.** This document. |
+| `docs/archive/PHASE_0_SERVICE_EXTRACTION.md` | **New.** This document. |
 
 No other file was touched. `src/ai_etl/agents/*.py` (prompts, analytical rules,
 response formats), `src/ai_etl/core/sandbox.py`, `src/ai_etl/audit/db.py` (SQLite

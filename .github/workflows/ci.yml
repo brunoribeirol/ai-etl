@@ -54,7 +54,7 @@ jobs:
     #   - the ai-etl-sandbox image built (`make sandbox-image`) for the
     #     docker-sandbox tests, or accept they stay skipped and make e2e a
     #     REQUIRED status check instead (branch-protection setting, owner
-    #     action — see docs/work/2026-09-09-persona-audit-remediation-plan.md).
+    #     action — see docs/archive/work/2026-09-09-persona-audit-remediation-plan.md).
     services:
       mysql-test:
         image: mysql:8.4

@@ -69,7 +69,7 @@ flagged as an explicit open item below, not silently skipped.
 Real `profile_scale.py` run against `generate_benchmark.py`'s default output — **204,000
 rows x 300 columns** (200,000 base rows + 2% duplicate injection), ~567 MB CSV. Machine:
 8-core / 8 GB RAM, macOS (not production hardware — see caveat in the profiling report).
-Full raw JSON: `docs/work/2026-08-19-sprint12-scale-profiling.md`.
+Full raw JSON: `docs/archive/work/2026-08-19-sprint12-scale-profiling.md`.
 
 | Stage | Real measurement | Verdict |
 |---|---|---|
@@ -206,7 +206,7 @@ concrete, sufficient one instead.
   consideration and asked for exactly this kind of follow-up measurement.
 - `case_study/data/generate_benchmark.py`, `case_study/data/profile_scale.py` — this ADR's
   measurement tooling.
-- `docs/work/2026-08-19-sprint12-scale-profiling.md` — full raw profiling report.
+- `docs/archive/work/2026-08-19-sprint12-scale-profiling.md` — full raw profiling report.
 - `src/ai_etl/agents/extractor.py` — `_extract_schema()`, the point-1 fix.
 - `src/ai_etl/core/sandbox.py`, `src/ai_etl/agents/analyst.py`, `src/ai_etl/agents/science.py`,
   `src/ai_etl/agents/transformer.py` — point-2 call sites.

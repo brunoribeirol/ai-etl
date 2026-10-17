@@ -35,7 +35,7 @@ Evidência (JS, `document.querySelector('button').outerHTML`):
 <button type="button" ... aria-label="localeToggle.switchTo" ...>
 ```
 
-**Já era conhecido?** Sim — `docs/work/2026-08-24-full-technical-product-audit.md` linha 248 já
+**Já era conhecido?** Sim — `docs/archive/work/2026-08-24-full-technical-product-audit.md` linha 248 já
 registrou exatamente esse achado ("fix the untranslated `localeToggle.switchTo` key", punch-list
 Alta). Confirmado que **ainda não foi corrigido** 11 dias depois.
 
@@ -60,7 +60,7 @@ Evidência:
 ```
 
 **Já era conhecido?** Não encontrei menção a isso na auditoria de 2026-08-24 nem em nenhum outro
-doc de `docs/work/`. É um achado novo desta rodada.
+doc de `docs/archive/work/`. É um achado novo desta rodada.
 
 ### 3. Tabela de `/history`: cada linha vira 5 links `<a>` idênticos, sem semântica de tabela (Média, novo)
 
@@ -108,7 +108,7 @@ Evidência (DOM de uma linha, 5 âncoras com o mesmo `href="/history/11d20b32-..
 
 ## Já era conhecido pelas auditorias anteriores? (resumo)
 
-- Achado 1 (`localeToggle.switchTo`): **sim**, `docs/work/2026-08-24-full-technical-product-audit.md`
+- Achado 1 (`localeToggle.switchTo`): **sim**, `docs/archive/work/2026-08-24-full-technical-product-audit.md`
   (linha 248), ainda não corrigido.
 - Achados 2 e 3 (upload por teclado; tabela de history sem semântica): **não encontrados** em
   nenhuma auditoria anterior verificada (`2026-08-24-full-technical-product-audit.md` e o

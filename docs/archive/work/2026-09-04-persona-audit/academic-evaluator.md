@@ -4,7 +4,7 @@
 
 **Repo:**
 - `CLAUDE.md`, `docs/CURRENT_STATE.md` (linhas 1-150, seções 2026-09-04 sessões 1-4)
-- `docs/work/2026-08-24-full-technical-product-audit.md` (seção "Academic evaluator" completa, para não repetir achados já registrados)
+- `docs/archive/work/2026-08-24-full-technical-product-audit.md` (seção "Academic evaluator" completa, para não repetir achados já registrados)
 - `case_study/results/tabela-resultados.md`, `case_study/results/sprint8/` (README, `stability_summary.json`)
 - `docs/adr/ADR-007-unified-sandbox-policy.md`
 - `grep` em `src/ai_etl/audit/` por `stage_latencies`/`save_stage_latencies` (ADR-007)
@@ -52,7 +52,7 @@ Confirmados nomeados formalmente em `CONTEXT.md:21-24`:
 
 ## Já era conhecido pelas auditorias anteriores? (sim/não + link se sim)
 
-- Achado #1 (draft-product-vision §8): **sim, já conhecido** — era o achado central da persona Academic Evaluator em `docs/work/2026-08-24-full-technical-product-audit.md` (linha 129) — e **já foi corrigido** em 2026-08-26, confirmado por mim hoje.
+- Achado #1 (draft-product-vision §8): **sim, já conhecido** — era o achado central da persona Academic Evaluator em `docs/archive/work/2026-08-24-full-technical-product-audit.md` (linha 129) — e **já foi corrigido** em 2026-08-26, confirmado por mim hoje.
 - Achado #2 (evaluation-metrics.md desatualizado): **parcialmente conhecido** — a auditoria de 08-24 já dizia "apenas 3/10 instrumentadas" (mesma seção, linha 132), mas não notou que a métrica de latência específica já tinha sido implementada via ADR-007 no mesmo Sprint em que o documento foi escrito. Refinamento do achado anterior, não um achado inteiramente novo.
 - Achado #3 (case study desatualizado): **sim, já conhecido** — registrado como item aberto em `docs/CURRENT_STATE.md` (sessão 4, hoje), tratado como decisão pendente do owner. Não estava explícito na seção Academic Evaluator da auditoria de 08-24, mas está documentado no repo.
 - Achado #4/#5: nada de novo — narrativa honesta confirmada, sem discrepância.

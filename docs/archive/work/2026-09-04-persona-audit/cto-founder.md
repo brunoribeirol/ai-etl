@@ -7,7 +7,7 @@
 - Artifact "AI-ETL Platform Audit" (`b859d4b5-89a4-4479-b372-af0b5c0ab62a`,
   auditado 2026-09-03, findings fechados 2026-09-04) — extraído o texto
   completo do HTML publicado, não apenas a preview.
-- `docs/work/2026-08-24-full-technical-product-audit.md` (referenciado, não
+- `docs/archive/work/2026-08-24-full-technical-product-audit.md` (referenciado, não
   relido linha a linha — usado como baseline do que já era conhecido).
 - Código real: `src/ai_etl/core/sandbox.py` (mecanismo de isolamento de
   execução), `src/ai_etl/api/routers/budget.py`, `infra/aws/terraform/*`,

@@ -296,7 +296,7 @@ def _date_parse_pattern_from_prompt(dates: pd.Series, prefer_dayfirst: bool) -> 
     Per-value (`.apply()`), not per-column: the previous column-wide version
     of this pattern (2026-09-04, 2nd round fix) correctly handled a column
     that was *purely* ISO or *purely* non-ISO, but a live-verified real gap
-    (docs/work/2026-09-05-mega-audit-remediation-plan.md) found it still
+    (docs/archive/work/2026-09-05-mega-audit-remediation-plan.md) found it still
     broke on a column genuinely MIXING both — `pd.to_datetime(...)` with no
     explicit `format=` infers ONE format from the column and silently turns
     minority-format rows into NaT, even though each string is individually
@@ -373,7 +373,7 @@ def test_date_parse_pattern_still_prefers_dayfirst_for_genuine_ddmmyyyy_text() -
 
 def test_date_parse_pattern_handles_a_column_genuinely_mixing_iso_and_ddmmyyyy() -> None:
     """Wave 3 item 16, 2026-09-05 mega-audit remediation
-    (docs/work/2026-09-05-mega-audit-remediation-plan.md): the exact
+    (docs/archive/work/2026-09-05-mega-audit-remediation-plan.md): the exact
     live-reproduced case (Data Engineer persona, `vendas_br_edge.csv` /
     confirmed again via the deployed app's own live-verification run for
     items 2/3/4b) — a column mixing ISO strings with DD/MM/YYYY strings.
@@ -404,7 +404,7 @@ def test_en_us_locale_prompt_prefers_month_first(mock_get_llm) -> None:
 
 # ---------------------------------------------------------------------------
 # Wave 1 item 3, 2026-09-05 mega-audit remediation
-# (docs/work/2026-09-05-mega-audit-remediation-plan.md): Data Engineer found,
+# (docs/archive/work/2026-09-05-mega-audit-remediation-plan.md): Data Engineer found,
 # live, that generated code twice wrote `str.replace('R\$ ', '')` to strip a
 # BR-currency prefix — `\$` is not a valid Python escape sequence, so the
 # literal backslash it leaves never matches "R$ " in the real data, silently

@@ -7,7 +7,7 @@ superseded by a manual `pg_dump`-to-S3 stopgap. **Fully verified
 succeeded with real numbers (see "Owner verification checklist" below).
 This is the only ADR-042 gap that was ever fully open; it is now closed.
 **Date:** 2026-08-27
-**Sprint:** Wave 3 (post-audit strategic decisions, `docs/work/2026-08-26-strategic-decisions-execution-plan.md`)
+**Sprint:** Wave 3 (post-audit strategic decisions, `docs/archive/work/2026-08-26-strategic-decisions-execution-plan.md`)
 
 ## Context
 
@@ -201,7 +201,7 @@ there's revenue to justify the cost. Revisit trigger: first paying tenant.
 **S3 run artifacts: no independent backup, by design.** Every artifact under
 `audit/storage.py` (`{run_id}.json`, `_silver.csv`, `_gold_*.csv`, figures) is
 fully regenerable by re-running the same `saved_pipeline` — nothing here is a
-system of record (`docs/architecture-storage.md` already establishes this
+system of record (`docs/architecture/architecture-storage.md` already establishes this
 split explicitly: "independently scaled and independently backed up on
 purpose"). S3 itself already provides 11 nines of object durability
 (AWS's own published figure) against physical loss, which is a stronger
@@ -236,7 +236,7 @@ useful history, not required for the product to keep functioning post-
 recovery. Once Postgres is restored, every `saved_pipeline` can be re-run on
 its next scheduled tick (or manually) to regenerate current-state artifacts —
 this is the same "S3 is a cache of derived outputs, Postgres is the source of
-truth" split `docs/architecture-storage.md` already documents, just stated
+truth" split `docs/architecture/architecture-storage.md` already documents, just stated
 here in DR terms.
 
 ## Owner verification checklist — fully resolved 2026-09-07

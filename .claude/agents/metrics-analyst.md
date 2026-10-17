@@ -19,7 +19,7 @@ output is analysis — a report, a comparison table, a flagged regression — no
 - `case_study/results/model_comparison_*/` — ad hoc live multi-provider LLM comparison runs
   (gitignored, ephemeral — see `docs/CURRENT_STATE.md` for context on why a given comparison was
   run and what it was checking).
-- `docs/work/*.md` — prior session's own analysis write-ups often already contain interpreted
+- `docs/archive/work/*.md` — prior session's own analysis write-ups often already contain interpreted
   results; check for an existing one covering the same question before re-deriving from raw
   JSON/CSV.
 

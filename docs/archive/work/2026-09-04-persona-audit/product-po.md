@@ -15,7 +15,7 @@
    `/pipelines` — para confirmar com a UI real (não só grep) se "quality rules customizadas" e
    "drift threshold por pipeline" (citados em `docs/CURRENT_STATE.md` Sprint 16/14) têm campo na
    tela de criação/edição de pipeline.
-4. Cruzei cada achado com `docs/work/2026-08-24-full-technical-product-audit.md` (linha 117) para
+4. Cruzei cada achado com `docs/archive/work/2026-08-24-full-technical-product-audit.md` (linha 117) para
    não reportar como novo algo já catalogado — e para checar se algo catalogado como gap lá já foi
    corrigido desde então (a instrução do prompt pedia explicitamente não confiar cegamente nela).
 
@@ -75,7 +75,7 @@ distinção registrada explicitamente na auditoria anterior, mas é consistente 
   citava "notification config" sem UI de forma genérica; a investigação de hoje mostra que isso já
   está errado pela metade (o `PUT` é usado, só os `GET`s é que sobram).
 - Achado 3 (test-connectivity/estimate/allowed-models): **Sim** —
-  `docs/work/2026-08-24-full-technical-product-audit.md:117`.
+  `docs/archive/work/2026-08-24-full-technical-product-audit.md:117`.
 - Achado 4 (admin/tenant-export não são mais gaps): não é um achado de produto, é uma correção do
   registro — a auditoria de 2026-08-24 está desatualizada nesse ponto específico.
 - Achado 5 (quality rules via JSON cru): **Não** citado explicitamente antes.

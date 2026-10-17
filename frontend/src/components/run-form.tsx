@@ -71,7 +71,7 @@ export function RunForm({
 
   const [file, setFile] = useState<File | null>(initialFile);
   // Wave 1 item 2 (2026-09-05 mega-audit remediation,
-  // docs/work/2026-09-05-mega-audit-remediation-plan.md): a multi-sheet Excel
+  // docs/archive/work/2026-09-05-mega-audit-remediation-plan.md): a multi-sheet Excel
   // upload used to always silently run against sheet 0 for the preview, then
   // fail during the real pipeline execution with no explanation ("Excel
   // multi-sheet always fails"). `sheetOptions` is `null` until a `.xlsx`/`.xls`
@@ -290,7 +290,7 @@ export function RunForm({
             <div className="flex flex-col gap-2">
               <Label htmlFor="file">{t("fileLabel")}</Label>
               {/* Wave 2 item 5, 2026-09-05 mega-audit remediation
-                  (docs/work/2026-09-05-mega-audit-remediation-plan.md):
+                  (docs/archive/work/2026-09-05-mega-audit-remediation-plan.md):
                   `className="hidden"` (display:none) used to remove this
                   input from the tab order entirely — a keyboard-only user
                   tabbing through the form skipped straight over file upload

@@ -46,7 +46,7 @@ The roadmap already suggested Terraform, and it holds up on its own merits here:
 ### Scope
 
 - `infra/aws/terraform/` — the full IaC: ECS Fargate cluster running two services (`web`, `worker`) from one ECR image, an ALB in front of `web` only, ElastiCache Redis (replaces Railway's managed Redis addon), IAM roles (task execution + a scoped task role for S3 access), Secrets Manager for the same secrets Railway holds in its dashboard. Reuses the account's **default VPC** rather than provisioning a dedicated network — a deliberate scope cut for a proof, documented as a known simplification in `infra/aws/terraform/README.md` (a real production cutover would want private subnets + NAT gateway).
-- `docs/deploy-diff-railway-vs-aws.md` — exactly what changes moving from the Railway config to this AWS one: env vars, networking model, secrets handling, credential model (a real, positive difference: ECS uses an IAM task role for S3 instead of Railway's static `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`).
+- `docs/architecture/deploy-diff-railway-vs-aws.md` — exactly what changes moving from the Railway config to this AWS one: env vars, networking model, secrets handling, credential model (a real, positive difference: ECS uses an IAM task role for S3 instead of Railway's static `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`).
 - **Not in scope**: a second managed Postgres. `APP_DATABASE_URL` keeps pointing at the existing Supabase instance either way — this sprint is about compute/network/storage portability, not about also re-homing the application database, which is already cloud-agnostic (a plain Postgres connection string) and out of scope for both Railway's and this ADR's decision.
 
 ## Consequences
@@ -63,5 +63,5 @@ The roadmap already suggested Terraform, and it holds up on its own merits here:
 - ADR-009 — `StorageBackend` abstraction this decision reuses without modification.
 - ADR-008 — Celery/Redis architecture ElastiCache replaces the managed-Redis half of.
 - `docs/CURRENT_STATE.md` — "Deploy" section, the Railway configuration this ADR is diffed against.
-- `docs/deploy-diff-railway-vs-aws.md` — the detailed diff.
+- `docs/architecture/deploy-diff-railway-vs-aws.md` — the detailed diff.
 - `infra/aws/terraform/README.md` — how to run `plan`/`apply` (human-gated), known simplifications.

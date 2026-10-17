@@ -1,6 +1,6 @@
 # AWS Secrets Manager. Railway's equivalent is its dashboard's plain
 # (encrypted-at-rest, but not access-audited the same way) service
-# variables -- see docs/deploy-diff-railway-vs-aws.md for the full
+# variables -- see docs/architecture/deploy-diff-railway-vs-aws.md for the full
 # comparison. Values are supplied via Terraform variables (sensitive,
 # no defaults, never committed) and written here; they are not baked into
 # the container image or the task definition's plaintext environment block.

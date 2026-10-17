@@ -17,7 +17,7 @@
    steps", Deploy) e ~1825-1869 ("Known risks / open items") comparado ao
    estado real observado agora.
 
-Não usei as auditorias anteriores (`docs/work/2026-08-24-...md`, artifact
+Não usei as auditorias anteriores (`docs/archive/work/2026-08-24-...md`, artifact
 publicado) como fonte de verdade — apenas como candidatos a re-verificar.
 
 ## Achados (severidade + evidência concreta)

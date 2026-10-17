@@ -132,7 +132,7 @@ Cloud Run/GKE, or any Kubernetes with a projected service account token.
 
 `.github/workflows/db-backup.yml` authenticates with permanent AWS access keys held as repository
 secrets. GitHub Actions **does** issue OIDC tokens, so that one is genuinely federatable. It is
-tracked as deferred work in `docs/work/2026-09-13-repository-hardening.md`.
+tracked as deferred work in `docs/archive/work/2026-09-13-repository-hardening.md`.
 
 ## Expiry tracking
 

@@ -339,7 +339,7 @@ def transformer_node(state: PipelineState) -> PipelineState:
     return {
         **state,
         # Wave 1 item 4b, 2026-09-05 mega-audit remediation
-        # (docs/work/2026-09-05-mega-audit-remediation-plan.md): before this
+        # (docs/archive/work/2026-09-05-mega-audit-remediation-plan.md): before this
         # fix, a total failure never set `transformation_code` at all, so the
         # History page's Code tab showed "No code available for this run."
         # with no way to see what was actually tried — confirmed live for the

@@ -110,7 +110,7 @@ achado.
 
 - **SQL injection (RCE 24/08):** SIM — corrigido e documentado em
   `src/ai_etl/core/sql_safety.py` (comentário "Wave 0, 2026-08-24 audit, Red
-  Team CRITICAL finding") e em `docs/work/2026-08-24-full-technical-product-audit.md`.
+  Team CRITICAL finding") e em `docs/archive/work/2026-08-24-full-technical-product-audit.md`.
   Reproduzi a defesa por leitura de código (não precisei re-explorar), continua
   fechada nos 5 call sites atuais.
 

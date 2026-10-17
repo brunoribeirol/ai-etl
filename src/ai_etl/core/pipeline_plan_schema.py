@@ -38,7 +38,7 @@ class PipelinePlanSource(BaseModel):
     name: str
     type: _SourceType
     # Wave 1 item 2, 2026-09-05 mega-audit remediation
-    # (docs/work/2026-09-05-mega-audit-remediation-plan.md): documents the
+    # (docs/archive/work/2026-09-05-mega-audit-remediation-plan.md): documents the
     # `csv`-type field `agents/pipeline/extractor.py` already reads
     # (`source.get("sheet_name")`, forwarded to
     # `sources/csv_source.py::load_source_file`/`_load_excel`) and

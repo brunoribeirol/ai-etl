@@ -4,7 +4,7 @@ Next.js (App Router) + Clerk, backed by the FastAPI API in `../src/ai_etl/api/`
 (Sprint 6, ADR-011 — `../docs/adr/ADR-011-nextjs-frontend-fastapi-clerk-middleware.md`).
 
 Replaces the Streamlit UI (`../app.py`), retired once this app covers the same
-surface (see the Sprint 6 plan: `../docs/work/2026-08-17-sprint6-frontend-nextjs-clerk-fastapi.md`).
+surface (see the Sprint 6 plan: `../docs/archive/work/2026-08-17-sprint6-frontend-nextjs-clerk-fastapi.md`).
 
 ## Local dev
 

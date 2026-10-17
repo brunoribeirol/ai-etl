@@ -46,6 +46,6 @@ See `decisions/nextjs-frontend-over-streamlit-js-bridge.md` (Vault) for the fron
 ## Related
 
 - Vault: `decisions/nextjs-frontend-over-streamlit-js-bridge.md` — the strategic decision this ADR implements.
-- `docs/work/2026-08-17-sprint6-frontend-nextjs-clerk-fastapi.md` — implementation plan, PR sequencing.
+- `docs/archive/work/2026-08-17-sprint6-frontend-nextjs-clerk-fastapi.md` — implementation plan, PR sequencing.
 - `docs/adr/ADR-006-clerk-auth-supabase-postgres-tenancy.md` — the auth verification this ADR reuses unchanged.
 - `docs/adr/ADR-009-tenant-scoped-storage-and-config.md` — the `_fig.json` artifact shape the frontend's result pages read.

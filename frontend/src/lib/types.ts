@@ -267,7 +267,7 @@ export type SavedPipeline = {
   approval_threshold_rows: number | null;
   last_approved_at: string | null;
   // Wave 2 item 8, 2026-09-05 mega-audit remediation
-  // (docs/work/2026-09-05-mega-audit-remediation-plan.md) — already a valid,
+  // (docs/archive/work/2026-09-05-mega-audit-remediation-plan.md) — already a valid,
   // accepted API field (`api/routers/pipelines.py`, `gt=0`, server default
   // 20.0) with no UI to set it; this is the frontend catching up, not a new
   // backend field. Never null (DB column has a `server_default`).

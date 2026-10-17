@@ -27,7 +27,7 @@
  *
  * `reliabilityNote` is rendered verbatim on the model-picker screen a business
  * user sees while choosing which model runs their pipeline (Wave 3 item 11,
- * 2026-09-05 mega-audit remediation, docs/work/2026-09-05-mega-audit-
+ * 2026-09-05 mega-audit remediation, docs/archive/work/2026-09-05-mega-audit-
  * remediation-plan.md) — keep it to user-facing facts (completion rate,
  * quality score, cost). Internal engineering history (which PR fixed what,
  * "this model used to fail 100% of the time") belongs in

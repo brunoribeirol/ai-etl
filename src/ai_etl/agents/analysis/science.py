@@ -222,7 +222,7 @@ def _column_named_in_narrative(lowercased_narrative: str, numeric_cols: pd.Index
     """Which of `numeric_cols` the narrative text actually names, if any.
 
     Wave 2 item 6, 2026-09-05 mega-audit remediation
-    (docs/work/2026-09-05-mega-audit-remediation-plan.md): the guard-rail
+    (docs/archive/work/2026-09-05-mega-audit-remediation-plan.md): the guard-rail
     below used to always check `numeric_cols[-1]` (last by DataFrame
     position) regardless of which column the narrative's trend claim was
     actually about — live-verified real miss (LLM/Prompt Engineer persona,

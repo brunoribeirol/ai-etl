@@ -7,7 +7,7 @@ shared-Chrome-tab-group contention problem running in parallel (browser-driving 
 over the same tab) plus a session rate-limit; those 4 (Accessibility, LLM/Prompt Engineer, Data
 Engineer, and partially Non-technical User) were retried solo and completed cleanly. Findings
 below are pulled from the 12 individual reports in this same directory
-(`docs/work/2026-09-04-persona-audit/<persona>.md`) — read those for full evidence trails.
+(`docs/archive/work/2026-09-04-persona-audit/<persona>.md`) — read those for full evidence trails.
 
 **Non-goal, per the skill's own protocol**: no fixes as part of the audit itself, except one —
 the date-parsing regression below directly contradicted a "fixed" claim this same session had
