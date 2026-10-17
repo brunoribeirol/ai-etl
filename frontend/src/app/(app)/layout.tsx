@@ -1,6 +1,7 @@
 import { getTranslations } from "next-intl/server";
 import Link from "next/link";
 import { AgentsInfo } from "@/components/agents-info";
+import { AppNav } from "@/components/app-nav";
 import { AuthHeader } from "@/components/auth-header";
 import { LocaleToggle } from "@/components/locale-toggle";
 import { MobileNav } from "@/components/mobile-nav";
@@ -32,7 +33,6 @@ import type { ApiConfig } from "@/lib/types";
  * `users.locale` via `PATCH /tenant/locale` (ADR-036 §3).
  */
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const t = await getTranslations("appNav");
   const tCommon = await getTranslations("common");
 
   // Best-effort: the model badge / "How it works" panel is informational,
@@ -62,47 +62,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <>
       <header className="sticky top-0 z-10 flex justify-between items-center px-4 sm:px-6 h-16 border-b border-border/60 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="flex items-center gap-2 sm:gap-8 min-w-0">
+        <div className="flex items-center gap-2 lg:gap-6 min-w-0">
           <MobileNav isAdmin={isAdmin} isEditor={isEditor} />
-          <Link href="/app" className="font-semibold tracking-tight text-sm shrink-0">
+          <Link href="/app" className="flex shrink-0 items-center gap-2 text-sm font-semibold tracking-tight">
+            <span aria-hidden className="size-2 rounded-full bg-brand" />
             {tCommon("brand")}
           </Link>
-          <nav className="hidden sm:flex gap-6 text-sm text-muted-foreground">
-            <Link href="/get-started" className="hover:text-foreground transition-colors">
-              {t("getStarted")}
-            </Link>
-            <Link href="/app" className="hover:text-foreground transition-colors">
-              {t("run")}
-            </Link>
-            <Link href="/history" className="hover:text-foreground transition-colors">
-              {t("history")}
-            </Link>
-            <Link href="/pipelines" className="hover:text-foreground transition-colors">
-              {t("pipelines")}
-            </Link>
-            <Link href="/approvals" className="hover:text-foreground transition-colors">
-              {t("approvals")}
-            </Link>
-            <Link href="/summary" className="hover:text-foreground transition-colors">
-              {t("summary")}
-            </Link>
-            <Link href="/budget" className="hover:text-foreground transition-colors">
-              {t("budget")}
-            </Link>
-            <Link href="/data-export" className="hover:text-foreground transition-colors">
-              {t("dataExport")}
-            </Link>
-            {isEditor && (
-              <Link href="/secrets" className="hover:text-foreground transition-colors">
-                {t("secrets")}
-              </Link>
-            )}
-            {isAdmin && (
-              <Link href="/admin" className="hover:text-foreground transition-colors">
-                {t("admin")}
-              </Link>
-            )}
-          </nav>
+          <AppNav isAdmin={isAdmin} isEditor={isEditor} />
         </div>
         <div className="flex items-center gap-1 shrink-0">
           <LocaleToggle syncBackend />

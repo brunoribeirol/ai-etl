@@ -15,7 +15,8 @@
   "common": {
     "brand": "AI-ETL",
     "openMenu": "Abrir menu",
-    "menu": "Menu"
+    "menu": "Menu",
+    "signIn": "Entrar"
   },
   "appNav": {
     "getStarted": "Começar",
@@ -27,59 +28,187 @@
     "approvals": "Aprovações",
     "budget": "Orçamento",
     "dataExport": "Dados e privacidade",
-    "secrets": "Segredos"
+    "secrets": "Segredos",
+    "more": "Mais",
+    "label": "Navegação principal"
   },
   "marketingLayout": {
-    "footer": "AI-ETL: framework multiagente de ETL, código auditável."
+    "navHow": "Como funciona",
+    "navAudit": "Auditoria",
+    "navFaq": "Perguntas",
+    "footerTagline": "Framework multiagente de ETL com código auditável.",
+    "footerProduct": "Produto",
+    "footerProject": "Projeto",
+    "footerProjectBody": "Trabalho de conclusão de curso, Ciência da Computação, CESAR School, 2026."
   },
   "landing": {
-    "heroBadge": "Multiagente · código auditável",
-    "heroTitleLine1": "Descreva o pipeline.",
-    "heroTitleLine2": "Os agentes constroem. Você audita.",
-    "heroSubtitle": "Uma especificação em linguagem natural vira extração, limpeza e carga de dados heterogêneos. Cada etapa gera código Python real e revisável, e não uma resposta de chat que some quando você fecha a aba.",
+    "eyebrow": "Multiagente · código auditável",
+    "heroTitle1": "Descreva o pipeline.",
+    "heroTitle2": "Os agentes constroem. Você audita.",
+    "heroSubtitle": "Uma especificação em linguagem natural vira extração, limpeza e carga de dados de várias fontes, e depois uma resposta para a sua pergunta de negócio. Cada etapa gera código Python que você lê, e não uma resposta de chat que some quando a aba fecha.",
     "ctaPrimary": "Entrar e rodar um pipeline",
     "ctaSecondary": "Ver como funciona",
-    "whyTitle": "“Por que não subo a planilha num chat e pergunto?”",
-    "whyBody": "Pergunta justa. Para um arquivo isolado e uma pergunta pontual, um Code Interpreter genérico já resolve, e é grátis. O AI-ETL existe para onde isso para de funcionar.",
-    "differentiators": [
+    "demo": {
+      "label": "Exemplo de execução",
+      "specLabel": "Especificação",
+      "spec": "Junte as corridas de janeiro com a tabela de zonas, remova duplicatas e grave o total por bairro no PostgreSQL.",
+      "steps": [
+        {
+          "agent": "Orchestrator",
+          "detail": "plano com 2 fontes e 4 transformações"
+        },
+        {
+          "agent": "Extractor",
+          "detail": "20.000 linhas lidas, esquema inferido"
+        },
+        {
+          "agent": "Transformer",
+          "detail": "transform(dfs) gerado e executado isolado"
+        },
+        {
+          "agent": "Quality",
+          "detail": "ausentes 0,2%, duplicatas 0: carga liberada"
+        },
+        {
+          "agent": "Loader",
+          "detail": "resultado gravado no PostgreSQL"
+        }
+      ],
+      "result": "Pronto. O código de cada etapa ficou salvo para revisão."
+    },
+    "stats": [
       {
-        "title": "Multi-fonte heterogênea, não um arquivo por vez",
-        "body": "CSV, conexão real a Postgres/MySQL/MongoDB, REST autenticado e PDF/DOCX numa spec só, e um agente decide como combinar. Não dá para colar isso num chat."
+        "value": "9",
+        "label": "agentes, cada um com uma função"
       },
       {
-        "title": "Pipeline auditável e persistido, não uma resposta efêmera",
-        "body": "Cada execução gera código real (Transformer, Analyst, Science), salvo, revisável e versionável. Sobrevive a fechar a aba; a resposta de um chat não."
+        "value": "7",
+        "label": "tipos de fonte, de CSV a APIs REST"
       },
       {
-        "title": "API-first, não chat-first",
-        "body": "O pipeline é um endpoint chamável, agendável, integrável a outro sistema: infraestrutura de dados, não uma conversa que alguém precisa lembrar de repetir toda semana."
+        "value": "5",
+        "label": "destinos, de PostgreSQL a Parquet no S3"
       },
       {
-        "title": "Governança e isolamento por tenant",
-        "body": "Dado sensível não passa pelo chat de um terceiro sem controle: isolamento por tenant, sandbox com timeout, log de auditoria de cada ação de cada agente."
+        "value": "20/20",
+        "label": "execuções do estudo de caso iguais à referência"
       }
     ],
-    "howTitle": "Do dado bruto à recomendação, uma pirâmide de agentes",
-    "howBody": "Nove agentes especializados, cada um com uma única responsabilidade. O estado do pipeline passa de um para o outro e nunca fica escondido numa caixa-preta.",
-    "howPlainLanguage": "Em termos simples: cada etapa refina os dados um pouco mais. Entra um arquivo bruto, sai um dado limpo e sem duplicatas, depois insights de negócio, depois previsões e, no topo, uma recomendação em português claro. Você não precisa saber o nome das etapas para ler o resultado; elas importam para quem for auditar como ele foi produzido.",
-    "rosterHeading": "Os nove agentes por trás da pirâmide",
-    "dualTitle": "Feito pra duas pessoas na mesma empresa",
+    "whyEyebrow": "Por que não um chat",
+    "whyTitle": "“Por que não subo a planilha num chat e pergunto?”",
+    "whyBody": "Pergunta justa. Para um arquivo isolado e uma pergunta pontual, um chat resolve. O AI-ETL existe para onde isso para de funcionar.",
+    "differentiators": [
+      {
+        "title": "Várias fontes numa especificação só",
+        "body": "CSV, Excel, PDF e DOCX, bancos PostgreSQL, MySQL, MongoDB e SQLite, e APIs REST. Um agente decide como combinar."
+      },
+      {
+        "title": "Pipeline que fica, não resposta que some",
+        "body": "Cada execução guarda o código gerado, o plano e o relatório de qualidade. Dá para revisar, comparar e rodar de novo."
+      },
+      {
+        "title": "Infraestrutura, não conversa",
+        "body": "Um pipeline salvo roda sozinho no horário definido, com aprovação antes de gravar se você quiser."
+      },
+      {
+        "title": "Governança desde o início",
+        "body": "Dados isolados por conta no banco, código gerado em ambiente isolado com tempo-limite, e um registro de cada ação."
+      }
+    ],
+    "howEyebrow": "Como funciona",
+    "howTitle": "Duas camadas, nove agentes",
+    "howBody": "A camada de ETL é um grafo com estado compartilhado: cada agente recebe o estado, faz uma coisa e passa adiante. A camada de análise trabalha sobre os dados já carregados.",
+    "howTabEtl": "Camada de ETL",
+    "howTabAnalysis": "Camada de análise",
+    "howEtlNote": "Só o planejamento e a transformação usam o modelo. Extração, qualidade e carga são determinísticas. Se o portão de qualidade bloqueia, nada é gravado e o motivo fica registrado.",
+    "howAnalysisNote": "A pergunta de negócio vira sub-análises descritivas e preditivas. Cada uma gera código, roda isolada e, se falhar, é reparada. O Advisor junta tudo em recomendações priorizadas.",
+    "graphGate": "portão",
+    "graphBlocked": "bloqueado: nada é gravado",
+    "auditEyebrow": "O que você audita",
+    "auditTitle": "Nada acontece fora da sua vista",
+    "auditBody": "O modelo escreve, o sistema executa e registra. Você tem como conferir cada etapa.",
+    "auditCards": [
+      {
+        "title": "O código de cada etapa",
+        "body": "Toda transformação é uma função Python que você lê, copia e roda de novo."
+      },
+      {
+        "title": "O portão antes da carga",
+        "body": "Ausentes, duplicatas, tipos e valores atípicos são verificados antes de gravar. Acima do limite, nada vai para o destino."
+      },
+      {
+        "title": "A trilha de cada ação",
+        "body": "Cada agente do pipeline registra o que fez e quando, junto com o código e o relatório de qualidade."
+      }
+    ],
+    "qualityRows": [
+      {
+        "label": "valores ausentes",
+        "value": "0,2%",
+        "state": "ok"
+      },
+      {
+        "label": "linhas duplicadas",
+        "value": "0",
+        "state": "ok"
+      },
+      {
+        "label": "tipos conferidos",
+        "value": "21 colunas",
+        "state": "ok"
+      },
+      {
+        "label": "valores atípicos",
+        "value": "977",
+        "state": "warn"
+      }
+    ],
+    "dualTitle": "Feito para duas pessoas na mesma empresa",
     "dualOperatorBadge": "Operador técnico",
     "dualOperatorTitle": "Quem hoje monta o relatório na mão",
-    "dualOperatorBody": "Configura a fonte, escreve a especificação, audita o código gerado antes de confiar nele. Sabe ler Python/pandas, mas não precisa escrever do zero toda semana.",
+    "dualOperatorBody": "Configura a fonte, escreve a especificação, audita o código gerado antes de confiar nele. Sabe ler Python e pandas, mas não precisa escrever tudo do zero toda semana.",
     "dualExecBadge": "Consumidor executivo",
-    "dualExecTitle": "Quem recebe o resultado, não configura nada",
-    "dualExecBody": "Quer a resposta e a recomendação sem virar refém de um número que a IA pode ter inventado, porque alguém do time já pôde auditar de onde ele veio.",
-    "techTitle": "Construído pra produção, não só pra demo",
+    "dualExecTitle": "Quem recebe o resultado e não configura nada",
+    "dualExecBody": "Quer a resposta e a recomendação sem depender de um número que a IA pode ter inventado, porque alguém do time pôde conferir de onde ele veio.",
+    "techTitle": "Construído para produção, não só para demonstração",
     "techFacts": [
-      "Orquestração multiagente via LangGraph, estado explícito",
-      "Código gerado roda em sandbox isolado, com timeout",
-      "Isolamento por tenant com Row-Level Security no Postgres",
-      "Retry automático + monitoramento de saúde de execuções agendadas",
-      "Validação de saída: resultado é conferido antes de chegar a você",
-      "Autoavaliação de prontidão SOC2 e política formal de dados (LGPD/GDPR)"
+      "Orquestração multiagente com LangGraph e estado explícito",
+      "Código gerado roda em ambiente isolado, com tempo-limite",
+      "Isolamento por conta com Row-Level Security no PostgreSQL",
+      "Nova tentativa automática e saúde das execuções agendadas",
+      "Saída conferida antes de chegar a você",
+      "Teto de gasto, estimativa de custo e aprovação antes da carga"
     ],
-    "finalCtaTitle": "Pare de reconciliar fontes à mão toda semana"
+    "faqEyebrow": "Perguntas",
+    "faqTitle": "O que costumam perguntar",
+    "faq": [
+      {
+        "q": "Meus dados vão inteiros para o modelo?",
+        "a": "Não. Para escrever a transformação, o modelo recebe o esquema de cada fonte e uma amostra de três linhas. O código gerado roda em ambiente isolado, sobre a tabela inteira."
+      },
+      {
+        "q": "E se o código gerado estiver errado?",
+        "a": "Se a execução falhar, o código e o erro voltam ao modelo, em até três tentativas. Depois disso a execução termina como falha, com o motivo registrado, e tudo o que foi gerado fica salvo para leitura."
+      },
+      {
+        "q": "Como sei que os dados estão bons?",
+        "a": "Um portão de qualidade determinístico verifica valores ausentes, duplicatas, tipos e valores atípicos antes da carga. Se uma coluna passa de 20% de valores ausentes, nada é gravado no destino."
+      },
+      {
+        "q": "Quais fontes e destinos são aceitos?",
+        "a": "Arquivos CSV, Excel, JSON, PDF e DOCX; bancos PostgreSQL, MySQL, MongoDB e SQLite; APIs REST. Destinos: CSV, PostgreSQL, MySQL, MongoDB e Parquet no S3."
+      },
+      {
+        "q": "Quanto custa uma execução?",
+        "a": "Você vê uma estimativa antes de rodar e pode definir um teto mensal. No estudo de caso, com o modelo padrão, cada execução custou menos de um centavo de dólar."
+      },
+      {
+        "q": "Dá para agendar e exigir aprovação?",
+        "a": "Sim. Pipelines que leem bancos ou APIs rodam no horário definido, e você pode exigir aprovação antes de gravar no destino."
+      }
+    ],
+    "finalCtaTitle": "Pare de reconciliar fontes à mão toda semana",
+    "finalCtaBody": "Descreva o que você quer. Leia o código. Aprove a carga."
   },
   "agents": {
     "pyramid": [
