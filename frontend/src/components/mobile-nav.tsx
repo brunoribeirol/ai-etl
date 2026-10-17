@@ -62,7 +62,7 @@ export function MobileNav({
     <Sheet>
       <SheetTrigger
         render={
-          <Button variant="ghost" size="icon-sm" className="sm:hidden">
+          <Button variant="ghost" size="icon-sm" className="lg:hidden">
             <Menu aria-hidden="true" />
             <span className="sr-only">{tCommon("openMenu")}</span>
           </Button>

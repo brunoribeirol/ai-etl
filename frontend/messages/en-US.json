@@ -15,7 +15,8 @@
   "common": {
     "brand": "AI-ETL",
     "openMenu": "Open menu",
-    "menu": "Menu"
+    "menu": "Menu",
+    "signIn": "Sign in"
   },
   "appNav": {
     "getStarted": "Get started",
@@ -27,59 +28,187 @@
     "approvals": "Approvals",
     "budget": "Budget",
     "dataExport": "Data & privacy",
-    "secrets": "Secrets"
+    "secrets": "Secrets",
+    "more": "More",
+    "label": "Main navigation"
   },
   "marketingLayout": {
-    "footer": "AI-ETL: multi-agent ETL framework, auditable code."
+    "navHow": "How it works",
+    "navAudit": "Audit",
+    "navFaq": "Questions",
+    "footerTagline": "Multi-agent ETL framework with auditable code.",
+    "footerProduct": "Product",
+    "footerProject": "Project",
+    "footerProjectBody": "Undergraduate final project, Computer Science, CESAR School, 2026."
   },
   "landing": {
-    "heroBadge": "Multi-agent · auditable code",
-    "heroTitleLine1": "Describe the pipeline.",
-    "heroTitleLine2": "The agents build it. You audit it.",
-    "heroSubtitle": "A natural-language specification becomes extraction, cleaning, and loading of heterogeneous data. Every step generates real, reviewable Python code, not a chat answer that disappears when you close the tab.",
+    "eyebrow": "Multi-agent · auditable code",
+    "heroTitle1": "Describe the pipeline.",
+    "heroTitle2": "The agents build it. You audit it.",
+    "heroSubtitle": "A natural-language specification becomes extraction, cleaning and loading of data from several sources, and then an answer to your business question. Every step produces Python code you can read, not a chat reply that disappears when the tab closes.",
     "ctaPrimary": "Sign in and run a pipeline",
     "ctaSecondary": "See how it works",
-    "whyTitle": "“Why not just upload the spreadsheet to a chat and ask?”",
-    "whyBody": "Fair question. For a single file and a one-off question, a generic Code Interpreter already handles it, and it's free. AI-ETL exists for where that stops working.",
-    "differentiators": [
+    "demo": {
+      "label": "Example run",
+      "specLabel": "Specification",
+      "spec": "Join January's trips with the zone table, remove duplicates and write the total per borough to PostgreSQL.",
+      "steps": [
+        {
+          "agent": "Orchestrator",
+          "detail": "plan with 2 sources and 4 transformations"
+        },
+        {
+          "agent": "Extractor",
+          "detail": "20,000 rows read, schema inferred"
+        },
+        {
+          "agent": "Transformer",
+          "detail": "transform(dfs) generated and run in isolation"
+        },
+        {
+          "agent": "Quality",
+          "detail": "missing 0.2%, duplicates 0: load allowed"
+        },
+        {
+          "agent": "Loader",
+          "detail": "result written to PostgreSQL"
+        }
+      ],
+      "result": "Done. The code of every step is saved for review."
+    },
+    "stats": [
       {
-        "title": "Heterogeneous multi-source, not one file at a time",
-        "body": "CSV, a real connection to Postgres/MySQL/MongoDB, authenticated REST, and PDF/DOCX in a single spec, and one agent decides how to combine them. You can't paste that into a chat."
+        "value": "9",
+        "label": "agents, one job each"
       },
       {
-        "title": "An auditable, persisted pipeline, not an ephemeral answer",
-        "body": "Every run generates real code (Transformer, Analyst, Science), saved, reviewable, and versionable. It survives closing the tab; a chat answer doesn't."
+        "value": "7",
+        "label": "source types, from CSV to REST APIs"
       },
       {
-        "title": "API-first, not chat-first",
-        "body": "The pipeline is a callable, schedulable endpoint you can integrate into another system: data infrastructure, not a conversation someone has to remember to repeat every week."
+        "value": "5",
+        "label": "destinations, from PostgreSQL to Parquet on S3"
       },
       {
-        "title": "Governance and tenant isolation",
-        "body": "Sensitive data never passes through a third party's uncontrolled chat: tenant isolation, a sandboxed execution with a timeout, and an audit log of every action every agent takes."
+        "value": "20/20",
+        "label": "case-study runs equal to the reference"
       }
     ],
-    "howTitle": "From raw data to a recommendation, a pyramid of agents",
-    "howBody": "Nine specialized agents, each with a single responsibility. The pipeline's state passes from one to the next and is never hidden inside a black box.",
-    "howPlainLanguage": "In plain terms: each stage refines the data a bit further. Raw file in, clean and de-duplicated data out, then business insights, then forecasts and, at the top, a plain-English recommendation. You don't need to know the stage names to read the result; they matter if you're the one auditing how it was produced.",
-    "rosterHeading": "The nine agents behind the pyramid",
-    "dualTitle": "Built for two people at the same company",
+    "whyEyebrow": "Why not a chat",
+    "whyTitle": "“Why not upload the spreadsheet to a chat and ask?”",
+    "whyBody": "Fair question. For one file and one question, a chat works. AI-ETL is for where that stops working.",
+    "differentiators": [
+      {
+        "title": "Many sources in one specification",
+        "body": "CSV, Excel, PDF and DOCX, PostgreSQL, MySQL, MongoDB and SQLite databases, and REST APIs. An agent decides how to combine them."
+      },
+      {
+        "title": "A pipeline that stays, not an answer that fades",
+        "body": "Every run keeps the generated code, the plan and the quality report. You can review, compare and run it again."
+      },
+      {
+        "title": "Infrastructure, not a conversation",
+        "body": "A saved pipeline runs on its own schedule, with approval before writing if you want it."
+      },
+      {
+        "title": "Governance from the start",
+        "body": "Data isolated per account in the database, generated code run in isolation with a time limit, and a record of every action."
+      }
+    ],
+    "howEyebrow": "How it works",
+    "howTitle": "Two layers, nine agents",
+    "howBody": "The ETL layer is a graph with shared state: each agent receives the state, does one thing and passes it on. The analysis layer works on the data already loaded.",
+    "howTabEtl": "ETL layer",
+    "howTabAnalysis": "Analysis layer",
+    "howEtlNote": "Only planning and transformation use the model. Extraction, quality and loading are deterministic. If the quality gate blocks, nothing is written and the reason is recorded.",
+    "howAnalysisNote": "The business question becomes descriptive and predictive sub-analyses. Each one generates code, runs in isolation and is repaired if it fails. The Advisor turns them into prioritised recommendations.",
+    "graphGate": "gate",
+    "graphBlocked": "blocked: nothing is written",
+    "auditEyebrow": "What you audit",
+    "auditTitle": "Nothing happens out of sight",
+    "auditBody": "The model writes, the system runs and records. You can check every step.",
+    "auditCards": [
+      {
+        "title": "The code of every step",
+        "body": "Every transformation is a Python function you can read, copy and run again."
+      },
+      {
+        "title": "The gate before loading",
+        "body": "Missing values, duplicates, types and outliers are checked before writing. Above the limit, nothing reaches the destination."
+      },
+      {
+        "title": "The trail of every action",
+        "body": "Each pipeline agent records what it did and when, next to the code and the quality report."
+      }
+    ],
+    "qualityRows": [
+      {
+        "label": "missing values",
+        "value": "0.2%",
+        "state": "ok"
+      },
+      {
+        "label": "duplicate rows",
+        "value": "0",
+        "state": "ok"
+      },
+      {
+        "label": "types checked",
+        "value": "21 columns",
+        "state": "ok"
+      },
+      {
+        "label": "outliers",
+        "value": "977",
+        "state": "warn"
+      }
+    ],
+    "dualTitle": "Made for two people in the same company",
     "dualOperatorBadge": "Technical operator",
     "dualOperatorTitle": "Whoever builds the report by hand today",
-    "dualOperatorBody": "Configures the source, writes the spec, audits the generated code before trusting it. Reads Python/pandas, but doesn't need to write it from scratch every week.",
+    "dualOperatorBody": "Configures the source, writes the specification, audits the generated code before trusting it. Reads Python and pandas, but no longer writes it all from scratch every week.",
     "dualExecBadge": "Executive consumer",
-    "dualExecTitle": "Whoever receives the result, configures nothing",
-    "dualExecBody": "Wants the answer and the recommendation without becoming hostage to a number the AI might have made up, because someone on the team could already audit where it came from.",
-    "techTitle": "Built for production, not just a demo",
+    "dualExecTitle": "Whoever receives the result and configures nothing",
+    "dualExecBody": "Wants the answer and the recommendation without depending on a number the AI may have made up, because someone on the team could check where it came from.",
+    "techTitle": "Built for production, not only for a demo",
     "techFacts": [
-      "Multi-agent orchestration via LangGraph, explicit state",
-      "Generated code runs in an isolated sandbox, with a timeout",
-      "Tenant isolation with Row-Level Security in Postgres",
-      "Automatic retry + health monitoring for scheduled runs",
-      "Output validation: the result is checked before it reaches you",
-      "Self-assessed SOC2 readiness and a formal data policy (LGPD/GDPR)"
+      "Multi-agent orchestration with LangGraph and explicit state",
+      "Generated code runs in isolation, with a time limit",
+      "Per-account isolation with Row-Level Security in PostgreSQL",
+      "Automatic retry and health of scheduled runs",
+      "Output checked before it reaches you",
+      "Spend cap, cost estimate and approval before loading"
     ],
-    "finalCtaTitle": "Stop reconciling sources by hand every week"
+    "faqEyebrow": "Questions",
+    "faqTitle": "What people usually ask",
+    "faq": [
+      {
+        "q": "Does all my data go to the model?",
+        "a": "No. To write the transformation, the model receives each source's schema and a three-row sample. The generated code runs in isolation, over the whole table."
+      },
+      {
+        "q": "What if the generated code is wrong?",
+        "a": "If it fails, the code and the error go back to the model, up to three attempts. After that the run ends as a failure with the reason recorded, and everything generated stays saved to read."
+      },
+      {
+        "q": "How do I know the data is good?",
+        "a": "A deterministic quality gate checks missing values, duplicates, types and outliers before loading. If a column passes 20% missing values, nothing is written to the destination."
+      },
+      {
+        "q": "Which sources and destinations are supported?",
+        "a": "CSV, Excel, JSON, PDF and DOCX files; PostgreSQL, MySQL, MongoDB and SQLite databases; REST APIs. Destinations: CSV, PostgreSQL, MySQL, MongoDB and Parquet on S3."
+      },
+      {
+        "q": "How much does a run cost?",
+        "a": "You see an estimate before running and can set a monthly cap. In the case study, with the default model, each run cost less than one US cent."
+      },
+      {
+        "q": "Can I schedule runs and require approval?",
+        "a": "Yes. Pipelines that read databases or APIs run on their schedule, and you can require approval before writing to the destination."
+      }
+    ],
+    "finalCtaTitle": "Stop reconciling sources by hand every week",
+    "finalCtaBody": "Describe what you want. Read the code. Approve the load."
   },
   "agents": {
     "pyramid": [

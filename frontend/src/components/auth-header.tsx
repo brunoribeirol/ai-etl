@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { SignInButton, useUser } from "@clerk/nextjs";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 
 // Lazy-loaded (2026-09-03 perf fix, same `next/dynamic`/`ssr: false` pattern
@@ -33,6 +34,7 @@ const UserButton = dynamic(() => import("@clerk/nextjs").then((mod) => mod.UserB
  */
 export function AuthHeader() {
   const { isLoaded, isSignedIn } = useUser();
+  const t = useTranslations("common");
 
   if (!isLoaded) {
     return null;
@@ -42,7 +44,7 @@ export function AuthHeader() {
     <UserButton />
   ) : (
     <SignInButton forceRedirectUrl="/app">
-      <Button size="sm">Entrar</Button>
+      <Button size="sm">{t("signIn")}</Button>
     </SignInButton>
   );
 }

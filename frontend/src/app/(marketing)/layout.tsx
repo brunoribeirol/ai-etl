@@ -5,44 +5,85 @@ import { LocaleToggle } from "@/components/locale-toggle";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 /**
- * Marketing route group's own layout (landing page, no sprint number: see
- * docs/CURRENT_STATE.md). Deliberately minimal: no product nav
- * (Get Started/Run/History/Pipelines/Summary), those only make sense once
- * a visitor is signed in and inside `(app)`. `<AuthHeader>` still works here
- * unmodified: a signed-in visitor who lands back on `/` (e.g. via a bookmark)
- * sees their `<UserButton>`, same component `(app)/layout.tsx` uses.
+ * Marketing route group's own layout. No product navigation: Run, History and the rest only
+ * make sense once a visitor is signed in and inside `(app)`; the header links to the landing
+ * page's own sections instead. `<AuthHeader>` works here unmodified: a signed-in visitor who
+ * lands back on `/` sees their `<UserButton>`.
  *
- * `<ThemeToggle>` (Sprint 38): the toggle needs to reach every screen, not
- * just `(app)`, since a signed-out visitor on the public marketing page is
- * still a real visitor with a light/dark preference.
+ * `<ThemeToggle>` and `<LocaleToggle>` reach every screen, signed in or not. `syncBackend` is
+ * left `false` here: a signed-out visitor has no tenant to configure, so the toggle only flips
+ * the interface cookie.
  *
- * `<LocaleToggle>` (Sprint 25, ADR-036): same "every screen" reasoning as
- * `<ThemeToggle>`. `syncBackend` is left at its default `false` here: a
- * signed-out marketing visitor has no tenant to configure via
- * `PATCH /tenant/locale` yet: this toggle only ever flips the UI cookie.
+ * 2026-10-16 redesign: section links in the header, a footer with the product links and the
+ * project it belongs to (still no repository link).
  */
 export default function MarketingLayout({ children }: { children: React.ReactNode }) {
   const t = useTranslations("marketingLayout");
   const tCommon = useTranslations("common");
 
+  const sections = [
+    { href: "#how-it-works", label: t("navHow") },
+    { href: "#audit", label: t("navAudit") },
+    { href: "#faq", label: t("navFaq") },
+  ];
+
   return (
     <>
-      <header className="sticky top-0 z-10 flex justify-between items-center px-4 sm:px-6 h-16 border-b border-border/60 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <Link href="/" className="font-semibold tracking-tight text-sm">
-          {tCommon("brand")}
-        </Link>
-        <div className="flex items-center gap-1">
-          <LocaleToggle />
-          <ThemeToggle />
-          <AuthHeader />
+      <header className="sticky top-0 z-20 border-b border-border/70 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/65">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
+          <Link href="/" className="flex items-center gap-2 text-sm font-semibold tracking-tight">
+            <span aria-hidden className="size-2 rounded-full bg-brand" />
+            {tCommon("brand")}
+          </Link>
+          <nav className="hidden items-center gap-1 text-sm text-muted-foreground md:flex">
+            {sections.map((section) => (
+              <a
+                key={section.href}
+                href={section.href}
+                className="rounded-md px-3 py-1.5 transition-colors hover:text-foreground"
+              >
+                {section.label}
+              </a>
+            ))}
+          </nav>
+          <div className="flex items-center gap-1">
+            <LocaleToggle />
+            <ThemeToggle />
+            <AuthHeader />
+          </div>
         </div>
       </header>
-      <div className="flex-1 flex flex-col">{children}</div>
-      <footer className="border-t border-border/60 px-6 py-8 text-xs text-muted-foreground">
-        {/* No GitHub link here on purpose: the repo is private today (see
-            docs/CURRENT_STATE.md); linking it would 404 for any visitor
-            without access. Revisit if/when the repo goes public. */}
-        <div className="max-w-5xl mx-auto text-center">{t("footer")}</div>
+      <div className="flex flex-1 flex-col">{children}</div>
+      <footer className="border-t border-border">
+        <div className="mx-auto grid max-w-6xl gap-10 px-6 py-14 text-sm sm:grid-cols-[1.4fr_1fr_1.2fr]">
+          <div className="flex flex-col gap-3">
+            <span className="flex items-center gap-2 font-semibold tracking-tight">
+              <span aria-hidden className="size-2 rounded-full bg-brand" />
+              {tCommon("brand")}
+            </span>
+            <p className="max-w-xs text-muted-foreground">{t("footerTagline")}</p>
+          </div>
+          <div className="flex flex-col gap-3">
+            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+              {t("footerProduct")}
+            </span>
+            {sections.map((section) => (
+              <a
+                key={section.href}
+                href={section.href}
+                className="w-fit transition-colors hover:text-brand-strong"
+              >
+                {section.label}
+              </a>
+            ))}
+          </div>
+          <div className="flex flex-col gap-3">
+            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+              {t("footerProject")}
+            </span>
+            <p className="text-muted-foreground">{t("footerProjectBody")}</p>
+          </div>
+        </div>
       </footer>
     </>
   );
