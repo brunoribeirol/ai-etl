@@ -30,14 +30,14 @@ export default async function RunDetail({
   let result: FullResult | null = null;
   let error: string | null = null;
   try {
-    result = await apiFetch<FullResult>(`/runs/${runId}`);
+    result = await apiFetch<FullResult>(`/runs/${runId}?preview_rows=20`);
   } catch (err) {
     error = String(err);
   }
 
   if (error || !result) {
     return (
-      <main className="flex-1 px-6 py-12 max-w-4xl mx-auto w-full">
+      <main className="flex-1 px-4 sm:px-6 py-10 sm:py-14 max-w-5xl mx-auto w-full">
         <Alert variant="destructive">
           <AlertDescription>{error ?? t("notFound")}</AlertDescription>
         </Alert>
@@ -51,17 +51,20 @@ export default async function RunDetail({
   const failure = result.state.error ? splitErrorMessage(result.state.error) : null;
 
   return (
-    <main className="flex-1 px-6 py-12 max-w-4xl mx-auto w-full flex flex-col gap-8">
-      <div className="flex flex-col gap-2">
+    <main className="flex-1 px-4 sm:px-6 py-10 sm:py-14 max-w-5xl mx-auto w-full flex flex-col gap-8">
+      <div className="flex flex-col gap-3 border-b border-border pb-8">
+        {/* 2026-10-16 redesign: the business question is the title; the run id, which was the
+            title before, stays as a small line for traceability. */}
         <div className="flex items-center gap-3">
-          <h1 className="text-lg font-semibold font-mono truncate">{runId}</h1>
+          <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+            {t("eyebrow")}
+          </span>
           <StatusBadge status={status} />
         </div>
-        {result.question && (
-          <p className="text-sm text-muted-foreground">
-            {t("questionPrefix", { question: result.question })}
-          </p>
-        )}
+        <h1 className="font-serif text-3xl leading-tight tracking-tight text-balance sm:text-4xl">
+          {result.question || t("noQuestionTitle")}
+        </h1>
+        <p className="font-mono text-xs break-all text-muted-foreground">{runId}</p>
         {failure && (
           <Alert variant="destructive">
             <AlertDescription className="flex flex-col gap-2">
@@ -84,7 +87,7 @@ export default async function RunDetail({
           silverRows ? (
             <>
               <h2 className="font-medium mb-3">{t("silverHeading")}</h2>
-              <DataTable rows={silverRows} />
+              <DataTable rows={silverRows} totalRows={result.state.transformed_row_count} />
             </>
           ) : null
         }

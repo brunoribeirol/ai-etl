@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Annotated, Any, Optional, cast
 
 import pandas as pd
-from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 
 from ai_etl.api.config import RUNS_DIR, UPLOADS_DIR
@@ -176,6 +176,7 @@ def get_pending_approvals(
 def get_run(
     run_id: str,
     tenant_id: str = Depends(get_current_tenant_id),
+    preview_rows: Annotated[int | None, Query(ge=0, le=1000)] = None,
 ) -> dict[str, Any]:
     """Wraps `audit.db.load_full_result`: 404 covers both "unknown run_id"
     and "belongs to another tenant" (indistinguishable by design, same as
@@ -183,7 +184,7 @@ def get_run(
     result = load_full_result(run_id, log_dir=str(RUNS_DIR), tenant_id=tenant_id)
     if result is None:
         raise HTTPException(status_code=404, detail="Run not found.")
-    return serialize_full_result(result)
+    return serialize_full_result(result, preview_rows=preview_rows)
 
 
 @router.get("/{task_id}/status")

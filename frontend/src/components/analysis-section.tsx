@@ -59,7 +59,7 @@ export async function AnalysisSection({
           </div>
         )}
         {entry.fig && <PlotlyChart figure={entry.fig} />}
-        {rows && <DataTable rows={rows} />}
+        {rows && <DataTable rows={rows} totalRows={entry[`${dataKey}_row_count`]} />}
         {entry.error && <p className="text-destructive text-sm">{entry.error}</p>}
       </CardContent>
     </Card>

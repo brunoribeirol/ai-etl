@@ -147,8 +147,8 @@ export function PipelineHistory({ pipelineId }: { pipelineId: string }) {
     setDiffError(null);
     try {
       const [a, b] = await Promise.all([
-        authedFetch<FullResult>(`/runs/${runA}`),
-        authedFetch<FullResult>(`/runs/${runB}`),
+        authedFetch<FullResult>(`/runs/${runA}?preview_rows=20`),
+        authedFetch<FullResult>(`/runs/${runB}?preview_rows=20`),
       ]);
       setDiffA(a);
       setDiffB(b);
@@ -309,8 +309,8 @@ function RunDiff({ a, b }: { a: FullResult; b: FullResult }) {
           <h3 className="text-sm font-medium mb-1">{t("silverHeading")}</h3>
           <DeltaRow
             label={t("rowsLoadedLabel")}
-            a={_num(a.state.transformed_data?.length)}
-            b={_num(b.state.transformed_data?.length)}
+            a={_num(a.state.transformed_row_count ?? a.state.transformed_data?.length)}
+            b={_num(b.state.transformed_row_count ?? b.state.transformed_data?.length)}
           />
         </div>
 

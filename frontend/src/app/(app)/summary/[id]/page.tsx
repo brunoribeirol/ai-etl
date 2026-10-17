@@ -38,7 +38,7 @@ export default async function SummaryPage({
 
   if (error || !pipeline) {
     return (
-      <main className="flex-1 px-6 py-12 max-w-3xl mx-auto w-full">
+      <main className="flex-1 px-4 sm:px-6 py-10 sm:py-14 max-w-4xl mx-auto w-full">
         <Alert variant="destructive">
           <AlertDescription>
             {error ? friendlyExecutiveError(error, tErrors) : t("notFound")}
@@ -49,12 +49,12 @@ export default async function SummaryPage({
   }
 
   return (
-    <main className="flex-1 px-6 py-12 max-w-3xl mx-auto w-full flex flex-col gap-6">
+    <main className="flex-1 px-4 sm:px-6 py-10 sm:py-14 max-w-4xl mx-auto w-full flex flex-col gap-6">
       <div className="flex flex-col gap-1">
         <Link href="/summary" className="text-xs text-muted-foreground hover:text-foreground w-fit">
           {t("backLink")}
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">
+        <h1 className="font-serif text-4xl leading-tight tracking-tight text-balance sm:text-5xl">
           {pipeline.business_question || pipeline.name}
         </h1>
         {pipeline.business_question && (

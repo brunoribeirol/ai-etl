@@ -119,3 +119,27 @@ def test_serialize_full_result_handles_missing_state_key() -> None:
     result = serialize_full_result({})
 
     assert result["state"] == {}
+
+
+def test_serialize_full_result_preview_rows_keeps_the_first_rows_and_the_totals() -> None:
+    # The run page shows 20 rows of each table; the full run of a 7,043-row file answered
+    # 3.5 MB (2026-10-16), so the page asks for a preview and the totals.
+    result = {
+        "state": {"transformed_data": pd.DataFrame({"a": range(50)})},
+        "gold": [{"gold_df": pd.DataFrame({"x": range(30)})}],
+        "science": [{"predictions_df": pd.DataFrame({"y": range(3)})}],
+    }
+    out = serialize_full_result(result, preview_rows=20)
+    assert len(out["state"]["transformed_data"]) == 20
+    assert out["state"]["transformed_row_count"] == 50
+    assert len(out["gold"][0]["gold_df"]) == 20
+    assert out["gold"][0]["gold_df_row_count"] == 30
+    assert len(out["science"][0]["predictions_df"]) == 3
+    assert out["science"][0]["predictions_df_row_count"] == 3
+
+
+def test_serialize_full_result_without_preview_rows_is_unchanged() -> None:
+    result = {"state": {"transformed_data": pd.DataFrame({"a": range(50)})}}
+    out = serialize_full_result(result)
+    assert len(out["state"]["transformed_data"]) == 50
+    assert "transformed_row_count" not in out["state"]

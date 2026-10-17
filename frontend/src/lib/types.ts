@@ -60,6 +60,9 @@ export type AnalysisEntry = {
   fig_path?: string;
   gold_df?: Record<string, unknown>[];
   predictions_df?: Record<string, unknown>[];
+  /** Rows in the whole table when the run was fetched with `?preview_rows=`. */
+  gold_df_row_count?: number;
+  predictions_df_row_count?: number;
   fig?: PlotlyFigure;
   /** Sprint 7: generated pandas/sklearn source (`agents/analyst.py`/
    * `science.py`), now persisted by `_serialize_analysis_result`. Optional:
@@ -134,6 +137,8 @@ export type FullResult = {
     spec?: string;
     error?: string | null;
     transformed_data?: Record<string, unknown>[];
+    /** Rows in the whole Silver table when `transformed_data` is a preview (`?preview_rows=`). */
+    transformed_row_count?: number;
     /** Transformer's generated code (`core/state.py::PipelineState.transformation_code`). */
     transformation_code?: string;
     transformation_attempts?: number;
