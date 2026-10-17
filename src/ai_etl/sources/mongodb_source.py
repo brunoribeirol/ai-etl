@@ -1,7 +1,7 @@
 """MongoDB source connector (Sprint 11, ADR-012).
 
 The one `sources/` connector backed by a document store instead of a SQL
-engine — no SQLAlchemy dialect applies, so this talks to `pymongo`
+engine: no SQLAlchemy dialect applies, so this talks to `pymongo`
 (the official driver) directly. Otherwise follows the same shape as every
 other connector: a module-level `load_<type>(...) -> pd.DataFrame`, a
 connection string read from an env var (`MONGODB_URI`, same convention as
@@ -12,13 +12,13 @@ single catch point).
 **Schema inference for a schema-less store**: MongoDB documents in the same
 collection can have different shapes (no fixed columns to read up front,
 unlike a SQL table). This connector doesn't add a separate schema-sampling
-step — `pd.json_normalize()` on the fetched documents already does the
+step: `pd.json_normalize()` on the fetched documents already does the
 equivalent of sampling: it flattens each document's keys into columns and
 unions them across every document it's given, filling `NaN` where a given
 document lacks a key. `limit` (default `MONGODB_SAMPLE_LIMIT`, see below)
 controls how many documents that union is built from, which doubles as the
 same purpose `agents/pipeline/extractor.py::_extract_schema`'s `df.head(3)` sample
-serves for the other connectors — a bound on how much of a
+serves for the other connectors: a bound on how much of a
 possibly-huge/heterogeneous collection gets pulled into a single
 `pipeline_plan` run and inspected for schema.
 """
@@ -32,7 +32,7 @@ from pymongo import MongoClient
 from ai_etl.core.tenant_context import get_connection_override
 
 # Ceiling on documents fetched per `load_mongodb` call when the caller
-# doesn't pass an explicit `limit` — MongoDB collections have no inherent
+# doesn't pass an explicit `limit`: MongoDB collections have no inherent
 # size bound the way a `pipeline_plan`-scoped CSV/SQL query implicitly does,
 # so an unset limit could otherwise pull an entire large collection into
 # memory. Mirrors `document_source.py`'s `MAX_TEXT_CHARS` bound for the same
@@ -41,7 +41,7 @@ from ai_etl.core.tenant_context import get_connection_override
 DEFAULT_SAMPLE_LIMIT = 10_000
 
 # Rejects MongoDB server-side JavaScript operators in a caller-supplied
-# query filter — the NoSQL-injection-equivalent surface to unparameterized
+# query filter: the NoSQL-injection-equivalent surface to unparameterized
 # SQL for this connector. Shallow check (top-level keys only) since
 # `pipeline_plan.sources[].query` is expected to be a plain equality/
 # comparison filter, not an arbitrary aggregation pipeline.
@@ -86,7 +86,7 @@ def load_mongodb(
 
     df = pd.json_normalize(documents)
     if "_id" in df.columns:
-        # ObjectId isn't JSON-serializable — audit_log/source_schemas both
+        # ObjectId isn't JSON-serializable: audit_log/source_schemas both
         # eventually get JSON-dumped (audit/logger.py), so stringify it here
         # rather than pushing that concern onto every downstream consumer.
         df["_id"] = df["_id"].astype(str)

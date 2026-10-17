@@ -1,6 +1,6 @@
 """Unit tests for services/notifications.py (Sprint 14, ADR-018).
 
-`httpx.post` is monkeypatched here — no real network call, no real Resend/
+`httpx.post` is monkeypatched here: no real network call, no real Resend/
 Slack credentials in this environment (see ADR-018 Decision 5's "not tested
 against a real provider" note). These tests verify the request shape and the
 not-configured/failure control flow, not a real delivery.
@@ -210,7 +210,7 @@ def test_send_google_chat_digest_returns_false_on_http_error(
     assert notifications.send_google_chat_digest("body") is False
 
 
-# Sprint 37 (ADR-034) — per-pipeline notification destination override.
+# Sprint 37 (ADR-034): per-pipeline notification destination override.
 
 
 def test_send_email_digest_override_recipients_takes_precedence_over_env(

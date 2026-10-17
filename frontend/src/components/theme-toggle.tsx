@@ -7,9 +7,9 @@ import { useSyncExternalStore } from "react";
 import { Button } from "@/components/ui/button";
 
 /**
- * Sprint 38 — light/dark toggle, accessible from every screen (mounted in
+ * Sprint 38: light/dark toggle, accessible from every screen (mounted in
  * both `(app)/layout.tsx` and `(marketing)/layout.tsx` headers). Two-state
- * toggle (light/dark) rather than a light/dark/system menu — matches the
+ * toggle (light/dark) rather than a light/dark/system menu: matches the
  * spec ("toggle light/dark funcional"), and `next-themes` still persists the
  * choice to `localStorage` under the hood either way.
  *

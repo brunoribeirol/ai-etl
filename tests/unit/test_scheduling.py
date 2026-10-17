@@ -13,7 +13,7 @@ from ai_etl.core.scheduling import (
 
 
 def test_schedulable_source_types_excludes_upload_only_sources() -> None:
-    """ADR-016 Decision 3 — csv/document (browser uploads) must never be schedulable."""
+    """ADR-016 Decision 3: csv/document (browser uploads) must never be schedulable."""
     assert "csv" not in SCHEDULABLE_SOURCE_TYPES
     assert "document" not in SCHEDULABLE_SOURCE_TYPES
     assert SCHEDULABLE_SOURCE_TYPES == {"postgres", "sqlite", "mysql", "mongodb", "rest"}
@@ -56,7 +56,7 @@ def test_compute_next_run_at_rejects_invalid_schedule() -> None:
 
 def test_compute_next_run_at_attaches_utc_to_naive_base_time() -> None:
     """A naive `base_time` (no tzinfo) must not silently propagate a naive
-    result — croniter preserves the input's tz-awareness, so this covers
+    result: croniter preserves the input's tz-awareness, so this covers
     the explicit UTC fallback."""
     naive_base = datetime(2026, 8, 19, 12, 0, 0)  # no tzinfo
     next_run = compute_next_run_at("* * * * *", naive_base)

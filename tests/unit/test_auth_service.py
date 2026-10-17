@@ -1,4 +1,4 @@
-"""Tests for `ai_etl.services.auth_service` — Clerk JWT/JWKS verification (ADR-006).
+"""Tests for `ai_etl.services.auth_service`: Clerk JWT/JWKS verification (ADR-006).
 
 No network calls, no real Clerk account: `PyJWKClient` is replaced with a fake
 that resolves any `kid` to a locally generated RSA keypair, so tokens are
@@ -46,7 +46,7 @@ def _reset_jwks_cache(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 class _FakeSigningKey:
-    """Stand-in for `jwt.PyJWK` — `auth_service` only ever reads `.key`."""
+    """Stand-in for `jwt.PyJWK`: `auth_service` only ever reads `.key`."""
 
     def __init__(self, key: Any) -> None:
         self.key = key
@@ -54,7 +54,7 @@ class _FakeSigningKey:
 
 def _mock_jwks_client(monkeypatch: pytest.MonkeyPatch, public_key: RSAPublicKey) -> None:
     """Replace `PyJWKClient` with a fake that resolves any `kid` to `public_key`
-    with no HTTP call — the local-keypair approach this module's tests use
+    with no HTTP call: the local-keypair approach this module's tests use
     instead of hitting Clerk's real JWKS endpoint."""
 
     class _FakeJWKSClient:
@@ -199,7 +199,7 @@ def test_extract_org_claims_returns_none_for_personal_session() -> None:
 
 
 # ---------------------------------------------------------------------------
-# JWKS endpoint unreachable — fails closed
+# JWKS endpoint unreachable: fails closed
 # ---------------------------------------------------------------------------
 
 
@@ -238,7 +238,7 @@ def test_fails_closed_when_jwks_url_not_configured(monkeypatch: pytest.MonkeyPat
 
 
 # ---------------------------------------------------------------------------
-# Issuer (`iss`) validation — rejects tokens from a different Clerk instance
+# Issuer (`iss`) validation: rejects tokens from a different Clerk instance
 # ---------------------------------------------------------------------------
 
 
@@ -247,7 +247,7 @@ def test_rejects_token_with_wrong_issuer(
 ) -> None:
     """A JWT that is otherwise perfectly valid (correct signature, not expired,
     has `sub`) but was issued by a different Clerk instance/application than
-    the one configured via `CLERK_ISSUER` must still be rejected — this is
+    the one configured via `CLERK_ISSUER` must still be rejected: this is
     the whole point of `iss` validation, not just a well-formedness check."""
     private_key, public_key = rsa_keypair
     _mock_jwks_client(monkeypatch, public_key)
@@ -263,7 +263,7 @@ def test_rejects_token_with_wrong_issuer(
 def test_rejects_token_missing_issuer_claim(
     monkeypatch: pytest.MonkeyPatch, rsa_keypair: tuple[RSAPrivateKey, RSAPublicKey]
 ) -> None:
-    """`iss` is in the `require` list alongside `exp`/`sub` — a token that
+    """`iss` is in the `require` list alongside `exp`/`sub`: a token that
     omits it entirely must fail closed, not be treated as "no claim to check
     against, so let it through"."""
     private_key, public_key = rsa_keypair

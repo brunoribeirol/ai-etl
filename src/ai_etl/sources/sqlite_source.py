@@ -6,7 +6,7 @@ only through SQLAlchemy `text()`, no source-level `try/except` (errors
 propagate to `agents/pipeline/extractor.py`'s single catch point).
 
 One deliberate difference from `postgres_source.py`: SQLite is file-based,
-not a server a single `POSTGRES_URL` env var can point at — each source in
+not a server a single `POSTGRES_URL` env var can point at: each source in
 `pipeline_plan.sources` can reference a different `.db` file, so `path` is a
 per-source argument here (like `csv_source.py`'s `path`), not an env var.
 SQLite also has no `schema.table` notion the way Postgres does, so the table
@@ -24,18 +24,18 @@ def load_sqlite(path: str, table: str, query: str | None = None) -> pd.DataFrame
 
     `path` is the `.db`/`.sqlite` file path. Always uses parameterized
     queries; `table` is validated via `core.sql_safety.validate_table_name`
-    (dots disallowed — SQLite has no `schema.table` notion) before being
+    (dots disallowed: SQLite has no `schema.table` notion) before being
     interpolated into the default `SELECT *` (matching `postgres_source.py`'s
-    validated-identifier pattern — SQLAlchemy has no bind-parameter syntax
+    validated-identifier pattern: SQLAlchemy has no bind-parameter syntax
     for identifiers, only values). A custom `query` (LLM-generated, from
     `pipeline_plan`) is validated via `core.sql_safety.validate_select_only_query`
-    (Wave 0, 2026-08-24 audit) — there's no bind-parameter syntax for an
+    (Wave 0, 2026-08-24 audit): there's no bind-parameter syntax for an
     entire query either, so this is that path's injection defense.
     """
     validate_table_name(table, allow_dots=False)
     if query is not None:
         validate_select_only_query(query)
     engine = create_engine(f"sqlite:///{path}")
-    sql = query or f"SELECT * FROM {table}"  # nosec B608 — table name validated above
+    sql = query or f"SELECT * FROM {table}"  # nosec B608: table name validated above
     with engine.connect() as conn:
         return pd.read_sql(text(sql), conn)

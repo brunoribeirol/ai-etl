@@ -1,16 +1,16 @@
-"""Tenant data deletion — LGPD/GDPR right to erasure (Sprint 24, ADR-025).
+"""Tenant data deletion: LGPD/GDPR right to erasure (Sprint 24, ADR-025).
 
 Hard-deletes everything a tenant's own account owns: `runs`,
 `analysis_runs`, `stage_latencies`, `saved_pipelines`, `tenant_secrets`
 rows, the storage artifacts those runs produced (`audit/storage.py`), and
 finally the `users` row itself. A minimal `tenant_deletion_log` row survives
-the deletion it describes — evidence for the SOC2 self-assessment that an
+the deletion it describes: evidence for the SOC2 self-assessment that an
 erasure request was fulfilled, without recreating the personal-data problem
 it solves (see ADR-025 Decision 2).
 
 Deletion order (ADR-025 Decision 3): storage artifacts first (their key
 derivation needs the DB rows to still exist), then one DB transaction in FK
-dependency order — `stage_latencies` -> `analysis_runs` -> `runs` ->
+dependency order: `stage_latencies` -> `analysis_runs` -> `runs` ->
 `saved_pipelines` -> `tenant_secrets` -> `users`. No existing FK's
 `ondelete` behavior is touched; this module is the entire cascade.
 """
@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 
 
 class TenantNotFoundError(LookupError):
-    """Raised when `tenant_id` has no `users` row — nothing to delete."""
+    """Raised when `tenant_id` has no `users` row: nothing to delete."""
 
     def __init__(self, tenant_id: str):
         super().__init__(f"No tenant found for id={tenant_id!r}")
@@ -68,14 +68,14 @@ def candidate_storage_keys_for_run(
     """Every key `save_run`/`save_analysis` (`audit/db.py`) might have written
     for one run, per their documented naming convention. A key that was never
     written for a particular run (e.g. no `_transform.py` because the spec had
-    no LLM-generated transform) is simply not found and skipped —
+    no LLM-generated transform) is simply not found and skipped:
     `delete_bytes` never raises for a missing key, but callers still check
     `exists()` first so a "deleted"/"exported" count only reflects keys that
     really existed, not every candidate attempted.
 
     Public (Sprint 36, ADR-035): shared by `tenant_run_storage_candidates`
     below, `services/tenant_export_service.py` (list, without deleting), and
-    `services/retention_service.py` (delete, scoped to expired runs only) —
+    `services/retention_service.py` (delete, scoped to expired runs only):
     one naming-convention derivation, never three copies that could drift.
     """
     keys = [f"{run_id}.json", f"{run_id}_transform.py", f"{run_id}_silver.csv"]
@@ -92,7 +92,7 @@ def candidate_storage_keys_for_run(
 
 def tenant_run_storage_candidates(conn: Connection, tenant_id: str) -> dict[str, list[str]]:
     """`{run_id: [candidate storage keys]}` for every run/analysis run a
-    tenant owns — regardless of whether each key actually exists in the
+    tenant owns: regardless of whether each key actually exists in the
     configured `StorageBackend` (callers check `exists()`/attempt
     `delete_bytes()` themselves).
 
@@ -101,7 +101,7 @@ def tenant_run_storage_candidates(conn: Connection, tenant_id: str) -> dict[str,
     `_delete_tenant_storage` below actually deletes.
 
     Takes an already-open `Connection` (ADR-040 follow-up) rather than an
-    `Engine`, so callers control which role/transaction it runs under —
+    `Engine`, so callers control which role/transaction it runs under:
     `tenant_export_service.py` still opens its own bypass-engine connection
     (its whole read path stays on the bypass role, unchanged), while
     `_delete_tenant_storage` below opens a `tenant_scope()` connection.
@@ -137,7 +137,7 @@ def tenant_run_storage_candidates(conn: Connection, tenant_id: str) -> dict[str,
 def _delete_tenant_storage(tenant_id: str, storage: StorageBackend) -> tuple[int, list[str]]:
     """Best-effort deletion of every storage artifact a tenant's runs produced.
 
-    Returns `(keys_deleted, errors)`. Never raises — a storage failure (e.g.
+    Returns `(keys_deleted, errors)`. Never raises: a storage failure (e.g.
     a transient S3 error) is recorded in `errors` and does not block the
     DB-side erasure that follows (ADR-025 Decision 3: the DB rows are the
     higher-confidence compliance signal).
@@ -147,10 +147,10 @@ def _delete_tenant_storage(tenant_id: str, storage: StorageBackend) -> tuple[int
 
     # Perf fix (2026-09-03): same `list_existing_keys()` batch lookup
     # `tenant_export_service.py::export_tenant_data` now uses, instead of one
-    # `storage.exists()` round-trip per candidate key — see `StorageBackend`'s
+    # `storage.exists()` round-trip per candidate key: see `StorageBackend`'s
     # protocol docstring. If the listing call itself fails, falls back to the
     # original per-key `exists()` check (not "delete everything regardless")
-    # — this function's `deleted` count feeds the LGPD/GDPR erasure log
+    #: this function's `deleted` count feeds the LGPD/GDPR erasure log
     # (`_write_deletion_log` below), so an inflated count from blindly
     # calling the idempotent `delete_bytes` on nonexistent keys would be a
     # real compliance-record accuracy regression, not just a perf detail.
@@ -218,19 +218,19 @@ def delete_tenant_data(
     Args:
         tenant_id: The tenant whose data is erased. Always the caller's own
             resolved tenant id at the API layer (`DELETE /tenant` is
-            self-service only — see ADR-025 Decision 1).
-        requested_by: Who initiated the deletion — same as `tenant_id` for
+            self-service only: see ADR-025 Decision 1).
+        requested_by: Who initiated the deletion: same as `tenant_id` for
             today's self-service-only scope, kept as a separate field so a
             future admin-initiated deletion doesn't need a schema change.
         log_dir: Passed through to `get_storage_backend` for the `local`
             backend (`s3` ignores it, same as every other caller).
 
     Raises:
-        TenantNotFoundError: No `users` row exists for `tenant_id` — nothing
+        TenantNotFoundError: No `users` row exists for `tenant_id`: nothing
             to delete. Callers (the API router) map this to `404`.
     """
     # `tenant_deletion_log` (ADR-025 Decision 2) has RLS enabled with no
-    # policy (migration 0014) — it is bypass-engine-only by design (ADR-040's
+    # policy (migration 0014): it is bypass-engine-only by design (ADR-040's
     # documented exemption list), so this is the one connection in this
     # function that deliberately stays on the bypass role throughout.
     log_engine = get_engine()

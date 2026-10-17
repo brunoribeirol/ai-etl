@@ -1,7 +1,7 @@
 """Unit tests for services/health_alerts.py (Sprint 15, ADR-020).
 
 Mocks at the import site inside `services/health_alerts.py`, same
-convention `test_alerting.py` uses — no real HTTP touched here.
+convention `test_alerting.py` uses: no real HTTP touched here.
 """
 
 from __future__ import annotations
@@ -63,7 +63,7 @@ def test_check_and_alert_pipeline_health_calls_every_channel(mocker) -> None:
 def test_check_and_alert_pipeline_health_forwards_override_only_to_matching_channel(
     mocker,
 ) -> None:
-    """Sprint 37 (ADR-034) — same per-pipeline channel override wiring as
+    """Sprint 37 (ADR-034): same per-pipeline channel override wiring as
     `test_alerting.py::test_drift_notify_forwards_override_only_to_matching_channel`."""
     mocker.patch(
         "ai_etl.services.health_alerts.resolve_pipeline_notification_override",

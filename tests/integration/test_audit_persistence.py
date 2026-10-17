@@ -1,6 +1,6 @@
 """Integration tests for the application-database persistence layer.
 
-Exercises `audit/db.py` and `audit/connection.py` against a live Postgres —
+Exercises `audit/db.py` and `audit/connection.py` against a live Postgres:
 `app-postgres-test` in docker-compose.yml (`make app-db-test-up`). Skipped
 automatically when that database isn't reachable, so `make test`/CI keep
 passing on machines without Docker, matching how the rest of this test suite
@@ -28,7 +28,7 @@ _TEST_APP_DATABASE_URL = os.getenv(
     "TEST_APP_DATABASE_URL",
     "postgresql://ai_etl_app_test:ai_etl_app_test@localhost:5435/ai_etl_app_test_db",
 )
-# ADR-040 — the restricted, non-bypass role migration 0021 creates, same
+# ADR-040: the restricted, non-bypass role migration 0021 creates, same
 # database as above. `tenant_scope()` (used by every `audit/db/*.py` function
 # this file exercises) needs this set, same as `APP_DATABASE_URL_TENANT` in
 # `.env.example`.
@@ -69,7 +69,7 @@ def _app_database(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     connection.get_engine.cache_clear()
     connection.get_tenant_engine.cache_clear()
     engine = connection.get_engine()
-    # ADR-040: `command.upgrade` (not `metadata.create_all`) — this file's functions
+    # ADR-040: `command.upgrade` (not `metadata.create_all`): this file's functions
     # now go through the restricted role + RLS policies migration 0021 creates,
     # which a bare `create_all()` would never set up.
     with engine.begin() as conn:
@@ -89,7 +89,7 @@ def _run_id() -> str:
 
 
 def _tenant_id() -> str:
-    """A real, valid `users.id` — migration 0003 (ADR-006) made
+    """A real, valid `users.id`: migration 0003 (ADR-006) made
     `runs.tenant_id`/`analysis_runs.tenant_id` `NOT NULL` foreign keys to `users.id`,
     so every `save_run`/`save_analysis` call in this file must reference one that
     actually exists first. Same `ensure_user` upsert `tests/e2e/conftest.py`'s

@@ -7,10 +7,10 @@ import { friendlyExecutiveError } from "@/lib/friendly-error";
 import type { SavedPipeline } from "@/lib/types";
 
 /**
- * Sprint 18 (ADR-024) — executive summary for one saved pipeline: plain-
+ * Sprint 18 (ADR-024): executive summary for one saved pipeline: plain-
  * language status, the KPIs that changed since the last run, and the
  * Advisor's existing narrative/recommendations (Sprint 14's digest content).
- * Deliberately not a variant of `history/[runId]/page.tsx` — no Pipeline
+ * Deliberately not a variant of `history/[runId]/page.tsx`: no Pipeline
  * tab, no Code tab, no `run_id` in the page's own identity (the header is
  * the business question, not a run id).
  *

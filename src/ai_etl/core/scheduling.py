@@ -1,6 +1,6 @@
 """Cron schedule parsing for saved pipelines (Sprint 13, ADR-016).
 
-Pure functions, no I/O — `audit/db.py` (persistence) and
+Pure functions, no I/O: `audit/db.py` (persistence) and
 `services/scheduler.py` (Celery beat task) both call these rather than
 duplicating cron math. Kept in `core/` per the layering rule in
 `.claude/specs/sr-standard.md` ("core/ = infraestrutura de execução"):
@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 
 from croniter import croniter
 
-# ADR-016 Decision 3 — only "live" source types (re-resolvable from
+# ADR-016 Decision 3: only "live" source types (re-resolvable from
 # connection info alone, no dependency on a browser-uploaded file) may be
 # scheduled. csv/document (PDF/DOCX uploads) are deliberately excluded.
 SCHEDULABLE_SOURCE_TYPES = frozenset({"postgres", "sqlite", "mysql", "mongodb", "rest"})
@@ -38,7 +38,7 @@ def compute_next_run_at(cron_schedule: str, base_time: datetime | None = None) -
     """Return the next UTC fire time strictly after `base_time` (default: now).
 
     Assumes `cron_schedule` has already been validated via
-    `validate_cron_schedule` — raises the same `InvalidCronScheduleError` if
+    `validate_cron_schedule`: raises the same `InvalidCronScheduleError` if
     not, rather than letting croniter's own exception type leak to callers.
     """
     base = base_time or datetime.now(tz=timezone.utc)

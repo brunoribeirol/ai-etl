@@ -43,13 +43,13 @@ def _saved_pipeline_row(**overrides: object) -> dict:
         "last_task_id": None,
         "last_run_at": None,
         "drift_threshold_pct": 20.0,
-        # Sprint 15 (ADR-020) — health-snapshot cache columns.
+        # Sprint 15 (ADR-020): health-snapshot cache columns.
         "consecutive_failures": 0,
         "last_status": None,
         "last_error": None,
-        # Sprint 16 (ADR-023) — operator-defined quality rules.
+        # Sprint 16 (ADR-023): operator-defined quality rules.
         "quality_rules": [],
-        # Sprint 27 (ADR-028) — write-approval gate.
+        # Sprint 27 (ADR-028): write-approval gate.
         "require_approval": False,
         "approval_threshold_rows": None,
         "last_approved_at": None,
@@ -67,7 +67,7 @@ def _health(**overrides: object) -> dict:
 
 
 def _llm_config(**overrides: object) -> dict:
-    # Sprint 30 (ADR-031) — `_with_health` merges this onto every saved-pipeline
+    # Sprint 30 (ADR-031): `_with_health` merges this onto every saved-pipeline
     # response; `None`/`None` (the default here) means "no override configured".
     config = {"llm_provider": None, "llm_model": None}
     config.update(overrides)
@@ -75,7 +75,7 @@ def _llm_config(**overrides: object) -> dict:
 
 
 def _notification_config(**overrides: object) -> dict:
-    # Sprint 37 (ADR-034) — `_with_health` merges this onto every saved-pipeline
+    # Sprint 37 (ADR-034): `_with_health` merges this onto every saved-pipeline
     # response too; the defaults here mean "no override configured".
     config = {
         "notification_channel": None,
@@ -155,7 +155,7 @@ def test_get_pipeline_returns_row(client: TestClient, mocker) -> None:
 
 
 def test_get_pipeline_history_404_when_pipeline_unknown(client: TestClient, mocker) -> None:
-    """Sprint 17 (ADR-017) — 404s before ever calling `list_pipeline_run_history`,
+    """Sprint 17 (ADR-017): 404s before ever calling `list_pipeline_run_history`,
     so an unowned/unknown pipeline id can't be used to probe for run history."""
     mocker.patch("ai_etl.api.routers.pipelines.get_saved_pipeline", return_value=None)
     mock_history = mocker.patch("ai_etl.api.routers.pipelines.list_pipeline_run_history")
@@ -198,7 +198,7 @@ def test_get_pipeline_history_returns_time_series(client: TestClient, mocker) ->
 
 
 def test_get_pipeline_history_forwards_explicit_limit(client: TestClient, mocker) -> None:
-    """Sprint 17 code review (PR #64) — `?limit=` must reach
+    """Sprint 17 code review (PR #64): `?limit=` must reach
     `list_pipeline_run_history`, not just sit unused on the endpoint."""
     mocker.patch(
         "ai_etl.api.routers.pipelines.get_saved_pipeline",
@@ -215,7 +215,7 @@ def test_get_pipeline_history_forwards_explicit_limit(client: TestClient, mocker
 
 
 def test_get_pipeline_history_rejects_limit_above_cap(client: TestClient, mocker) -> None:
-    """1000 is the hard ceiling (FastAPI's `Query(..., le=1000)`) — a caller
+    """1000 is the hard ceiling (FastAPI's `Query(..., le=1000)`): a caller
     can widen the window but not request an unbounded query."""
     mocker.patch(
         "ai_etl.api.routers.pipelines.get_saved_pipeline",
@@ -456,7 +456,7 @@ def test_create_pipeline_rejects_unknown_operator(client: TestClient, mocker) ->
 def test_create_pipeline_rejects_missing_value_for_comparison_operator(
     client: TestClient, mocker
 ) -> None:
-    """Sprint 16 (ADR-023) — every operator except `not_null` requires `value`."""
+    """Sprint 16 (ADR-023): every operator except `not_null` requires `value`."""
     mock_create = mocker.patch("ai_etl.api.routers.pipelines.create_saved_pipeline")
 
     response = client.post(
@@ -585,7 +585,7 @@ def test_patch_pipeline_rejects_non_live_source_type(client: TestClient, mocker)
 
 def test_delete_pipeline_happy_path(client: TestClient, mocker) -> None:
     """2026-09-04 gap-closing feature: until now, PATCH is_active=False (pause)
-    was the only way to stop a saved pipeline — no way to actually remove one."""
+    was the only way to stop a saved pipeline: no way to actually remove one."""
     mock_delete = mocker.patch(
         "ai_etl.api.routers.pipelines.delete_saved_pipeline", return_value=True
     )
@@ -606,7 +606,7 @@ def test_delete_pipeline_404_when_unknown(client: TestClient, mocker) -> None:
 
 
 def test_viewer_role_cannot_delete_pipeline(client: TestClient, mocker) -> None:
-    """Same RBAC posture as create/patch (Sprint 19, ADR-022) — deleting a
+    """Same RBAC posture as create/patch (Sprint 19, ADR-022): deleting a
     saved pipeline is an `editor`-only mutation."""
     app.dependency_overrides[get_current_auth_context] = lambda: {
         "tenant_id": "tenant-a",
@@ -621,7 +621,7 @@ def test_viewer_role_cannot_delete_pipeline(client: TestClient, mocker) -> None:
 
 
 def test_viewer_role_cannot_create_pipeline(client: TestClient, mocker) -> None:
-    """RBAC (Sprint 19, ADR-022): a `viewer` cannot configure a pipeline —
+    """RBAC (Sprint 19, ADR-022): a `viewer` cannot configure a pipeline:
     only `editor` can, even though both roles share the same tenant_id."""
     app.dependency_overrides[get_current_auth_context] = lambda: {
         "tenant_id": "tenant-a",
@@ -644,7 +644,7 @@ def test_viewer_role_cannot_create_pipeline(client: TestClient, mocker) -> None:
 
 
 def test_viewer_role_can_still_list_pipelines(client: TestClient, mocker) -> None:
-    """Read access stays available to a `viewer` — only mutation is gated."""
+    """Read access stays available to a `viewer`: only mutation is gated."""
     app.dependency_overrides[get_current_auth_context] = lambda: {
         "tenant_id": "tenant-a",
         "role": "viewer",
@@ -656,7 +656,7 @@ def test_viewer_role_can_still_list_pipelines(client: TestClient, mocker) -> Non
     assert response.status_code == 200
 
 
-# Sprint 30 (ADR-031) — `/pipelines/{id}/llm-config` (per-pipeline LLM provider/
+# Sprint 30 (ADR-031): `/pipelines/{id}/llm-config` (per-pipeline LLM provider/
 # model override) and `/pipelines/llm/allowed-models` (the allowlist it validates
 # against).
 
@@ -727,7 +727,7 @@ def test_set_pipeline_llm_config_rejects_unsupported_provider(client: TestClient
 
 def test_set_pipeline_llm_config_rejects_partial_pair(client: TestClient, mocker) -> None:
     """`llm_provider` without `llm_model` (or vice versa) is rejected by request
-    validation before ever reaching the DB layer — see
+    validation before ever reaching the DB layer: see
     `SetPipelineLlmConfigRequest._both_or_neither`."""
     mock_set = mocker.patch("ai_etl.api.routers.pipelines.set_saved_pipeline_llm_config")
 
@@ -793,7 +793,7 @@ def test_get_allowed_llm_models(client: TestClient) -> None:
     assert "llama3.1" in body["ollama"]
 
 
-# Sprint 37 (ADR-034) — `/pipelines/{id}/notification-config` (per-pipeline
+# Sprint 37 (ADR-034): `/pipelines/{id}/notification-config` (per-pipeline
 # notification destination override) and
 # `/pipelines/notifications/allowed-channels` (the allowlist it validates against).
 
@@ -877,7 +877,7 @@ def test_set_pipeline_notification_config_rejects_unknown_channel(
 
 def test_set_pipeline_notification_config_rejects_partial_pair(client: TestClient, mocker) -> None:
     """`notification_channel` without `notification_target` (or vice versa) is
-    rejected by request validation before ever reaching the DB layer — see
+    rejected by request validation before ever reaching the DB layer: see
     `SetPipelineNotificationConfigRequest._both_or_neither`."""
     mock_set = mocker.patch("ai_etl.api.routers.pipelines.set_saved_pipeline_notification_config")
 

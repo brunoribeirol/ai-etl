@@ -11,7 +11,7 @@ import { splitErrorMessage } from "@/lib/error-message";
 import type { FullResult } from "@/lib/types";
 
 /**
- * Run-detail page (Sprint 6, PR 5 → Sprint 7 redesign, ADR-011) — replaces
+ * Run-detail page (Sprint 6, PR 5 → Sprint 7 redesign, ADR-011): replaces
  * `app.py::_render_results`. Same server-side `GET /runs/{run_id}` fetch
  * (tenant-ownership check enforced server-side, 404 on mismatch); the
  * previously flat vertical stack is now grouped into tabs

@@ -1,13 +1,13 @@
 """Sprint 22 dirty-data corpus verification for `rest_source.py`'s JSON handling.
 
-Unlike `csv_source.py`, no fix was needed here — investigated first, per this
+Unlike `csv_source.py`, no fix was needed here: investigated first, per this
 sprint's scope, before assuming a rewrite was necessary. `load_rest`'s
 existing `pd.json_normalize` call already handles both deeply nested JSON
 (flattens into dotted column names) and irregular array/key shapes between
 records (missing keys become `NaN`, no crash, no silent misalignment)
 correctly. These tests pin that already-correct behavior against the real
 corpus fixtures (`tests/fixtures/dirty_data/json_*.json`) rather than
-leaving it unverified — same fixtures, network transport (`httpx.get`)
+leaving it unverified: same fixtures, network transport (`httpx.get`)
 mocked with their real content, matching `test_rest_source_auth.py`'s
 convention.
 """
@@ -53,7 +53,7 @@ def test_load_rest_irregular_arrays_fill_missing_with_nan(mocker) -> None:
 
     assert df.shape == (4, 4)
     assert list(df.columns) == ["id", "nome", "tags", "extra_field"]
-    # Record 4 has no "tags" key at all — normalize fills it with NaN rather
+    # Record 4 has no "tags" key at all: normalize fills it with NaN rather
     # than raising or silently dropping the row.
     assert df.loc[3, "tags"] is None or df["tags"].isna().iloc[3]
     # Record 1's "extra_field" (present on only one record) is NaN elsewhere.

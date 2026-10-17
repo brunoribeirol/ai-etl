@@ -11,22 +11,22 @@ import type { FullResult, PipelineRunHistoryEntry, SavedPipeline } from "@/lib/t
 import { formatDateTime } from "@/lib/format-date";
 
 /**
- * Sprint 18 (ADR-024) — the executive-facing counterpart to the technical
+ * Sprint 18 (ADR-024): the executive-facing counterpart to the technical
  * run-detail page (`history/[runId]/page.tsx`'s Pipeline/Code tabs).
  * Deliberately does not render either tab: this component only shows what a
- * non-technical stakeholder needs — plain-language status, the KPIs that
+ * non-technical stakeholder needs: plain-language status, the KPIs that
  * changed since the last run, and the Advisor's existing narrative/
- * recommendations (Sprint 14's digest content, reused as-is per ADR-024 —
+ * recommendations (Sprint 14's digest content, reused as-is per ADR-024:
  * no new agent, no new LLM call here).
  *
  * Composes three already-existing, already-tenant-scoped endpoints
- * (`GET /pipelines/{id}/history`, `GET /runs/{run_id}`) — no new backend
+ * (`GET /pipelines/{id}/history`, `GET /runs/{run_id}`): no new backend
  * surface, see ADR-024. Client Component for the same reason
  * `PipelineHistory`/`PipelinesManager` are: `useAuth().getToken()` needs a
  * fresh token per request.
  */
 
-// Sprint 25 (ADR-036) — labels come from `messages/{locale}.json`'s
+// Sprint 25 (ADR-036): labels come from `messages/{locale}.json`'s
 // `executiveSummary` namespace (built into a lookup map inside the
 // component, since this constant needs `useTranslations`); tone (color) is
 // locale-independent and stays a plain module-level map.
@@ -213,10 +213,10 @@ export function ExecutiveSummary({ pipeline }: { pipeline: SavedPipeline }) {
       {latest.status.toLowerCase() === "failed" && (
         <Card>
           <CardContent>
-            {/* Sprint 38 — previously interpolated `latest.error` (a raw
+            {/* Sprint 38: previously interpolated `latest.error` (a raw
                 backend exception message, e.g. stack-trace-adjacent Python
                 text) straight into this executive-facing sentence. That
-                detail belongs on the technical "History" page, not here —
+                detail belongs on the technical "History" page, not here:
                 this card now just says what happened and what to expect,
                 in plain language. */}
             <p className="text-sm text-red-400">{t("failedNotice")}</p>

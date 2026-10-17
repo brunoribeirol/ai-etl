@@ -1,8 +1,8 @@
-"""E2E Scenario 5 — SQLite + authenticated REST sources, CSV destination
+"""E2E Scenario 5: SQLite + authenticated REST sources, CSV destination
 (Sprint 11, ADR-012).
 
 New for Sprint 11: a real SQLite `.db` file (seeded for real via the stdlib
-`sqlite3` module — not mocked) as one source, and a REST source using bearer
+`sqlite3` module: not mocked) as one source, and a REST source using bearer
 auth as the other. Same convention as scenario 3's REST call: only the
 network transport (`httpx.get`) is mocked, everything else (auth header
 construction, SQLite read, sandboxed transform, quality checks, CSV write,
@@ -81,7 +81,7 @@ def test_scenario5_sqlite_rest_auth_runs_end_to_end(
     assert status["state"] == "SUCCESS", status.get("error")
     assert status["result"]["status"] == "completed"
 
-    # The REST call actually happened with the bearer token attached — not
+    # The REST call actually happened with the bearer token attached: not
     # just that the mocked response was accepted.
     _, kwargs = mock_get.call_args
     assert kwargs["headers"] == {"Authorization": "Bearer test-token-abc"}

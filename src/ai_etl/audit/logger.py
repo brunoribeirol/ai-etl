@@ -1,4 +1,4 @@
-"""Audit logger — appends structured action entries to PipelineState.audit_log.
+"""Audit logger: appends structured action entries to PipelineState.audit_log.
 
 All agents must call log_action() for every significant decision or step.
 The audit log is the primary record of what happened in a pipeline run.
@@ -54,7 +54,7 @@ _SENSITIVE_KEYWORDS = {
     "bearer",
     # Audit finding M4/BT-1 (2026-09-09): a DSN with an embedded password lives
     # in fields named `connection_string`/`postgres_connection_string`/`dsn`,
-    # none of which matched the keywords above — the value passed through
+    # none of which matched the keywords above: the value passed through
     # unredacted. These names are not plausible legitimate data-column names in
     # an audit payload, so redacting on them is safe.
     "connection",
@@ -63,7 +63,7 @@ _SENSITIVE_KEYWORDS = {
 
 # A URL/DSN carrying inline credentials (scheme://user:password@host). Used to
 # scrub free-text values (exception messages, connection errors) where a secret
-# is embedded in a value, not in a field NAME — `_sanitize`'s key-name check
+# is embedded in a value, not in a field NAME: `_sanitize`'s key-name check
 # can't catch that. See `scrub_secrets_in_text`.
 #
 # The match begins at the literal "://", not at the scheme before it. The pattern

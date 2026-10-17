@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/table";
 
 /** Renders a cell value, formatting numbers via `Intl.NumberFormat` (up to 2
- * fraction digits, no trailing zeros — e.g. `100234.0` → "100234", `3.14159`
+ * fraction digits, no trailing zeros: e.g. `100234.0` → "100234", `3.14159`
  * → "3.14"). Non-number values (including numeric-looking strings) keep the
  * existing bare-string rendering. */
 function formatCell(value: unknown, formatter: Intl.NumberFormat): string {
@@ -21,7 +21,7 @@ function formatCell(value: unknown, formatter: Intl.NumberFormat): string {
 
 /** Renders the first 20 rows of a DataFrame-as-records payload (matches the
  * preview-only convention `_serialize_analysis_result`/Streamlit's
- * `_render_results` already use — the full data was always a CSV download
+ * `_render_results` already use: the full data was always a CSV download
  * away, never meant to be rendered in full inline). Sprint 7: shadcn Table
  * instead of a raw `<table>`, same data/behavior. */
 export async function DataTable({ rows }: { rows: Record<string, unknown>[] }) {

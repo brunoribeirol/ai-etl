@@ -20,7 +20,7 @@ def _timed(name: str, node_fn: NodeFn) -> NodeFn:
     `state["stage_durations"]`, without modifying the node's own implementation.
 
     Per ADR-007, latency capture lives at graph-construction time (here), not
-    inside each agent function — `extractor.py`/`transformer.py`/`quality.py`/
+    inside each agent function: `extractor.py`/`transformer.py`/`quality.py`/
     `loader.py`/`orchestrator.py` stay untouched. Merges into the *incoming*
     state's durations (not the node's return value) so this works whether a
     node returns a partial update or a full state copy.
@@ -58,7 +58,7 @@ def build_graph() -> Any:
 
     # mypy can't resolve add_node's TypeVar-bound overloads against a wrapped
     # Callable alias (NodeFn) the way it can against a concrete `def` passed
-    # directly — this is a static-typing resolution artifact of the wrapper,
+    # directly: this is a static-typing resolution artifact of the wrapper,
     # not a real type mismatch (langgraph accepts a plain callable at runtime).
     graph.add_node("orchestrator", _timed("orchestrator", orchestrator_node))  # type: ignore[call-overload]  # see comment above
     graph.add_node("extractor", _timed("extractor", extractor_node))  # type: ignore[call-overload]  # see comment above

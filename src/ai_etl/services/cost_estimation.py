@@ -2,28 +2,28 @@
 
 `estimate_run_cost` blends two signals into a single estimate:
 
-1. `heuristic_cost_usd` — `core.cost_estimation`'s token heuristic
+1. `heuristic_cost_usd`: `core.cost_estimation`'s token heuristic
    (row/column-count based), priced via `core.pricing.compute_cost_usd` for
    the requested provider/model. Size- and model-aware, but a first-pass
    calibration (see `core/cost_estimation.py`'s module docstring).
-2. `historical_avg_cost_usd` — the tenant's own average cost per run
+2. `historical_avg_cost_usd`: the tenant's own average cost per run
    (`analysis_runs.cost_usd`, most recent `TENANT_HISTORY_RUN_LIMIT` priced
    runs), falling back to a global average across all tenants when this
    tenant has no priced run history yet (a brand-new tenant, or one whose
-   only runs so far were Ollama's genuine $0 and therefore excluded — see
+   only runs so far were Ollama's genuine $0 and therefore excluded: see
    `get_avg_run_cost_usd`). Model/size-agnostic, but grounded in real spend.
 
 `estimated_cost_usd` is a fixed-weight blend of the two (`HEURISTIC_WEIGHT`)
 whenever a historical signal is available; heuristic-only otherwise (a fresh
 deployment with zero priced runs anywhere). The weight is a deliberately
-simple starting point, not a fitted regression — this sprint's own
+simple starting point, not a fitted regression: this sprint's own
 "definição de pronto" calls for validating the resulting margin against real
 executions *after* shipping, not calibrating it before.
 
-No new table/migration: nothing here is persisted — every call recomputes
+No new table/migration: nothing here is persisted: every call recomputes
 the estimate from `MODEL_PRICING_USD_PER_MILLION_TOKENS` and the existing
 `analysis_runs` history. See ADR note in the Sprint 35 PR description for why
-this sprint didn't open a new ADR (no real architectural trade-off — this is
+this sprint didn't open a new ADR (no real architectural trade-off: this is
 an additive read-only heuristic, not a change to how anything is stored or
 enforced).
 """
@@ -57,11 +57,11 @@ CostEstimateBasis = Literal[
 
 
 class CostEstimate(TypedDict):
-    """Return shape of `estimate_run_cost` — also `POST /runs/estimate`'s
+    """Return shape of `estimate_run_cost`: also `POST /runs/estimate`'s
     response body. `basis` tells the caller which historical signal (if any)
     was blended in, so a frontend can label a cold-start estimate
-    differently (e.g. "heuristic_only" — no run history yet for this
-    deployment — vs. a tenant-calibrated one)."""
+    differently (e.g. "heuristic_only": no run history yet for this
+    deployment: vs. a tenant-calibrated one)."""
 
     estimated_cost_usd: float
     provider: str
@@ -84,7 +84,7 @@ def estimate_run_cost(
     `row_count` x `col_count`, for `provider`/`model`.
 
     Raises `core.llm.UnsupportedProviderOrModelError` for a provider/model
-    outside `core.llm.ALLOWED_MODELS_BY_PROVIDER` — same validation
+    outside `core.llm.ALLOWED_MODELS_BY_PROVIDER`: same validation
     `PUT /pipelines/{id}/llm-config` already applies (Sprint 30, ADR-031), so
     an estimate is never produced for a selection the tenant could not
     actually run. Raises `ValueError` for a negative `row_count`/`col_count`
@@ -93,7 +93,7 @@ def estimate_run_cost(
 
     tokens = estimate_token_usage(row_count, col_count)
     # `compute_cost_usd` returns `None` only for a model missing a pricing
-    # entry — every model in `ALLOWED_MODELS_BY_PROVIDER` has one (enforced by
+    # entry: every model in `ALLOWED_MODELS_BY_PROVIDER` has one (enforced by
     # `test_every_llm_allowed_model_has_a_pricing_entry`), so `model` having
     # already passed `validate_provider_and_model` above means this is never
     # actually `None` in practice; `or 0.0` is defensive, not expected to fire.

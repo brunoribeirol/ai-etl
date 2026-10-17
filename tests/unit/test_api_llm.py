@@ -50,7 +50,7 @@ def test_test_connectivity_success(client: TestClient, mocker) -> None:
 
 
 def test_test_connectivity_provider_failure_is_still_200(client: TestClient, mocker) -> None:
-    """A failed connectivity check is a useful, expected result — not an API error."""
+    """A failed connectivity check is a useful, expected result: not an API error."""
     mocker.patch(
         "ai_etl.api.routers.llm.test_provider_connectivity",
         return_value={

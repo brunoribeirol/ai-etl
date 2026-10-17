@@ -14,7 +14,7 @@ import {
 
 // Sprint 25 (ADR-036): labels now come from `messages/{locale}.json`'s
 // `appNav` namespace (shared with the horizontal `<nav>` in
-// `(app)/layout.tsx`) — only the href/translation-key pairing stays here.
+// `(app)/layout.tsx`): only the href/translation-key pairing stays here.
 const NAV_LINKS = [
   { href: "/get-started", key: "getStarted" },
   { href: "/app", key: "run" },
@@ -27,12 +27,12 @@ const NAV_LINKS = [
 ] as const;
 
 /**
- * Sprint 38 — mobile-responsiveness audit finding: `(app)/layout.tsx`'s
+ * Sprint 38: mobile-responsiveness audit finding: `(app)/layout.tsx`'s
  * header packed logo + 5 nav links + "How it works" + auth into one
  * non-wrapping flex row (`justify-between items-center`, no `flex-wrap`,
  * no scroll fallback). Below ~640px the 5 links alone (~310px of text
  * plus `gap-6`) don't fit next to the logo and auth chrome, and nothing in
- * the original markup handled that — content overflowed the header,
+ * the original markup handled that: content overflowed the header,
  * dragging the whole page into unwanted horizontal scroll.
  *
  * Fix follows the pattern already established by `agents-info.tsx`
@@ -50,7 +50,7 @@ export function MobileNav({
   const t = useTranslations("appNav");
   const tCommon = useTranslations("common");
 
-  // Wave 6 (2026-08-25 admin panel/approval-gate UI plan) — same cosmetic-
+  // Wave 6 (2026-08-25 admin panel/approval-gate UI plan): same cosmetic-
   // only role gate as the desktop `<nav>` in `(app)/layout.tsx`. Secrets UI
   // link is "editor" rank (accepts editor or admin), added before "Admin" so
   // both extra links land in the same relative order as the desktop nav.

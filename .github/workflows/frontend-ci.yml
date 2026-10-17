@@ -47,18 +47,18 @@ jobs:
       # too loose in practice.
       #
       # `--omit=dev` (2026-09-03, real CI failure): `npm audit` audits every
-      # dependency by default, dev-only tools included — this step failed on
+      # dependency by default, dev-only tools included: this step failed on
       # `fast-uri`/`qs` advisories that only exist because `shadcn` (the
       # scaffolding CLI, `bin`-only, never imported by app code) pulls in
       # `@modelcontextprotocol/sdk` -> `express`/`ajv`. Moved `shadcn` to
-      # `devDependencies` (its correct category) at the same time — neither
+      # `devDependencies` (its correct category) at the same time: neither
       # package ever reaches the deployed app, so auditing them here was
       # noise, not signal, exactly the gap `--omit=dev` closes.
       - name: Security — npm audit
         run: npm audit --omit=dev --audit-level=high
 
       # `next build` runs its own TypeScript check as part of the build
-      # (visible as a "Running TypeScript ..." step in its own output) — a
+      # (visible as a "Running TypeScript ..." step in its own output): a
       # separate `tsc --noEmit` step here would additionally need to run
       # *after* build to see Next.js's generated global types (e.g.
       # `LayoutProps`, from `.next/types/`), which don't exist until a build
@@ -67,7 +67,7 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          # No Clerk key needed here — verified locally that `next build`
+          # No Clerk key needed here: verified locally that `next build`
           # succeeds without one: `/` is fully dynamic (uses `auth()` +
           # `fetch(..., {cache: "no-store"})`), so nothing Clerk-related
           # executes during the build/prerender step itself.

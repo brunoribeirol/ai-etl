@@ -1,17 +1,17 @@
-"""Pydantic schema for `pipeline_plan` — the Orchestrator's LLM-generated JSON output.
+"""Pydantic schema for `pipeline_plan`: the Orchestrator's LLM-generated JSON output.
 
 Wave 0 security fix (2026-08-24 audit, Red Team CRITICAL finding): `pipeline_plan` was
 previously typed only as `dict[str, Any]` (see `core/state.py`'s comment-only schema)
 and never structurally validated before `agents/pipeline/extractor.py` read fields off
-of it — an adversarial spec could get the Orchestrator's LLM to emit unexpected keys
+of it: an adversarial spec could get the Orchestrator's LLM to emit unexpected keys
 with nothing catching it before execution.
 
 This model validates structure (each source has `name`/`type`, `type` is one of the
 types `ORCHESTRATOR_PROMPT` itself documents) while staying permissive on per-type
-fields (`extra="allow"`) — full per-type field validation (REST auth shapes, etc.) is a
+fields (`extra="allow"`): full per-type field validation (REST auth shapes, etc.) is a
 larger follow-up, not needed to close this specific gap.
 
-**This schema does not validate `query` content** — the actual SQL-injection defense for
+**This schema does not validate `query` content**: the actual SQL-injection defense for
 `sqlite`/`mysql` custom `query` strings lives at the connector level
 (`sources/sqlite_source.py`/`sources/mysql_source.py`'s `validate_select_only_query`,
 mirroring `sources/mongodb_source.py::_validate_query`'s connector-level pattern) so it
@@ -30,7 +30,7 @@ class PipelinePlanSource(BaseModel):
     """One entry in `pipeline_plan["sources"]`.
 
     Extra per-type fields (`path`, `table`, `query`, `url`, `auth`, ...) pass through
-    unvalidated here — validated where they're actually used (the relevant connector).
+    unvalidated here: validated where they're actually used (the relevant connector).
     """
 
     model_config = ConfigDict(extra="allow")
@@ -43,7 +43,7 @@ class PipelinePlanSource(BaseModel):
     # (`source.get("sheet_name")`, forwarded to
     # `sources/csv_source.py::load_source_file`/`_load_excel`) and
     # `ORCHESTRATOR_PROMPT` now names explicitly. `extra="allow"` above
-    # already let this field pass through unvalidated before this change —
+    # already let this field pass through unvalidated before this change:
     # declaring it here is documentation/type-clarity, not a behavior
     # change (existing plans without it are unaffected, `None` default
     # matches `_load_excel`'s own "no sheet_name given" branch).
@@ -51,7 +51,7 @@ class PipelinePlanSource(BaseModel):
 
 
 class PipelinePlanDestination(BaseModel):
-    """`pipeline_plan["destination"]` — extra per-type fields pass through unvalidated."""
+    """`pipeline_plan["destination"]`: extra per-type fields pass through unvalidated."""
 
     model_config = ConfigDict(extra="allow")
 
@@ -60,7 +60,7 @@ class PipelinePlanDestination(BaseModel):
 
 class PipelinePlan(BaseModel):
     """Top-level shape of `pipeline_plan`, matching `ORCHESTRATOR_PROMPT`'s documented
-    schema (`agents/pipeline/orchestrator.py`). Used only as a validation gate — callers
+    schema (`agents/pipeline/orchestrator.py`). Used only as a validation gate: callers
     keep working with the original `dict` (see `orchestrator_node`), not this model's
     own `model_dump()`, so plan shape passed to `extractor_node` is unchanged.
     """

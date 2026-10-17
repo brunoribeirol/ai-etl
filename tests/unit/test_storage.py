@@ -1,7 +1,7 @@
 """Unit tests for the storage backend abstraction (storage.py, ADR-009).
 
 `S3StorageBackend` is tested against a mocked `boto3` client (no `moto`
-dependency in this project) — these tests assert the right S3 API calls with
+dependency in this project): these tests assert the right S3 API calls with
 the right Bucket/Key are made, not against a live/emulated bucket. Coverage of
 the actual bucket/IAM setup is manual (ADR-009), not something a unit test
 can verify.
@@ -16,7 +16,7 @@ from botocore.exceptions import ClientError
 from ai_etl.audit.storage import LocalStorageBackend, S3StorageBackend, get_storage_backend
 
 # ---------------------------------------------------------------------------
-# LocalStorageBackend — today's exact Path-based behavior, unchanged
+# LocalStorageBackend: today's exact Path-based behavior, unchanged
 # ---------------------------------------------------------------------------
 
 
@@ -136,7 +136,7 @@ def test_local_backend_delete_bytes_removes_the_key(tmp_path: Path) -> None:
 
 def test_local_backend_delete_bytes_is_a_noop_for_missing_key(tmp_path: Path) -> None:
     """ADR-025: candidate keys derived from DB rows may legitimately not
-    exist for every run (e.g. no transform code) — deletion must not raise."""
+    exist for every run (e.g. no transform code): deletion must not raise."""
     backend = LocalStorageBackend(str(tmp_path))
 
     backend.delete_bytes("no-such-key.json")  # must not raise
@@ -157,7 +157,7 @@ def test_local_backend_list_existing_keys_empty_when_nothing_written(tmp_path: P
 
 
 # ---------------------------------------------------------------------------
-# S3StorageBackend — mocked boto3 client
+# S3StorageBackend: mocked boto3 client
 # ---------------------------------------------------------------------------
 
 
@@ -298,7 +298,7 @@ def test_s3_backend_scopes_keys_by_environment_and_tenant_prefix() -> None:
 
 
 # ---------------------------------------------------------------------------
-# get_storage_backend — STORAGE_BACKEND env-driven selection
+# get_storage_backend: STORAGE_BACKEND env-driven selection
 # ---------------------------------------------------------------------------
 
 

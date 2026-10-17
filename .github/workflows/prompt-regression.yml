@@ -1,11 +1,11 @@
 name: Prompt/Agent Regression Harness
 
-# Sprint 28 (ADR-029, Decision 1) — manual trigger ONLY, deliberately not on
+# Sprint 28 (ADR-029, Decision 1): manual trigger ONLY, deliberately not on
 # push/pull_request. Real value requires a real OPENAI_API_KEY (catching an
 # actual prompt-wording/model regression); running that automatically on every
 # push to every PR would spend real LLM money on every trivial commit. A
 # developer changing a prompt, an agent's code, or AI_ETL_LLM_MODEL runs this
-# by hand before merging — same "run this before merging" discipline this
+# by hand before merging: same "run this before merging" discipline this
 # project already applies to `make check`, just for this one narrow class of
 # change. See ADR-029 for the full trade-off analysis and the path-filtered-
 # automatic alternative considered and deferred.
@@ -44,7 +44,7 @@ jobs:
         run: uv sync --all-extras
 
       - name: Run regression harness
-        # No `if: secrets.OPENAI_API_KEY` guard — the script itself degrades
+        # No `if: secrets.OPENAI_API_KEY` guard: the script itself degrades
         # gracefully to mocked mode (data_source="mock", clearly logged) when
         # the secret isn't configured, same "flagged, not faked" convention
         # Sprint 8's model_comparison.py already established. A missing key

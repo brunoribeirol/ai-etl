@@ -4,7 +4,7 @@ install:
 	uv sync --all-extras
 	@$(MAKE) unhide-pth
 
-# Sprint 6 (ADR-011) — the HTTP API the Next.js frontend calls. Replaced
+# Sprint 6 (ADR-011): the HTTP API the Next.js frontend calls. Replaced
 # the old Streamlit `app` target in the PR 6 cutover.
 api:
 	uv sync --all-extras --quiet
@@ -64,7 +64,7 @@ app-db-down:
 app-db-test-up:
 	docker-compose up -d app-postgres-test
 
-# Sprint 11 (ADR-012) — real MySQL/MongoDB for the mysql_source.py/
+# Sprint 11 (ADR-012): real MySQL/MongoDB for the mysql_source.py/
 # mongodb_source.py integration tests (tests/integration/test_mysql_source_real.py,
 # test_mongodb_source_real.py). Both self-skip if unreachable, same
 # convention as postgres-test/db-test-up.
@@ -83,7 +83,7 @@ mongodb-test-down:
 db-migrate:
 	uv run alembic upgrade head
 
-# Sprint 3 (ADR-008) — broker/backend for Celery async execution + rate
+# Sprint 3 (ADR-008): broker/backend for Celery async execution + rate
 # limiting. `app`/`celery-worker` (docker-compose.yml) both need this up.
 redis-up:
 	docker-compose up -d redis
@@ -121,18 +121,18 @@ case-study-seed:
 case-study:
 	uv run python case_study/scripts/run_case_study.py
 
-# ADR-038 — builds the image core/sandbox_docker.py's execute_in_sandbox()
+# ADR-038: builds the image core/sandbox_docker.py's execute_in_sandbox()
 # runs when AI_ETL_SANDBOX_BACKEND=docker. Local/dev-verified only today;
 # not part of the Railway deploy build (top-level Dockerfile is unchanged).
 sandbox-image:
 	docker build -f docker/sandbox/Dockerfile -t ai-etl-sandbox:latest .
 
-# ADR-039 — pushes the same image (docker/sandbox/Dockerfile; both
+# ADR-039: pushes the same image (docker/sandbox/Dockerfile; both
 # run_sandboxed.py and run_sandboxed_vercel.py ship in it) to this project's
 # Vercel Container Registry, for core/sandbox_vercel.py's
 # AI_ETL_SANDBOX_BACKEND=vercel production backend. Requires the Vercel CLI
 # authenticated and this repo linked to a Vercel project (`vercel login` +
-# `vercel link`) — not automated in CI (no live Vercel project available
+# `vercel link`): not automated in CI (no live Vercel project available
 # there), a manual/deploy-time step. Re-run after any change to
 # src/ai_etl/** that sandboxed code paths depend on, or to
 # docker/sandbox/run_sandboxed*.py.

@@ -30,7 +30,7 @@ from ai_etl.core.llm import get_model_name
 from ai_etl.core.logging_config import configure_logging
 from ai_etl.core.observability import init_sentry
 
-# Sprint 34 (ADR-033) — both run before `FastAPI(...)` is constructed: JSON
+# Sprint 34 (ADR-033): both run before `FastAPI(...)` is constructed: JSON
 # logging must be attached before any import-time log line fires (several
 # routers/services log at module scope), and Sentry's `FastApiIntegration`
 # patches Starlette internals that `FastAPI(...)` reads at construction time.
@@ -40,7 +40,7 @@ init_sentry(component="api")
 app = FastAPI(title="AI-ETL API", version="1.0.0")
 
 # Vercel preview/production domains calling this Railway-hosted API are
-# cross-origin — comma-separated allowlist via env var, never `["*"]` (would
+# cross-origin: comma-separated allowlist via env var, never `["*"]` (would
 # accept credentialed requests from any origin, defeating the point of
 # Clerk-verified per-request auth). No default: an unconfigured deployment
 # should reject every browser-origin request loudly, not silently allow none
@@ -69,7 +69,7 @@ app.include_router(llm.router)
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    """Liveness: the process is up and serving. Intentionally shallow — used by
+    """Liveness: the process is up and serving. Intentionally shallow: used by
     the platform to decide whether to restart the container, so it must not fail
     just because a downstream dependency is temporarily unreachable. For
     dependency health (DB/Redis) see `/health/ready`."""
@@ -80,7 +80,7 @@ def health() -> dict[str, str]:
 def health_ready() -> JSONResponse:
     """Readiness: the process AND its critical dependencies (app database, Redis
     broker) are reachable. Returns 200 only if every check passes, otherwise 503
-    with per-dependency detail (audit finding M8 — `/health` alone returned 200
+    with per-dependency detail (audit finding M8: `/health` alone returned 200
     even with a dead DB, so the platform kept routing traffic to a broken
     instance). Every check is best-effort and non-throwing."""
     checks: dict[str, str] = {}
@@ -108,11 +108,11 @@ def health_ready() -> JSONResponse:
 
 @app.get("/config")
 def config(auth: Annotated[AuthContext, Depends(get_current_auth_context)]) -> dict[str, str]:
-    """Sprint 7: read-only — this deployment's global model (`AI_ETL_LLM_MODEL`,
+    """Sprint 7: read-only: this deployment's global model (`AI_ETL_LLM_MODEL`,
     `core/llm.py::get_model_name()`). Streamlit's sidebar showed the same thing
     (`st.caption(f"Modelo: {LLM_MODEL}")`), also read-only. A per-`saved_pipeline`
     override now exists (`GET/PUT /pipelines/{id}/llm-config`, Sprint 30 ADR-031,
-    actually wired into execution as of the Sprint 30 gap-closing fix) — this
+    actually wired into execution as of the Sprint 30 gap-closing fix): this
     endpoint intentionally stays scoped to the deployment default, not a
     per-pipeline resolved value, since it takes no pipeline id. Behind the same
     auth as every other endpoint even though the value isn't sensitive, to keep
@@ -121,10 +121,10 @@ def config(auth: Annotated[AuthContext, Depends(get_current_auth_context)]) -> d
 
     `role` (Wave 6, 2026-08-25 admin panel/approval-gate UI plan): the
     frontend had no way to know the caller's resolved viewer/editor/admin
-    role at all — `(app)/layout.tsx` already fetches `/config` once per page
+    role at all: `(app)/layout.tsx` already fetches `/config` once per page
     load (for the model badge), so this became the single source of truth
     for role-aware UI (e.g. showing the "Admin" nav link) instead of adding
-    a dedicated endpoint. Cosmetic only — every admin/approval route still
+    a dedicated endpoint. Cosmetic only: every admin/approval route still
     independently enforces its own role via `require_admin`/`require_role`,
     same as before; a hidden nav link is not the security boundary."""
     return {"model_name": get_model_name(), "role": auth["role"]}

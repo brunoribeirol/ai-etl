@@ -1,4 +1,4 @@
-"""`/runs` endpoints — thin wrappers over `audit/db.py` and `services/execution_queue.py`
+"""`/runs` endpoints: thin wrappers over `audit/db.py` and `services/execution_queue.py`
 (ADR-011). No pipeline/agent logic lives here; every function this router calls
 already exists and is already tested."""
 
@@ -30,8 +30,8 @@ router = APIRouter(prefix="/runs", tags=["runs"])
 
 
 class RejectRunRequest(BaseModel):
-    """Sprint 27 (ADR-028) — optional free-text reason an operator declines a
-    gated write. Never required — `reason` defaults to "" (no explanation
+    """Sprint 27 (ADR-028): optional free-text reason an operator declines a
+    gated write. Never required: `reason` defaults to "" (no explanation
     given is still a valid, explicit rejection)."""
 
     reason: str = ""
@@ -46,18 +46,18 @@ def _document_spec(
     business_question: str,
     additional_instructions: str = "",
 ) -> Optional[str]:
-    """Spec text for a PDF/DOCX upload — the document-connector equivalent of
+    """Spec text for a PDF/DOCX upload: the document-connector equivalent of
     `auto_generate_spec()`, whose signature needs a pre-parsed DataFrame a
     document doesn't have yet.
 
     Real bug found 2026-08-30, live testing: `_dataframe_from_upload()` below
-    never had a `.pdf`/`.docx` branch at all — despite the upload UI
+    never had a `.pdf`/`.docx` branch at all: despite the upload UI
     advertising both and `sources/document_source.py` existing specifically
-    to handle them — so every PDF/DOCX upload hit `create_run`'s generic
+    to handle them: so every PDF/DOCX upload hit `create_run`'s generic
     "Could not parse uploaded file." 400 before ever reaching the pipeline.
 
     Deliberately does NOT call `document_source.load_document()` (which
-    structures text into rows via an LLM call) — that would pay for the
+    structures text into rows via an LLM call): that would pay for the
     same LLM extraction twice: once here just to preview, once for real
     inside the pipeline's own Extractor -> `load_document()` call. Instead
     uses `extract_document_text()` (no LLM, deterministic) for a cheap
@@ -65,7 +65,7 @@ def _document_spec(
     row-structuring happen exactly once, where it already happens.
 
     Returns `None` (never raises) if the document can't even be read as
-    text — `create_run` then reports the same "Could not parse uploaded
+    text: `create_run` then reports the same "Could not parse uploaded
     file." error as every other unreadable upload, not a different message
     for this one source type.
     """
@@ -79,7 +79,7 @@ def _document_spec(
     question_hint = (
         f" The analysis should answer: {business_question}." if business_question else ""
     )
-    # 2026-09-04 gap-closing fix — see `spec_builder.auto_generate_spec`'s identical
+    # 2026-09-04 gap-closing fix: see `spec_builder.auto_generate_spec`'s identical
     # `additional_instructions` param and docstring for why this exists.
     user_hint = (
         f"The user also gave these specific instructions — follow them, and where "
@@ -113,7 +113,7 @@ def _dataframe_from_upload(
 
     `sheet_name` (Wave 1 item 2, 2026-09-05 mega-audit remediation): before this
     fix, an Excel upload always silently read `pd.read_excel(buffer)`'s default
-    (sheet index 0) for this preview/schema-detection DataFrame — even when the
+    (sheet index 0) for this preview/schema-detection DataFrame: even when the
     workbook had other sheets, and even though the *real* pipeline execution
     (`agents/pipeline/extractor.py` -> `sources/csv_source.py::_load_excel`)
     explicitly raises rather than guess which sheet is "right" when more than
@@ -142,7 +142,7 @@ def _excel_sheet_names(contents: bytes) -> list[str]:
     """All sheet names in an uploaded Excel workbook, in file order.
 
     Callers (`get_excel_sheets` below) are only reached for `.xlsx`/`.xls`
-    filenames — errors reading a corrupt/non-Excel file propagate as a 400
+    filenames: errors reading a corrupt/non-Excel file propagate as a 400
     from the route, same as `_dataframe_from_upload`'s existing "Could not
     parse uploaded file." shape for other unreadable uploads.
     """
@@ -154,7 +154,7 @@ def list_runs(
     limit: int = 20,
     tenant_id: str = Depends(get_current_tenant_id),
 ) -> list[dict[str, Any]]:
-    """Wraps `audit.db.load_history` — same tenant-scoped query the Streamlit
+    """Wraps `audit.db.load_history`: same tenant-scoped query the Streamlit
     History tab uses."""
     history = load_history(limit=limit, tenant_id=tenant_id)
     records = cast("list[dict[str, Any]]", history.to_dict(orient="records"))
@@ -165,7 +165,7 @@ def list_runs(
 def get_pending_approvals(
     tenant_id: Annotated[str, Depends(get_current_tenant_id)],
 ) -> list[dict[str, Any]]:
-    """Sprint 27 (ADR-028) — every run of this tenant currently gated
+    """Sprint 27 (ADR-028): every run of this tenant currently gated
     `awaiting_approval`, most recent first. Declared before `/{run_id}` so
     FastAPI's path matching doesn't swallow this literal path as a `run_id`.
     """
@@ -177,9 +177,9 @@ def get_run(
     run_id: str,
     tenant_id: str = Depends(get_current_tenant_id),
 ) -> dict[str, Any]:
-    """Wraps `audit.db.load_full_result` — 404 covers both "unknown run_id"
+    """Wraps `audit.db.load_full_result`: 404 covers both "unknown run_id"
     and "belongs to another tenant" (indistinguishable by design, same as
-    `load_full_result`'s own soft-fail shape — see its docstring)."""
+    `load_full_result`'s own soft-fail shape: see its docstring)."""
     result = load_full_result(run_id, log_dir=str(RUNS_DIR), tenant_id=tenant_id)
     if result is None:
         raise HTTPException(status_code=404, detail="Run not found.")
@@ -195,7 +195,7 @@ def get_status(
 ) -> dict[str, Any]:
     """Wraps `execution_queue.get_task_status`. Celery task ids aren't tenant-scoped
     (same as the Streamlit polling loop, which only ever polls a task id it just
-    enqueued itself) — this endpoint requires *a* valid session, not proof the
+    enqueued itself): this endpoint requires *a* valid session, not proof the
     caller owns this specific task_id, matching pre-existing behavior."""
     return get_task_status(task_id)
 
@@ -210,11 +210,11 @@ async def get_excel_sheets(
     ask "does this workbook have more than one sheet, and what are they called"
     *before* the user submits the run, so they can pick the right one instead of
     the pipeline always defaulting to (or, before this fix, sometimes failing
-    on) the first sheet. Read-only, no write/budget/rate-limit implications —
+    on) the first sheet. Read-only, no write/budget/rate-limit implications:
     `get_current_tenant_id` (auth-only) is the right dependency here, the same
     one `/status` uses, not `require_role("editor")`.
 
-    Returns `{"sheets": []}` (not an error) for a non-Excel filename — the
+    Returns `{"sheets": []}` (not an error) for a non-Excel filename: the
     frontend only calls this for `.xlsx`/`.xls` uploads, but a wrong/empty
     filename shouldn't 400 a preflight check.
     """
@@ -241,27 +241,27 @@ async def create_run(
 ) -> dict[str, str]:
     """Wraps `execution_queue.enqueue_analysis`. Originally mirrored `app.py::_tab_executar`'s
     upload-vs-manual-spec branching exactly (`auto_generate_spec` for an uploaded file, the
-    raw textarea value otherwise) — but that branching silently discarded whatever the user
+    raw textarea value otherwise): but that branching silently discarded whatever the user
     typed in `manual_spec` whenever a file was also attached, even though the UI's "optional
     if a file was attached" label implied it would still be taken into account. Real,
     live-verified gap found 2026-09-04: typed "rename dt to date, filter active rows" was
     never seen by the Orchestrator at all when a file was uploaded alongside it. Fixed by
     threading `manual_spec` through as `additional_instructions` to both
-    `auto_generate_spec`/`_document_spec` instead of dropping it — the file-derived spec is
+    `auto_generate_spec`/`_document_spec` instead of dropping it: the file-derived spec is
     still primary (columns/rows/dtypes the Orchestrator needs), the user's typed text is now
     layered on top and explicitly marked as taking priority on conflict.
 
     `llm_provider_override`/`llm_model_override`: gap-closing fix (2026-08-25
-    audit, Wave 4) — the avulso "Executar" flow's `ModelPicker` selection
+    audit, Wave 4): the avulso "Executar" flow's `ModelPicker` selection
     (`frontend/src/components/executar-form.tsx`), sent under the same field
     names as `PipelineState`'s. An avulso run has no `saved_pipeline_id` for
     `run_silver_pipeline` to resolve a DB-stored override from (Sprint 30,
-    ADR-031 §3 only covers saved pipelines) — this is that path's equivalent.
+    ADR-031 §3 only covers saved pipelines): this is that path's equivalent.
     Both or neither must be set (same posture as `PUT /pipelines/{id}/llm-config`),
     and the pair must be in `core.llm.ALLOWED_MODELS_BY_PROVIDER`.
 
     `sheet_name`: Wave 1 item 2, 2026-09-05 mega-audit remediation. Only
-    meaningful for a `.xlsx`/`.xls` `file` — the frontend resolves it via
+    meaningful for a `.xlsx`/`.xls` `file`: the frontend resolves it via
     `POST /runs/excel-sheets` + a picker before submit whenever the workbook
     has more than one sheet, so the Orchestrator's generated plan (and the
     real pipeline execution behind it) reads the sheet the user actually
@@ -306,12 +306,12 @@ async def create_run(
             if name.endswith(_EXCEL_EXTENSIONS) and resolved_sheet_name is None:
                 # Wave 1 item 2, 2026-09-05 mega-audit remediation: don't
                 # silently default to sheet 0 for a multi-sheet workbook the
-                # way `_dataframe_from_upload` used to — the frontend's
+                # way `_dataframe_from_upload` used to: the frontend's
                 # `/runs/excel-sheets` picker (`run-form.tsx`) is supposed to
                 # have already resolved this before submit for any file with
                 # more than one sheet. Landing here with `sheet_name` still
                 # unset and >1 sheet means that step was skipped (an older
-                # client, or the picker itself failing) — fail with a clear
+                # client, or the picker itself failing): fail with a clear
                 # 400 rather than guess, matching `_load_excel`'s own
                 # no-guessing stance for the real pipeline execution path.
                 try:
@@ -358,14 +358,14 @@ async def create_run(
             llm_model_override=llm_model_override,
             # Audit finding H5 / D4: the UI's active locale (next-intl cookie),
             # sent by run-form.tsx, wins over the tenant's stored users.locale for
-            # this run's progress messages + narrative — so an English-UI user
+            # this run's progress messages + narrative: so an English-UI user
             # never sees Portuguese progress/narrative again.
             locale_override=locale,
         )
     except RateLimitExceededError as e:
         raise HTTPException(status_code=429, detail=str(e)) from e
     except BudgetExceededError as e:
-        # 402 Payment Required — semantically distinct from 429 (rate limit):
+        # 402 Payment Required: semantically distinct from 429 (rate limit):
         # this rejection is about accumulated spend, not request cadence, and
         # doesn't self-resolve after a window; it needs the cap raised or the
         # next billing period, not just "wait and retry" (ADR-019).
@@ -382,7 +382,7 @@ _WRITE_FAILED_AFTER_APPROVAL = "The write failed after approval. Open the run to
 
 
 def _run_summary(state: dict[str, Any], error: str | None) -> dict[str, Any]:
-    """Small JSON-safe summary of a post-approval/rejection `PipelineState` —
+    """Small JSON-safe summary of a post-approval/rejection `PipelineState`:
     mirrors `execution_queue.run_full_analysis_task`'s own return shape
     rather than the full `AnalysisRunResult` (no Gold/Science/Advisor result
     changes here, only the Loader's outcome). `error` is passed by the caller,
@@ -400,11 +400,11 @@ def approve_run(
     run_id: str,
     tenant_id: Annotated[str, Depends(require_role("editor"))],
 ) -> dict[str, Any]:
-    """Sprint 27 (ADR-028) — an operator approves a gated write: performs the
+    """Sprint 27 (ADR-028): an operator approves a gated write: performs the
     real write now (`pipeline_service.resume_pending_load`) and returns the
     updated run's outcome. 404s for an unknown/unowned run id; 409s if the
     run exists but isn't currently `awaiting_approval` (already resolved, or
-    never gated) — same "known-but-wrong-state" distinction `PATCH
+    never gated): same "known-but-wrong-state" distinction `PATCH
     /pipelines/{id}` already makes via 404 vs. 400 for its own preconditions.
     """
     try:
@@ -423,7 +423,7 @@ def reject_run(
     body: RejectRunRequest,
     tenant_id: Annotated[str, Depends(require_role("editor"))],
 ) -> dict[str, Any]:
-    """Sprint 27 (ADR-028) — an operator declines a gated write: never writes
+    """Sprint 27 (ADR-028): an operator declines a gated write: never writes
     to the destination, marks the run `failed` with an explicit rejection
     reason. Same 404/409 mapping as `approve_run`.
     """

@@ -28,7 +28,7 @@ def test_sanitize_redacts_connection_string_and_dsn_field_names() -> None:
 
 
 def test_sanitize_scrubs_dsn_password_embedded_in_a_value() -> None:
-    """A secret inside a VALUE (not a field name) is scrubbed too — e.g. a raw
+    """A secret inside a VALUE (not a field name) is scrubbed too: e.g. a raw
     connection error surfaced in a benignly-named field."""
     data = {"error": "could not connect: postgresql://tenant:supersecret@db-host:5432/prod"}
     result = _sanitize(data)

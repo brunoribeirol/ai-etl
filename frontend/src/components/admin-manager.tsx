@@ -25,7 +25,7 @@ import { formatUsd } from "@/lib/format-number";
 
 /**
  * `/admin` page's actual data + interaction layer (Wave 6, 2026-08-25 admin
- * panel/approval-gate UI plan). Client Component — every tab needs a fresh
+ * panel/approval-gate UI plan). Client Component: every tab needs a fresh
  * per-request token (`useAuthedFetch`), same reasoning `pipelines-manager.tsx`
  * already established. The page component wrapping this one has already
  * verified `role === "admin"` server-side before rendering this at all; every
@@ -33,11 +33,11 @@ import { formatUsd } from "@/lib/format-number";
  * stale/cached role check here is never the only thing standing between a
  * non-admin and this data.
  *
- * Two tabs: "Audit log" (default — `GET /admin/audit-log`, the DoD's
+ * Two tabs: "Audit log" (default: `GET /admin/audit-log`, the DoD's
  * "queryable" requirement made concrete) and "Query tenant" (`GET
  * /admin/tenants` for the picker, ADR-032's other 2 read-only routes for the
  * selected tenant's runs/budget). Clicking a `target_tenant_id` in the audit
- * log pivots into the tenant tab with that id pre-selected — the audit log
+ * log pivots into the tenant tab with that id pre-selected: the audit log
  * is the only real way to *discover* a tenant id in context today, since
  * `/admin/tenants` returns raw Clerk ids with no display name.
  */
@@ -102,7 +102,7 @@ export function AdminManager() {
       try {
         setTenants(await authedFetch<AdminTenantSummary[]>("/admin/tenants"));
       } catch {
-        // Non-fatal for this tab alone — the select just renders empty; the
+        // Non-fatal for this tab alone: the select just renders empty; the
         // audit-log tab (default) already surfaces auth/network failures.
       } finally {
         setTenantsLoading(false);

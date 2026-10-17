@@ -1,6 +1,6 @@
 """Generate a synthetic wide/large benchmark dataset for Sprint 12 scale profiling.
 
-Not one of the 3 case-study scenarios — this is a standalone load-testing fixture used
+Not one of the 3 case-study scenarios: this is a standalone load-testing fixture used
 by `case_study/data/profile_scale.py` to measure real Extractor/Transformer/Quality/
 Analyst/Science behavior against data far larger than the existing scenario datasets
 (sales.csv: 5k rows x 8 cols, orders.csv: 10k rows x 7 cols).
@@ -15,12 +15,12 @@ both column-count-sensitive, not just row-count-sensitive:
     work, not just numeric-only operations.
 
 Column layout (out of `--cols`, default 300):
-  - 1 row-id integer column (no nulls, no dupes — the natural primary key)
-  - ~40% numeric (float, 5% nulls, 1% IQR outliers — mirrors generate_sales.py's
+  - 1 row-id integer column (no nulls, no dupes: the natural primary key)
+  - ~40% numeric (float, 5% nulls, 1% IQR outliers: mirrors generate_sales.py's
     existing outlier-injection pattern)
   - ~25% integer (small-range categorical-ish counts, 3% nulls)
   - ~20% low-cardinality string/categorical (2% nulls)
-  - ~10% free-text-ish string (longer, higher entropy — worst case for prompt-size
+  - ~10% free-text-ish string (longer, higher entropy: worst case for prompt-size
     concerns since these produce the largest per-cell sample values)
   - ~5% datetime (ISO strings, 2% nulls)
 Plus a fixed 2% exact-duplicate-row injection, matching the existing generators.

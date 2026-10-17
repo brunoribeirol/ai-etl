@@ -1,4 +1,4 @@
-"""Transformer Agent — generates and executes Python transformation code via LLM."""
+"""Transformer Agent: generates and executes Python transformation code via LLM."""
 
 import json
 
@@ -10,7 +10,7 @@ from ai_etl.core.locale import date_parse_hint, resolve_locale
 from ai_etl.core.sandbox import execute_in_sandbox, scale_timeout_for_rows
 from ai_etl.core.state import PipelineState
 
-# Matches core/sandbox.py's own default — made explicit here (rather than relying on
+# Matches core/sandbox.py's own default: made explicit here (rather than relying on
 # execute_in_sandbox()'s default parameter) so it has a name to scale via
 # scale_timeout_for_rows() below (ADR-012).
 TRANSFORMER_TIMEOUT_SECONDS = 30
@@ -251,7 +251,7 @@ def transformer_node(state: PipelineState) -> PipelineState:
     model_override = state.get("llm_model_override")
     llm = get_llm(provider=provider_override, model=model_override)
     if provider_override or model_override:
-        # Sprint 30/gap-closing (ADR-031 §5) — see orchestrator_node's identical
+        # Sprint 30/gap-closing (ADR-031 §5): see orchestrator_node's identical
         # comment for rationale.
         state = {
             **state,
@@ -276,7 +276,7 @@ def transformer_node(state: PipelineState) -> PipelineState:
 
     last_error: str | None = None
     attempts = state.get("transformation_attempts", 0)
-    # ADR-012: scaled by the largest source — Transformer receives every extracted
+    # ADR-012: scaled by the largest source: Transformer receives every extracted
     # source at once (unlike Analyst/Science, which get a single already-merged
     # Silver DataFrame), so the widest single input bounds how long legitimate
     # cleaning/merging code over it can take.
@@ -342,10 +342,10 @@ def transformer_node(state: PipelineState) -> PipelineState:
         # (docs/archive/work/2026-09-05-mega-audit-remediation-plan.md): before this
         # fix, a total failure never set `transformation_code` at all, so the
         # History page's Code tab showed "No code available for this run."
-        # with no way to see what was actually tried — confirmed live for the
+        # with no way to see what was actually tried: confirmed live for the
         # nested-JSON case (Data Engineer persona, `pedidos_aninhado.json`).
         # `code` here is the last attempt's generated code (the for-loop
-        # variable, still in scope after the loop exits) — showing it doesn't
+        # variable, still in scope after the loop exits): showing it doesn't
         # make the run succeed, but it turns an opaque "Failed" into something
         # a technical operator can actually audit and act on.
         "transformation_code": code,

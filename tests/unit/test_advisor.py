@@ -84,7 +84,7 @@ VALID_RESPONSE = json.dumps(
 
 
 # ---------------------------------------------------------------------------
-# run_advisor — happy path
+# run_advisor: happy path
 # ---------------------------------------------------------------------------
 
 
@@ -132,7 +132,7 @@ def test_run_advisor_prompt_instructs_hedging_small_samples_and_unverified_colum
 ) -> None:
     """Wave 2 item 7, 2026-09-05 mega-audit remediation
     (docs/archive/work/2026-09-05-mega-audit-remediation-plan.md): live-verified real
-    gap (LLM/Prompt Engineer persona, `misleading_column.csv`) — recommendations
+    gap (LLM/Prompt Engineer persona, `misleading_column.csv`): recommendations
     grounded in a tiny segment, or in a column whose name implies a calculated
     metric it may not actually be, used to be presented with the same
     confidence as a finding from the full dataset."""
@@ -210,7 +210,7 @@ def test_run_advisor_normalizes_invalid_priority(
 
 
 # ---------------------------------------------------------------------------
-# run_advisor — with missing upstream results
+# run_advisor: with missing upstream results
 # ---------------------------------------------------------------------------
 
 
@@ -276,7 +276,7 @@ def test_run_advisor_skips_failed_subtasks_in_context(
 
 
 # ---------------------------------------------------------------------------
-# run_advisor — JSON retry
+# run_advisor: JSON retry
 # ---------------------------------------------------------------------------
 
 
@@ -326,7 +326,7 @@ def test_run_advisor_forwards_llm_override(
 
 
 # ---------------------------------------------------------------------------
-# run_advisor — fence-stripping via the shared helper (Sprint 33, dedupe)
+# run_advisor: fence-stripping via the shared helper (Sprint 33, dedupe)
 # ---------------------------------------------------------------------------
 
 
@@ -354,7 +354,7 @@ def test_run_advisor_strips_markdown_fences_without_closing_fence(
 
 
 # ---------------------------------------------------------------------------
-# run_advisor — ADR-037 sanity-check awareness (Wave 3)
+# run_advisor: ADR-037 sanity-check awareness (Wave 3)
 # ---------------------------------------------------------------------------
 
 
@@ -473,7 +473,7 @@ def test_run_advisor_ok_sanity_check_injects_no_warning(
 def test_run_advisor_missing_sanity_check_injects_no_warning(
     mock_get_llm, sample_df, gold_result, science_result
 ) -> None:
-    """`gold_result`/`science_result` fixtures have no `sanity_check` key at all —
+    """`gold_result`/`science_result` fixtures have no `sanity_check` key at all:
     the common case for a sub-task whose deterministic checks all passed with no
     entries appended (or ADR-037 LLM review disabled)."""
     mock_llm = _mock_llm([VALID_RESPONSE])
@@ -485,7 +485,7 @@ def test_run_advisor_missing_sanity_check_injects_no_warning(
 
 
 # ---------------------------------------------------------------------------
-# Audit finding M3 (2026-09-10) — deterministic revenue↔demand conflation guard
+# Audit finding M3 (2026-09-10): deterministic revenue↔demand conflation guard
 # ---------------------------------------------------------------------------
 
 _DEMAND_REC_RESPONSE = json.dumps(
@@ -520,7 +520,7 @@ def test_advisor_does_not_caveat_demand_when_quantity_dimension_present(
     mock_get_llm, sample_df, science_result
 ) -> None:
     """If the analysis actually measured quantity (a 'quantidade' column exists), a
-    demand claim can be legitimately grounded — no caveat, no downgrade."""
+    demand claim can be legitimately grounded: no caveat, no downgrade."""
     gold_with_qty = [
         {
             "task_question": "Units sold per product?",

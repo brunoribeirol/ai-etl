@@ -6,7 +6,7 @@ SQLite engine, a fake in-memory `StorageBackend`, and monkeypatched
 
 ADR-040 follow-up: expired-run reads now go through `tenant_scope()`
 (faked here, same pattern as `test_audit_db.py`); `retention_cleanup_log`
-writes stay on `get_engine()` (bypass role — RLS-enabled-with-no-policy
+writes stay on `get_engine()` (bypass role: RLS-enabled-with-no-policy
 table, ADR-040's documented exemption).
 """
 
@@ -92,7 +92,7 @@ def engine(monkeypatch: pytest.MonkeyPatch, fake_storage: FakeStorageBackend) ->
                 tenant_id="tenant-a",
             )
         )
-        # Recent run for tenant-a (1 day old) — must survive the sweep.
+        # Recent run for tenant-a (1 day old): must survive the sweep.
         conn.execute(
             sqlalchemy.insert(runs_table).values(
                 run_id="run-recent",

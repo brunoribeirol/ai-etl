@@ -1,6 +1,6 @@
-"""`/secrets` endpoints — tenant-scoped external-source credential storage
+"""`/secrets` endpoints: tenant-scoped external-source credential storage
 (Sprint 19, ADR-022). Editor-only end to end: a `viewer` cannot read, list,
-or write another member's credentials, including the names alone — closing
+or write another member's credentials, including the names alone: closing
 the RBAC DoD's isolation requirement for the secrets management surface.
 
 No endpoint here ever returns a decrypted value. `GET` returns names only

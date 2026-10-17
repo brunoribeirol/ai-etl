@@ -1,9 +1,9 @@
-"""`/llm` endpoints — real provider connectivity testing (Sprint 30, ADR-031).
+"""`/llm` endpoints: real provider connectivity testing (Sprint 30, ADR-031).
 
 Closes a gap ADR-014 (Sprint 23) left open: provider selection was verified only
 by mocking env vars and asserting the correct LangChain class got instantiated,
 never by making a live API call. Tenant-scoped auth (`get_current_tenant_id`) even
-though the test doesn't touch tenant data, matching `GET /config`'s reasoning —
+though the test doesn't touch tenant data, matching `GET /config`'s reasoning:
 one auth story for the whole API rather than a public-endpoint carve-out for one
 low-stakes probe.
 """
@@ -44,10 +44,10 @@ def test_connectivity(
     """Make one real, minimal LLM call against `provider`/`model` and report
     whether it succeeded. Always returns 200 with `ok: false` and an `error`
     string on failure (missing credential, unreachable provider, invalid model
-    id) — never a 5xx for "the provider itself failed", since a failed
+    id): never a 5xx for "the provider itself failed", since a failed
     connectivity check is exactly the useful, expected answer this endpoint
     exists to give. Only rejects with 400 before attempting the call if
-    `provider`/`model` isn't in `core.llm.ALLOWED_MODELS_BY_PROVIDER` at all —
+    `provider`/`model` isn't in `core.llm.ALLOWED_MODELS_BY_PROVIDER` at all:
     that's a client input error, not a provider connectivity result.
     """
     try:

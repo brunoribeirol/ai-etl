@@ -4,7 +4,7 @@
 Real bug found live: `core/locale.py` (ADR-036) already resolves a
 per-tenant locale and threads it through the Transformer's date-parsing
 convention and every Analyst/Science/Advisor/Planner prompt's *narrative*
-language — but the execution-progress messages
+language: but the execution-progress messages
 `agent-progress.tsx`/`analysis-section.tsx` render live while a pipeline
 runs were never touched by that work. They stayed 100% hardcoded
 Portuguese strings regardless of the tenant's locale or the frontend's own
@@ -13,8 +13,8 @@ Portuguese strings regardless of the tenant's locale or the frontend's own
 every run.
 
 Same shape as `core/locale.py`'s own catalogs (`LOCALE_METADATA`,
-`narrative_language_instruction`) — a `dict[locale, dict[key, template]]`
-plus a lookup helper — kept in its own module rather than added to
+`narrative_language_instruction`): a `dict[locale, dict[key, template]]`
+plus a lookup helper: kept in its own module rather than added to
 `locale.py` because these are UI-facing progress strings with `.format()`
 placeholders, a different concern than the LLM-prompt-facing metadata
 `locale.py` already owns.
@@ -27,7 +27,7 @@ from typing import Any
 from ai_etl.core.locale import DEFAULT_LOCALE, resolve_locale
 
 # Emoji + label + locale-aware description for each Silver/LangGraph node as
-# it streams. `label` ("Orchestrator", "Extractor", ...) is a proper noun —
+# it streams. `label` ("Orchestrator", "Extractor", ...) is a proper noun:
 # the same across every locale, same convention as `agent-progress.tsx`'s
 # `PHASES` labels ("Silver", "Planner", "Advisor") staying untranslated.
 AGENT_STEP_LABELS: dict[str, tuple[str, str]] = {
@@ -75,7 +75,7 @@ def agent_step(locale: str, node_name: str) -> tuple[str, str, str]:
 
 
 # `{placeholder}` names match exactly what each call site in
-# `pipeline_service.py` passes as `**kwargs` to `progress_message()` below —
+# `pipeline_service.py` passes as `**kwargs` to `progress_message()` below:
 # keep both in sync when adding a new message.
 _MESSAGES: dict[str, dict[str, str]] = {
     "pt-BR": {
@@ -142,7 +142,7 @@ def progress_message(locale: str, key: str, **kwargs: Any) -> str:
 
     Falls back to `DEFAULT_LOCALE`'s template if `locale` isn't recognized
     (mirrors `core/locale.py::resolve_locale`'s soft-fail convention), and
-    raises `KeyError` if `key` itself is missing from both locales — a
+    raises `KeyError` if `key` itself is missing from both locales: a
     programming error (typo'd key), not a runtime condition to swallow
     silently the way an unknown locale is.
     """

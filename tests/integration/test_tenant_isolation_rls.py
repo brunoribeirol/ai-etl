@@ -6,12 +6,12 @@ convention as `test_alembic_migration.py`/`test_audit_persistence.py`.
 Two things are proven here, against a *real* Postgres, not mocked or reasoned
 about in the abstract:
 
-1. `test_tenant_scope_blocks_cross_tenant_read_with_no_where_clause` — the
+1. `test_tenant_scope_blocks_cross_tenant_read_with_no_where_clause`: the
    actual backstop this whole feature exists to provide: a query through the
    restricted role that simulates the exact bug class ADR-040 defends
    against (a missing `WHERE tenant_id = :id`) returns zero rows for another
    tenant's data, not both tenants' rows.
-2. `test_set_local_guc_does_not_leak_across_pooled_connection_reuse` — ADR-032's
+2. `test_set_local_guc_does_not_leak_across_pooled_connection_reuse`: ADR-032's
    single biggest concern about this design: with a pool of exactly one
    connection, a second "request" that reuses the same physical connection
    after the first request's transaction ended must not see the first
@@ -70,7 +70,7 @@ def _alembic_config() -> Config:
 @pytest.fixture(autouse=True)
 def _clean_slate(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     """Same `DROP SCHEMA ... CASCADE` + full migration replay as
-    `test_alembic_migration.py` — this is the one test file that most needs the
+    `test_alembic_migration.py`: this is the one test file that most needs the
     restricted role's grants and the RLS policies to genuinely exist, not just
     a `metadata.create_all()` shape-alike."""
     monkeypatch.setenv("APP_DATABASE_URL", _TEST_APP_DATABASE_URL)
@@ -108,8 +108,8 @@ def _insert_user_and_run(bypass_engine: sqlalchemy.Engine, tenant_id: str, run_i
 
 def test_tenant_scope_blocks_cross_tenant_read_with_no_where_clause() -> None:
     """The actual backstop: a query run through the restricted engine's
-    `tenant_scope()` that *has no `WHERE tenant_id = ...` clause at all* —
-    simulating the exact application bug class ADR-040 exists to catch —
+    `tenant_scope()` that *has no `WHERE tenant_id = ...` clause at all*:
+    simulating the exact application bug class ADR-040 exists to catch:
     must still return only the GUC-scoped tenant's own row, never another
     tenant's, thanks to the RLS policy alone."""
     bypass_engine = connection.get_engine()
@@ -118,7 +118,7 @@ def test_tenant_scope_blocks_cross_tenant_read_with_no_where_clause() -> None:
     _insert_user_and_run(bypass_engine, tenant_a, run_a)
     _insert_user_and_run(bypass_engine, tenant_b, run_b)
 
-    # No `WHERE tenant_id = ...` at all — the RLS policy is the only thing
+    # No `WHERE tenant_id = ...` at all: the RLS policy is the only thing
     # standing between this query and both tenants' rows.
     with connection.tenant_scope(tenant_a) as conn:
         rows = conn.execute(text("SELECT run_id, tenant_id FROM runs")).fetchall()
@@ -135,7 +135,7 @@ def test_tenant_scope_blocks_cross_tenant_read_with_no_where_clause() -> None:
 def test_tenant_scope_blocks_write_to_another_tenants_row() -> None:
     """The `WITH CHECK` half of the policy: an `INSERT` attempting to write a
     row under a `tenant_id` that doesn't match the GUC is rejected outright by
-    Postgres — a tenant cannot plant a row claiming to belong to another
+    Postgres: a tenant cannot plant a row claiming to belong to another
     tenant, even if it tries to."""
     bypass_engine = connection.get_engine()
     tenant_a, tenant_b = f"tenant-a-{uuid.uuid4().hex[:8]}", f"tenant-b-{uuid.uuid4().hex[:8]}"
@@ -147,7 +147,7 @@ def test_tenant_scope_blocks_write_to_another_tenants_row() -> None:
 
     with pytest.raises(sqlalchemy.exc.DBAPIError):
         with connection.tenant_scope(tenant_b) as conn:
-            # Scoped as tenant_b, but this row claims tenant_a — the policy's
+            # Scoped as tenant_b, but this row claims tenant_a: the policy's
             # WITH CHECK clause must reject it before it ever commits.
             conn.execute(
                 text(
@@ -162,7 +162,7 @@ def test_set_local_guc_does_not_leak_across_pooled_connection_reuse() -> None:
     """ADR-032's single biggest concern, verified for real: with a pool of
     exactly one connection, a second `tenant_scope()` call that reuses the
     same physical connection after the first one's transaction committed
-    must not still see the first call's `app.tenant_id` — proving `SET LOCAL`
+    must not still see the first call's `app.tenant_id`: proving `SET LOCAL`
     (`set_config(..., true)`) truly resets at transaction end rather than
     persisting on the pooled connection for whichever tenant's request
     happens to reuse it next.
@@ -183,7 +183,7 @@ def test_set_local_guc_does_not_leak_across_pooled_connection_reuse() -> None:
             ).scalar()
 
         # "Request 2": a brand-new transaction on what is, with pool_size=1,
-        # necessarily the *same* underlying DBAPI connection request 1 used —
+        # necessarily the *same* underlying DBAPI connection request 1 used:
         # and does not itself call set_config at all.
         with small_pool_engine.begin() as conn:
             observed_in_txn_2 = conn.execute(
@@ -194,7 +194,7 @@ def test_set_local_guc_does_not_leak_across_pooled_connection_reuse() -> None:
 
     assert observed_in_txn_1 == tenant_first
     # The GUC did NOT survive into the next transaction on the reused
-    # connection — it reads back empty/NULL, not tenant_first's value. This is
+    # connection: it reads back empty/NULL, not tenant_first's value. This is
     # exactly the property that makes reusing a pooled connection across two
     # different tenants' requests safe: RLS then denies all rows (fail closed)
     # until that request's own `tenant_scope()` call sets it again.
@@ -203,7 +203,7 @@ def test_set_local_guc_does_not_leak_across_pooled_connection_reuse() -> None:
 
 def test_tenant_scope_sees_own_row_when_where_clause_is_present() -> None:
     """Sanity check alongside the no-WHERE-clause test above: the normal,
-    correctly-filtered case still works exactly as before — RLS is additive,
+    correctly-filtered case still works exactly as before: RLS is additive,
     not a replacement for the application's own `WHERE tenant_id = ...`."""
     bypass_engine = connection.get_engine()
     tenant_a = f"tenant-a-{uuid.uuid4().hex[:8]}"

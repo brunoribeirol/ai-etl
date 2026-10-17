@@ -4,7 +4,7 @@ These TypedDicts formalize the dict-based contracts these agents already used
 informally. Several bugs found in this project were exactly this kind of
 undocumented contract drifting between agents (a `None` where a string was
 assumed, a stale key name silently returning a default). Formalizing the shape
-doesn't add runtime validation — these are still plain dicts at runtime — but it
+doesn't add runtime validation, these are still plain dicts at runtime, but it
 gets every call site checked by mypy instead of relying on each agent's author
 remembering the informal contract.
 
@@ -34,7 +34,7 @@ class AnalysisTask(TypedDict):
 class OutputSanityCheckEntry(TypedDict):
     """One entry from `core/output_validation.py` (Sprint 21, ADR-026).
 
-    Mirrors `agents/pipeline/quality.py`'s per-check dict shape — `check` names the rule,
+    Mirrors `agents/pipeline/quality.py`'s per-check dict shape: `check` names the rule,
     `severity` is always "ok" or "warning" for this module (never "error", see
     ADR-026 Decision 1), `detail` is a short human-readable explanation.
     """
@@ -66,9 +66,9 @@ class GoldResult(TypedDict):
     error: str | None
     tokens: TokenUsage
     # Set by app.py when this result came from a simplified fallback question after
-    # the original sub-task question failed outright — not set by run_analyst itself.
+    # the original sub-task question failed outright: not set by run_analyst itself.
     repaired: NotRequired[bool]
-    # Set by pipeline_service.py after a successful run (Sprint 21, ADR-026) — absent
+    # Set by pipeline_service.py after a successful run (Sprint 21, ADR-026): absent
     # on a failed sub-task, which has nothing to sanity-check.
     sanity_check: NotRequired[OutputSanityCheck]
 
@@ -92,9 +92,9 @@ class ScienceResult(TypedDict):
     error: str | None
     tokens: TokenUsage
     # Set by app.py when this result came from a simplified fallback question after
-    # the original sub-task question failed outright — not set by run_science itself.
+    # the original sub-task question failed outright: not set by run_science itself.
     repaired: NotRequired[bool]
-    # Set by pipeline_service.py after a successful run (Sprint 21, ADR-026) — absent
+    # Set by pipeline_service.py after a successful run (Sprint 21, ADR-026): absent
     # on a failed sub-task, which has nothing to sanity-check.
     sanity_check: NotRequired[OutputSanityCheck]
 
@@ -114,7 +114,7 @@ class AdvisorResult(TypedDict):
 
 
 class AnalysisRunResult(TypedDict):
-    """Return contract of `pipeline_service.run_full_analysis` — the full
+    """Return contract of `pipeline_service.run_full_analysis`: the full
     Silver -> Planner -> Gold/Science -> Advisor run for one business question.
 
     `advisor` keeps the legacy "empty dict means not run" sentinel from the code

@@ -12,7 +12,7 @@ const SEVERITY_ICON: Record<string, ReactNode> = {
   error: <XCircle className="h-3.5 w-3.5 text-red-400 shrink-0" />,
 };
 
-// Silver/LangGraph node keys, in execution order — matches
+// Silver/LangGraph node keys, in execution order: matches
 // `services/pipeline_service.py::AGENT_STEPS` and `core/graph.py`'s edges.
 const SILVER_NODES = ["orchestrator", "extractor", "transformer", "quality", "loader"];
 
@@ -38,12 +38,12 @@ function agentLabel(node: string): string {
 }
 
 /**
- * Sprint 7 — replaces `app.py`'s "Silver Agents Execution" + "Pipeline
+ * Sprint 7: replaces `app.py`'s "Silver Agents Execution" + "Pipeline
  * Plan" + "Quality Report" sections (originally in Portuguese). Reads `stage_durations`
- * (the real field — the old Streamlit read a `_agent_timings` key that was
+ * (the real field: the old Streamlit read a `_agent_timings` key that was
  * never actually set on `PipelineState`, a pre-existing dead-code bug fixed
  * here, not reproduced), `pipeline_plan`, and `quality_report`, all already
- * present in `GET /runs/{run_id}`'s `state` — no backend change needed.
+ * present in `GET /runs/{run_id}`'s `state`: no backend change needed.
  */
 export async function PipelineTab({
   stageDurations,
@@ -129,7 +129,7 @@ export async function PipelineTab({
                         {t("outliersSuffix", { count: check.outlier_count })}
                       </span>
                     )}
-                    {/* Sprint 16 (ADR-023) — custom rule detail: either an evaluation
+                    {/* Sprint 16 (ADR-023): custom rule detail: either an evaluation
                         error (unknown column / incompatible type) or the violation count. */}
                     {check.check === "custom_rule" && check.error && (
                       <span className="text-muted-foreground">: {check.error}</span>

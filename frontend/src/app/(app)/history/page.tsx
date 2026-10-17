@@ -34,7 +34,7 @@ function uploadedFileName(spec: string): string | null {
  * <basename>"; a natural-language spec (business question) is shown as-is;
  * an empty spec falls back to the formatted run timestamp. The raw
  * `run_id`/`spec` stay available underneath for technical cross-referencing
- * — this only picks what's shown first. */
+ *: this only picks what's shown first. */
 function runTitle(
   run: Pick<RunSummary, "spec" | "timestamp">,
   fileLabel: string,
@@ -56,7 +56,7 @@ function runTitle(
 
 /**
  * "History" page (Sprint 6, PR 5 → Sprint 7 redesign, ADR-011). Same
- * server-side `GET /runs` fetch (`cache: "no-store"`, tenant-scoped) — the
+ * server-side `GET /runs` fetch (`cache: "no-store"`, tenant-scoped): the
  * card-list markup is replaced with a shadcn Table, same data, same link
  * target per row.
  */
@@ -108,14 +108,14 @@ export default async function History() {
               {/* Wave 3 item 9, 2026-09-05 mega-audit remediation
                   (docs/archive/work/2026-09-05-mega-audit-remediation-plan.md): this
                   already renders real `<table>`/`<tr>`/`<td>` markup (shadcn
-                  `<Table>`, not a `<div>` grid) — the actual reported gap was
+                  `<Table>`, not a `<div>` grid): the actual reported gap was
                   5 separate, identically-targeted `<a>` elements per row, so
                   a screen reader announces "link" 5 times per run instead of
                   once. Collapsed to a single link (the run title/id cell,
                   the one already carrying the most identifying text); the
                   other cells are now static content. `cursor-pointer` stays
                   on the row as a visual affordance even though only the
-                  first cell is the real click target — a full-row stretched
+                  first cell is the real click target: a full-row stretched
                   link is a heavier change than this finding calls for. */}
               {runs.map((run) => (
                 <TableRow key={run.run_id} className="cursor-pointer">

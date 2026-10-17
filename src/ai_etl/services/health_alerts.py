@@ -2,9 +2,9 @@
 ADR-020).
 
 Distinct from `services/digest.py`/`services/alerting.py` (Sprint 14,
-ADR-018): that pair is about pipeline *content* — a KPI moved between two
+ADR-018): that pair is about pipeline *content*: a KPI moved between two
 successful runs of the same saved pipeline. This module is about pipeline
-*health* — a scheduled pipeline stopped completing at all. Different
+*health*: a scheduled pipeline stopped completing at all. Different
 audience (whoever configured the pipeline, not an executive consumer),
 different tone (operational, not a business narrative), same delivery
 mechanism underneath: `services/notifications.py`'s four generic send
@@ -30,7 +30,7 @@ def build_health_alert(pipeline: dict[str, Any]) -> dict[str, Any]:
     (`execution_queue.py::HEALTH_ALERT_FAILURE_THRESHOLD`).
 
     `pipeline` is the dict shape `audit.db.get_saved_pipeline`/
-    `list_saved_pipelines` already return — this function reads
+    `list_saved_pipelines` already return: this function reads
     `name`/`id`/`consecutive_failures`/`last_error` off it, nothing new.
     """
     name = pipeline["name"]
@@ -70,7 +70,7 @@ def check_and_alert_pipeline_health(pipeline: dict[str, Any]) -> dict[str, bool]
     """Deliver a health alert for `pipeline` via every configured channel.
 
     Same "never raises, returns `False` per channel if unconfigured or the
-    request fails" contract as every `notifications.py` function — this
+    request fails" contract as every `notifications.py` function: this
     function doesn't add its own try/except because none of the four calls
     below can raise on their own. Callers (`execution_queue.py`) are
     expected to call this at most once per threshold crossing (an
@@ -79,7 +79,7 @@ def check_and_alert_pipeline_health(pipeline: dict[str, Any]) -> dict[str, bool]
     failure.
     """
     alert = build_health_alert(pipeline)
-    # Sprint 37 (ADR-034) — same per-pipeline channel override as
+    # Sprint 37 (ADR-034): same per-pipeline channel override as
     # `services/alerting.py::check_drift_and_notify`; see that call site's
     # comment for why the other three channels are left untouched.
     override_channel, override_target = resolve_pipeline_notification_override(

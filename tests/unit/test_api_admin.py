@@ -1,12 +1,12 @@
 """Tests for `/admin` endpoints (Sprint 31, ADR-032).
 
 Mocks at the import site inside `api/routers/admin.py`, same convention
-`test_api_runs.py` already uses — and overrides the auth dependency via
+`test_api_runs.py` already uses: and overrides the auth dependency via
 FastAPI's `dependency_overrides` rather than minting real JWTs here (that's
 already covered by `test_api_deps.py`).
 
 Gap-closing (2026-08-24 QA audit, Wave 5): this router previously had zero
-direct endpoint tests — only the persistence layer (`audit/admin_log.py`)
+direct endpoint tests: only the persistence layer (`audit/admin_log.py`)
 was exercised. These tests cover the actual FastAPI wiring: successful
 admin-role access, the `require_admin()` 403 gate for a non-admin caller,
 and that every route logs exactly one admin action.

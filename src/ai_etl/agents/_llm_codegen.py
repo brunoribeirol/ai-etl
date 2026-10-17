@@ -3,7 +3,7 @@
 Extracted from `agents/analysis/analyst.py`, `agents/analysis/science.py`, and
 `agents/analysis/planner.py`, which each duplicated an equivalent
 `_strip_fences()`, and `analyst.py`/`science.py` which each additionally
-duplicated a near-equivalent `_build_column_stats()`. Pure refactor — call
+duplicated a near-equivalent `_build_column_stats()`. Pure refactor: call
 sites keep their public names/signatures unchanged, they just delegate to
 these shared implementations now.
 
@@ -13,8 +13,8 @@ that `analyst.py`'s and `planner.py`-adjacent copies didn't; `analyst.py`'s
 version additionally included `samples=[...]` for high-cardinality
 non-numeric columns that `science.py`'s copy didn't. Neither is a security-
 relevant divergence (this only shapes LLM prompt context, not SQL/exec
-input), so the shared version keeps the union of both — datetime detection
-*and* high-cardinality samples — per the Sprint 33 spec's instruction to
+input), so the shared version keeps the union of both: datetime detection
+*and* high-cardinality samples: per the Sprint 33 spec's instruction to
 reuse the most complete version without regressing simpler callers. Existing
 tests for both agents assert only substrings (e.g. `"datetime" in stats`),
 not exact output, so this superset introduces no regression for either.

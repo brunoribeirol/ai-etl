@@ -1,6 +1,6 @@
 """Unit tests for Sprint 34's load-test script (`case_study/scripts/
-load_test.py`). Only the pure, deterministic helpers are covered here —
-`_percentile`, `summarize`, and `_orchestrator_side_effect` — per the same
+load_test.py`). Only the pure, deterministic helpers are covered here:
+`_percentile`, `summarize`, and `_orchestrator_side_effect`: per the same
 convention `test_model_comparison.py` documents: `main()`/`_run_one` are
 I/O-heavy orchestration (real sandbox execution, real threads), exercised
 manually and documented in `case_study/results/sprint34/README.md`, not
@@ -92,7 +92,7 @@ class TestSummarize:
         assert summary["error_rate_within_slo"] is True
 
     def test_per_stage_flags_slo_breach(self) -> None:
-        # transformer SLO is 20.0s (SLO_P95_STAGE_SECONDS) — 25s p95 breaches it.
+        # transformer SLO is 20.0s (SLO_P95_STAGE_SECONDS): 25s p95 breaches it.
         results = [
             RequestResult(
                 tenant_id="t1",

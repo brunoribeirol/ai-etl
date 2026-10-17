@@ -1,8 +1,8 @@
 /**
- * Sprint 25 (ADR-036) — frontend locale constants.
+ * Sprint 25 (ADR-036): frontend locale constants.
  *
  * Deliberately mirrors the backend's `core/locale.py::SUPPORTED_LOCALES`/
- * `DEFAULT_LOCALE` exactly (same two codes, same default) — this is the UI-side
+ * `DEFAULT_LOCALE` exactly (same two codes, same default): this is the UI-side
  * half of the same locale, not an independent list that could drift from what
  * `PATCH /tenant/locale` accepts. See ADR-036 §3 for why the frontend UI locale
  * (this cookie) and the backend narrative locale (`users.locale`) are two
@@ -22,7 +22,7 @@ export function isSupportedLocale(value: string | undefined | null): value is Lo
 }
 
 // Read by the server (`src/i18n/request.ts`) and written by the client toggle
-// (`src/components/locale-toggle.tsx` via `src/i18n/actions.ts`'s server action) —
+// (`src/components/locale-toggle.tsx` via `src/i18n/actions.ts`'s server action):
 // a long-lived cookie so a visitor's choice survives across sessions, same
 // persistence contract as `next-themes`' own `localStorage`-backed toggle.
 export const LOCALE_COOKIE_NAME = "AI_ETL_LOCALE";

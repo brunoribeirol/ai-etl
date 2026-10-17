@@ -2,7 +2,7 @@
 
 Exercises `core/sandbox_docker.py::execute_in_docker_sandbox()` (and
 `execute_in_sandbox(..., backend="docker")`) against a real, locally built
-`ai-etl-sandbox:latest` image and a real Docker daemon — not mocks, since the
+`ai-etl-sandbox:latest` image and a real Docker daemon: not mocks, since the
 whole point of ADR-038 is the isolation a real container boundary provides,
 which nothing about the process-boundary "process" backend tests
 (`test_sandbox.py`) exercises.
@@ -10,7 +10,7 @@ which nothing about the process-boundary "process" backend tests
 Skipped automatically when Docker isn't reachable or the sandbox image
 hasn't been built (`make sandbox-image`), matching this project's existing
 "real infrastructure, self-skipping" convention
-(test_mysql_source_real.py/test_mongodb_source_real.py) — CI does not build
+(test_mysql_source_real.py/test_mongodb_source_real.py): CI does not build
 this image (ADR-038: this backend is dev/local-verified, Railway rollout is
 explicit follow-up work), so these tests are expected to skip in CI and run
 for real in local development once the image is built.
@@ -51,7 +51,7 @@ pytestmark = pytest.mark.skipif(
 
 
 # ---------------------------------------------------------------------------
-# Contract parity with the "process" backend — same inputs, same outputs.
+# Contract parity with the "process" backend: same inputs, same outputs.
 # ---------------------------------------------------------------------------
 
 
@@ -98,7 +98,7 @@ def test_syntax_error_returns_error_message_via_docker_backend() -> None:
 
 
 def test_dangerous_builtins_still_blocked_via_docker_backend() -> None:
-    """Same restricted-globals guarantee as the "process" backend — the
+    """Same restricted-globals guarantee as the "process" backend: the
     Docker backend calls the identical `_execute_code()` helper, it does not
     relax SAFE_BUILTINS."""
     code = "result = open('/etc/passwd')"
@@ -123,7 +123,7 @@ def test_timeout_kills_hung_container() -> None:
     assert result["values"] == {}
     assert result["error"] is not None
     assert "Execution exceeded" in result["error"]
-    # 3s timeout + docker kill + a short grace period — generous but still a
+    # 3s timeout + docker kill + a short grace period: generous but still a
     # real regression guard against a reverted/broken kill path hanging.
     assert wall_clock < 30, f"timeout enforcement took {wall_clock}s, expected well under 30s"
 
@@ -134,7 +134,7 @@ def test_timeout_kills_hung_container() -> None:
 # boundary, not merely asserted in prose. Each test below reaches for the
 # real os/socket module via the exact gadget named in ADR-032/ADR-003/
 # ADR-007 (`().__class__.__mro__[1].__subclasses__()`), then attempts a
-# concrete host-reaching action through it — proving the kernel-enforced
+# concrete host-reaching action through it: proving the kernel-enforced
 # container boundary (not Python-level restriction) is what stops it.
 # ---------------------------------------------------------------------------
 
@@ -151,7 +151,7 @@ for cls in ().__class__.__mro__[1].__subclasses__():
 def test_introspection_bypass_cannot_write_host_filesystem() -> None:
     """The documented `__mro__`/`__subclasses__()` escape can still reach a
     real `os` module reference inside the container (Python-level
-    restriction does not stop it, matching ADR-032's own finding) — but the
+    restriction does not stop it, matching ADR-032's own finding): but the
     container's `--read-only` root filesystem stops the write itself, a
     kernel-enforced boundary the "process" backend never had."""
     code = (
@@ -176,7 +176,7 @@ result = "fs-write-succeeded"
 
 def test_introspection_bypass_cannot_reach_network() -> None:
     """Same escape, reaching for `socket` instead of `os` this time, to
-    attempt an outbound connection — blocked by `--network none`, not by
+    attempt an outbound connection: blocked by `--network none`, not by
     anything Python-level."""
     code = """
 socket_module = None
@@ -200,7 +200,7 @@ result = "connected"
 
 def test_introspection_bypass_env_is_empty_not_host_secrets() -> None:
     """The container is started with no `-e`/`--env-file` at all (stronger
-    than the "process" backend's `os.environ.clear()`) — even a successful
+    than the "process" backend's `os.environ.clear()`): even a successful
     `os` gadget reach finds an empty/minimal environment, never a host
     secret like OPENAI_API_KEY."""
     code = (

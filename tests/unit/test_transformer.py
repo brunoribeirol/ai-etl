@@ -79,7 +79,7 @@ def test_audit_log_entry_added_on_success(mock_get_llm) -> None:
 
 def test_scales_timeout_for_large_source(mocker, mock_get_llm) -> None:
     """ADR-012: the largest extracted source (not just the Silver output)
-    determines the sandbox timeout budget — Transformer receives every raw
+    determines the sandbox timeout budget: Transformer receives every raw
     source at once, unlike Analyst/Science's single merged Silver input."""
     from ai_etl.core import sandbox as sandbox_module
 
@@ -171,7 +171,7 @@ def test_all_attempts_exhausted_sets_failed(mock_get_llm) -> None:
 
 def test_all_attempts_exhausted_still_persists_last_code(mock_get_llm) -> None:
     """Wave 1 item 4b, 2026-09-05 mega-audit remediation: before this fix, a
-    total failure never set `transformation_code` at all — the History page's
+    total failure never set `transformation_code` at all: the History page's
     Code tab showed "No code available for this run." with no way to see what
     was actually tried (confirmed live for the nested-JSON case)."""
     mock_get_llm.return_value = _mock_llm([INVALID_CODE, INVALID_CODE, INVALID_CODE])
@@ -271,7 +271,7 @@ def test_default_locale_prompt_prefers_dayfirst(mock_get_llm) -> None:
     """Sprint 25 (ADR-036): `_make_state()`'s default locale (`initial_state`'s
     `"pt-BR"` default) should steer the prompt toward preferring `dayfirst=True`.
     2026-09-04 fix (2nd round): the prompt must gate that preference on a strict
-    ISO-format check, not on comparing the two parses' results — the 1st-round fix
+    ISO-format check, not on comparing the two parses' results: the 1st-round fix
     (agreement-check) was found live to still corrupt ISO dates whenever day and
     month are both <= 12, since dayfirst=True genuinely disagrees with the default
     reading in exactly that case."""
@@ -290,14 +290,14 @@ def test_default_locale_prompt_prefers_dayfirst(mock_get_llm) -> None:
 
 def _date_parse_pattern_from_prompt(dates: pd.Series, prefer_dayfirst: bool) -> pd.Series:
     """A literal copy of the RIGHT pattern from `TRANSFORMER_PROMPT` (Wave 3
-    item 16, 2026-09-05 mega-audit remediation) — executed for real against
+    item 16, 2026-09-05 mega-audit remediation): executed for real against
     pandas, not just asserted as prompt text.
 
     Per-value (`.apply()`), not per-column: the previous column-wide version
     of this pattern (2026-09-04, 2nd round fix) correctly handled a column
     that was *purely* ISO or *purely* non-ISO, but a live-verified real gap
     (docs/archive/work/2026-09-05-mega-audit-remediation-plan.md) found it still
-    broke on a column genuinely MIXING both — `pd.to_datetime(...)` with no
+    broke on a column genuinely MIXING both: `pd.to_datetime(...)` with no
     explicit `format=` infers ONE format from the column and silently turns
     minority-format rows into NaT, even though each string is individually
     parseable. Parsing per-value sidesteps that column-wide inference
@@ -362,7 +362,7 @@ def test_date_parse_pattern_keeps_a_whole_week_of_iso_datetimes_inside_its_windo
 
 def test_date_parse_pattern_still_prefers_dayfirst_for_genuine_ddmmyyyy_text() -> None:
     """Regression guard the other direction: fixing the ISO case must not break
-    the original bug this whole fix chain exists for — real DD/MM/YYYY text for
+    the original bug this whole fix chain exists for: real DD/MM/YYYY text for
     a pt-BR tenant must still parse day-first."""
     dates = pd.Series(["02/03/2026", "15/04/2026"])  # 2 Mar and 15 Apr if dayfirst
 
@@ -376,7 +376,7 @@ def test_date_parse_pattern_handles_a_column_genuinely_mixing_iso_and_ddmmyyyy()
     (docs/archive/work/2026-09-05-mega-audit-remediation-plan.md): the exact
     live-reproduced case (Data Engineer persona, `vendas_br_edge.csv` /
     confirmed again via the deployed app's own live-verification run for
-    items 2/3/4b) — a column mixing ISO strings with DD/MM/YYYY strings.
+    items 2/3/4b): a column mixing ISO strings with DD/MM/YYYY strings.
     The column-wide version of this pattern dropped every ISO row here
     (pandas infers one format from the column and applies it uniformly);
     parsing per-value must recover all of them."""
@@ -406,7 +406,7 @@ def test_en_us_locale_prompt_prefers_month_first(mock_get_llm) -> None:
 # Wave 1 item 3, 2026-09-05 mega-audit remediation
 # (docs/archive/work/2026-09-05-mega-audit-remediation-plan.md): Data Engineer found,
 # live, that generated code twice wrote `str.replace('R\$ ', '')` to strip a
-# BR-currency prefix — `\$` is not a valid Python escape sequence, so the
+# BR-currency prefix: `\$` is not a valid Python escape sequence, so the
 # literal backslash it leaves never matches "R$ " in the real data, silently
 # turning the entire column to NaN after `pd.to_numeric`. Same technique as
 # the date-parsing tests above: a literal copy of the prompt's pattern,
@@ -439,7 +439,7 @@ def test_numeric_coercion_prompt_forbids_silent_fillna_zero(mock_get_llm) -> Non
 
 def _wrong_currency_clean(prices: pd.Series) -> pd.Series:
     """The exact real bug, found live 2026-09-04 in generated code (Data
-    Engineer persona, `vendas_br_edge.csv`) — kept here only to prove it
+    Engineer persona, `vendas_br_edge.csv`): kept here only to prove it
     really is broken, not to recommend it."""
     cleaned = prices.str.replace("R\\$ ", "").str.replace(".", "").str.replace(",", ".")
     return pd.to_numeric(cleaned, errors="coerce")
@@ -457,7 +457,7 @@ def _right_currency_clean(prices: pd.Series) -> pd.Series:
 
 def test_wrong_currency_pattern_really_does_null_the_whole_column() -> None:
     """Documents the bug mechanism for real: the invalid `\\$` escape means the
-    WRONG pattern is not merely non-idiomatic, it silently produces 100% NaN —
+    WRONG pattern is not merely non-idiomatic, it silently produces 100% NaN:
     the exact live-reproduced symptom ('preco' column became fully null)."""
     prices = pd.Series(["R$ 1.234,56", "R$ 89,90"])
 

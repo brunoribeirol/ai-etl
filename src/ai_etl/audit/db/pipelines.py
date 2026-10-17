@@ -1,6 +1,6 @@
 """Saved-pipeline CRUD, scheduling claims, write-approval, and LLM-config overrides.
 
-Split out of the former monolithic `audit/db.py` (Sprint 33) — see
+Split out of the former monolithic `audit/db.py` (Sprint 33): see
 `audit/db/__init__.py` for the full split rationale.
 """
 
@@ -29,15 +29,15 @@ def _saved_pipeline_row_to_dict(row: Any) -> dict[str, Any]:
         "next_run_at": row.next_run_at,
         "last_task_id": row.last_task_id,
         "last_run_at": row.last_run_at,
-        # Sprint 14 (ADR-018) — per-pipeline "% change worth alerting on".
+        # Sprint 14 (ADR-018): per-pipeline "% change worth alerting on".
         "drift_threshold_pct": row.drift_threshold_pct,
-        # Sprint 15 (ADR-020) — health-snapshot cache, see models.py.
+        # Sprint 15 (ADR-020): health-snapshot cache, see models.py.
         "consecutive_failures": row.consecutive_failures,
         "last_status": row.last_status,
         "last_error": row.last_error,
-        # Sprint 16 (ADR-023) — operator-defined quality rules, see models.py.
+        # Sprint 16 (ADR-023): operator-defined quality rules, see models.py.
         "quality_rules": row.quality_rules or [],
-        # Sprint 27 (ADR-028) — write-approval gate, see models.py.
+        # Sprint 27 (ADR-028): write-approval gate, see models.py.
         "require_approval": row.require_approval,
         "approval_threshold_rows": row.approval_threshold_rows,
         "last_approved_at": row.last_approved_at,
@@ -66,7 +66,7 @@ def create_saved_pipeline(
     `cron_schedule` (`core.scheduling.validate_cron_schedule`),
     `source_type` (`core.scheduling.SCHEDULABLE_SOURCE_TYPES`, ADR-016
     Decision 3), and each `quality_rules` entry's `operator`/`value` shape
-    (Pydantic, ADR-023) before calling this — this function trusts its
+    (Pydantic, ADR-023) before calling this: this function trusts its
     inputs, matching `save_run`/`save_analysis`'s existing "no revalidation
     at the persistence layer" pattern.
     """
@@ -137,7 +137,7 @@ def list_saved_pipelines(tenant_id: str) -> list[dict[str, Any]]:
 
 
 def get_saved_pipeline(pipeline_id: str, tenant_id: str) -> Optional[dict[str, Any]]:
-    """Return one saved pipeline, scoped to `tenant_id` — `None` covers both
+    """Return one saved pipeline, scoped to `tenant_id`: `None` covers both
     "unknown id" and "belongs to another tenant" (same soft-fail shape as
     `load_full_result`'s ownership check)."""
     stmt = select(saved_pipelines).where(
@@ -162,10 +162,10 @@ def update_saved_pipeline(
     require_approval: Optional[bool] = None,
     approval_threshold_rows: Optional[int] = None,
 ) -> Optional[dict[str, Any]]:
-    """Partial update (PATCH semantics) — only fields passed as non-`None` change.
+    """Partial update (PATCH semantics): only fields passed as non-`None` change.
 
     `approval_threshold_rows` follows the same "explicit value wins, `None`
-    means omitted" PATCH convention as every other optional field here — a
+    means omitted" PATCH convention as every other optional field here: a
     caller cannot use this function alone to *clear* an existing threshold
     back to `NULL` ("always require approval"); the router only ever forwards
     a Pydantic-validated value, never a sentinel-vs-omitted distinction for
@@ -173,13 +173,13 @@ def update_saved_pipeline(
     `drift_threshold_pct` already has).
 
     Recomputes `next_run_at` whenever `cron_schedule` changes, or whenever a
-    paused pipeline (`is_active=False -> True`) is resumed — a schedule that
+    paused pipeline (`is_active=False -> True`) is resumed: a schedule that
     was paused for a week should fire from "now", not immediately catch up
     on every tick it missed while paused.
 
     Returns the updated row, or `None` if `pipeline_id` doesn't exist or
     doesn't belong to `tenant_id` (ownership check happens first, before any
-    write — same pattern as `_run_belongs_to_tenant`).
+    write: same pattern as `_run_belongs_to_tenant`).
     """
     existing = get_saved_pipeline(pipeline_id, tenant_id)
     if existing is None:
@@ -198,7 +198,7 @@ def update_saved_pipeline(
     if drift_threshold_pct is not None:
         values["drift_threshold_pct"] = drift_threshold_pct
     if quality_rules is not None:
-        # `is not None` (not truthiness) — an explicit `quality_rules=[]` is a valid
+        # `is not None` (not truthiness): an explicit `quality_rules=[]` is a valid
         # "clear all my rules" update, distinct from "field omitted, leave as-is".
         values["quality_rules"] = quality_rules
     if require_approval is not None:
@@ -227,18 +227,18 @@ def update_saved_pipeline(
 
 def delete_saved_pipeline(pipeline_id: str, tenant_id: str) -> bool:
     """Permanently delete one saved pipeline, scoped to `tenant_id` (2026-09-04
-    gap-closing feature — previously the only way to stop a saved pipeline was
+    gap-closing feature: previously the only way to stop a saved pipeline was
     `update_saved_pipeline(..., is_active=False)`, which pauses it but leaves it
     listed forever; there was no way to actually remove a mistaken or test entry).
 
-    Ownership-checked the same way as `update_saved_pipeline` — a row belonging
+    Ownership-checked the same way as `update_saved_pipeline`: a row belonging
     to another tenant, or an unknown id, is a no-op (`False`), never a 404-shaped
     exception raised from this layer (the router turns that into the HTTP
     response).
 
     Safe by design at the schema level: `runs.saved_pipeline_id` and
     `analysis_runs.saved_pipeline_id` are both `ForeignKey(..., ondelete="SET
-    NULL")` (`audit/models.py`) — deleting a saved pipeline never cascades into
+    NULL")` (`audit/models.py`): deleting a saved pipeline never cascades into
     deleting run history, it only detaches those runs from this pipeline (they
     become ordinary avulso-looking runs in `/history`, same as they'd look if
     they had never been linked to a saved pipeline at all).
@@ -253,7 +253,7 @@ def delete_saved_pipeline(pipeline_id: str, tenant_id: str) -> bool:
 
 def list_due_pipelines(now: Optional[datetime] = None) -> list[dict[str, Any]]:
     """Return every active saved pipeline (across all tenants) whose
-    `next_run_at` has passed — the query `services/scheduler.py`'s Celery
+    `next_run_at` has passed: the query `services/scheduler.py`'s Celery
     beat task runs on each tick. No `tenant_id` filter: the beat task itself
     isn't acting on behalf of any one tenant."""
     cutoff = now or datetime.now(tz=timezone.utc)
@@ -269,13 +269,13 @@ def claim_due_pipeline(
     pipeline_id: str, expected_next_run_at: datetime, new_next_run_at: datetime
 ) -> bool:
     """Atomically claim one due fire of a saved pipeline (Sprint 13 code
-    review fix — see ADR-016 addendum on beat-tick concurrency).
+    review fix: see ADR-016 addendum on beat-tick concurrency).
 
     A compare-and-swap on `next_run_at`: the `UPDATE` only affects a row if
     `next_run_at` still equals `expected_next_run_at` (the value
     `list_due_pipelines` read it as). If a Celery beat tick overruns the
     next tick's start (many due pipelines, a slow Redis rate-limit check,
-    worker backlog — `next_run_at` was previously only advanced *after*
+    worker backlog: `next_run_at` was previously only advanced *after*
     `enqueue_analysis` returned, so an overlapping tick would still see the
     same pipeline as due and fire it twice), only one tick's `UPDATE` can
     win this race: Postgres serializes concurrent `UPDATE`s to the same row,
@@ -284,7 +284,7 @@ def claim_due_pipeline(
 
     Returns `True` if this call won the claim (must proceed to
     `enqueue_analysis`), `False` if another tick already claimed this fire
-    (must skip — not an error, just lost the race).
+    (must skip: not an error, just lost the race).
     """
     stmt = (
         update(saved_pipelines)
@@ -303,12 +303,12 @@ def release_pipeline_claim(
     pipeline_id: str, claimed_next_run_at: datetime, original_next_run_at: datetime
 ) -> None:
     """Undo a `claim_due_pipeline` win when `enqueue_analysis` then fails
-    (rate limit or any other error) — reverts `next_run_at` back to the
+    (rate limit or any other error): reverts `next_run_at` back to the
     original due time so the pipeline is retried on the very next tick
     instead of silently waiting a full cron period.
 
     Guarded the same way as the claim itself (`next_run_at` must still equal
-    what this call's claim just set) — in the normal single-claimant flow
+    what this call's claim just set): in the normal single-claimant flow
     this is always true; the guard is defensive, not load-bearing."""
     stmt = (
         update(saved_pipelines)
@@ -324,12 +324,12 @@ def release_pipeline_claim(
 
 def record_pipeline_run(pipeline_id: str, task_id: str) -> None:
     """Record that a claimed saved pipeline actually fired: remember
-    `last_task_id`/`last_run_at`. `next_run_at` is *not* touched here — by
+    `last_task_id`/`last_run_at`. `next_run_at` is *not* touched here: by
     the time this is called, `claim_due_pipeline` has already advanced it
     atomically (see that function's docstring for why the ordering matters).
 
     `task_id` is the Celery task id `enqueue_analysis` returns, not yet the
-    eventual `runs.run_id` (generated later, inside the task itself) — same
+    eventual `runs.run_id` (generated later, inside the task itself): same
     distinction `GET /runs/{task_id}/status` already relies on."""
     now = datetime.now(tz=timezone.utc)
     stmt = (
@@ -342,11 +342,11 @@ def record_pipeline_run(pipeline_id: str, task_id: str) -> None:
 
 
 def mark_pipeline_approved(pipeline_id: str, tenant_id: str) -> None:
-    """Sprint 27 (ADR-028) — record that a saved pipeline just had an
+    """Sprint 27 (ADR-028): record that a saved pipeline just had an
     operator-approved write. Called once, by
     `services/pipeline_service.py::resume_pending_load`, on the first
     approval that actually completes a write. Scoped by `tenant_id` (same
-    ownership-check pattern as `update_saved_pipeline`) — a no-op if the
+    ownership-check pattern as `update_saved_pipeline`): a no-op if the
     pipeline doesn't exist or isn't owned by this tenant, rather than
     raising, matching this module's soft-fail style for post-hoc bookkeeping.
     """
@@ -361,10 +361,10 @@ def mark_pipeline_approved(pipeline_id: str, tenant_id: str) -> None:
 
 
 def get_run_status_and_pipeline(run_id: str, tenant_id: str) -> Optional[dict[str, Any]]:
-    """Sprint 27 (ADR-028) — the small slice of a `runs` row
+    """Sprint 27 (ADR-028): the small slice of a `runs` row
     `resume_pending_load`/`reject_pending_load` need before touching any
     storage artifact: current `status` and which `saved_pipeline_id` (if
-    any) produced it. Tenant-scoped, `None` for "unknown or not owned" —
+    any) produced it. Tenant-scoped, `None` for "unknown or not owned":
     same soft-fail shape as `get_saved_pipeline`.
     """
     stmt = select(runs.c.status, runs.c.saved_pipeline_id).where(
@@ -378,9 +378,9 @@ def get_run_status_and_pipeline(run_id: str, tenant_id: str) -> Optional[dict[st
 
 
 def list_pending_approvals(tenant_id: str) -> list[dict[str, Any]]:
-    """Sprint 27 (ADR-028) — every run of this tenant currently
+    """Sprint 27 (ADR-028): every run of this tenant currently
     `awaiting_approval`, most recently created first. Backs
-    `GET /runs/pending-approval` — the queue an operator works through.
+    `GET /runs/pending-approval`: the queue an operator works through.
     `LEFT OUTER JOIN`ed against `saved_pipelines` for the pipeline's `name`
     (an avulso run is never gated, per the ADR, so this list is expected to
     be scheduled-fire-only in practice, but the join tolerates a `NULL`
@@ -415,7 +415,7 @@ def list_pending_approvals(tenant_id: str) -> list[dict[str, Any]]:
     ]
 
 
-# Sprint 30 (ADR-031) — per-`saved_pipeline` LLM provider/model override
+# Sprint 30 (ADR-031): per-`saved_pipeline` LLM provider/model override
 # (migration 0016). Deliberately two small standalone functions rather than new
 # parameters bolted onto `create_saved_pipeline`/`update_saved_pipeline`/
 # `get_saved_pipeline`/`_saved_pipeline_row_to_dict` above: this sprint runs in a
@@ -428,7 +428,7 @@ def list_pending_approvals(tenant_id: str) -> list[dict[str, Any]]:
 
 def get_saved_pipeline_llm_config(pipeline_id: str, tenant_id: str) -> Optional[dict[str, Any]]:
     """Return `{"llm_provider": str | None, "llm_model": str | None}` for one saved
-    pipeline, scoped to `tenant_id` — `None` (the whole return value) covers both
+    pipeline, scoped to `tenant_id`: `None` (the whole return value) covers both
     "unknown id" and "belongs to another tenant", same soft-fail shape as
     `get_saved_pipeline`. Both dict values `None` means "no override configured,
     this pipeline uses the deployment's global `AI_ETL_LLM_PROVIDER`/
@@ -452,18 +452,18 @@ def set_saved_pipeline_llm_config(
 ) -> Optional[dict[str, Any]]:
     """Set (or clear) one saved pipeline's LLM provider/model override.
 
-    `llm_provider`/`llm_model` are always written together — pass both as `None` to
+    `llm_provider`/`llm_model` are always written together: pass both as `None` to
     clear the override back to "use this deployment's global default" (matching
     `models.py`'s "always set or cleared together" column comment); the caller
     (`api/routers/pipelines.py`) is responsible for validating a non-`None` pair
     against `core.llm.ALLOWED_MODELS_BY_PROVIDER`
-    (`core.llm.validate_provider_and_model`) before calling this — this function
+    (`core.llm.validate_provider_and_model`) before calling this: this function
     trusts its inputs, matching every other `audit/db` writer's "no revalidation
     at the persistence layer" pattern (see `create_saved_pipeline`'s docstring).
 
     Returns the updated `{"llm_provider", "llm_model"}` dict, or `None` if
     `pipeline_id` doesn't exist or doesn't belong to `tenant_id` (ownership check
-    happens first, before any write — same pattern as `update_saved_pipeline`).
+    happens first, before any write: same pattern as `update_saved_pipeline`).
     """
     existing = get_saved_pipeline(pipeline_id, tenant_id)
     if existing is None:
@@ -483,7 +483,7 @@ def set_saved_pipeline_llm_config(
     return {"llm_provider": llm_provider, "llm_model": llm_model}
 
 
-# Sprint 37 (ADR-034) — per-`saved_pipeline` notification destination
+# Sprint 37 (ADR-034): per-`saved_pipeline` notification destination
 # (migration 0019). Same append-only rationale as the LLM-config block above:
 # two small standalone functions plus one internal-only sibling, rather than
 # folded into `create_saved_pipeline`/`update_saved_pipeline`/
@@ -496,11 +496,11 @@ def get_saved_pipeline_notification_config(
     pipeline_id: str, tenant_id: str
 ) -> Optional[dict[str, Any]]:
     """Return `{"notification_channel": str | None, "notification_configured": bool,
-    "notification_active": bool}` for one saved pipeline, scoped to `tenant_id` —
+    "notification_active": bool}` for one saved pipeline, scoped to `tenant_id`:
     `None` (the whole return value) covers both "unknown id" and "belongs to
     another tenant", same soft-fail shape as `get_saved_pipeline`.
 
-    Deliberately never includes the target value (encrypted or decrypted) — this
+    Deliberately never includes the target value (encrypted or decrypted): this
     is the shape any API endpoint may safely return. The actual destination is
     only ever read by `get_saved_pipeline_notification_target`, an
     internal-only sibling consumed exclusively by the delivery path
@@ -525,7 +525,7 @@ def get_saved_pipeline_notification_config(
 def get_saved_pipeline_notification_target(
     pipeline_id: str, tenant_id: str
 ) -> Optional[dict[str, Any]]:
-    """Internal-only sibling of `get_saved_pipeline_notification_config` —
+    """Internal-only sibling of `get_saved_pipeline_notification_config`:
     additionally returns the raw `notification_target_ciphertext`, still
     encrypted (decrypting it is `services/notifications.py`'s responsibility,
     same "audit/db never decrypts" boundary `services/secrets_service.py`
@@ -560,32 +560,32 @@ def set_saved_pipeline_notification_config(
 ) -> Optional[dict[str, Any]]:
     """Set (or clear) one saved pipeline's notification destination.
 
-    `notification_channel`/`notification_target` are always written together
-    — pass both as `None` to clear the override back to "use this
-    deployment's global channel(s)" (`services/notifications.py`'s
-    `RESEND_API_KEY`/`SLACK_WEBHOOK_URL`/`TEAMS_WEBHOOK_URL`/
-    `GOOGLE_CHAT_WEBHOOK_URL` env vars), same "always set or cleared together"
-    convention `set_saved_pipeline_llm_config` already uses.
+     `notification_channel`/`notification_target` are always written together
+    : pass both as `None` to clear the override back to "use this
+     deployment's global channel(s)" (`services/notifications.py`'s
+     `RESEND_API_KEY`/`SLACK_WEBHOOK_URL`/`TEAMS_WEBHOOK_URL`/
+     `GOOGLE_CHAT_WEBHOOK_URL` env vars), same "always set or cleared together"
+     convention `set_saved_pipeline_llm_config` already uses.
 
-    `notification_target` arrives here as plaintext (an email recipient list
-    or a webhook URL) and is encrypted with
-    `services.secrets_service.encrypt_value` before it ever reaches a SQL
-    statement — this function is the only place in the codebase that
-    persists it, and it never logs or returns the plaintext or ciphertext
-    back to the caller; the returned dict matches
-    `get_saved_pipeline_notification_config`'s config-only shape.
+     `notification_target` arrives here as plaintext (an email recipient list
+     or a webhook URL) and is encrypted with
+     `services.secrets_service.encrypt_value` before it ever reaches a SQL
+     statement: this function is the only place in the codebase that
+     persists it, and it never logs or returns the plaintext or ciphertext
+     back to the caller; the returned dict matches
+     `get_saved_pipeline_notification_config`'s config-only shape.
 
-    The caller (`api/routers/pipelines.py`) is responsible for validating
-    `notification_channel` against the allowed channel set
-    (`services.notifications.ALLOWED_NOTIFICATION_CHANNELS`) and the basic
-    shape of `notification_target` before calling this — this function
-    trusts its inputs, matching every other `audit/db` writer's "no
-    revalidation at the persistence layer" pattern (see
-    `create_saved_pipeline`'s docstring).
+     The caller (`api/routers/pipelines.py`) is responsible for validating
+     `notification_channel` against the allowed channel set
+     (`services.notifications.ALLOWED_NOTIFICATION_CHANNELS`) and the basic
+     shape of `notification_target` before calling this: this function
+     trusts its inputs, matching every other `audit/db` writer's "no
+     revalidation at the persistence layer" pattern (see
+     `create_saved_pipeline`'s docstring).
 
-    Returns the updated config dict, or `None` if `pipeline_id` doesn't
-    exist or doesn't belong to `tenant_id` (ownership check happens first,
-    before any write — same pattern as `set_saved_pipeline_llm_config`).
+     Returns the updated config dict, or `None` if `pipeline_id` doesn't
+     exist or doesn't belong to `tenant_id` (ownership check happens first,
+     before any write: same pattern as `set_saved_pipeline_llm_config`).
     """
     existing = get_saved_pipeline(pipeline_id, tenant_id)
     if existing is None:

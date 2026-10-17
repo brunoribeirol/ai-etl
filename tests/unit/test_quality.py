@@ -63,12 +63,12 @@ def test_quality_node_error_severity_for_high_nulls() -> None:
     result = quality_node(_state_with_df(df))  # type: ignore[arg-type]
     assert result["quality_report"]["severity"] == "error"
     assert result["status"] == "failed"  # quality-blocked runs must not stay "running"
-    assert result["error"]  # must not be None — callers render it directly
+    assert result["error"]  # must not be None: callers render it directly
 
 
 def test_quality_node_error_severity_for_duplicate_column_names() -> None:
     """Real bug found 2026-08-23 (generated transform code renamed two source
-    columns to the same target name) — `df[col]` on a duplicate-named column
+    columns to the same target name): `df[col]` on a duplicate-named column
     returns a DataFrame, not a Series, which used to crash `_check_nulls` with
     an uncaught `TypeError` instead of blocking the pipeline through the
     normal quality-gate contract."""
@@ -76,7 +76,7 @@ def test_quality_node_error_severity_for_duplicate_column_names() -> None:
     result = quality_node(_state_with_df(df))  # type: ignore[arg-type]
     assert result["quality_report"]["severity"] == "error"
     assert result["status"] == "failed"
-    assert result["error"]  # must not be None — callers render it directly
+    assert result["error"]  # must not be None: callers render it directly
     dup_checks = [
         c for c in result["quality_report"]["checks"] if c["check"] == "duplicate_columns"
     ]
@@ -389,7 +389,7 @@ def test_coerced_numeric_loss_silent_on_clean_numeric_source() -> None:
 
 
 def test_coerced_numeric_loss_ignores_blank_cells() -> None:
-    """Empty/whitespace cells are legitimately missing, not coerced *data* — must
+    """Empty/whitespace cells are legitimately missing, not coerced *data*: must
     not be flagged (avoids false positives on ordinary nulls)."""
     bronze = pd.DataFrame({"quantidade": ["10", "", "  ", "8"]})
     silver = pd.DataFrame({"quantidade": [10, 0, 0, 8]})
@@ -398,7 +398,7 @@ def test_coerced_numeric_loss_ignores_blank_cells() -> None:
 
 def test_coerced_numeric_loss_skips_renamed_columns() -> None:
     """If the Transformer renamed the column, it can't be matched to a source
-    column by name — skip rather than guess/false-positive."""
+    column by name: skip rather than guess/false-positive."""
     bronze = pd.DataFrame({"quantidade": ["10", "cem"]})
     silver = pd.DataFrame({"qty": [10, 0]})  # renamed
     assert _check_coerced_numeric_loss(silver, {"s": bronze}) == []

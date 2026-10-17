@@ -1,4 +1,4 @@
-"""Error tracking / APM bootstrap — Sentry (Sprint 34, ADR-033).
+"""Error tracking / APM bootstrap: Sentry (Sprint 34, ADR-033).
 
 Conditional on `SENTRY_DSN`: unset (the default in every environment except
 a deployed one with a real Sentry project configured) makes `init_sentry()`
@@ -6,7 +6,7 @@ a no-op, same "optional, never breaks if absent" convention as
 `services/notifications.py`'s Resend/Slack/Teams/Google Chat integrations
 and `services/secrets_service.py`'s `AI_ETL_SECRETS_ENCRYPTION_KEY`.
 
-**Not verified against a real Sentry project in this environment** — no
+**Not verified against a real Sentry project in this environment**: no
 Sentry account/DSN is available here (same constraint `case_study/results/
 sprint8/README.md` documents for `OPENAI_API_KEY`/Ollama). `init_sentry()`
 and its no-op path are covered by `tests/unit/test_observability.py`; an
@@ -32,15 +32,15 @@ def init_sentry(component: str) -> bool:
 
     Args:
         component: which process is initializing Sentry (`"api"` or
-            `"worker"`) — set as the `component` tag on every event, so
+            `"worker"`): set as the `component` tag on every event, so
             errors from the web process and the Celery worker can be told
             apart in the Sentry dashboard without separate projects.
 
     Returns:
         `True` if Sentry was actually initialized (a DSN was present),
         `False` if this call was a no-op. Callers don't need the return
-        value for control flow — `capture`/breadcrumb calls elsewhere stay
-        no-ops on the SDK's own side when uninitialized — it exists mainly
+        value for control flow: `capture`/breadcrumb calls elsewhere stay
+        no-ops on the SDK's own side when uninitialized: it exists mainly
         so tests and the bootstrap log line can assert/report which path
         was taken.
     """
@@ -64,7 +64,7 @@ def init_sentry(component: str) -> bool:
             LoggingIntegration(level=logging.INFO, event_level=logging.ERROR),
         ],
         # Tier-conscious defaults (free Sentry tier has a monthly event
-        # cap) — captures every error but only samples a fraction of
+        # cap): captures every error but only samples a fraction of
         # performance traces. Overridable per-environment without a code
         # change if traffic volume ever calls for it.
         traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.1")),

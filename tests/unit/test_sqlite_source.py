@@ -1,7 +1,7 @@
 """Unit tests for the SQLite source connector (Sprint 11, ADR-012).
 
 Uses real `.db` files under `tmp_path` and the stdlib `sqlite3` module to
-seed them — no mocking of the connector itself, matching ADR-012's rationale
+seed them: no mocking of the connector itself, matching ADR-012's rationale
 for picking SQLite (real end-to-end coverage with zero added infrastructure).
 """
 
@@ -70,7 +70,7 @@ def test_valid_table_names_pass(name: str) -> None:
     "name",
     [
         "orders; DROP TABLE orders; --",
-        "public.orders",  # SQLite has no schema.table notion — dots rejected
+        "public.orders",  # SQLite has no schema.table notion: dots rejected
         "1_invalid_start",
         "",
         "table name with spaces",
@@ -100,6 +100,6 @@ def test_load_sqlite_rejects_destructive_query(tmp_path: Path) -> None:
         load_sqlite(str(db_path), "orders", query="DROP TABLE orders; --")
 
     with sqlite3.connect(db_path) as conn:
-        # the table must still exist — the drop must never have reached the DB
+        # the table must still exist: the drop must never have reached the DB
         cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='orders'")
         assert cursor.fetchone() is not None

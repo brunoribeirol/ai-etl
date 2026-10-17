@@ -158,7 +158,7 @@ def test_viewer_role_can_export_tenant(client: TestClient, mocker) -> None:
 
 
 def test_export_never_takes_a_tenant_id_from_the_request(client: TestClient, mocker) -> None:
-    """Same scope-strict contract as `DELETE /tenant` (ADR-025 Decision 1) —
+    """Same scope-strict contract as `DELETE /tenant` (ADR-025 Decision 1):
     there is no way to pass another tenant's id in; it always comes from the
     resolved auth context."""
     mock_export = mocker.patch(

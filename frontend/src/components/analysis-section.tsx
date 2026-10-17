@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { AnalysisEntry } from "@/lib/types";
 
-/** One Gold or Science sub-task entry — narrative, chart (if any), data
+/** One Gold or Science sub-task entry: narrative, chart (if any), data
  * preview table, matching `app.py::_render_results`'s per-sub-task layout.
  * Sprint 7: wrapped in a Card instead of a bare `<section>`, same content. */
 export async function AnalysisSection({

@@ -2,7 +2,7 @@
 
 Unlike the other three connectors in this package (`csv_source.py`,
 `postgres_source.py`, `rest_source.py`), a document's text isn't already
-tabular — this is the one `sources/` connector that calls an LLM (via
+tabular: this is the one `sources/` connector that calls an LLM (via
 `core.llm.get_llm()`) to structure extracted text into rows, following the
 same retry-loop/JSON-parse shape `agents/pipeline/orchestrator.py` already uses for
 spec -> pipeline_plan. Same convention as the other connectors otherwise: no
@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 
 MAX_ATTEMPTS = 3
 
-# Cap on how much extracted text goes into the prompt — a long PDF/DOCX
+# Cap on how much extracted text goes into the prompt: a long PDF/DOCX
 # could otherwise blow past the model's context window or run up token cost
 # for little gain (row-structuring past a few thousand words rarely needs
 # more context, and truncation is enough to keep this connector usable
@@ -52,16 +52,16 @@ def load_document(
     """Extract tabular data from a PDF or DOCX file into a DataFrame.
 
     Raises ValueError for unsupported extensions or if the LLM fails to
-    produce a valid JSON array of row objects after MAX_ATTEMPTS retries —
+    produce a valid JSON array of row objects after MAX_ATTEMPTS retries:
     matching rest_source.py's plain-exception style for unexpected shapes.
 
     Args:
         llm_provider_override / llm_model_override: Sprint 30/gap-closing
-            (ADR-031 §5) — this connector's `get_llm()` call is reached from
+            (ADR-031 §5): this connector's `get_llm()` call is reached from
             `agents/pipeline/extractor.py::extractor_node`, inside the same graph
             run as every other `get_llm()` call site, so it respects the same
             per-`saved_pipeline` override rather than being a silent exception to
-            it. `None` (the default) for every caller that doesn't pass it —
+            it. `None` (the default) for every caller that doesn't pass it:
             unchanged behavior.
     """
     text = extract_document_text(path)
@@ -69,14 +69,14 @@ def load_document(
 
 
 def extract_document_text(path: str) -> str:
-    """Raw text extraction only — no LLM call, deterministic and cheap.
+    """Raw text extraction only: no LLM call, deterministic and cheap.
 
     Public (2026-08-30 gap fix) so `api/routers/runs.py::create_run` can
     validate a PDF/DOCX upload and build its spec-preview text without
     paying for `_structure_text()`'s LLM call twice: once here just to
     preview, once for real inside the pipeline's own Extractor ->
     `load_document()` call. `load_document()` above still does exactly what
-    it always did (extract, then structure) — this just gives the raw first
+    it always did (extract, then structure): this just gives the raw first
     half a name callers outside this module can use on its own.
     """
     if path.endswith(".pdf"):
@@ -99,14 +99,14 @@ def _extract_docx_text(path: str) -> str:
     document = docx.Document(path)
     paragraph_text = "\n".join(paragraph.text for paragraph in document.paragraphs)
 
-    # `document.tables` is never visited by python-docx's `.paragraphs` — a
+    # `document.tables` is never visited by python-docx's `.paragraphs`: a
     # heading followed by a real Word table (the most common way tabular data
     # shows up in a .docx) would otherwise vanish silently before it ever
     # reaches the LLM prompt below. Rendered paragraphs-then-tables (not
     # interleaved in document order): python-docx doesn't expose an ordered
     # walk of `document.element.body` anywhere else in this repo, and for
     # this connector's purpose (handing the LLM enough text to spot rows) the
-    # order tables appear in relative to paragraphs doesn't matter — only
+    # order tables appear in relative to paragraphs doesn't matter: only
     # that no table is dropped.
     table_blocks = [_render_docx_table(table) for table in document.tables]
 

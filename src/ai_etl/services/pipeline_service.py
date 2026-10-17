@@ -1,4 +1,4 @@
-"""Pipeline orchestration service — sequences Silver -> Planner -> Gold/Science ->
+"""Pipeline orchestration service: sequences Silver -> Planner -> Gold/Science ->
 Advisor without any dependency on the presentation layer.
 
 Extracted from `app.py`, which used to inline this whole sequence inside a Streamlit
@@ -6,8 +6,8 @@ button handler, mixing agent orchestration with `st.status`/`st.session_state` c
 That made the orchestration untestable without booting Streamlit and unusable from
 any future caller (a worker, the CLI, a script) that isn't the Streamlit app.
 
-Every function here accepts a `ProgressCallback` — a plain `(stage, message) -> None`
-callable — instead of talking to `st.status` directly. Callers that want live
+Every function here accepts a `ProgressCallback`: a plain `(stage, message) -> None`
+callable: instead of talking to `st.status` directly. Callers that want live
 progress (e.g. `app.py`) supply an adapter; callers that don't (tests, batch scripts)
 can omit it, since the default is a no-op.
 """
@@ -65,11 +65,11 @@ def _noop_progress(stage: str, message: str) -> None:
 
 
 def _build_approval_policy(pipeline: dict[str, Any]) -> dict[str, Any]:
-    """Sprint 27 (ADR-028) — `saved_pipelines` row -> `PipelineState["approval_policy"]`.
+    """Sprint 27 (ADR-028): `saved_pipelines` row -> `PipelineState["approval_policy"]`.
 
     `last_approved_at` is carried as an ISO string (not the raw `datetime`) since
     this dict crosses into `PipelineState`, which is JSON-serialized wholesale by
-    `audit.db._make_serializable`/`save_run` — keeping it JSON-safe from the start
+    `audit.db._make_serializable`/`save_run`: keeping it JSON-safe from the start
     avoids a silent `str(datetime)` fallback there. `agents/pipeline/loader.py::_is_write_gated`
     only ever checks it for `None`-ness, never parses it back into a `datetime`.
     """
@@ -95,47 +95,47 @@ def run_silver_pipeline(
     -> Loader) to completion and persist the resulting state via `save_run`.
 
     Mirrors the previous `app.py::_run_silver_pipeline` node-by-node, including the
-    per-node `agent_timings` computation (each entry is ~0 by construction — timed
+    per-node `agent_timings` computation (each entry is ~0 by construction: timed
     from immediately before to immediately after the state update, not across the
-    node's actual execution — a pre-existing quirk kept as-is rather than fixed here).
+    node's actual execution: a pre-existing quirk kept as-is rather than fixed here).
 
     Args:
-        tenant_id: Sprint A session-scoping stopgap forwarded to `save_run` — the
+        tenant_id: Sprint A session-scoping stopgap forwarded to `save_run`: the
             browser session's UUID (see `app.py::_get_session_id`), not a real
             tenant/account. Defaults to `None` for backward compatibility.
-        saved_pipeline_id: Sprint 17 (ADR-017) — forwarded to `save_run` so a
+        saved_pipeline_id: Sprint 17 (ADR-017): forwarded to `save_run` so a
             scheduled fire (`services/scheduler.py`) can be grouped with the
             rest of its saved pipeline's run history. `None` for every avulso
-            (one-off) run — the default, and the only value most callers pass.
+            (one-off) run: the default, and the only value most callers pass.
             Sprint 14 (ADR-018) also relies on this to later find this run's
             predecessor for drift detection. Sprint 16 (ADR-023) also uses it
             here to look up that saved pipeline's `quality_rules`.
         llm_provider_override/llm_model_override: gap-closing fix (2026-08-25
-            audit, Wave 4) — a caller-supplied override for an avulso run, e.g.
+            audit, Wave 4): a caller-supplied override for an avulso run, e.g.
             `POST /runs`' `ModelPicker` selection, which has no `saved_pipeline_id`
             to resolve an override from the DB. Ignored (overwritten) whenever a
-            real saved-pipeline override is found below — a saved pipeline's own
+            real saved-pipeline override is found below: a saved pipeline's own
             configured override always wins over whatever a caller happened to
             pass, matching the pre-existing behavior for that path exactly.
     """
     run_id = str(uuid.uuid4())
-    # Sprint 16 (ADR-023) — a saved pipeline's own operator-defined quality rules,
+    # Sprint 16 (ADR-023): a saved pipeline's own operator-defined quality rules,
     # resolved here (not inside `quality_node`, which stays a pure function of
     # `PipelineState`) and carried into the graph via `initial_state`. Only a
     # scheduled fire has both a `saved_pipeline_id` and the real owning `tenant_id`
-    # (confirmed in `services/scheduler.py` — see ADR-023) — an avulso run always
+    # (confirmed in `services/scheduler.py`, see ADR-023), an avulso run always
     # gets `[]`, unchanged fixed-checks-only behavior.
-    # Sprint 27 (ADR-028) — same lookup, same "only a scheduled fire has both a
+    # Sprint 27 (ADR-028): same lookup, same "only a scheduled fire has both a
     # saved_pipeline_id and the real tenant_id" gate: this saved pipeline's own
     # write-approval policy, resolved here (not inside `loader_node`, which stays
     # a pure function of `PipelineState`) and carried into the graph via
-    # `initial_state`. An avulso run always gets `None` — never gated.
-    # Sprint 30/gap-closing (ADR-031 §5) — same lookup gate as quality_rules/
+    # `initial_state`. An avulso run always gets `None`: never gated.
+    # Sprint 30/gap-closing (ADR-031 §5): same lookup gate as quality_rules/
     # approval_policy above: this saved pipeline's own LLM provider/model override
     # (Sprint 30, ADR-031 §3), resolved here (not inside any `agents/pipeline/*.py`
     # node, which stay pure functions of `PipelineState`) and carried into the
     # graph via `initial_state`. A separate `get_saved_pipeline_llm_config` call
-    # (not folded into `get_saved_pipeline`'s dict) — `audit/db.py`'s Sprint 30
+    # (not folded into `get_saved_pipeline`'s dict): `audit/db.py`'s Sprint 30
     # append-only constraint kept the two functions standalone; no reason to widen
     # `get_saved_pipeline`'s return shape just because a caller now wants both.
     custom_quality_rules: list[dict[str, Any]] = []
@@ -149,24 +149,24 @@ def run_silver_pipeline(
         if llm_config is not None:
             llm_provider_override = llm_config.get("llm_provider")
             llm_model_override = llm_config.get("llm_model")
-    # Sprint 25 (ADR-036) — unlike quality_rules/approval_policy/the LLM override above,
+    # Sprint 25 (ADR-036): unlike quality_rules/approval_policy/the LLM override above,
     # locale is a per-*tenant* setting (users.locale), not per-saved-pipeline: resolved
     # whenever a real tenant_id is present, regardless of saved_pipeline_id, so every
     # avulso run also gets its tenant's configured locale.
     #
     # Real regression found post-merge (2026-08-23): `get_locale()` has no fail-safe
     # against an unreachable/unconfigured database (unlike the saved_pipeline lookups
-    # above, which only run when saved_pipeline_id is also set) — a DB hiccup, or any
+    # above, which only run when saved_pipeline_id is also set): a DB hiccup, or any
     # caller with no APP_DATABASE_URL at all (e.g. case_study/scripts/model_comparison.py,
     # which deliberately bypasses persistence), previously crashed the *entire* run
     # before a single agent ran, for a cosmetic i18n setting. Narrating the run in the
-    # wrong language is a much smaller failure than never running it — fall back to
+    # wrong language is a much smaller failure than never running it: fall back to
     # DEFAULT_LOCALE and log, don't propagate.
     # Audit finding H5 / D4 (2026-09-09): the locale the *UI is actually showing*
     # (the next-intl cookie, passed as `locale_override` from `POST /runs`) wins over
     # the tenant's stored `users.locale`. Before this, progress messages and the
     # narrative were localized to `users.locale` (default pt-BR), an independent source
-    # from the UI cookie — so an English-UI tenant whose `users.locale` was still pt-BR
+    # from the UI cookie: so an English-UI tenant whose `users.locale` was still pt-BR
     # saw Portuguese progress ("Executando pipeline Silver...") and narrative, the exact
     # symptom PR #221 was recorded as fixing. When no override is passed (scheduled
     # fires, the CLI, tests), fall back to the tenant's stored locale exactly as before.
@@ -198,7 +198,7 @@ def run_silver_pipeline(
     agent_timings: dict[str, float] = {}
 
     # ADR-044: resolve this tenant's own DB connection strings (if any were
-    # saved via `POST /secrets`) once, here — this is the one place in the
+    # saved via `POST /secrets`) once, here: this is the one place in the
     # call chain that has both `tenant_id` and is about to invoke the graph.
     # Never added to `state`/`PipelineState`: see `core/tenant_context.py`'s
     # module docstring for why (the whole state gets serialized into the
@@ -257,11 +257,11 @@ def _record_stage_call(
     stage_log: "list[dict[str, Any]] | None", agent: str, elapsed: float, error: str | None
 ) -> None:
     """Append one Analyst/Science call's timing into `stage_log`, if the caller
-    passed one (per-call opt-in — same pattern as `progress_callback`, so callers
+    passed one (per-call opt-in: same pattern as `progress_callback`, so callers
     that don't care about latency persistence, e.g. tests, can omit it).
 
     `timed_out` is inferred from the error message's ADR-007 timeout phrasing
-    (`f"Execution exceeded {N}s — simplify the computation"`, set by
+    (`f"Execution exceeded {N}s: simplify the computation"`, set by
     analyst.py/science.py's sandbox-timeout branch) rather than threaded through
     as a separate field, since `run_analyst`/`run_science`'s return contract
     (GoldResult/ScienceResult) has no dedicated `timed_out` key.
@@ -280,13 +280,13 @@ def _record_stage_call(
 def _log_llm_override_if_used(
     agent: str, run_id: str, llm_provider_override: str | None, llm_model_override: str | None
 ) -> None:
-    """Sprint 30/gap-closing (ADR-031 §5) — visibility into which provider/model
+    """Sprint 30/gap-closing (ADR-031 §5): visibility into which provider/model
     actually ran an Analyst/Science/Advisor/Planner call, for the agentic BI layer
     that runs outside the LangGraph/PipelineState (see this module's docstring) and
     therefore can't call `audit/logger.py::log_action` the way `agents/pipeline/*.py`
     nodes do. Standard logging is the established substitute this module already
     uses for that layer's other agent-level visibility (see `run_gold_analysis`'s/
-    `run_advisor_analysis`'s `logger.warning` calls on failure) — a no-op when no
+    `run_advisor_analysis`'s `logger.warning` calls on failure): a no-op when no
     override is configured, so this stays silent for every deployment-default run.
     """
     if llm_provider_override or llm_model_override:
@@ -313,15 +313,15 @@ def run_gold_analysis(
     """Run one Gold (descriptive) sub-task via the Analyst agent.
 
     `stage_log`: optional list this call appends its ADR-007 latency entry to
-    (see `_record_stage_call`) — omitted by default, populated by
+    (see `_record_stage_call`): omitted by default, populated by
     `run_analysis_tasks` when the caller wants Analyst/Science latencies
     persisted via `save_stage_latencies`.
 
     `run_id`/`llm_provider_override`/`llm_model_override`: Sprint 30/gap-closing
-    (ADR-031 §5) — see `_log_llm_override_if_used`. `run_id` is only used for that
+    (ADR-031 §5): see `_log_llm_override_if_used`. `run_id` is only used for that
     log line; it's not forwarded to `run_analyst` itself.
 
-    `locale`: Sprint 25 (ADR-036) — the tenant's configured locale, forwarded to
+    `locale`: Sprint 25 (ADR-036): the tenant's configured locale, forwarded to
     `run_analyst` for the narrative's output language. Defaults to `DEFAULT_LOCALE`.
     """
     progress_callback(stage, progress_message(locale, "gold_start", task_question=task_question))
@@ -338,7 +338,7 @@ def run_gold_analysis(
 
     if result["error"]:
         # Agentic BI layer runs outside the LangGraph/PipelineState, so there's no
-        # `log_action()` audit trail here (see module docstring) — without this, a
+        # `log_action()` audit trail here (see module docstring): without this, a
         # failed sub-task was only ever visible transiently via `progress_callback`,
         # never in a queryable log a Sprint-28-era testers-report investigation could
         # replay.
@@ -352,11 +352,11 @@ def run_gold_analysis(
         return {**result, "task_question": task_question}
 
     # Sprint 21 (ADR-026): sanity-check a successful result against the Silver data
-    # it was derived from — a result that "ran" (ADR-007) is not necessarily correct.
+    # it was derived from: a result that "ran" (ADR-007) is not necessarily correct.
     sanity_check = check_gold_output(result["gold_df"], silver_df, result.get("narrative", ""))
     tokens = result["tokens"]
     # ADR-037 (Sprint 21 follow-up): opt-in second LLM pass, additive to the
-    # deterministic checks above — see core.llm.is_llm_review_enabled's docstring
+    # deterministic checks above: see core.llm.is_llm_review_enabled's docstring
     # for why this is a global env var, not a per-pipeline setting.
     if is_llm_review_enabled():
         review_entries, review_tokens = review_gold_result(
@@ -403,9 +403,9 @@ def run_science_analysis(
     `stage_log`: see `run_gold_analysis`.
 
     `run_id`/`llm_provider_override`/`llm_model_override`: Sprint 30/gap-closing
-    (ADR-031 §5) — see `run_gold_analysis`'s identical parameters.
+    (ADR-031 §5): see `run_gold_analysis`'s identical parameters.
 
-    `locale`: Sprint 25 (ADR-036) — see `run_gold_analysis`'s identical parameter.
+    `locale`: Sprint 25 (ADR-036): see `run_gold_analysis`'s identical parameter.
     """
     progress_callback(stage, progress_message(locale, "science_start", task_question=task_question))
     progress_callback(stage, progress_message(locale, "science_agent_start"))
@@ -420,7 +420,7 @@ def run_science_analysis(
     attempts = result.get("attempts", 1)
 
     if result["error"]:
-        # See run_gold_analysis's comment above — same rationale.
+        # See run_gold_analysis's comment above: same rationale.
         logger.warning(
             "run_science_analysis: science agent failed for task_question=%r after %s "
             "attempt(s): %s",
@@ -434,7 +434,7 @@ def run_science_analysis(
         return {**result, "task_question": task_question}
 
     # Sprint 21 (ADR-026): sanity-check a successful result against the Silver data
-    # it was derived from — a result that "ran" (ADR-007) is not necessarily correct.
+    # it was derived from: a result that "ran" (ADR-007) is not necessarily correct.
     model_info = result.get("model_info", {})
     model_info_dict: dict[str, Any] = dict(model_info) if isinstance(model_info, dict) else {}
     sanity_check = check_science_output(result["predictions_df"], model_info_dict, silver_df)
@@ -521,23 +521,23 @@ def _run_with_repair(
     locale: str = DEFAULT_LOCALE,
 ) -> _RepairResultT:
     """Shared auto-repair strategy behind `run_gold_with_repair`/
-    `run_science_with_repair` (Wave 5 dedup, Tech Lead 2026-08-24 audit — the two
+    `run_science_with_repair` (Wave 5 dedup, Tech Lead 2026-08-24 audit: the two
     were near-verbatim duplicates of this same control flow). Runs `run_fn` (either
     `run_gold_analysis` or `run_science_analysis`) once; if it fails outright,
     retries once with a simplified fallback question before giving up.
 
-    `run_fn` already retries the SAME question up to 3 times internally — this is
+    `run_fn` already retries the SAME question up to 3 times internally: this is
     a different failure mode: the question itself may be too specific/complex for
     the LLM to translate into working code at all, so the fallback rephrases it
     instead of repeating it verbatim.
 
-    `label`: "Gold"/"Science" — the only textual difference between the two
+    `label`: "Gold"/"Science": the only textual difference between the two
     call sites' progress messages, parameterized here rather than hardcoded.
 
     `run_id`/`llm_provider_override`/`llm_model_override`: Sprint 30/gap-closing
-    (ADR-031 §5) — see `run_gold_analysis`'s identical parameters.
+    (ADR-031 §5): see `run_gold_analysis`'s identical parameters.
 
-    `locale`: Sprint 25 (ADR-036) — see `run_gold_analysis`'s identical parameter.
+    `locale`: Sprint 25 (ADR-036): see `run_gold_analysis`'s identical parameter.
     """
     result = run_fn(
         silver_df,
@@ -588,7 +588,7 @@ def _run_with_repair(
 
     if repaired.get("error"):
         result["tokens"] = both_tries
-        return result  # both failed — surface the original, more specific error
+        return result  # both failed: surface the original, more specific error
     repaired["task_question"] = task_question
     repaired["repaired"] = True
     repaired["tokens"] = both_tries
@@ -611,9 +611,9 @@ def run_gold_with_repair(
     implementation.
 
     `run_id`/`llm_provider_override`/`llm_model_override`: Sprint 30/gap-closing
-    (ADR-031 §5) — see `run_gold_analysis`'s identical parameters.
+    (ADR-031 §5): see `run_gold_analysis`'s identical parameters.
 
-    `locale`: Sprint 25 (ADR-036) — see `run_gold_analysis`'s identical parameter.
+    `locale`: Sprint 25 (ADR-036): see `run_gold_analysis`'s identical parameter.
     """
     return _run_with_repair(
         run_gold_analysis,
@@ -645,9 +645,9 @@ def run_science_with_repair(
     See `_run_with_repair` for the shared implementation.
 
     `run_id`/`llm_provider_override`/`llm_model_override`: Sprint 30/gap-closing
-    (ADR-031 §5) — see `run_gold_analysis`'s identical parameters.
+    (ADR-031 §5): see `run_gold_analysis`'s identical parameters.
 
-    `locale`: Sprint 25 (ADR-036) — see `run_gold_analysis`'s identical parameter.
+    `locale`: Sprint 25 (ADR-036): see `run_gold_analysis`'s identical parameter.
     """
     return _run_with_repair(
         run_science_analysis,
@@ -677,21 +677,21 @@ def run_analysis_tasks(
     """Decompose the business question and run each sub-task through Gold or Science.
 
     A single Gold/Science call answering a multi-part question in one shot tends to
-    cover only part of it — the LLM has to prioritize within one code generation. This
+    cover only part of it: the LLM has to prioritize within one code generation. This
     runs the Planner first, then one Gold/Science call per sub-task (with a one-shot
     auto-repair fallback if a sub-task fails outright), so coverage of a "mega prompt"
     is a property of the loop instead of how well one call juggled it.
 
     `stage_log`: optional list (see `run_gold_analysis`/`_record_stage_call`) that
     every Analyst/Science call across every sub-task (and repair rerun) appends its
-    ADR-007 latency entry to, in call order — left `None` (the default) keeps this
+    ADR-007 latency entry to, in call order: left `None` (the default) keeps this
     function's own return signature unchanged for existing callers.
 
     `run_id`/`llm_provider_override`/`llm_model_override`: Sprint 30/gap-closing
-    (ADR-031 §5) — forwarded to the Planner call and to every Gold/Science sub-task
-    (and repair rerun) below. `None` (the default) — unchanged behavior.
+    (ADR-031 §5): forwarded to the Planner call and to every Gold/Science sub-task
+    (and repair rerun) below. `None` (the default): unchanged behavior.
 
-    `locale`: Sprint 25 (ADR-036) — same forwarding, for the Planner/Analyst/Science
+    `locale`: Sprint 25 (ADR-036): same forwarding, for the Planner/Analyst/Science
     output language. Defaults to `DEFAULT_LOCALE`.
 
     Returns (gold_results, science_results, planner_tokens).
@@ -778,9 +778,9 @@ def run_advisor_analysis(
     """Synthesize Gold/Science results into prescriptive recommendations.
 
     `run_id`/`llm_provider_override`/`llm_model_override`: Sprint 30/gap-closing
-    (ADR-031 §5) — see `run_gold_analysis`'s identical parameters.
+    (ADR-031 §5): see `run_gold_analysis`'s identical parameters.
 
-    `locale`: Sprint 25 (ADR-036) — see `run_gold_analysis`'s identical parameter.
+    `locale`: Sprint 25 (ADR-036): see `run_gold_analysis`'s identical parameter.
     """
     progress_callback("advisor", progress_message(locale, "advisor_start"))
     progress_callback("advisor", progress_message(locale, "advisor_agent_start"))
@@ -799,7 +799,7 @@ def run_advisor_analysis(
     n = len(result.get("recommendations", []))
 
     if result["error"]:
-        # See run_gold_analysis's comment above — same rationale.
+        # See run_gold_analysis's comment above: same rationale.
         logger.warning(
             "run_advisor_analysis: advisor failed after %ss: %s", elapsed, result["error"]
         )
@@ -828,22 +828,22 @@ def run_full_analysis(
     This is the orchestration previously inlined in `app.py`'s "Analisar dados"
     button handler. If Silver fails or produces an empty/missing DataFrame, Planner/
     Gold/Science/Advisor are skipped entirely and `advisor` comes back as `{}` (the
-    legacy sentinel meaning "not run" — see `AnalysisRunResult`), matching the
+    legacy sentinel meaning "not run": see `AnalysisRunResult`), matching the
     original short-circuit exactly.
 
     Args:
         tenant_id: Sprint A session-scoping stopgap forwarded to `save_run`/
-            `save_analysis` — the browser session's UUID. Defaults to `None` for
+            `save_analysis`: the browser session's UUID. Defaults to `None` for
             backward compatibility; `app.py` should always pass a real value.
-        saved_pipeline_id: Sprint 17 (ADR-017) — forwarded to `save_run`/
+        saved_pipeline_id: Sprint 17 (ADR-017): forwarded to `save_run`/
             `save_analysis` so a scheduled fire can be grouped with the rest of
             its saved pipeline's run history. `None` for every avulso run.
-            Sprint 14 (ADR-018)'s drift check is not decided here — it's the
+            Sprint 14 (ADR-018)'s drift check is not decided here: it's the
             caller's job (`services/execution_queue.py`, once this function
-            returns with the full `gold`/`science`/`advisor` results) — this
+            returns with the full `gold`/`science`/`advisor` results): this
             function only needs to keep forwarding the id.
         llm_provider_override/llm_model_override: gap-closing fix (2026-08-25
-            audit, Wave 4) — forwarded straight to `run_silver_pipeline`, which
+            audit, Wave 4): forwarded straight to `run_silver_pipeline`, which
             only actually uses them when `saved_pipeline_id` doesn't already
             resolve a real override from the DB (see that function's docstring).
     """
@@ -858,7 +858,7 @@ def run_full_analysis(
         locale_override=locale_override,
     )
     silver_df = silver_state.get("transformed_data")
-    # Sprint 30/gap-closing (ADR-031 §5) — reuse the override `run_silver_pipeline`
+    # Sprint 30/gap-closing (ADR-031 §5): reuse the override `run_silver_pipeline`
     # already resolved into `PipelineState` (via `get_saved_pipeline_llm_config`)
     # instead of a second DB round-trip; the analytical layer (Planner/Analyst/
     # Science/Advisor) runs outside the graph/`PipelineState`, so it's threaded
@@ -867,13 +867,13 @@ def run_full_analysis(
     llm_model_override = silver_state.get("llm_model_override")
     # ADR-031 gap fix: the actual resolved model name this run's `get_llm(
     # provider=..., model=...)` calls used (`agents/analysis/*.py`, via
-    # `llm_model_override` above) — threaded into `save_analysis` below so
+    # `llm_model_override` above): threaded into `save_analysis` below so
     # `_write_analysis_row`'s cost tracking reflects the model that actually ran,
     # not the deployment-global `AI_ETL_LLM_MODEL` env var `get_model_name()`
     # reads. Mirrors `get_llm()`'s own resolution: an explicit override wins,
     # otherwise fall back to the global default.
     resolved_model_name = llm_model_override or get_model_name()
-    # Sprint 25 (ADR-036) — same reuse rationale as the LLM override above: the
+    # Sprint 25 (ADR-036): same reuse rationale as the LLM override above: the
     # tenant's locale, already resolved into `PipelineState` by `run_silver_pipeline`
     # (via `audit/db.py::get_locale`), forwarded as a plain parameter from here on.
     locale = silver_state.get("locale", DEFAULT_LOCALE)
@@ -992,12 +992,12 @@ def _reload_awaiting_state(
     (Sprint 27, ADR-028): validate the run exists, belongs to this tenant,
     and is actually `awaiting_approval`, then reconstruct its
     `PipelineState` via the already-existing `load_full_result` (see the
-    ADR's Decision 1 for why this — not a LangGraph checkpointer — is the
+    ADR's Decision 1 for why this, not a LangGraph checkpointer, is the
     resume mechanism). Raises `ValueError` with an actionable message on any
     of those checks failing; callers (the `/runs` router) map that to a
     4xx HTTP response.
 
-    Returns `(state, saved_pipeline_id)` — `saved_pipeline_id` is returned
+    Returns `(state, saved_pipeline_id)`: `saved_pipeline_id` is returned
     alongside `state`, not folded into it: `PipelineState` has no such field
     (it's a `runs`-table column, threaded as a parameter into
     `save_run`/`save_analysis`, never part of the graph state itself), and
@@ -1022,31 +1022,31 @@ def _reload_awaiting_state(
 
 
 def resume_pending_load(run_id: str, tenant_id: str, run_dir: str) -> PipelineState:
-    """Sprint 27 (ADR-028) — an operator approved a gated write: perform the
+    """Sprint 27 (ADR-028): an operator approved a gated write: perform the
     real write now, by calling `loader_node` directly a second time (never
-    the full graph — Orchestrator/Extractor/Transformer already ran and
+    the full graph: Orchestrator/Extractor/Transformer already ran and
     their LLM cost is sunk; re-running them could also regenerate a
     *different* transformation than the one just previewed and approved).
 
     Persists the result via `save_run`'s existing upsert (the `runs` row
     moves from `awaiting_approval` to `completed`/`failed` in place), keeps
     Sprint 15's health-snapshot cache in sync via a direct
-    `record_pipeline_health` call, and — only once the write actually
-    succeeds — marks the pipeline as having had its first approved write
+    `record_pipeline_health` call, and: only once the write actually
+    succeeds: marks the pipeline as having had its first approved write
     (`mark_pipeline_approved`), which is what lets a future write clear the
     approval gate via `approval_threshold_rows` instead of being gated every
     time (ADR-028 Decision 2).
 
     Raises `ValueError` if `run_id` doesn't exist, isn't owned by
     `tenant_id`, isn't currently `awaiting_approval`, or its Silver data
-    can't be reloaded — the caller (the `/runs` router) maps each case to a
+    can't be reloaded: the caller (the `/runs` router) maps each case to a
     4xx response.
     """
     state, saved_pipeline_id = _reload_awaiting_state(run_id, tenant_id, run_dir)
 
     granted_state: PipelineState = {**state, "approval_granted": True}
     # ADR-044: this is the *other* place a DB connector actually opens a
-    # connection outside `run_silver_pipeline`'s own graph run — the deferred
+    # connection outside `run_silver_pipeline`'s own graph run: the deferred
     # write after an operator approves a gated run (ADR-028). Same tenant,
     # same override resolution, same transient-only scope.
     with tenant_connections(resolve_tenant_overrides(tenant_id), tenant_id=tenant_id):
@@ -1062,7 +1062,7 @@ def resume_pending_load(run_id: str, tenant_id: str, run_dir: str) -> PipelineSt
             record_pipeline_health(saved_pipeline_id, final_status, result_state.get("error"))
             if final_status == "completed":
                 mark_pipeline_approved(saved_pipeline_id, tenant_id)
-        except Exception:  # nosec B110 — best-effort bookkeeping, never fails an
+        except Exception:  # nosec B110: best-effort bookkeeping, never fails an
             # already-persisted, already-written approval outcome.
             logger.warning(
                 "resume_pending_load: best-effort health/approval bookkeeping failed "
@@ -1077,7 +1077,7 @@ def resume_pending_load(run_id: str, tenant_id: str, run_dir: str) -> PipelineSt
 def reject_pending_load(
     run_id: str, tenant_id: str, run_dir: str, reason: str = ""
 ) -> PipelineState:
-    """Sprint 27 (ADR-028) — an operator declined a gated write: never calls
+    """Sprint 27 (ADR-028): an operator declined a gated write: never calls
     the real write path at all. Marks the run `failed` with an explicit
     "rejected by operator" error (distinct from a real Loader error) and
     persists that via the same `save_run` upsert `resume_pending_load` uses.
@@ -1104,7 +1104,7 @@ def reject_pending_load(
     if saved_pipeline_id is not None:
         try:
             record_pipeline_health(saved_pipeline_id, "failed", error_message)
-        except Exception:  # nosec B110 — best-effort bookkeeping, never fails an
+        except Exception:  # nosec B110: best-effort bookkeeping, never fails an
             # already-persisted rejection.
             logger.warning(
                 "reject_pending_load: best-effort health bookkeeping failed "

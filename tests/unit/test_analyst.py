@@ -86,7 +86,7 @@ def test_build_column_stats_empty_df() -> None:
 
 
 # ---------------------------------------------------------------------------
-# run_analyst — happy path
+# run_analyst: happy path
 # ---------------------------------------------------------------------------
 
 HAPPY_CODE = """\
@@ -113,7 +113,7 @@ def test_run_analyst_scales_timeout_for_large_df(
     mocker, mock_get_llm, sample_df: pd.DataFrame
 ) -> None:
     """ADR-012: a Silver DataFrame above LARGE_DATASET_ROW_THRESHOLD gets a
-    doubled sandbox timeout budget — real profiling confirmed the fixed 15s
+    doubled sandbox timeout budget: real profiling confirmed the fixed 15s
     budget is too tight for representative Analyst-style code at large scale."""
     from ai_etl.core import sandbox as sandbox_module
 
@@ -176,7 +176,7 @@ def test_run_analyst_returns_code_field(mock_get_llm, sample_df: pd.DataFrame) -
 
 
 # ---------------------------------------------------------------------------
-# run_analyst — retry on error
+# run_analyst: retry on error
 # ---------------------------------------------------------------------------
 
 BAD_CODE = "this is not valid python code !!!"
@@ -228,7 +228,7 @@ def test_run_analyst_retries_when_fig_is_none(mock_get_llm, sample_df: pd.DataFr
 
 
 # ---------------------------------------------------------------------------
-# run_analyst — audit fields
+# run_analyst: audit fields
 # ---------------------------------------------------------------------------
 
 
@@ -270,7 +270,7 @@ def test_run_analyst_forwards_llm_override(mock_get_llm, sample_df: pd.DataFrame
 
 
 # ---------------------------------------------------------------------------
-# run_analyst — locale (Sprint 25, ADR-036)
+# run_analyst: locale (Sprint 25, ADR-036)
 # ---------------------------------------------------------------------------
 
 
@@ -306,17 +306,17 @@ def test_run_analyst_unsupported_locale_falls_back_to_default(
 
 
 # ---------------------------------------------------------------------------
-# run_analyst — chart axis label grounding (2026-08-24 LLM/Prompt-Engineer audit)
+# run_analyst: chart axis label grounding (2026-08-24 LLM/Prompt-Engineer audit)
 # ---------------------------------------------------------------------------
 #
 # The Analyst's axis-label bug is a prompt-instruction gap, not deterministic
-# post-processing — the label text itself comes back embedded in `code`
+# post-processing: the label text itself comes back embedded in `code`
 # (a Plotly call written by the LLM), so there is no separate function to unit
 # test in isolation. What IS testable and under our control: the prompt sent to
 # the LLM must (a) carry the real, exact column names from the schema, and (b)
 # explicitly instruct grounding axis labels in those real columns instead of a
 # generic "category" placeholder. We assert the prompt content, not LLM behavior
-# we cannot deterministically control — same honesty caveat as the Planner fix.
+# we cannot deterministically control: same honesty caveat as the Planner fix.
 
 
 def test_run_analyst_prompt_includes_exact_column_names(

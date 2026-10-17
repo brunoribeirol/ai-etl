@@ -1,11 +1,11 @@
-"""E2E Scenario 3 — CSV + Postgres + REST sources, Postgres destination.
+"""E2E Scenario 3: CSV + Postgres + REST sources, Postgres destination.
 
 Mirrors `case_study/pipelines/scenario3_spec.txt`: join orders + customers,
 enrich Recife customers with a max-temperature forecast from a REST weather
 endpoint, filter active orders, write to `public.enriched_orders`.
 
 The REST call itself is mocked (`httpx.get`, patched at `rest_source.py`'s
-import site) — same reasoning as `mock_pipeline_llm` mocking the LLM calls:
+import site): same reasoning as `mock_pipeline_llm` mocking the LLM calls:
 this project's existing tests never depend on a real third-party network call
 succeeding for a CI run to pass. `rest_source.py`'s actual JSON-normalizing
 logic still runs for real against the mocked response.
@@ -41,7 +41,7 @@ def transform(dfs: dict) -> pd.DataFrame:
 def test_scenario3_csv_postgres_rest_runs_end_to_end(
     tmp_path, mock_pipeline_llm, test_tenant, postgres_customers_table, mocker
 ) -> None:
-    # 5 Recife customers + 1 Olinda customer (from postgres_customers_table) —
+    # 5 Recife customers + 1 Olinda customer (from postgres_customers_table):
     # keeps the resulting city_max_temp null ratio (Olinda has none) at ~17%,
     # under quality.py's 20% NULL_ERROR_THRESHOLD, so this stays a "warning"
     # (Loader still runs), not a pipeline-blocking "error".

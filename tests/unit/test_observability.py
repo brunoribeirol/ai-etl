@@ -1,7 +1,7 @@
 """Unit tests for `core/observability.py` (Sprint 34, ADR-033).
 
 Tests the conditional-init contract (`SENTRY_DSN` unset -> no-op,
-`SENTRY_DSN` set -> `sentry_sdk.init` called) via mocked `sentry_sdk` calls —
+`SENTRY_DSN` set -> `sentry_sdk.init` called) via mocked `sentry_sdk` calls:
 no real Sentry account/DSN is available in this environment (see the
 module's own docstring), so this does NOT confirm an event ever reaches a
 real Sentry dashboard.

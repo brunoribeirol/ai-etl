@@ -1,6 +1,6 @@
 """Unit tests for core/llm.py's multi-provider factory (ADR-014).
 
-No real credentials are used — provider selection is verified by mocking env vars
+No real credentials are used: provider selection is verified by mocking env vars
 and asserting the correct LangChain class is instantiated with the correct model,
 never by making a live API call. See ADR-014's Consequences section for why.
 """
@@ -24,7 +24,7 @@ from ai_etl.core.llm import (
 )
 
 # Aliased on import: a bare `test_provider_connectivity` import would be a
-# module-level `test_*` callable pytest tries to collect and call with no args —
+# module-level `test_*` callable pytest tries to collect and call with no args:
 # see ADR-031's own note on this in the PR description.
 from ai_etl.core.llm import test_provider_connectivity as check_provider_connectivity
 
@@ -77,7 +77,7 @@ class TestGetModelName:
 
 class TestGetLlmProviderSelection:
     """Each provider must instantiate the correct LangChain BaseChatModel subclass
-    with the expected model — this is the "switching AI_ETL_LLM_PROVIDER really
+    with the expected model: this is the "switching AI_ETL_LLM_PROVIDER really
     switches the instantiated class" proof the task's Definition of Done requires.
     """
 
@@ -177,7 +177,7 @@ class TestGetLlmProviderSelection:
 
 
 class TestGetLlmOverride:
-    """Sprint 30/gap-closing (ADR-031 §5) — get_llm()'s optional provider/model
+    """Sprint 30/gap-closing (ADR-031 §5): get_llm()'s optional provider/model
     override, closing the gap ADR-031 §5 flagged: a saved pipeline's configured
     provider/model must actually reach the LLM client construction, not just the
     deployment-global AI_ETL_LLM_PROVIDER/AI_ETL_LLM_MODEL env vars.
@@ -210,7 +210,7 @@ class TestGetLlmOverride:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Should not normally happen (llm_provider/llm_model are always persisted
-        together — ADR-031 §3), but falls back safely rather than reusing a
+        together: ADR-031 §3), but falls back safely rather than reusing a
         possibly-foreign AI_ETL_LLM_MODEL value."""
         monkeypatch.setenv("AI_ETL_LLM_MODEL", "gpt-4o-mini")  # an OpenAI model id
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-fake")
@@ -231,7 +231,7 @@ class TestGetLlmOverride:
 
 class TestGetLlmFailFast:
     """Missing credentials or an unknown provider must fail immediately and clearly
-    — never silently fall back to OpenAI (ADR-014 §3).
+    : never silently fall back to OpenAI (ADR-014 §3).
     """
 
     def test_anthropic_without_api_key_raises_clear_error(
@@ -255,7 +255,7 @@ class TestGetLlmFailFast:
 
 
 class TestValidateProviderAndModel:
-    """Sprint 30 (ADR-031) — the allowlist backing `PUT /pipelines/{id}/llm-config`."""
+    """Sprint 30 (ADR-031): the allowlist backing `PUT /pipelines/{id}/llm-config`."""
 
     def test_every_provider_has_an_allowed_models_entry(self) -> None:
         assert set(ALLOWED_MODELS_BY_PROVIDER) == {"openai", "anthropic", "google", "ollama"}
@@ -273,7 +273,7 @@ class TestValidateProviderAndModel:
 
 
 class TestProviderConnectivity:
-    """Sprint 30 (ADR-031) — closes the gap ADR-014 left open: a real `.invoke()`
+    """Sprint 30 (ADR-031): closes the gap ADR-014 left open: a real `.invoke()`
     call, never mocked at the LangChain-class level (only the underlying HTTP/SDK
     call itself is faked here, same as the rest of this test module does for
     credential presence).
@@ -298,7 +298,7 @@ class TestProviderConnectivity:
     def test_missing_credential_reports_ok_false_not_a_raise(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        # No ANTHROPIC_API_KEY set — _build_anthropic's _require_env raises
+        # No ANTHROPIC_API_KEY set: _build_anthropic's _require_env raises
         # RuntimeError, which test_provider_connectivity must catch and report,
         # never propagate.
         result = check_provider_connectivity("anthropic", "claude-sonnet-5")
@@ -328,7 +328,7 @@ class TestProviderConnectivity:
 
 
 class _FakeLLM:
-    """Minimal `BaseChatModel`-shaped stand-in — `invoke_llm()` only ever calls
+    """Minimal `BaseChatModel`-shaped stand-in: `invoke_llm()` only ever calls
     `.invoke(prompt)` on whatever it's given, so a real LangChain client isn't
     needed to test the breaker logic itself (provider construction is already
     covered by TestGetLlmProviderSelection above).
@@ -351,7 +351,7 @@ class _FakeResponse:
 
 
 class TestInvokeLlmCircuitBreaker:
-    """ADR-041 (Wave 3 / X-PRO.ai gap analysis) — the per-provider circuit breaker
+    """ADR-041 (Wave 3 / X-PRO.ai gap analysis): the per-provider circuit breaker
     wrapping `.invoke()`. Threshold/cooldown are set to small explicit values per
     test rather than relying on the module defaults, so these tests don't depend
     on (or need to change alongside) whatever the defaults happen to be.
@@ -369,7 +369,7 @@ class TestInvokeLlmCircuitBreaker:
         llm = _FakeLLM([ConnectionError("boom"), _FakeResponse()])
         with pytest.raises(ConnectionError):
             invoke_llm(llm, "prompt", "openai")
-        # Circuit still closed — the next call reaches the (now-succeeding) LLM.
+        # Circuit still closed: the next call reaches the (now-succeeding) LLM.
         response = invoke_llm(llm, "prompt", "openai")
         assert response.content == "ok"
         assert llm.call_count == 2
@@ -386,7 +386,7 @@ class TestInvokeLlmCircuitBreaker:
         with pytest.raises(ConnectionError):
             invoke_llm(llm, "prompt", "openai")
 
-        # Threshold reached (2 consecutive failures) — the 3rd call must fail fast
+        # Threshold reached (2 consecutive failures): the 3rd call must fail fast
         # WITHOUT reaching the LLM (call_count stays at 2, not 3).
         with pytest.raises(LLMCircuitOpenError, match="openai"):
             invoke_llm(llm, "prompt", "openai")
@@ -404,7 +404,7 @@ class TestInvokeLlmCircuitBreaker:
         invoke_llm(llm, "prompt", "openai")  # success resets the counter to 0
         with pytest.raises(ConnectionError):
             invoke_llm(llm, "prompt", "openai")
-        # Only 1 consecutive failure since the reset — threshold (2) not reached,
+        # Only 1 consecutive failure since the reset: threshold (2) not reached,
         # so this 4th call must still reach the LLM instead of failing fast.
         response = invoke_llm(llm, "prompt", "openai")
         assert response.content == "ok"
@@ -433,7 +433,7 @@ class TestInvokeLlmCircuitBreaker:
         with pytest.raises(ConnectionError):
             invoke_llm(openai_llm, "prompt", "openai")  # opens ONLY openai's circuit
 
-        # anthropic's circuit is untouched — this call must reach its LLM.
+        # anthropic's circuit is untouched: this call must reach its LLM.
         response = invoke_llm(anthropic_llm, "prompt", "anthropic")
         assert response.content == "ok"
         assert anthropic_llm.call_count == 1
@@ -454,7 +454,7 @@ class TestInvokeLlmCircuitBreaker:
 
 
 class TestIsLlmReviewEnabled:
-    """ADR-037 (Sprint 21 follow-up) — opt-in, default off."""
+    """ADR-037 (Sprint 21 follow-up): opt-in, default off."""
 
     def test_defaults_to_false(self) -> None:
         assert is_llm_review_enabled() is False

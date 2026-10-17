@@ -8,7 +8,7 @@ disk needed) so storage-artifact deletion is exercised for real too.
 ADR-040 follow-up: tenant-scoped reads/writes now go through `tenant_scope()`
 (faked here the same way `test_audit_db.py` established); `tenant_deletion_log`
 writes stay on `get_engine()` (bypass role, RLS-enabled-with-no-policy table,
-per ADR-040's documented exemption) — both are faked onto the same SQLite
+per ADR-040's documented exemption): both are faked onto the same SQLite
 engine here since this test has no real Postgres role split to exercise.
 """
 
@@ -32,7 +32,7 @@ from ai_etl.services import tenant_deletion_service as svc
 
 
 class FakeStorageBackend:
-    """In-memory `StorageBackend` — records writes/deletes for assertions."""
+    """In-memory `StorageBackend`: records writes/deletes for assertions."""
 
     def __init__(self) -> None:
         self._objects: dict[str, bytes] = {}
@@ -213,7 +213,7 @@ def test_deletes_storage_artifacts(engine: Engine, fake_storage: FakeStorageBack
 def test_deletes_storage_artifacts_falls_back_to_per_key_exists_when_listing_fails(
     engine: Engine, fake_storage: FakeStorageBackend
 ) -> None:
-    """Perf fix (2026-09-03) added a `list_existing_keys()` fast path — this
+    """Perf fix (2026-09-03) added a `list_existing_keys()` fast path: this
     pins down the fallback: a listing failure must not inflate the
     compliance-log deletion count by blindly calling the idempotent
     `delete_bytes` on every candidate. `deleted` must come out identical to

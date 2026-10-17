@@ -1,5 +1,5 @@
 """Auto-generated NL pipeline spec from an uploaded file (extracted from `app.py`,
-Sprint 6/ADR-011 — needed by both the Streamlit UI and the new API's `POST /runs`,
+Sprint 6/ADR-011: needed by both the Streamlit UI and the new API's `POST /runs`,
 same reasoning `pipeline_service.py`'s own docstring already gives for extracting
 orchestration logic out of `app.py`: unusable from any caller that isn't Streamlit
 otherwise. No Streamlit dependency, no behavior change from the original.
@@ -23,7 +23,7 @@ def auto_generate_spec(
     `additional_instructions` (2026-09-04 gap-closing fix): the free-text "manual
     spec" the user typed in the same form as the file upload. Before this fix,
     `api/routers/runs.py::create_run` unconditionally discarded that text whenever
-    a file was also attached — `auto_generate_spec()`'s generic cleaning steps were
+    a file was also attached: `auto_generate_spec()`'s generic cleaning steps were
     the *only* instructions the Orchestrator ever saw, so a user-typed instruction
     like "rename dt to date" or "only keep active rows" silently never reached the
     pipeline, even though the UI's "optional if a file was attached" label implied
@@ -34,7 +34,7 @@ def auto_generate_spec(
     `sheet_name` (Wave 1 item 2, 2026-09-05 mega-audit remediation): set only when
     the upload is a multi-sheet Excel workbook and the user picked one via the
     frontend's sheet picker (`api/routers/runs.py::create_run`'s new `/runs`
-    form field, sourced from `POST /runs/excel-sheets`) — `df` was already loaded
+    form field, sourced from `POST /runs/excel-sheets`): `df` was already loaded
     from that exact sheet by the caller before this function runs, so the sole
     purpose here is telling the Orchestrator's LLM which sheet to put in the
     generated `pipeline_plan`, in the exact phrasing `ORCHESTRATOR_PROMPT` looks

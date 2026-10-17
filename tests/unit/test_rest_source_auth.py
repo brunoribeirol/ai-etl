@@ -1,6 +1,6 @@
 """Unit tests for authenticated REST source support (Sprint 11, ADR-012).
 
-Only the network transport (`httpx.get`) is mocked — same convention as
+Only the network transport (`httpx.get`) is mocked: same convention as
 `tests/unit/test_connectors.py`'s existing `load_rest` tests and
 `tests/e2e/test_scenario3_csv_postgres_rest.py`'s REST call. The auth
 header/credential construction itself (`_build_auth`) runs for real, and is
@@ -95,7 +95,7 @@ def test_build_auth_unsupported_type_raises() -> None:
 def test_build_auth_bearer_secret_ref_wins_over_env_var(
     monkeypatch: pytest.MonkeyPatch, mocker
 ) -> None:
-    # Even when both are set, the tenant's own stored secret must win —
+    # Even when both are set, the tenant's own stored secret must win:
     # same precedence core/tenant_context.py's DB overrides already have.
     monkeypatch.setenv("MY_API_TOKEN", "shared-env-token")
     mocker.patch("ai_etl.sources.rest_source.get_rest_secret", return_value="tenant-token")
@@ -108,7 +108,7 @@ def test_build_auth_bearer_secret_ref_wins_over_env_var(
 def test_build_auth_bearer_falls_back_to_env_var_when_secret_ref_unresolved(
     monkeypatch: pytest.MonkeyPatch, mocker
 ) -> None:
-    # No active tenant context, or the tenant never saved this secret —
+    # No active tenant context, or the tenant never saved this secret:
     # get_rest_secret returns None, not an exception.
     monkeypatch.setenv("MY_API_TOKEN", "shared-env-token")
     mocker.patch("ai_etl.sources.rest_source.get_rest_secret", return_value=None)
@@ -185,7 +185,7 @@ def test_build_auth_secret_ref_lookup_failure_falls_back_to_env_var(
     monkeypatch: pytest.MonkeyPatch, mocker
 ) -> None:
     # get_rest_secret itself already swallows lookup errors and returns
-    # None (see core/tenant_context.py) — this pins down that rest_source.py
+    # None (see core/tenant_context.py): this pins down that rest_source.py
     # treats that None exactly like "not configured", not a special case.
     monkeypatch.setenv("MY_API_TOKEN", "shared-env-token")
     mocker.patch("ai_etl.sources.rest_source.get_rest_secret", return_value=None)
@@ -274,7 +274,7 @@ def test_load_rest_no_auth_unchanged_behavior(mocker) -> None:
     assert kwargs["auth"] is None
 
 
-# --- oauth2_client_credentials — token fetch, caching, and load_rest wiring ---
+# --- oauth2_client_credentials: token fetch, caching, and load_rest wiring ---
 
 
 def test_fetch_oauth2_token_posts_client_credentials_grant(mocker) -> None:
@@ -426,6 +426,6 @@ def test_fetch_oauth2_token_default_ttl_when_expires_in_omitted(mocker) -> None:
     assert token == "tok-1"
     cached_token, expires_at = rest_source._TOKEN_CACHE[("https://auth.example.com/token", "cid")]
     assert cached_token == "tok-1"
-    # default TTL (3600s) minus the leeway (30s), roughly — just assert it's
+    # default TTL (3600s) minus the leeway (30s), roughly: just assert it's
     # comfortably in the future relative to "now".
     assert expires_at > time.monotonic()

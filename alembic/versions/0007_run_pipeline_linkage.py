@@ -3,17 +3,17 @@
 Adds a nullable `saved_pipeline_id` FK column to both `runs` and
 `analysis_runs`, so an execution produced by a scheduled saved pipeline
 (Sprint 13, ADR-016) can be grouped with every other execution of that same
-pipeline — the linkage Sprint 17's time-series/diff view needs and that
+pipeline: the linkage Sprint 17's time-series/diff view needs and that
 `saved_pipelines.last_task_id` alone cannot provide (it only remembers the
 single most recent fire, not full history). `ON DELETE SET NULL`: deleting a
-saved pipeline must not delete the runs it already produced — run history is
+saved pipeline must not delete the runs it already produced: run history is
 audit data (ADR-004's whole premise), independent of whether the pipeline
 that created it still exists.
 
 No backfill: every row that predates this column reads back NULL
-(`saved_pipeline_id IS NULL` means "avulso, or scheduled before Sprint 17" —
+(`saved_pipeline_id IS NULL` means "avulso, or scheduled before Sprint 17":
 indistinguishable, and that is an accepted, documented limitation, not a bug
-— see ADR-017).
+, see ADR-017).
 
 Revision ID: 0007
 Revises: 0006

@@ -3,23 +3,23 @@
 This is a separate Postgres database from `POSTGRES_URL` (`sources/postgres_source.py`,
 `destinations/postgres_dest.py`), which is a pipeline data source/destination the user
 points at their own data. `APP_DATABASE_URL`/`APP_DATABASE_URL_TENANT` are AI-ETL's own
-database, holding the `runs`/`analysis_runs` audit tables — logically distinct even when
+database, holding the `runs`/`analysis_runs` audit tables: logically distinct even when
 both run in the same docker-compose project.
 
 Two engines, two roles (ADR-040, superseding ADR-032 Decision 1's "keep
 `rolbypassrls=true`" posture):
 
-- `get_engine()` — the original, bypass-capable role (`rolbypassrls=true`). Kept for
+- `get_engine()`: the original, bypass-capable role (`rolbypassrls=true`). Kept for
   the narrow, deliberate cross-tenant paths that must see every tenant's rows by
   design: `audit/admin_log.py` and the platform-admin routes it backs (ADR-032
   Decision 2), and background/scheduler jobs that are not acting on behalf of any
   single tenant's request (e.g. `audit/db/pipelines.py::list_due_pipelines`,
   `audit/db/retention.py::list_tenants_with_retention`).
-- `get_tenant_engine()` / `tenant_scope()` — a new, non-bypass role
+- `get_tenant_engine()` / `tenant_scope()`: a new, non-bypass role
   (`APP_DATABASE_URL_TENANT`) for every per-tenant-request read/write in
   `audit/db/*.py`. Row Level Security policies (migration `0021`) enforce
   `tenant_id = current_setting('app.tenant_id')` as a real, database-level backstop
-  against a future `WHERE tenant_id = :id` bug in application code — see ADR-040 for
+  against a future `WHERE tenant_id = :id` bug in application code: see ADR-040 for
   the full design and how its pooled-connection safety was verified
   (`tests/integration/test_tenant_isolation_rls.py`).
 """
@@ -52,12 +52,12 @@ def get_tenant_engine() -> Engine:
     """Return a process-wide engine for the application database, using the new
     restricted, non-bypass role (ADR-040).
 
-    Uses `APP_DATABASE_URL_TENANT` from environment — a distinct Postgres role from
+    Uses `APP_DATABASE_URL_TENANT` from environment: a distinct Postgres role from
     `APP_DATABASE_URL`'s, with `NOBYPASSRLS` and no privileges beyond what the RLS
     policies in migration `0021` allow. Never connect with this engine outside
-    `tenant_scope()` below — a bare connection from this engine has no `app.tenant_id`
+    `tenant_scope()` below: a bare connection from this engine has no `app.tenant_id`
     GUC set, so every tenant-scoped table's RLS policy would deny all rows (fail
-    closed, not fail open — but also not the query the caller wanted).
+    closed, not fail open: but also not the query the caller wanted).
     """
     url = os.getenv("APP_DATABASE_URL_TENANT")
     if not url:
@@ -72,25 +72,25 @@ def tenant_scope(tenant_id: str) -> Iterator[Connection]:
 
     Every `audit/db/*.py` function that reads or writes one tenant's own data should
     open its connection through this context manager instead of calling
-    `get_engine()`/`get_tenant_engine()` directly — it is the single place that binds
+    `get_engine()`/`get_tenant_engine()` directly: it is the single place that binds
     the GUC, so every call site gets the same guarantee.
 
     Uses `SELECT set_config('app.tenant_id', :tenant_id, true)` rather than
     `SET LOCAL app.tenant_id = ...` for one reason: `SET LOCAL` does not accept a bound
     parameter (it is DDL-like session-config syntax, not a normal statement), which
-    would force interpolating `tenant_id` directly into the SQL string — exactly the
+    would force interpolating `tenant_id` directly into the SQL string: exactly the
     f-string-SQL pattern this project's non-negotiable rules forbid, even for an
     internally-sourced value. `set_config(name, value, is_local)`, by contrast, is a
     regular function call and takes `tenant_id` as a normal bound parameter; its third
     argument (`true`) gives it the identical transaction-local semantics as
-    `SET LOCAL` — the setting reverts automatically at `COMMIT`/`ROLLBACK`, before the
+    `SET LOCAL`: the setting reverts automatically at `COMMIT`/`ROLLBACK`, before the
     underlying connection is ever returned to the pool.
 
     This transaction-local reset is exactly what makes reusing a pooled connection
     across different tenants' requests safe: the GUC lives only inside the
     transaction `engine.begin()` opens here, so a later request that checks out the
     same physical connection starts a brand-new transaction with no `app.tenant_id`
-    set at all (RLS then denies all rows — fail closed — until this function sets it
+    set at all (RLS then denies all rows, fail closed, until this function sets it
     again for that request). See `tests/integration/test_tenant_isolation_rls.py`
     for a real Postgres test proving this: two "requests" sharing one pooled
     connection (pool_size=1), the second not observing the first's tenant_id.
@@ -110,7 +110,7 @@ def scoped_connection(tenant_id: str | None) -> Iterator[Connection]:
     bypass-engine transaction (ADR-040).
 
     A handful of `audit/db/*.py` functions accept `tenant_id: str | None = None` for
-    backward compatibility with callers that predate per-tenant scoping (ADR-006) —
+    backward compatibility with callers that predate per-tenant scoping (ADR-006):
     real callers always pass one today, and the tenant-scoped tables' own NOT NULL
     constraints make a genuine `None` write fail regardless of which engine handles
     it. This helper keeps each call site a single `with` statement instead of an

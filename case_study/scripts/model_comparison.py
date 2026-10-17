@@ -1,10 +1,10 @@
-"""Sprint 8 — model comparison + stability experiment (CLI/headless only, no
-`api/` or `frontend/` touched — matches the sprint's scope).
+"""Sprint 8: model comparison + stability experiment (CLI/headless only, no
+`api/` or `frontend/` touched: matches the sprint's scope).
 
 Runs Scenario 1 of the case study (`case_study/pipelines/scenario1_spec.txt`,
 `case_study/data/sales.csv`) N times per configured model through
-`ai_etl.services.pipeline_service.run_full_analysis` — the same function
-`services/execution_queue.py::enqueue_analysis` wraps in a Celery task — and
+`ai_etl.services.pipeline_service.run_full_analysis`: the same function
+`services/execution_queue.py::enqueue_analysis` wraps in a Celery task: and
 records real cost (`core/pricing.py`), real latency (`state["stage_durations"]`
 plus total wall time), and an objective quality score (see `score_quality`)
 per run. Also computes run-to-run variance per model (the "stability"
@@ -12,7 +12,7 @@ experiment) from the same N runs.
 
 Scenarios 2-4 (`case_study/pipelines/`, `tests/e2e/test_scenario{2,3,4}_*.py`)
 additionally need a reachable Postgres (`postgres-test`, and a REST/document
-source for 3/4) — see `_postgres_reachable()`. When unreachable, this script
+source for 3/4): see `_postgres_reachable()`. When unreachable, this script
 records one `status="skipped_no_infra"` row per (model, scenario) rather than
 silently omitting them, and explains why in the printed summary.
 
@@ -23,16 +23,16 @@ silently omitting them, and explains why in the printed summary.
 with Postgres-specific `ON CONFLICT` upserts (`audit/db.py`,
 `sqlalchemy.dialects.postgresql.insert`) that do not work against SQLite.
 This session's sandbox has no Docker daemon (`docker ps` fails with "Cannot
-connect to the Docker daemon"), so neither Redis nor Postgres is reachable —
+connect to the Docker daemon"), so neither Redis nor Postgres is reachable:
 this script therefore calls `pipeline_service.run_full_analysis` directly
 (the same function `run_full_analysis_task` wraps) and monkeypatches
 `save_run`/`save_analysis`/`save_stage_latencies` to no-ops for the duration
 of each run (pass `--persist-audit` to let them write for real once
-`APP_DATABASE_URL` is reachable — the Celery/Redis hop itself is still
+`APP_DATABASE_URL` is reachable: the Celery/Redis hop itself is still
 bypassed either way, since it adds no signal for cost/latency/quality
 comparison beyond confirming the plumbing, which `tests/e2e/` already covers).
-Everything else — the real Silver LangGraph, real sandboxed transform
-execution, real Quality Agent, latency, cost, quality score — runs for real.
+Everything else: the real Silver LangGraph, real sandboxed transform
+execution, real Quality Agent, latency, cost, quality score: runs for real.
 
 --- Why every row may still say data_source != "real" ---
 This script degrades gracefully per-model depending on what's actually
@@ -42,17 +42,17 @@ set; Ollama needs the `ollama` binary on `PATH` (checked via `shutil.which`)
 with its server reachable and the requested model already pulled. When a
 provider isn't reachable, LLM calls for that model are mocked with
 deterministic, fixed responses (same technique as
-`tests/e2e/conftest.py::mock_pipeline_llm`) rather than skipped — this still
+`tests/e2e/conftest.py::mock_pipeline_llm`) rather than skipped: this still
 validates the full harness (real sandbox execution, real Quality Agent, real
 cost/latency/quality-score computation) end to end, but the resulting cost
 and latency numbers for that model are NOT a real comparison. Every output
 row is tagged `data_source`:
-  - "real" — ran against a real API/local server with the given model.
-  - "mock" — no credentials/access for that model's provider; deterministic
+  - "real": ran against a real API/local server with the given model.
+  - "mock": no credentials/access for that model's provider; deterministic
              mocked LLM responses, $0 cost, near-zero LLM latency.
 Sprint 30 (ADR-031) added real Anthropic/Google support and this update adds
-real local Ollama execution (previously always mocked/"simulated" — see git
-history if you need that older 3-state version) — a `provider:model` CLI
+real local Ollama execution (previously always mocked/"simulated": see git
+history if you need that older 3-state version): a `provider:model` CLI
 value like `anthropic:claude-haiku-4-5` or `ollama:mistral` selects both
 `AI_ETL_LLM_PROVIDER` and `AI_ETL_LLM_MODEL` for that run; a bare model name
 (no `:`) defaults to `provider=openai` for backward compatibility with
@@ -96,12 +96,12 @@ DEFAULT_MODELS = [
     "ollama:mistral",
 ]
 DEFAULT_N = 5  # matches case_study/results/tabela-resultados.md's established
-# convention (5 runs/scenario) — see the report for the full rationale.
+# convention (5 runs/scenario): see the report for the full rationale.
 
 TEST_POSTGRES_URL = os.getenv("TEST_POSTGRES_URL", "postgresql://test:test@localhost:5433/testdb")
 
 # Deterministic mock plan/transform code mirroring `scenario1_spec.txt` exactly
-# (rename dt->date, amt->amount, filter status=="active", drop duplicates) —
+# (rename dt->date, amt->amount, filter status=="active", drop duplicates):
 # same transformation `tests/e2e/test_scenario1_csv.py` mocks, applied here to
 # the real 5000-row `case_study/data/sales.csv` dataset instead of a tiny
 # inline fixture, so quality/completeness numbers reflect the real case study.
@@ -182,28 +182,28 @@ def score_quality(
     reference_rows: int | None = None,
 ) -> float:
     """Objective, deterministic 0-100 quality score computed only from signals
-    the real (non-mocked) Silver pipeline stages produce — the Quality Agent's
+    the real (non-mocked) Silver pipeline stages produce: the Quality Agent's
     severity verdict, the Loader's `rows_loaded`, and the Transformer's retry
-    count — so it stays meaningful even when the LLM call itself is mocked
+    count: so it stays meaningful even when the LLM call itself is mocked
     (only the *content* of the LLM's plan/code is faked; the sandboxed
     execution, quality checks, and load step that consume it are real).
 
     Weights, chosen for interpretability over statistical tuning (there is no
     labeled dataset to tune against at this project's TCC scale):
-      - 40 pts: pipeline reached `status == "completed"` — a hard gate; every
+      - 40 pts: pipeline reached `status == "completed"`: a hard gate; every
                 other signal is meaningless for a failed run, so the score is
                 0 if this fails.
-      - 30 pts: Quality Agent severity — ok=30, warning=18, error=0 (an
+      - 30 pts: Quality Agent severity: ok=30, warning=18, error=0 (an
                 `error` severity means the pipeline still completed but the
                 data itself is unreliable, matching `quality_report`'s own
                 "checks: N warnings, M errors" summary).
-      - 20 pts: completeness — `rows_loaded / reference_rows` capped at 1.0
+      - 20 pts: completeness: `rows_loaded / reference_rows` capped at 1.0
                 when a reference is given (comparing against a prior known-good
                 run's row count catches silent under-extraction); 20 pts flat
                 if `rows_loaded > 0` and no reference was supplied.
-      - 10 pts: Transformer efficiency — 1 attempt=10, 2=5, >=3=0 (mirrors
+      - 10 pts: Transformer efficiency: 1 attempt=10, 2=5, >=3=0 (mirrors
                 `transformation_attempts`, capped at the real retry limit of 3
-                — see `agents/transformer.py`).
+               : see `agents/transformer.py`).
     """
     if state.get("status") != "completed":
         return 0.0
@@ -233,7 +233,7 @@ def _mock_response(content: str) -> MagicMock:
 
 def _patch_mocked_pipeline(stack: ExitStack, plan: dict[str, Any], transform_code: str) -> None:
     """Same technique as `tests/e2e/conftest.py::mock_pipeline_llm`, standalone
-    (this script isn't a pytest fixture) — patches every LLM call site
+    (this script isn't a pytest fixture): patches every LLM call site
     `run_full_analysis` touches with deterministic, fixed responses."""
     orchestrator_llm = MagicMock()
     orchestrator_llm.invoke.return_value = _mock_response(json.dumps(plan))
@@ -266,7 +266,7 @@ def _patch_mocked_pipeline(stack: ExitStack, plan: dict[str, Any], transform_cod
 
 def _patch_no_audit_persistence(stack: ExitStack) -> None:
     """Bypasses `save_run`/`save_analysis`/`save_stage_latencies` (all need a
-    reachable Postgres via `APP_DATABASE_URL` — unavailable in this sandbox,
+    reachable Postgres via `APP_DATABASE_URL`: unavailable in this sandbox,
     see module docstring). No audit trail is written by this script."""
     stack.enter_context(patch("ai_etl.services.pipeline_service.save_run", return_value=None))
     stack.enter_context(patch("ai_etl.services.pipeline_service.save_analysis", return_value=None))
@@ -309,7 +309,7 @@ def run_scenario1(
     spec = SCENARIO1_SPEC.read_text()
 
     # `model` may carry a `provider:` prefix (e.g. `anthropic:claude-haiku-4-5`)
-    # — core/llm.py::get_llm() reads provider and model from two separate env
+    #: core/llm.py::get_llm() reads provider and model from two separate env
     # vars, so both need setting here, not just AI_ETL_LLM_MODEL as before
     # Sprint 30 added real multi-provider support.
     bare_model = model.partition(":")[2] if ":" in model else model
@@ -378,7 +378,7 @@ def _provider_and_access(model: str) -> tuple[str, bool]:
     report whether real credentials/access exist for that provider.
 
     Sprint 30 (ADR-031) added Anthropic/Google alongside the original
-    OpenAI/Ollama pair — this function used to hardcode a 2-provider
+    OpenAI/Ollama pair: this function used to hardcode a 2-provider
     assumption (`ollama:` prefix vs. everything-else-is-OpenAI); extended
     here rather than left stale, since a real multi-provider comparison
     (this update's whole point) needs it to actually branch on all 4.
@@ -397,7 +397,7 @@ def _provider_and_access(model: str) -> tuple[str, bool]:
 
 
 def compute_stability(rows: list[RunResult]) -> dict[str, Any]:
-    """Run-to-run variance for one (model, scenario) group — the "stability"
+    """Run-to-run variance for one (model, scenario) group: the "stability"
     half of Sprint 8. Reports sample stdev (n-1) guarded for n<2, plus the
     coefficient of variation (stdev/mean) where mean != 0, which is more
     comparable across metrics of very different scale (rows vs. ms vs. score)
@@ -453,7 +453,7 @@ def main() -> None:
     for model in models:
         provider, has_real_access = _provider_and_access(model)
         # Ollama used to get a "simulated" fallback here (pre-Sprint-30, when
-        # this environment never had it installed) — now that it's a real,
+        # this environment never had it installed): now that it's a real,
         # locally-reachable provider like any other, it gets the same
         # real/mock branch as OpenAI/Anthropic/Google, not a 3rd state.
         data_source = "real" if has_real_access else "mock"

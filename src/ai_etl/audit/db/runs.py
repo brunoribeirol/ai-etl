@@ -1,6 +1,6 @@
-"""Run/analysis persistence — `runs`/`analysis_runs`/`stage_latencies` writes and reads.
+"""Run/analysis persistence: `runs`/`analysis_runs`/`stage_latencies` writes and reads.
 
-Split out of the former monolithic `audit/db.py` (Sprint 33) — see
+Split out of the former monolithic `audit/db.py` (Sprint 33): see
 `audit/db/__init__.py` for the full split rationale. Owns `ensure_user`
 (the FK-prerequisite upsert every `save_run`/`save_analysis` caller needs),
 the Silver run + Gold/Science/Advisor analysis persistence pair
@@ -34,7 +34,7 @@ def ensure_user(user_id: str) -> None:
     NOT NULL foreign keys to `users.id`. Nothing in the Clerk sign-in flow
     otherwise creates that row, so without this call the very first
     `save_run()`/`save_analysis()` for a brand-new Clerk account fails with a
-    Postgres FK violation (`IntegrityError`) — every real user's first run
+    Postgres FK violation (`IntegrityError`): every real user's first run
     would crash. Callers must invoke this with the verified `tenant_id`
     (`auth_service.verify_session_token()`'s `user_id`) before it is used
     anywhere else that writes to `runs`/`analysis_runs`.
@@ -47,7 +47,7 @@ def ensure_user(user_id: str) -> None:
         .values(id=user_id, created_at=datetime.now(tz=timezone.utc))
         .on_conflict_do_nothing(index_elements=[users.c.id])
     )
-    # ADR-040: the restricted role's `users` RLS policy is `id = app.tenant_id` —
+    # ADR-040: the restricted role's `users` RLS policy is `id = app.tenant_id`:
     # for this specific insert, the row *being created* is its own tenant, so the
     # GUC is set to the same `user_id` this call is provisioning.
     with tenant_scope(user_id) as conn:
@@ -62,25 +62,25 @@ def save_run(
 ) -> str:
     """Persist the final pipeline state to JSON and record it in the app database.
 
-    Creates (ADR-009: via the `StorageBackend` selected by `STORAGE_BACKEND` —
+    Creates (ADR-009: via the `StorageBackend` selected by `STORAGE_BACKEND`:
     `local` writes under `log_dir`, `s3` writes under the tenant/environment-scoped
     bucket prefix; key names below are unchanged either way):
-        {run_id}.json          — full state snapshot
-        {run_id}_transform.py  — generated transformation code (if any)
+        {run_id}.json         : full state snapshot
+        {run_id}_transform.py : generated transformation code (if any)
         a row in the `runs` table of the application Postgres (APP_DATABASE_URL)
 
     Args:
         state: Final pipeline state to persist.
         log_dir: Directory to write the JSON/transform files into (`local` backend only).
-        tenant_id: Sprint A session-scoping stopgap — the browser session's UUID
+        tenant_id: Sprint A session-scoping stopgap: the browser session's UUID
             (see `app.py::_get_session_id`), not a real tenant/account. Defaults to
             `None` for backward compatibility with callers that don't pass one, but
             `app.py` should always pass a real value going forward. Also used by the
             `s3` backend as the tenant segment of the storage key prefix.
-        saved_pipeline_id: Sprint 17 (ADR-017) — the `saved_pipelines.id` that
+        saved_pipeline_id: Sprint 17 (ADR-017): the `saved_pipelines.id` that
             produced this execution, if it was a scheduled fire (`services/
             scheduler.py`). `None` for every avulso (one-off) run, which is the
-            majority of callers — defaults to `None` for backward compatibility.
+            majority of callers: defaults to `None` for backward compatibility.
             Sprint 14 (ADR-018) also reads this back via `get_previous_completed_run`
             to find "the previous run of this same saved pipeline" for drift detection.
 
@@ -97,7 +97,7 @@ def save_run(
         storage.write_bytes(transform_code_key, state["transformation_code"].encode())
 
     # Sprint 3 (ADR-008): also persist the Silver DataFrame as CSV, alongside
-    # the (lossy) JSON snapshot below — `_make_serializable` only keeps a
+    # the (lossy) JSON snapshot below: `_make_serializable` only keeps a
     # shape placeholder for DataFrames in `{run_id}.json`. `load_full_result`
     # reads this CSV back to reconstruct `state["transformed_data"]` for
     # `app.py::_render_results`, which async execution's polling loop can no
@@ -162,7 +162,7 @@ def _write_run_row(
             "saved_pipeline_id": stmt.excluded.saved_pipeline_id,
         },
     )
-    # ADR-040: `runs.tenant_id` is NOT NULL, so a real caller always passes one —
+    # ADR-040: `runs.tenant_id` is NOT NULL, so a real caller always passes one:
     # `tenant_id=None` only remains possible for backward compatibility with a
     # caller that predates ADR-006, and would fail on the NOT NULL constraint
     # either way; `scoped_connection` falls back to the bypass engine in that case
@@ -176,20 +176,20 @@ def load_history(limit: int = 20, tenant_id: str | None = None) -> pd.DataFrame:
 
     Mirrors the Phase 1 `_load_history` SQLite query. Returns an empty DataFrame
     (rather than raising) if the application database is unreachable, so history
-    stays a soft-fail feature — matching the original behavior when `runs.db` was
+    stays a soft-fail feature: matching the original behavior when `runs.db` was
     missing or unreadable.
 
     Args:
         limit: Maximum number of rows to return, most recent first.
         tenant_id: Sprint A session-scoping stopgap. When not `None`, restricts
             results to that browser session's own runs via a bound-parameter
-            `WHERE` clause — this is the actual fix for the cross-session history
+            `WHERE` clause: this is the actual fix for the cross-session history
             leak. When `None` (the default, kept for backward compatibility with
             other callers), no filter is applied. `app.py` should always pass a
             real value going forward.
 
     `cost_usd`/`model_name` (Sprint 3, ADR-008) come from a `LEFT OUTER JOIN`
-    against `analysis_runs` on `run_id` — a Silver-only run (no business
+    against `analysis_runs` on `run_id`: a Silver-only run (no business
     question asked, so `save_analysis` never ran) has no matching row and
     reads back as `NaN`/`None`, which is the correct "no analysis, no cost"
     signal, not a bug to backfill.
@@ -213,7 +213,7 @@ def load_history(limit: int = 20, tenant_id: str | None = None) -> pd.DataFrame:
     try:
         # ADR-040: tenant-scoped (restricted engine + RLS backstop) when a
         # tenant_id is given; unscoped callers keep the pre-ADR-040 unrestricted
-        # bypass-engine read (unchanged behavior — see docstring above).
+        # bypass-engine read (unchanged behavior: see docstring above).
         with scoped_connection(tenant_id) as conn:
             return pd.read_sql(stmt, conn)
     except Exception:
@@ -238,31 +238,31 @@ def save_analysis(
     same as `save_run`) with narratives, model_info,
     recommendations, and a data preview for every sub-task the Planner produced.
     Figures aren't serialized (not JSON-safe, and cheap to regenerate from `code`);
-    full DataFrames aren't embedded either — only a preview and shape, since the CSV
+    full DataFrames aren't embedded either: only a preview and shape, since the CSV
     download per sub-task already covers the full data during the session. Token
     usage is aggregated into an `analysis_runs` table in the application Postgres so
     cost can be tracked across runs without re-parsing every JSON file.
 
-    Without this, closing the browser tab lost every Gold/Science/Advisor result —
+    Without this, closing the browser tab lost every Gold/Science/Advisor result:
     only the Silver ETL state was ever persisted, which undercut the "auditable
     pipeline" pitch at exactly the layer a user is most likely to want to revisit.
 
     Args:
-        tenant_id: Sprint A session-scoping stopgap — the browser session's UUID.
+        tenant_id: Sprint A session-scoping stopgap: the browser session's UUID.
             Defaults to `None` for backward compatibility; `app.py` should always
             pass a real value going forward.
-        business_question: Sprint 3 addition — persisted so `load_full_result` can
+        business_question: Sprint 3 addition: persisted so `load_full_result` can
             reconstruct the header `_render_results` shows ("O que fazer sobre:
             ..."). Defaults to `""` for backward compatibility with existing callers.
-        saved_pipeline_id: Sprint 17 (ADR-017) — same linkage as `save_run`'s
+        saved_pipeline_id: Sprint 17 (ADR-017): same linkage as `save_run`'s
             argument of the same name; threaded through to `analysis_runs` so a
             scheduled pipeline's Gold/Science KPIs can be charted over time.
-        model_name: ADR-031 gap fix — the actual resolved model name (already
+        model_name: ADR-031 gap fix: the actual resolved model name (already
             known to the caller, which itself called `get_llm(provider=...,
             model=...)` with any per-pipeline `llm_provider_override`/
             `llm_model_override`) used for cost tracking below. `None` (the
             default) preserves the previous behavior for any caller not yet
-            updated to pass this — `_write_analysis_row` then falls back to
+            updated to pass this: `_write_analysis_row` then falls back to
             `get_model_name()`, which only reflects the *global*
             `AI_ETL_LLM_MODEL` env var and is wrong for a per-pipeline-override
             run.
@@ -316,7 +316,7 @@ def _serialize_analysis_result(
     `data_preview`/`data_shape` are the original lossy-but-JSON-embedded preview
     (unchanged, still useful for `st.json(...)` debugging in the History tab's
     raw view). Sprint 3 adds `data_path`/`fig_path`: the full DataFrame (CSV) and
-    Plotly `Figure` (`fig.to_json()`) persisted as sibling files, not embedded —
+    Plotly `Figure` (`fig.to_json()`) persisted as sibling files, not embedded:
     `load_full_result` reads them back to reconstruct the exact objects
     `app.py::_render_results` renders. A missing df/fig simply omits that key
     from the manifest; the reload step treats that as "not available" the same
@@ -333,7 +333,7 @@ def _serialize_analysis_result(
         "tokens": result.get("tokens"),
         # Sprint 7: the generated pandas/sklearn code (`agents/analysis/analyst.py`/
         # `science.py`'s `"code"` key, ADR-007's sandbox `exec()`s it) was never
-        # persisted here — only ever available in-memory for a synchronous run,
+        # persisted here: only ever available in-memory for a synchronous run,
         # which stopped being how this ran once Sprint 3 made execution async.
         # `app.py`'s old "Código Gold/Science" tab read this same key and had
         # silently shown nothing since Sprint 3 as a result. Plain string,
@@ -388,7 +388,7 @@ def _write_analysis_row(
     model_name: str | None = None,
 ) -> None:
     # Sprint 3 (ADR-008) originally computed model_name here unconditionally via
-    # get_model_name(), which only reads the *global* AI_ETL_LLM_MODEL env var —
+    # get_model_name(), which only reads the *global* AI_ETL_LLM_MODEL env var:
     # wrong for a run that used a per-pipeline `llm_model_override` (Sprint 30,
     # ADR-031). Fixed: `model_name` is now an optional caller-supplied parameter
     # (the actual resolved model the run's `get_llm(provider=..., model=...)`
@@ -439,7 +439,7 @@ def save_stage_latencies(
 ) -> None:
     """Persist per-stage wall-clock durations to the `stage_latencies` table (ADR-007).
 
-    No JSON artifact is written here (unlike `save_run`/`save_analysis`) — `log_dir`
+    No JSON artifact is written here (unlike `save_run`/`save_analysis`): `log_dir`
     is accepted only for signature symmetry with those two, since `stage_latencies`
     is pure aggregate timing data with no per-run file of its own.
 
@@ -449,10 +449,10 @@ def save_stage_latencies(
         run_type: "silver" | "analysis".
         tenant_id: Same Sprint A/ADR-006 tenant-scoping stopgap as save_run/save_analysis.
         durations: either
-            - {"stage_name": seconds} — Silver's `state["stage_durations"]`, one entry
+            - {"stage_name": seconds}: Silver's `state["stage_durations"]`, one entry
               per LangGraph node, each run exactly once (seq is always 1), or
             - a list of {"stage", "duration_seconds", "timed_out"} dicts in call
-              order — Analyst/Science, where a business question can fan out into
+              order: Analyst/Science, where a business question can fan out into
               several sub-tasks plus repair reruns; repeat calls for the same stage
               get an incrementing `seq` (e.g. a repair call is seq=2).
         log_dir: unused; kept for signature symmetry with save_run/save_analysis.
@@ -501,13 +501,13 @@ def save_stage_latencies(
 
 
 def _run_belongs_to_tenant(run_id: str, tenant_id: str) -> bool:
-    """Server-side ownership check for `load_full_result` — queries `runs`
+    """Server-side ownership check for `load_full_result`: queries `runs`
     directly rather than trusting a `run_id` the caller already claims is
     tenant-scoped. Soft-fails to `False` (i.e. "not authorized") on any DB
-    error, matching this module's existing soft-fail style — a reload should
+    error, matching this module's existing soft-fail style: a reload should
     never leak data just because the ownership check itself couldn't run.
 
-    ADR-040: runs through the restricted tenant engine — `tenant_id` is both the
+    ADR-040: runs through the restricted tenant engine: `tenant_id` is both the
     filter bound here *and* the GUC `tenant_scope` sets, so a bug that dropped
     this `WHERE` clause would still be caught by the RLS policy on `runs`."""
     try:
@@ -526,7 +526,7 @@ def load_full_result(
 
     Sprint 3 (ADR-008) context: `run_full_analysis_task`'s Celery return value is
     a small JSON-safe summary only (DataFrames/Figures don't cross the task's
-    process boundary — see `services/execution_queue.py`'s docstring). The full
+    process boundary: see `services/execution_queue.py`'s docstring). The full
     result was always durably persisted as a side effect of `save_run`/
     `save_analysis` for the History tab's raw-JSON view; this function is what
     actually reconstructs it into a shape `_render_results` can render, for both
@@ -535,30 +535,30 @@ def load_full_result(
     Security note (added on review): this reads artifacts straight off disk by
     `run_id`, with no inherent ownership check. `app.py`'s only caller today
     passes a `run_id` sourced from `load_history(..., tenant_id=...)`, so a
-    tenant can normally only ever select their own runs — but that's a UI-layer
+    tenant can normally only ever select their own runs: but that's a UI-layer
     restriction, not a data-layer one, and this project has already shipped
     (and fixed) exactly one cross-tenant data leak before (Sprint A). When
     `tenant_id` is given, ownership is verified against `runs.tenant_id` before
     any file is read, returning `None` (same soft-fail shape as "unknown run
-    id") on mismatch — a second, defense-in-depth check that doesn't rely on
+    id") on mismatch: a second, defense-in-depth check that doesn't rely on
     the caller never changing how `run_id` is sourced. `tenant_id` defaults to
     `None` for callers that intentionally operate without tenant scoping (none
     exist in `app.py` today; kept optional rather than required so this stays
     a additive, non-breaking signature change).
 
     Returns `None` if `{run_id}.json` doesn't exist (unknown run id), or if
-    `tenant_id` is given and doesn't match the run's owner — mirrors
+    `tenant_id` is given and doesn't match the run's owner: mirrors
     `load_history`'s soft-fail style rather than raising.
 
     `bronze` is always `None` on reload: the originally-uploaded file only ever
     existed in the browser session's memory and was never persisted (unchanged
-    from before Sprint 3 — `_render_results` already renders a missing bronze_df
+    from before Sprint 3: `_render_results` already renders a missing bronze_df
     as "not available" rather than erroring).
 
     Reload is best-effort per sub-task artifact: a missing/corrupt CSV or figure
     JSON for one gold/science entry degrades just that entry (data/figure
     omitted, narrative/model_info still shown) rather than failing the whole
-    reload — matches `load_history`'s "soft-fail, don't block the UI" philosophy.
+    reload: matches `load_history`'s "soft-fail, don't block the UI" philosophy.
     """
     if tenant_id is not None and not _run_belongs_to_tenant(run_id, tenant_id):
         return None
@@ -573,7 +573,7 @@ def load_full_result(
     if storage.exists(silver_key):
         try:
             state["transformed_data"] = pd.read_csv(io.BytesIO(storage.read_bytes(silver_key)))
-        except Exception:  # nosec B110 — best-effort reload; a corrupt CSV degrades
+        except Exception:  # nosec B110: best-effort reload; a corrupt CSV degrades
             pass  # to a missing Silver tab, not a failed reload of the whole run.
 
     gold: list[dict[str, Any]] = []
@@ -615,7 +615,7 @@ def _reload_analysis_entry(
     if data_key and storage.exists(data_key):
         try:
             reloaded[df_key] = pd.read_csv(io.BytesIO(storage.read_bytes(data_key)))
-        except Exception:  # nosec B110 — best-effort per sub-task; a corrupt
+        except Exception:  # nosec B110: best-effort per sub-task; a corrupt
             pass  # CSV omits that entry's data, not the whole reload.
 
     fig_key = entry.get("fig_path")
@@ -624,7 +624,7 @@ def _reload_analysis_entry(
             import plotly.io as pio
 
             reloaded["fig"] = pio.from_json(storage.read_bytes(fig_key).decode())
-        except Exception:  # nosec B110 — best-effort per sub-task; a corrupt
+        except Exception:  # nosec B110: best-effort per sub-task; a corrupt
             pass  # figure JSON omits that entry's chart, not the whole reload.
 
     return reloaded
@@ -634,7 +634,7 @@ def _load_analysis_tokens(run_id: str, tenant_id: str | None = None) -> TokenUsa
     """Read the already-aggregated token totals back from `analysis_runs`
     (written by `_write_analysis_row`), rather than re-summing every
     sub-task's `tokens` field from the JSON manifest a second time. Soft-fails
-    to all-zero on any DB error, matching `load_history`'s pattern — a reload
+    to all-zero on any DB error, matching `load_history`'s pattern: a reload
     should never hard-fail just because the aggregate row is unreachable.
 
     ADR-040: `tenant_id` (passed through from `load_full_result`, already

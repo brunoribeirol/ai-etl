@@ -1,6 +1,6 @@
 """Unit tests for the destination `preview_*` functions (Sprint 27, ADR-028).
 
-Each destination's preview must never write — asserted directly (a mocked
+Each destination's preview must never write: asserted directly (a mocked
 write call that's never invoked), not just inferred from the return value.
 """
 
@@ -88,7 +88,7 @@ def test_preview_postgres_existing_table_reports_row_count(monkeypatch, tmp_path
 
 def test_preview_postgres_uses_tenant_override_over_shared_env(monkeypatch, tmp_path) -> None:
     # ADR-044: point the shared env var at one (empty) sqlite file and the
-    # tenant override at a different one with a real table — the override
+    # tenant override at a different one with a real table: the override
     # must be the one actually read from.
     monkeypatch.setenv("POSTGRES_URL", f"sqlite:///{tmp_path}/shared.sqlite")
     tenant_db_url = f"sqlite:///{tmp_path}/tenant.sqlite"

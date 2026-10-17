@@ -1,4 +1,4 @@
-"""Loader Agent — writes the validated DataFrame to the destination."""
+"""Loader Agent: writes the validated DataFrame to the destination."""
 
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -15,13 +15,13 @@ from ai_etl.destinations.s3_parquet_dest import preview_s3_parquet, save_s3_parq
 
 
 def _is_write_gated(policy: Optional[dict[str, Any]], rows: int) -> bool:
-    """Sprint 27 (ADR-028 Decision 2) — pure gate decision, no I/O.
+    """Sprint 27 (ADR-028 Decision 2): pure gate decision, no I/O.
 
     `policy` is `PipelineState["approval_policy"]`: `None` for every avulso
     run (never gated). For a saved pipeline with `require_approval=True`:
     the very first write (`last_approved_at is None`) is always gated
     regardless of `threshold_rows`; after at least one approval, only a
-    write whose row count is at or above `threshold_rows` is gated again —
+    write whose row count is at or above `threshold_rows` is gated again:
     `threshold_rows is None` means "always require approval" (the roadmap's
     own "exigir aprovação sempre" option).
     """
@@ -39,7 +39,7 @@ def _build_preview(dest_type: str, destination: dict[str, Any], df: pd.DataFrame
     """Dispatch to the destination-specific, write-free preview builder.
 
     Raises the same `ValueError` `loader_node`'s real-write branch would for
-    an unsupported `dest_type` — kept as a distinct call so a preview never
+    an unsupported `dest_type`: kept as a distinct call so a preview never
     silently succeeds for a destination type it doesn't actually know how to
     write to either.
     """
@@ -65,10 +65,10 @@ def loader_node(state: PipelineState) -> PipelineState:
     Sprint 27 (ADR-028): if this run's `approval_policy` gates the write
     (`_is_write_gated`) and `approval_granted` isn't already set, this node
     computes a write-free preview instead of writing, and returns
-    `status="awaiting_approval"` — a legitimate terminal state, not a
+    `status="awaiting_approval"`: a legitimate terminal state, not a
     failure. `services/pipeline_service.py::resume_pending_load` calls this
     same node a second time, directly (not through the graph), with
-    `approval_granted=True` once an operator approves — see the ADR for why
+    `approval_granted=True` once an operator approves: see the ADR for why
     a second direct call, not a LangGraph checkpointer, resumes the write.
     """
     if state.get("error"):

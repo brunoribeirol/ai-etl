@@ -47,7 +47,7 @@ def test_get_budget_returns_status_for_the_authenticated_tenant(client: TestClie
 
 
 def test_get_budget_never_blocks_a_tenant_already_over_cap(client: TestClient, mocker) -> None:
-    """Reading status must always succeed, even when `exceeded` is True —
+    """Reading status must always succeed, even when `exceeded` is True:
     only `POST /runs` actually enforces the cap."""
     mocker.patch(
         "ai_etl.api.routers.budget.get_budget_status",

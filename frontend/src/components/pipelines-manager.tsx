@@ -23,10 +23,10 @@ import {
 import { formatDateTime } from "@/lib/format-date";
 
 /**
- * Sprint 13 (ADR-016) — minimal CRUD UI for saved (recurring) pipelines,
+ * Sprint 13 (ADR-016): minimal CRUD UI for saved (recurring) pipelines,
  * distinct from the "Run" page's one-off `POST /runs`. Client
  * Component (needs `useAuth().getToken()` fresh per request, same pattern
- * `run-form.tsx` already established) — no server-side prefetch, since
+ * `run-form.tsx` already established): no server-side prefetch, since
  * every action here (create/pause/resume/edit) needs a token anyway.
  *
  * Deliberately minimal per the sprint's own scope ("doesn't need to be
@@ -65,34 +65,34 @@ export function PipelinesManager() {
   const [spec, setSpec] = useState("");
   const [businessQuestion, setBusinessQuestion] = useState("");
   const [cronSchedule, setCronSchedule] = useState("0 3 * * *");
-  // Sprint 16 (ADR-023) — operator-defined quality rules, edited as raw JSON: a
+  // Sprint 16 (ADR-023): operator-defined quality rules, edited as raw JSON: a
   // plain textarea rather than a per-field rule builder, matching this manager's
   // own Sprint 13 precedent ("doesn't need to be pretty, needs to work").
   const [qualityRulesText, setQualityRulesText] = useState("[]");
-  // Sprint 27 (ADR-028) — gate this pipeline's writes behind manual approval.
+  // Sprint 27 (ADR-028): gate this pipeline's writes behind manual approval.
   // Previously backend-only (`require_approval`/`approval_threshold_rows` on
-  // `POST`/`PATCH /pipelines`) with no UI to set it — found during the
+  // `POST`/`PATCH /pipelines`) with no UI to set it: found during the
   // 2026-08-30 live functionality sweep: `/approvals` could never show
   // anything because no saved pipeline could ever be configured to need
   // approval. Threshold left blank (`null`) means "always gate, no
-  // row-count exemption" — the same default the backend model already uses.
+  // row-count exemption": the same default the backend model already uses.
   const [requireApproval, setRequireApproval] = useState(false);
   const [approvalThresholdRows, setApprovalThresholdRows] = useState("");
   // Wave 2 item 8, 2026-09-05 mega-audit remediation
-  // (docs/archive/work/2026-09-05-mega-audit-remediation-plan.md) — a valid, accepted
+  // (docs/archive/work/2026-09-05-mega-audit-remediation-plan.md): a valid, accepted
   // API field (`gt=0`, server default 20.0) with no UI to set it until now.
   const [driftThresholdPct, setDriftThresholdPct] = useState("20");
   const [submitting, setSubmitting] = useState(false);
-  // Sprint 30 (ADR-031) frontend — the pipeline currently being edited's LLM
+  // Sprint 30 (ADR-031) frontend: the pipeline currently being edited's LLM
   // provider/model override, kept separate from the fields above since it
   // writes via its own endpoint (`PUT /pipelines/{id}/llm-config`), not the
   // main PATCH `handleSubmit` below.
   const [llmProvider, setLlmProvider] = useState<string | null>(null);
   const [llmModel, setLlmModel] = useState<string | null>(null);
-  // Sprint 37 (ADR-034) frontend — the pipeline currently being edited's
+  // Sprint 37 (ADR-034) frontend: the pipeline currently being edited's
   // notification destination override, same "kept separate, own endpoint"
   // reasoning as `llmProvider`/`llmModel` above. `notification_target` itself
-  // is never part of this state — see `<NotificationConfig>`'s own docstring.
+  // is never part of this state: see `<NotificationConfig>`'s own docstring.
   const [notificationChannel, setNotificationChannel] = useState<string | null>(null);
   const [notificationConfigured, setNotificationConfigured] = useState(false);
   const [notificationActive, setNotificationActive] = useState(true);
@@ -114,7 +114,7 @@ export function PipelinesManager() {
         const body = await response.json().catch(() => null);
         throw new Error(body?.detail ?? `HTTP ${response.status}`);
       }
-      // 204 No Content (the new DELETE endpoint) has no body to parse —
+      // 204 No Content (the new DELETE endpoint) has no body to parse:
       // `.json()` on an empty response throws, which every existing caller
       // here would otherwise treat as a failure despite the request succeeding.
       if (response.status === 204) return null;
@@ -146,7 +146,7 @@ export function PipelinesManager() {
   }, [loadPipelines]);
 
   useEffect(() => {
-    // Sprint 37 (ADR-034) frontend — the notification channel allowlist
+    // Sprint 37 (ADR-034) frontend: the notification channel allowlist
     // `<NotificationConfig>` renders as `<select>` options, fetched once from
     // `GET /pipelines/notifications/allowed-channels` (same allowlist `PUT
     // /pipelines/{id}/notification-config` validates against server-side).
@@ -193,7 +193,7 @@ export function PipelinesManager() {
     setNotificationActive(pipeline.notification_active);
   }
 
-  /** Sprint 30 (ADR-031) frontend — writes a model-picker click immediately via
+  /** Sprint 30 (ADR-031) frontend: writes a model-picker click immediately via
    * `PUT /pipelines/{id}/llm-config`, independent of the main form's `Save`
    * button (see `<ModelPicker>`'s own docstring for why). */
   async function handleModelSelect(provider: string, model: string) {
@@ -212,7 +212,7 @@ export function PipelinesManager() {
     }
   }
 
-  /** Sprint 37 (ADR-034) frontend — writes a notification config save
+  /** Sprint 37 (ADR-034) frontend: writes a notification config save
    * immediately via `PUT /pipelines/{id}/notification-config`, independent of
    * the main form's `Save` button (see `<NotificationConfig>`'s own docstring
    * for why). */
@@ -238,7 +238,7 @@ export function PipelinesManager() {
   }
 
   /** Clears a saved pipeline's notification override back to this
-   * deployment's global channel(s) — `notification_channel`/
+   * deployment's global channel(s): `notification_channel`/
    * `notification_target` both `null`, same convention
    * `SetPipelineNotificationConfigRequest` documents. */
   async function handleNotificationClear() {
@@ -262,10 +262,10 @@ export function PipelinesManager() {
     }
   }
 
-  /** Sprint 16 (ADR-023) — parses the raw JSON textarea into `QualityRule[]`,
+  /** Sprint 16 (ADR-023): parses the raw JSON textarea into `QualityRule[]`,
    * throwing a Portuguese, actionable message on invalid JSON or a non-array
    * shape (caught by `handleSubmit`, surfaced via `toast.error`, submit aborted
-   * *before* any request reaches the API — same "fail loud before the network
+   * *before* any request reaches the API: same "fail loud before the network
    * call" posture `validate_cron_schedule` already has server-side). */
   function parseQualityRules(): QualityRule[] {
     let parsed: unknown;
@@ -281,7 +281,7 @@ export function PipelinesManager() {
   }
 
   /** Same "fail loud before the network call" posture as `parseQualityRules`
-   * above — an empty field means "no threshold" (`null`, always gate),
+   * above: an empty field means "no threshold" (`null`, always gate),
    * anything else must be a non-negative integer, matching the backend's own
    * `Field(default=None, ge=0)` on `approval_threshold_rows`. */
   function parseApprovalThresholdRows(): number | null {
@@ -295,7 +295,7 @@ export function PipelinesManager() {
   }
 
   /** Same "fail loud before the network call" posture as the two parsers
-   * above — matches the backend's own `Field(..., gt=0)` on
+   * above: matches the backend's own `Field(..., gt=0)` on
    * `drift_threshold_pct` (Wave 2 item 8, 2026-09-05 mega-audit
    * remediation). */
   function parseDriftThresholdPct(): number {
@@ -369,10 +369,10 @@ export function PipelinesManager() {
   }
 
   // 2026-09-04 gap-closing feature: until now, `toggleActive` (pause) was the
-  // only way to stop a saved pipeline — there was no way to actually remove a
+  // only way to stop a saved pipeline: there was no way to actually remove a
   // mistaken or test entry, so it stayed listed here and on `/summary` forever.
   // `window.confirm` matches this action's actual stakes (a single saved
-  // pipeline; run history is detached, not deleted — see the DELETE endpoint's
+  // pipeline; run history is detached, not deleted: see the DELETE endpoint's
   // docstring) rather than `data-export-manager.tsx`'s heavier typed-"DELETE"
   // confirmation, reserved for whole-account erasure.
   async function deletePipeline(pipeline: SavedPipeline) {
@@ -488,7 +488,7 @@ export function PipelinesManager() {
               <p className="text-xs text-muted-foreground">{t("qualityRulesHelp")}</p>
             </div>
 
-            {/* Sprint 27 (ADR-028) — require-approval gate. Previously
+            {/* Sprint 27 (ADR-028): require-approval gate. Previously
                 backend-only, no UI control; added 2026-08-30 (live
                 functionality sweep) since `/approvals` could never receive
                 anything otherwise. */}
@@ -527,7 +527,7 @@ export function PipelinesManager() {
             </div>
 
             {/* Wave 2 item 8, 2026-09-05 mega-audit remediation
-                (docs/archive/work/2026-09-05-mega-audit-remediation-plan.md) —
+                (docs/archive/work/2026-09-05-mega-audit-remediation-plan.md):
                 already a valid, accepted API field (`gt=0`, server default
                 20.0) with no UI to set it until now. */}
             <div className="flex flex-col gap-2">
@@ -549,7 +549,7 @@ export function PipelinesManager() {
               />
             </div>
 
-            {/* Sprint 30 (ADR-031) frontend — only shown while editing an
+            {/* Sprint 30 (ADR-031) frontend: only shown while editing an
                 already-saved pipeline: the model picker needs a real
                 pipeline id to call `PUT /pipelines/{id}/llm-config` against,
                 which doesn't exist yet for a pipeline still being created. */}
@@ -568,7 +568,7 @@ export function PipelinesManager() {
               </div>
             )}
 
-            {/* Sprint 37 (ADR-034) frontend — same "only while editing an
+            {/* Sprint 37 (ADR-034) frontend: same "only while editing an
                 already-saved pipeline" reasoning as the model picker above:
                 the notification config needs a real pipeline id to call
                 `PUT /pipelines/{id}/notification-config` against. */}
@@ -649,9 +649,9 @@ export function PipelinesManager() {
                   <span>{t("lastRun", { when: formatDateTime(pipeline.last_run_at, locale) })}</span>
                 )}
               </div>
-              {/* Sprint 15 (ADR-020) — minimal health badge, no dedicated page
+              {/* Sprint 15 (ADR-020): minimal health badge, no dedicated page
                   (that's Sprint 18, UI executiva). Only shown once a pipeline
-                  has actually failed at least once — a healthy pipeline shows
+                  has actually failed at least once: a healthy pipeline shows
                   nothing extra here. */}
               {pipeline.consecutive_failures > 0 && (
                 <div className="text-xs text-red-400" role="alert">
@@ -667,7 +667,7 @@ export function PipelinesManager() {
                   size="sm"
                   variant="outline"
                   render={
-                    // Sprint 18 (ADR-024) — plain-language view for a
+                    // Sprint 18 (ADR-024): plain-language view for a
                     // non-technical stakeholder, separate from "History"
                     // (run-by-run technical detail, Pipeline/Code tabs).
                     <Link href={`/summary/${pipeline.id}`}>

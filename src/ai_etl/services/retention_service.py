@@ -1,7 +1,7 @@
 """Automatic run-artifact retention cleanup (Sprint 36, ADR-035).
 
 `core/celery_app.py`'s `beat_schedule` calls `cleanup_expired_retention_task`
-on a fixed interval (`AI_ETL_RETENTION_INTERVAL_SECONDS`, default 24h — a
+on a fixed interval (`AI_ETL_RETENTION_INTERVAL_SECONDS`, default 24h: a
 compliance sweep, not a latency-sensitive job, so a much coarser cadence than
 `services/scheduler.py`'s 60s pipeline-firing tick is deliberate). Each tick:
 list every tenant with a configured `retention_days` window
@@ -10,16 +10,16 @@ every storage artifact (`audit/storage.py::StorageBackend.delete_bytes`,
 ADR-025) belonging to a run older than that window.
 
 Unlike `services/tenant_deletion_service.py` (ADR-025), this never deletes a
-`runs`/`analysis_runs` DB row, nor the `users` row — only the storage bytes
+`runs`/`analysis_runs` DB row, nor the `users` row: only the storage bytes
 those runs produced. The DB rows (run metadata, cost, status) stay forever
 unless a tenant separately requests full account deletion; only the
-underlying dataset artifacts (the actual personal-data exposure — see
+underlying dataset artifacts (the actual personal-data exposure: see
 ADR-025's own investigation) expire. This mirrors the product roadmap's own
 framing: retention is about artifact lifecycle, not a second, quieter
 account-deletion path.
 
 One `retention_cleanup_log` row (migration `0018`) is written per tenant per
-tick — evidence a cleanup pass ran, same "survives what it describes" shape
+tick: evidence a cleanup pass ran, same "survives what it describes" shape
 as `tenant_deletion_log` (ADR-025 Decision 2), but per pass rather than per
 irreversible event.
 """
@@ -56,12 +56,12 @@ class TenantRetentionCleanupSummary(TypedDict):
 
 def _expired_run_storage_candidates(tenant_id: str, cutoff: datetime) -> dict[str, list[str]]:
     """`{run_id: [candidate storage keys]}` for every run/analysis run of
-    `tenant_id` whose `timestamp` is older than `cutoff` — same candidate-key
+    `tenant_id` whose `timestamp` is older than `cutoff`: same candidate-key
     derivation as `tenant_deletion_service.tenant_run_storage_candidates`,
     just scoped to expired runs instead of every run a tenant owns (a
     retention sweep must never touch an artifact still inside its window).
 
-    Reads through `tenant_scope()` (ADR-040 follow-up) — same restricted,
+    Reads through `tenant_scope()` (ADR-040 follow-up): same restricted,
     RLS-backed role every other per-tenant read in this project now uses;
     `_write_cleanup_log` below stays on the bypass engine, since
     `retention_cleanup_log` has RLS enabled with no policy (ADR-040's
@@ -137,13 +137,13 @@ def cleanup_expired_retention_for_tenant(
     than `retention_days`. Best-effort per artifact (mirrors
     `tenant_deletion_service._delete_tenant_storage`): a single storage
     failure is recorded in `error` and does not stop the rest of the sweep
-    for this tenant — `status` stays `"completed"` with a non-empty `error`
+    for this tenant: `status` stays `"completed"` with a non-empty `error`
     noting the partial failure, never raised.
 
-    Never touches `runs`/`analysis_runs` DB rows — see module docstring.
+    Never touches `runs`/`analysis_runs` DB rows: see module docstring.
     """
     # `retention_cleanup_log` (below) is bypass-engine-only by design (ADR-040's
-    # exemption list) — `log_engine` names that connection is specifically for it,
+    # exemption list): `log_engine` names that connection is specifically for it,
     # not for the tenant-scoped reads above.
     log_engine = get_engine()
     started_at = datetime.now(tz=timezone.utc)
@@ -203,12 +203,12 @@ def cleanup_expired_retention_for_tenant(
 @celery_app.task(name="ai_etl.cleanup_expired_retention")  # type: ignore[untyped-decorator]  # celery has no type stubs for @task
 def cleanup_expired_retention_task() -> dict[str, Any]:
     """Sweep every tenant with a configured retention window. Returns a
-    small summary dict (tenants processed, total storage keys deleted) —
+    small summary dict (tenants processed, total storage keys deleted):
     useful for beat log inspection, not consumed by any caller.
 
     A single tenant's `StorageBackend` blowing up entirely (not just one
     key) is caught and skipped so it never blocks the sweep for every other
-    tenant in the same tick — same "one bad unit must not break the tick"
+    tenant in the same tick: same "one bad unit must not break the tick"
     contract as `services/scheduler.py`'s `check_scheduled_pipelines_task`.
     """
     processed: list[str] = []
@@ -222,7 +222,7 @@ def cleanup_expired_retention_task() -> dict[str, Any]:
             continue
         try:
             summary = cleanup_expired_retention_for_tenant(tenant_id, retention_days)
-        except Exception:  # nosec B110 — one bad tenant must not break the tick
+        except Exception:  # nosec B110: one bad tenant must not break the tick
             skipped.append(tenant_id)
             continue
         processed.append(tenant_id)

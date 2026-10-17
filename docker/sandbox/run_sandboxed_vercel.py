@@ -1,12 +1,12 @@
 """Driver entrypoint for the ADR-039 Vercel Sandbox production image.
 
 Reads one pickled request dict from a file (Vercel Sandbox's Python SDK
-does not support piping data over a process's stdin — "Process standard
-input isn't supported", per the Python SDK reference — so the payload has
+does not support piping data over a process's stdin: "Process standard
+input isn't supported", per the Python SDK reference: so the payload has
 to cross the boundary as a file instead of the pipe `docker/sandbox/
 run_sandboxed.py` uses), runs it through
 ``ai_etl.core.sandbox._execute_code`` (the exact same restricted-globals /
-mode-dispatch logic every other backend uses — this file does not
+mode-dispatch logic every other backend uses: this file does not
 reimplement it), and writes one pickled result dict to a second file.
 
 Invoked as ``python /app/run_sandboxed_vercel.py <input_path> <output_path>``
@@ -14,7 +14,7 @@ by ``core/sandbox_vercel.py`` via ``box.run_process(...)``. Not imported by
 any other module.
 
 Ships in the same image as ``run_sandboxed.py`` (see ``docker/sandbox/
-Dockerfile``) — one image, two entrypoints, one shared dependency install.
+Dockerfile``): one image, two entrypoints, one shared dependency install.
 Vercel Sandbox ignores a custom image's Docker ``ENTRYPOINT``/``CMD``
 entirely ("Vercel Sandbox does not run Docker ENTRYPOINT or CMD for custom
 images"), so this file is only ever reached by naming it explicitly on the
@@ -79,7 +79,7 @@ if __name__ == "__main__":
 # Note on `pickle.load` (S301/B301, "possible security issue"): the file
 # read here was written moments earlier by `core/sandbox_vercel.py` via
 # `box.fs.write_bytes()`, into this exact sandbox instance, for this exact
-# call — not attacker-controlled network input. The untrusted part of this
+# call: not attacker-controlled network input. The untrusted part of this
 # call (`code`) is a plain string field inside the payload, never itself
 # `eval`/`exec`'d by this file; it only ever reaches Python's restricted
 # `exec()` inside `_execute_code()`, the same reviewed call site every other

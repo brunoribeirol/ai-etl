@@ -67,7 +67,7 @@ def test_all_retries_exhausted_sets_failed(mock_get_llm) -> None:
 
 
 def test_plan_with_unsupported_source_type_retries_and_fails(mock_get_llm) -> None:
-    # Wave 0 (2026-08-24 audit, Red Team CRITICAL finding) — pipeline_plan is now
+    # Wave 0 (2026-08-24 audit, Red Team CRITICAL finding): pipeline_plan is now
     # structurally validated (PipelinePlan), not just JSON-parsed. An unexpected
     # `type` value must be rejected the same way malformed JSON is.
     bad_plan = {
@@ -102,18 +102,18 @@ def test_markdown_fenced_json_is_parsed(mock_get_llm) -> None:
     # fences its JSON on every attempt, so the old json.loads()-with-no-stripping
     # behavior failed 100% of real Haiku runs, not just "1 wasted retry" as this
     # test used to document. Now uses strip_code_fences (same helper every other
-    # agent already uses) — fenced JSON succeeds on the *first* attempt.
+    # agent already uses): fenced JSON succeeds on the *first* attempt.
     fenced = f"```json\n{json.dumps(VALID_PLAN)}\n```"
     mock = _mock_llm([fenced])
     mock_get_llm.return_value = mock
     result = orchestrator_node(_make_state())
 
     assert result["pipeline_plan"] == VALID_PLAN
-    assert mock.invoke.call_count == 1  # no retry needed — fences stripped on attempt 1
+    assert mock.invoke.call_count == 1  # no retry needed: fences stripped on attempt 1
 
 
 class TestLlmOverride:
-    """Sprint 30/gap-closing (ADR-031 §5) — PipelineState's llm_provider_override/
+    """Sprint 30/gap-closing (ADR-031 §5): PipelineState's llm_provider_override/
     llm_model_override actually reach get_llm(), and get audit-logged when used."""
 
     def test_no_override_calls_get_llm_with_no_override(self, mock_get_llm) -> None:

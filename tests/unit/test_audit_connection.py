@@ -51,7 +51,7 @@ def test_get_tenant_engine_uses_app_database_url_tenant_when_set(
 def test_get_tenant_engine_is_a_distinct_cached_singleton_from_get_engine(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The two engines must never collapse into the same cached object — they
+    """The two engines must never collapse into the same cached object: they
     connect with different roles/privileges (ADR-040)."""
     monkeypatch.setenv("APP_DATABASE_URL", "postgresql://bypass_role:pass@localhost:5434/db")
     monkeypatch.setenv("APP_DATABASE_URL_TENANT", "postgresql://tenant_role:pass@localhost:5434/db")
@@ -70,7 +70,7 @@ def test_tenant_scope_sets_guc_via_bound_parameter_not_string_interpolation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Regression guard for this project's non-negotiable "no f-string SQL"
-    rule (CLAUDE.md) — even applied to an internally-sourced `tenant_id`: the
+    rule (CLAUDE.md): even applied to an internally-sourced `tenant_id`: the
     GUC-setting statement must be a fixed string with `tenant_id` passed as a
     bound parameter, never interpolated into the SQL text itself. Captures
     the actual `(statement, params)` pair passed to `Connection.execute`

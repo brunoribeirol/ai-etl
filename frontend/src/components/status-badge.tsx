@@ -3,10 +3,10 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 /**
- * Sprint 7 redesign (ADR-011 surface, no API contract change) — one status
+ * Sprint 7 redesign (ADR-011 surface, no API contract change): one status
  * vocabulary shared by the "Run" poll result and the History table,
  * replacing plain-text status strings with a consistent color/label pair.
- * Statuses come straight from the API (`audit/db.py`/Celery task state) —
+ * Statuses come straight from the API (`audit/db.py`/Celery task state):
  * this only maps known values to a look, unknown values still render as-is.
  */
 const STATUS_STYLES: Record<string, string> = {

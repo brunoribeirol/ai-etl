@@ -5,7 +5,7 @@ engine (not a mocked `get_engine`) so the actual insert/select/delete
 statements execute for real.
 
 ADR-040 follow-up: this module now reads/writes through `tenant_scope()`
-(the restricted, RLS-backed role) instead of `get_engine()` (bypass role) —
+(the restricted, RLS-backed role) instead of `get_engine()` (bypass role):
 `tenant_scope` is faked the same way `test_audit_db.py` already established
 for every other ADR-040-migrated module, since its real
 `SELECT set_config(...)` GUC call is Postgres-only. Real GUC-scoping/RLS
@@ -87,7 +87,7 @@ def test_secret_is_isolated_per_tenant(engine: Engine) -> None:
 
 
 def test_stored_ciphertext_never_contains_the_plaintext_value(engine: Engine) -> None:
-    """Confirms the value is actually encrypted at rest, not stored as-is —
+    """Confirms the value is actually encrypted at rest, not stored as-is:
     a raw DB read must never reveal the secret."""
     secrets_service.set_secret("tenant-a", "db_password", "hunter2-plaintext")
 

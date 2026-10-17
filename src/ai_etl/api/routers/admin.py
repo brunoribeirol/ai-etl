@@ -1,14 +1,14 @@
-"""`/admin` endpoints — platform-admin, cross-tenant access (Sprint 31, ADR-032;
+"""`/admin` endpoints: platform-admin, cross-tenant access (Sprint 31, ADR-032;
 mediated write access, ADR-047).
 
 Every route here is `require_admin()`-gated (platform `admin` role only,
-resolved via `AI_ETL_PLATFORM_ADMINS` — see `api/deps.py`) and every route
+resolved via `AI_ETL_PLATFORM_ADMINS`: see `api/deps.py`) and every route
 writes exactly one `log_admin_action()` entry (`audit/admin_log.py`) before
-returning, success or not — this router is the DoD's "acesso admin
+returning, success or not: this router is the DoD's "acesso admin
 cross-tenant fica registrado de forma auditável e consultável" made
 concrete.
 
-Every route also requires a `reason` — a short, free-text justification for
+Every route also requires a `reason`: a short, free-text justification for
 why this specific action is being taken (ADR-047). This is deliberately not
 optional: it is the single cheapest change that turns "an admin can read/act
 on tenant data" into "an admin must state why," which is most of what a
@@ -16,11 +16,11 @@ SOC2 auditor is actually checking for under CC5. Read routes take it as a
 required query parameter; the one write route below takes it in the request
 body.
 
-`retry_tenant_pipeline` (ADR-047) is this router's first *write* route —
+`retry_tenant_pipeline` (ADR-047) is this router's first *write* route:
 Sprint 31/ADR-032 Decision 2 deliberately scoped this router to read-only
 and flagged a future write path as explicit future work, not an omission.
-It reuses `services/execution_queue.enqueue_analysis()` verbatim — the same
-function `services/scheduler.py`'s own scheduled fires call — so an
+It reuses `services/execution_queue.enqueue_analysis()` verbatim: the same
+function `services/scheduler.py`'s own scheduled fires call: so an
 admin-triggered retry goes through the application's normal budget/rate-limit
 gates exactly like any other run, never a bypass.
 """
@@ -56,7 +56,7 @@ def admin_list_tenants(
     auth: Annotated[AuthContext, Depends(require_admin)],
     reason: _ReasonQuery,
 ) -> list[TenantSummary]:
-    """The tenant directory itself — Wave 6 (2026-08-25 admin panel/approval-
+    """The tenant directory itself: Wave 6 (2026-08-25 admin panel/approval-
     gate UI plan) gap-closing addition. The 3 routes below all require a
     `tenant_id` the caller already knows; there was previously no way to
     discover one at all, so the frontend admin panel had no real picker."""
@@ -72,7 +72,7 @@ def admin_list_tenant_runs(
     reason: _ReasonQuery,
     limit: int = 20,
 ) -> list[dict[str, Any]]:
-    """Cross-tenant equivalent of `GET /runs` — the run history of any
+    """Cross-tenant equivalent of `GET /runs`: the run history of any
     tenant, not just the caller's own. `require_admin()` (not `require_role`)
     means only a platform admin can reach this; a tenant's own `editor` role
     cannot escalate here."""
@@ -94,7 +94,7 @@ def admin_get_tenant_budget(
     auth: Annotated[AuthContext, Depends(require_admin)],
     reason: _ReasonQuery,
 ) -> BudgetStatus:
-    """Cross-tenant equivalent of `GET /budget` — support/billing triage
+    """Cross-tenant equivalent of `GET /budget`: support/billing triage
     without the tenant needing to share a screenshot."""
     status = get_budget_status(tenant_id)
     log_admin_action(
@@ -105,7 +105,7 @@ def admin_get_tenant_budget(
 
 class RetryTenantPipelineRequest(BaseModel):
     """`reason` (ADR-047): required justification, e.g. "tenant emailed
-    support, run stuck queued for 2h" — logged verbatim in
+    support, run stuck queued for 2h": logged verbatim in
     `admin_action_log.reason`, never truncated or summarized.
     """
 
@@ -119,14 +119,14 @@ def admin_retry_tenant_pipeline(
     body: RetryTenantPipelineRequest,
     auth: Annotated[AuthContext, Depends(require_admin)],
 ) -> dict[str, str]:
-    """Admin-mediated retry of a tenant's saved pipeline (ADR-047) — the
+    """Admin-mediated retry of a tenant's saved pipeline (ADR-047): the
     support scenario the SOC2 self-assessment's own top finding described
     ("direct DB access by Bruno, not mediated by the application, not
     separately logged") now has an application-mediated, reason-required,
     audit-logged path instead. Reuses `enqueue_analysis()` verbatim, the
     same function `services/scheduler.py`'s scheduled fires call, so this
     goes through the tenant's normal budget cap and rate limit exactly like
-    any other run — an admin retry is not a bypass of either.
+    any other run: an admin retry is not a bypass of either.
     """
     pipeline = get_saved_pipeline(pipeline_id, tenant_id)
     if pipeline is None:
@@ -176,7 +176,7 @@ def admin_get_audit_log(
     actor_user_id: str | None = None,
     target_tenant_id: str | None = None,
 ) -> list[AdminActionRecord]:
-    """The admin audit trail itself — 'consultável' (DoD). Reading the audit
+    """The admin audit trail itself: 'consultável' (DoD). Reading the audit
     log is itself an admin action and is itself logged, same as every other
     route in this router (recursion bottoms out fine: this call's own log
     entry is written *after* the read below, so it never appears in its own

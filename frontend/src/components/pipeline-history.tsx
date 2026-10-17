@@ -14,23 +14,23 @@ import { formatDateTime } from "@/lib/format-date";
 import { formatUsd } from "@/lib/format-number";
 
 /**
- * Sprint 17 (ADR-017) — time-series KPI view + two-run diff for one saved
+ * Sprint 17 (ADR-017): time-series KPI view + two-run diff for one saved
  * pipeline. Client Component: needs `useAuth().getToken()` fresh per
  * request, same pattern `PipelinesManager` already established.
  *
  * Reuses `<PlotlyChart>` (ADR-011/ADR-009's `{data, layout}` shape) for the
- * time series instead of a new charting component — the figure is built
+ * time series instead of a new charting component: the figure is built
  * client-side from `GET /pipelines/{id}/history`'s plain KPI rows, not a
  * backend-serialized `fig.to_plotly_json()`, since this view has no single
  * agent-generated figure to reuse (it's the aggregate across runs).
  *
  * The diff panel fetches the two selected runs' full results via the
- * existing `GET /runs/{run_id}` (no new backend diff endpoint — ADR-017's
+ * existing `GET /runs/{run_id}` (no new backend diff endpoint: ADR-017's
  * own scope note) and computes the diff entirely client-side.
  */
 
 // Mirrors `audit/db.py::DEFAULT_PIPELINE_HISTORY_LIMIT` (Sprint 17 code
-// review, PR #64) — passed explicitly rather than relying on the backend's
+// review, PR #64): passed explicitly rather than relying on the backend's
 // own default, so this component always knows the exact cap it requested
 // and can tell "this is everything" from "this is truncated" (see the
 // `history.length === HISTORY_LIMIT` check below).
@@ -260,7 +260,7 @@ function _num(v: unknown): number | null {
   return typeof v === "number" && Number.isFinite(v) ? v : null;
 }
 
-/** One numeric metric row with a colored delta — green improvement is
+/** One numeric metric row with a colored delta: green improvement is
  * ambiguous per-metric (more rows isn't always "better"), so this only
  * signals direction (▲/▼), not good/bad. */
 function DeltaRow({

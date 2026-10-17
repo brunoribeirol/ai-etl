@@ -1,4 +1,4 @@
-"""Unit tests for `core.sql_safety` — table-name and custom-query validation.
+"""Unit tests for `core.sql_safety`: table-name and custom-query validation.
 
 `validate_select_only_query` is the Wave 0 fix (2026-08-24 audit, Red Team CRITICAL
 finding): `{"type": "sqlite", "query": "DROP TABLE users; --"}` was passed straight to
@@ -54,7 +54,7 @@ def test_valid_table_names_pass(name: str) -> None:
 
 def test_trailing_newline_no_longer_bypasses_check() -> None:
     # Red Team, 2026-08-24 audit: `re.match(..., "^...$")` lets `"$"` match right
-    # before a trailing "\n" — cosmetic under current call sites, but a real gap in
+    # before a trailing "\n": cosmetic under current call sites, but a real gap in
     # the check itself. `fullmatch` closes it.
     with pytest.raises(ValueError, match="Invalid table name"):
         validate_table_name("orders\n", allow_dots=False)

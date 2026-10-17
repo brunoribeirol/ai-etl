@@ -1,7 +1,7 @@
 """Unit tests for services/scheduler.py's Celery beat task (Sprint 13, ADR-016).
 
 Mocks at the import site inside `services/scheduler.py`, same convention
-`test_api_runs.py` uses for `api/routers/runs.py` — no real Celery/Redis/DB
+`test_api_runs.py` uses for `api/routers/runs.py`: no real Celery/Redis/DB
 touched here (that belongs in integration tests). `claim_due_pipeline`'s
 actual compare-and-swap semantics are covered for real (in-memory SQLite)
 in `test_saved_pipelines_db.py`; here it's mocked to exercise the task's own
@@ -61,7 +61,7 @@ def test_no_due_pipelines_is_a_no_op(mocker) -> None:
 def test_losing_the_claim_skips_without_enqueueing(mocker) -> None:
     """Concurrency guard (Sprint 13 code review fix): an overlapping tick
     that lost the `claim_due_pipeline` race must never call
-    `enqueue_analysis` — that's exactly the duplicate-fire this claim
+    `enqueue_analysis`: that's exactly the duplicate-fire this claim
     exists to prevent."""
     mocker.patch(
         "ai_etl.services.scheduler.list_due_pipelines", return_value=[_due_pipeline("pl-1")]
@@ -100,7 +100,7 @@ def test_rate_limited_pipeline_releases_its_claim(mocker) -> None:
 def test_budget_exceeded_pipeline_releases_its_claim(mocker) -> None:
     """Sprint 29 (ADR-019): a tenant over their monthly budget cap must not
     stop the tick, and the claim it won must be released so the pipeline is
-    retried next tick — same treatment as a rate-limited pipeline above."""
+    retried next tick: same treatment as a rate-limited pipeline above."""
     mocker.patch(
         "ai_etl.services.scheduler.list_due_pipelines", return_value=[_due_pipeline("pl-1")]
     )
@@ -177,7 +177,7 @@ def test_enqueue_analysis_called_with_pipeline_spec_and_question(mocker) -> None
 def test_next_run_at_is_computed_from_scheduled_time_not_now(mocker) -> None:
     """Schedule-drift fix (Sprint 13 code review): the replacement
     `next_run_at` passed to `claim_due_pipeline` must be derived from the
-    pipeline's own (past) `next_run_at`, not `datetime.now()` — otherwise a
+    pipeline's own (past) `next_run_at`, not `datetime.now()`: otherwise a
     tick running late inherits and compounds that delay on every fire."""
     scheduled_time = datetime(2026, 8, 19, 12, 0, 0, tzinfo=timezone.utc)
     # Simulate a tick running late: "now" is well past the scheduled time.
@@ -194,6 +194,6 @@ def test_next_run_at_is_computed_from_scheduled_time_not_now(mocker) -> None:
     args = mock_claim.call_args.args
     assert args[0] == "pl-1"
     assert args[1] == scheduled_time
-    # "* * * * *" (every minute) from a 12:00:00 base is exactly 12:01:00 —
+    # "* * * * *" (every minute) from a 12:00:00 base is exactly 12:01:00:
     # never anything derived from wall-clock "now".
     assert args[2] == scheduled_time + timedelta(minutes=1)

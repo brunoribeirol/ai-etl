@@ -2,10 +2,10 @@ import { getTranslations } from "next-intl/server";
 import { PipelinesManager } from "@/components/pipelines-manager";
 
 /**
- * "Pipelines" page (Sprint 13, ADR-016) — create/pause/resume/edit a saved
+ * "Pipelines" page (Sprint 13, ADR-016): create/pause/resume/edit a saved
  * (recurring) pipeline. Distinct from "/" (avulso `POST /runs`, unchanged).
  *
- * Sprint 25 (ADR-036) — copy comes from `messages/{locale}.json`'s
+ * Sprint 25 (ADR-036): copy comes from `messages/{locale}.json`'s
  * `pipelinesPage` namespace.
  */
 export default async function PipelinesPage() {

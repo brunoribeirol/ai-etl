@@ -1,9 +1,9 @@
-# Per-Dockerfile ignore file for docker/sandbox/Dockerfile (ADR-038/ADR-039) —
+# Per-Dockerfile ignore file for docker/sandbox/Dockerfile (ADR-038/ADR-039):
 # Docker resolves this automatically from its path relative to the build
 # context (repo root, `docker build -f docker/sandbox/Dockerfile .`), same
 # mechanism the root `.dockerignore` documents. This sandbox image doesn't
 # COPY `case_study/` (only the root Dockerfile does), so it's safe to exclude
-# here for a smaller build context — excluding it from the shared root
+# here for a smaller build context: excluding it from the shared root
 # `.dockerignore` broke that Dockerfile's own build (see its comment).
 
 .git/

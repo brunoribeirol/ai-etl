@@ -1,6 +1,6 @@
 """saved_pipelines.quality_rules (ADR-023, Sprint 16)
 
-Additive, nullable-safe (server_default '[]') JSON column — operator-defined data
+Additive, nullable-safe (server_default '[]') JSON column: operator-defined data
 quality rules for a saved pipeline, folded into that pipeline's subsequent
 `quality_report`s alongside the fixed checks (`agents/quality.py`). Backfills every
 existing row to an empty rule set, zero behavior change until an operator adds a rule.

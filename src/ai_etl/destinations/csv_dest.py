@@ -14,10 +14,10 @@ def save_csv(df: pd.DataFrame, path: str) -> dict[str, Any]:
 
 
 def preview_csv(df: pd.DataFrame, path: str) -> dict[str, Any]:
-    """Sprint 27 (ADR-028) — what `save_csv` would do, without writing anything.
+    """Sprint 27 (ADR-028): what `save_csv` would do, without writing anything.
 
     Contains no write call at all (not a `dry_run` flag on `save_csv` a caller
-    could get wrong) — the "never accidentally writes on preview" invariant is
+    could get wrong): the "never accidentally writes on preview" invariant is
     structural. `would_write_rows` uses the same `len(df)` `save_csv` reports
     as `rows_loaded`, so a later real write always matches this preview.
     """

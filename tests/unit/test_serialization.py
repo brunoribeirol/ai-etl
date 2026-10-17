@@ -1,6 +1,6 @@
 """Unit tests for `api/serialization.py` (ADR-011).
 
-Previously untested at the unit level (2026-09-04 coverage gap-closing pass) —
+Previously untested at the unit level (2026-09-04 coverage gap-closing pass):
 `_serialize_figure`/`_serialize_analysis_entry`'s DataFrame/Figure branches were
 only ever exercised indirectly, if at all, through `test_api_runs.py`'s mocked
 `load_full_result` results (none of which happen to carry a real Figure).
@@ -66,7 +66,7 @@ def test_serialize_analysis_entry_converts_df_and_fig_when_present() -> None:
 
 def test_serialize_analysis_entry_leaves_entry_untouched_when_df_and_fig_absent() -> None:
     """A failed sub-task's entry (auto-repair exhausted) carries an error
-    string instead of gold_df/fig — must pass through unchanged, not raise."""
+    string instead of gold_df/fig: must pass through unchanged, not raise."""
     entry = {"error": "sandbox execution failed"}
 
     result = _serialize_analysis_entry(entry, "gold_df")
@@ -114,7 +114,7 @@ def test_serialize_full_result_defaults_missing_optional_fields() -> None:
 
 def test_serialize_full_result_handles_missing_state_key() -> None:
     """`load_full_result` always sets `state`, but this guards the `or {}`
-    fallback rather than assuming it — a missing/`None` state must not crash
+    fallback rather than assuming it: a missing/`None` state must not crash
     `dict()`."""
     result = serialize_full_result({})
 

@@ -50,7 +50,7 @@ def test_onboarding_status_returns_the_authenticated_tenants_checklist(
 
 
 def test_onboarding_status_never_requires_editor_role(client: TestClient, mocker) -> None:
-    """Read-only, same trust model as `GET /budget` — a `viewer` can read
+    """Read-only, same trust model as `GET /budget`: a `viewer` can read
     its own activation status (only `PATCH /budget`-style mutations need
     `editor`, and this endpoint has none)."""
     mocker.patch(

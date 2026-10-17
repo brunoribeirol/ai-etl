@@ -5,7 +5,7 @@ Called from `services/execution_queue.py::run_full_analysis_task` only when
 the run was produced by a scheduled fire (`saved_pipeline_id` is not
 `None`). Ties together `audit/db.py` (fetch the previous run's KPIs),
 `core/drift.py` (pure comparison), `services/digest.py` (formatting), and
-`services/notifications.py` (delivery) — kept out of `core/` because it does
+`services/notifications.py` (delivery): kept out of `core/` because it does
 real I/O (DB reads, outbound HTTP), matching this project's `core/` vs
 `services/`/`audit/` layering.
 """
@@ -98,14 +98,14 @@ def check_drift_and_notify(
     a digest.
 
     Returns `None` when there is no previous completed run to compare
-    against (the pipeline's first fire) — not an error. Otherwise returns a
+    against (the pipeline's first fire): not an error. Otherwise returns a
     small summary dict: `{"triggered": bool, "findings": list[DriftMetric],
     "email_sent": bool, "slack_sent": bool, "teams_sent": bool,
     "google_chat_sent": bool}`. All four `*_sent` keys are always `False`
     when `triggered` is `False` (nothing was built to send).
 
     Callers (`services/execution_queue.py`) are expected to wrap this in a
-    try/except — see that module's docstring — since a failure here (a DB
+    try/except, see that module's docstring, since a failure here (a DB
     hiccup, a delivery-provider error) must never fail the pipeline run
     itself.
     """
@@ -143,7 +143,7 @@ def check_drift_and_notify(
         findings=triggered,
         advisor_result=advisor_result,
     )
-    # Sprint 37 (ADR-034) — a saved pipeline may override one channel's
+    # Sprint 37 (ADR-034): a saved pipeline may override one channel's
     # destination; the other three channels are unaffected and still fall
     # back to this deployment's global env vars, same as before this sprint.
     override_channel, override_target = resolve_pipeline_notification_override(

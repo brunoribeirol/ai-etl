@@ -3,10 +3,10 @@
 Per-`saved_pipeline` LLM provider/model override. Both columns are nullable with
 no server default: `NULL`/`NULL` (the state of every existing row after this
 migration) means "no override, use this deployment's global
-`AI_ETL_LLM_PROVIDER`/`AI_ETL_LLM_MODEL`" — zero behavior change until a tenant
+`AI_ETL_LLM_PROVIDER`/`AI_ETL_LLM_MODEL`": zero behavior change until a tenant
 explicitly sets both via `PUT /pipelines/{id}/llm-config`
 (`api/routers/pipelines.py`). Always written or cleared together, never one `NULL`
-and the other not — see `audit/db.py::set_saved_pipeline_llm_config`.
+and the other not: see `audit/db.py::set_saved_pipeline_llm_config`.
 
 Revision ID: 0016
 Revises: 0015

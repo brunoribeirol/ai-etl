@@ -23,7 +23,7 @@ from ai_etl.services.tenant_deletion_service import TenantNotFoundError
 
 
 class FakeStorageBackend:
-    """In-memory `StorageBackend` — same fake used by
+    """In-memory `StorageBackend`: same fake used by
     `test_tenant_deletion_service.py`."""
 
     def __init__(self) -> None:

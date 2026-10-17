@@ -1,7 +1,7 @@
 """Tests for top-level `/config` (`api/main.py`).
 
 Same `dependency_overrides` convention as `test_api_runs.py`/`test_api_admin.py`
-— overrides `get_current_auth_context` rather than minting real JWTs.
+, overrides `get_current_auth_context` rather than minting real JWTs.
 """
 
 import pytest
@@ -32,7 +32,7 @@ def _override_auth(role: str) -> None:
 
 @pytest.mark.parametrize("role", ["viewer", "editor", "admin"])
 def test_config_returns_resolved_role(client: TestClient, mocker, role: str) -> None:
-    # Wave 6 (2026-08-25 admin panel/approval-gate UI plan) gap-closing fix —
+    # Wave 6 (2026-08-25 admin panel/approval-gate UI plan) gap-closing fix:
     # the frontend previously had no way to know the caller's role at all;
     # `/config` is the single source of truth now (already fetched once per
     # page load by `(app)/layout.tsx` for the model badge).
@@ -54,7 +54,7 @@ def test_config_requires_auth(client: TestClient) -> None:
 
 
 def test_health_is_shallow_and_always_ok(client: TestClient) -> None:
-    """Liveness must not fail on a dead dependency — it decides restarts."""
+    """Liveness must not fail on a dead dependency: it decides restarts."""
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}

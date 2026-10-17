@@ -1,13 +1,13 @@
 """Unit tests for the sandbox module (ADR-007 unified sandbox + enforced timeout).
 
 `execute_in_sandbox()` runs the sandboxed code in a real `multiprocessing.Process`
-(spawn context) — these tests exercise the actual process boundary (real pickling
+(spawn context): these tests exercise the actual process boundary (real pickling
 across processes, real SIGTERM/SIGKILL timeout enforcement via join/terminate/kill),
 not mocks, since that boundary is exactly what ADR-007 introduced and is the part
 of this change with the least prior empirical coverage (see ADR-007 and the
 Sprint 2 backend-agent handoff notes). This module cannot be executed in this
-project's interactive dev sandbox — `multiprocessing`/pandas execution hangs there
-— so CI is the first real run of everything in this file.
+project's interactive dev sandbox: `multiprocessing`/pandas execution hangs there
+, so CI is the first real run of everything in this file.
 """
 
 import os
@@ -27,7 +27,7 @@ from ai_etl.core.sandbox import (
 )
 
 # ---------------------------------------------------------------------------
-# mode="function" (Transformer contract) — rewritten for the SandboxResult
+# mode="function" (Transformer contract): rewritten for the SandboxResult
 # TypedDict return shape (was a `(result, error)` tuple before ADR-007).
 # ---------------------------------------------------------------------------
 
@@ -103,7 +103,7 @@ def transform(dfs):
 
 
 # ---------------------------------------------------------------------------
-# mode="script" (Analyst/Science contract) — new coverage, not previously
+# mode="script" (Analyst/Science contract): new coverage, not previously
 # exercised by this file at all.
 # ---------------------------------------------------------------------------
 
@@ -137,10 +137,10 @@ def test_script_mode_exposes_dfs_keys_directly_as_globals() -> None:
 
 
 # Module-level so it pickles by reference (qualified name) under the spawn
-# context — the same way science.py's sklearn/statsmodels classes cross the
+# context: the same way science.py's sklearn/statsmodels classes cross the
 # process boundary via `extra_globals` (ADR-007). Whole *module* objects
 # (plotly, math, os) don't pickle at all and must go through `extra_modules`
-# instead (imported by dotted path inside the child) — see
+# instead (imported by dotted path inside the child): see
 # core/sandbox.py's execute_in_sandbox() docstring.
 class _FakeExtraModule:
     LABEL = "extra-global-marker"
@@ -151,7 +151,7 @@ class _FakeExtraModule:
 
 
 def _double(x: int) -> int:
-    """Module-level (not a lambda) so it's picklable by reference — a lambda
+    """Module-level (not a lambda) so it's picklable by reference: a lambda
     cannot be pickled, and using one here would fail for a reason unrelated to
     what this test is checking."""
     return x * 2
@@ -190,7 +190,7 @@ def test_extra_builtins_are_available_to_executed_code() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Timeout enforcement — a hung child must actually be killed, not just have
+# Timeout enforcement: a hung child must actually be killed, not just have
 # the parent stop waiting for it (ADR-007 Question 2).
 # ---------------------------------------------------------------------------
 
@@ -221,7 +221,7 @@ def test_timeout_kills_hung_process() -> None:
 # multiprocessing.Queue is backed by an OS pipe with a bounded (~64KB) buffer.
 # If the parent only drains the queue *after* process.join() returns, a child
 # blocked on queue.put() for a result larger than the pipe buffer deadlocks
-# until the join timeout fires — which would show up here as a false
+# until the join timeout fires: which would show up here as a false
 # timed_out=True for a call that actually completed correctly and quickly.
 # ---------------------------------------------------------------------------
 
@@ -230,7 +230,7 @@ def test_large_result_does_not_falsely_report_timeout() -> None:
     """UNVERIFIED LOCALLY: this project's dev sandbox cannot run multiprocessing,
     so this test has never actually executed before CI. If it fails with
     timed_out=True (or hangs until the 30s timeout), that is the real
-    pipe-buffer-deadlock bug ADR-007 flagged — do not silently "fix" this test
+    pipe-buffer-deadlock bug ADR-007 flagged: do not silently "fix" this test
     to tolerate it; report it (see ADR-007 / core/sandbox.py's
     `execute_in_sandbox()` docstring) so the parent can be changed to drain the
     result queue with a background thread started before/while joining, rather
@@ -254,7 +254,7 @@ def test_large_result_does_not_falsely_report_timeout() -> None:
 
 
 # ---------------------------------------------------------------------------
-# SAFE_BUILTINS restriction — still holds post-refactor, and analyst.py/
+# SAFE_BUILTINS restriction: still holds post-refactor, and analyst.py/
 # science.py's actual call shape (extra_builtins=None) still blocks setattr.
 # ---------------------------------------------------------------------------
 
@@ -305,7 +305,7 @@ def test_setattr_unavailable_for_analyst_science_extra_builtins_config() -> None
 
 
 # ---------------------------------------------------------------------------
-# Env-var exposure — the child inherits the parent's full `os.environ` under
+# Env-var exposure: the child inherits the parent's full `os.environ` under
 # `spawn` (spawn does not clear it), and this project keeps real secrets
 # there (APP_DATABASE_URL, POSTGRES_URL, CLERK_JWKS_URL/CLERK_ISSUER,
 # OPENAI_API_KEY-style vars). `_sandbox_worker()` now clears `os.environ` as
@@ -313,16 +313,16 @@ def test_setattr_unavailable_for_analyst_science_extra_builtins_config() -> None
 # documented introspection escape (`().__class__.__mro__[1].__subclasses__()`
 # reaching an already-imported `os` module's globals) finds nothing there.
 #
-# These tests don't exercise that exact mro/subclasses escape path — which
+# These tests don't exercise that exact mro/subclasses escape path: which
 # module happens to be reachable that way is a fragile implementation detail
 # of whatever's been imported by pandas/plotly/sklearn at the time, not a
 # stable thing to assert on. Instead they inject the real `os` module via
 # `extra_modules` (the same mechanism analyst.py/science.py use for
-# `px`/`go`/`math` — modules are imported by dotted path inside the child,
+# `px`/`go`/`math`: modules are imported by dotted path inside the child,
 # not pickled across the process boundary, since whole module objects can't
 # be pickled at all) as a stable proxy: however sandboxed code ends up
-# holding a reference to `os` — via the accepted escape or (as here) a
-# legitimate extra_modules entry — `os.environ` must already be empty by the
+# holding a reference to `os`: via the accepted escape or (as here) a
+# legitimate extra_modules entry: `os.environ` must already be empty by the
 # time it can use it, which is exactly the property `_sandbox_worker()`'s
 # env-clear is supposed to guarantee.
 # ---------------------------------------------------------------------------
@@ -331,7 +331,7 @@ def test_setattr_unavailable_for_analyst_science_extra_builtins_config() -> None
 def test_child_process_environment_is_cleared_before_user_code_runs() -> None:
     """Baseline: the child's `os.environ` is empty (or at least does not
     contain any of the parent's own vars), proving the clear happens
-    before user code — and inside the child, not the parent, since this
+    before user code: and inside the child, not the parent, since this
     process's own `os.environ` (checked below) is untouched."""
     code = "env_len = len(os.environ)"
     result = execute_in_sandbox(
@@ -342,7 +342,7 @@ def test_child_process_environment_is_cleared_before_user_code_runs() -> None:
     assert result["values"]["env_len"] == 0
 
     # The clear happened in the child's copy of os.environ, not the parent's
-    # (this test process) — this process's own environment must be untouched.
+    # (this test process): this process's own environment must be untouched.
     assert len(os.environ) > 0
 
 
@@ -350,8 +350,8 @@ def test_injected_parent_env_var_not_visible_in_sandboxed_child(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A secret-shaped var set in the parent (this test process) right before
-    the call — analogous to APP_DATABASE_URL/OPENAI_API_KEY being real,
-    populated env vars in the running app — must not be visible inside the
+    the call: analogous to APP_DATABASE_URL/OPENAI_API_KEY being real,
+    populated env vars in the running app: must not be visible inside the
     sandboxed child, even though `spawn` would otherwise inherit it."""
     monkeypatch.setenv("AI_ETL_TEST_SECRET_MARKER", "should-not-leak-into-sandbox")
 
@@ -362,7 +362,7 @@ def test_injected_parent_env_var_not_visible_in_sandboxed_child(
 
     assert result["error"] is None, result["error"]
     assert result["values"]["leaked"] is None
-    # Confirm the marker really was set in the parent at call time — otherwise
+    # Confirm the marker really was set in the parent at call time: otherwise
     # this test would trivially pass for the wrong reason.
     assert os.environ.get("AI_ETL_TEST_SECRET_MARKER") == "should-not-leak-into-sandbox"
 
@@ -372,29 +372,29 @@ def test_injected_parent_env_var_not_visible_in_sandboxed_child(
 # (docs/archive/work/2026-09-05-mega-audit-remediation-plan.md): a seccomp filter
 # denying execve/execveat on the sandboxed child, closing the
 # arbitrary-command-execution vector the Red Team audit demonstrated
-# (docs/archive/work/2026-09-04-persona-audit/red-team.md — reaching subprocess.run
+# (docs/archive/work/2026-09-04-persona-audit/red-team.md: reaching subprocess.run
 # via ().__class__.__base__.__subclasses__() and calling it to run
 # `whoami`, with no `import` anywhere in the payload). This reproduces that
 # exact gadget through the real execute_in_sandbox() call (not a
 # copy-pasted globals dict, unlike the Red Team's own local repro), since
-# pandas already imports `subprocess` at module load — confirmed
-# separately — so `subprocess.CompletedProcess` is reliably reachable via
+# pandas already imports `subprocess` at module load: confirmed
+# separately: so `subprocess.CompletedProcess` is reliably reachable via
 # `__subclasses__()` in the real sandboxed child, the same as it was for
 # the audit.
 #
 # Linux-only, skipped elsewhere: `_install_seccomp_filter()` fails open on
 # any platform where `pyseccomp` doesn't import (every non-Linux dev
-# machine — macOS has no `libseccomp.so` at all), by design (see its
-# docstring in `core/sandbox.py`) — so this test cannot observe the
+# machine: macOS has no `libseccomp.so` at all), by design (see its
+# docstring in `core/sandbox.py`): so this test cannot observe the
 # protection anywhere but Linux. This mirrors the project's existing
 # `test_sandbox_vercel.py` precedent (skip with an explanation when a
 # platform/credential dependency isn't available, rather than assert
 # something the current environment can't actually exercise). CI
 # (`ubuntu-latest`) and the earlier version of this fix (RLIMIT_NPROC=0,
-# reverted — see `core/sandbox.py`'s "Security note") were both verified
+# reverted: see `core/sandbox.py`'s "Security note") were both verified
 # against a real Linux container (this project's own `python:3.12-slim`
 # base image) before this seccomp version was chosen; not just reasoned
-# about — see the module docstring for the full comparison.
+# about: see the module docstring for the full comparison.
 # ---------------------------------------------------------------------------
 
 _SUBPROCESS_GADGET_CODE = """
@@ -419,7 +419,7 @@ def test_subclasses_gadget_can_no_longer_spawn_a_process() -> None:
     """The exact Red Team payload, run for real: must fail at execve() (this
     fix) rather than reach subprocess.run's `whoami` and prove the RCE
     still works. `entry_point`'s own contract lets the gadget raise instead
-    of returning a DataFrame — that's how a caught success would surface
+    of returning a DataFrame: that's how a caught success would surface
     here (see _SUBPROCESS_GADGET_CODE), the same way _run_function_mode
     wraps any exception `transform(dfs)` raises into `result["error"]`."""
     result = execute_in_sandbox(_SUBPROCESS_GADGET_CODE, {})
@@ -427,7 +427,7 @@ def test_subclasses_gadget_can_no_longer_spawn_a_process() -> None:
     assert result["error"] is not None
     # "RCE SUCCEEDED, whoami returned: ..." is the RuntimeError the gadget
     # itself raises on an actual successful command execution (see
-    # _SUBPROCESS_GADGET_CODE) — must never appear. "whoami" alone isn't a
+    # _SUBPROCESS_GADGET_CODE): must never appear. "whoami" alone isn't a
     # safe substring to assert absent: subprocess's own PermissionError
     # legitimately names the attempted executable in its blocked-call
     # message (`[Errno 1] Operation not permitted: 'whoami'`) even when
@@ -442,7 +442,7 @@ def test_subclasses_gadget_can_no_longer_spawn_a_process() -> None:
 def test_install_seccomp_filter_fails_open_when_pyseccomp_unavailable(mocker) -> None:
     """Runs everywhere, incl. macOS dev machines: the exact fail-open path
     `_install_seccomp_filter()` takes on every non-Linux target (and would
-    take on Linux too, if `pyseccomp` somehow weren't importable) — must
+    take on Linux too, if `pyseccomp` somehow weren't importable): must
     never raise, since this runs unconditionally before every sandboxed
     call, on every backend call site."""
     mocker.patch.object(sandbox_module, "_PYSECCOMP_AVAILABLE", False)
@@ -458,7 +458,7 @@ def test_install_seccomp_filter_fails_open_on_non_linux(mocker) -> None:
 
 
 # ---------------------------------------------------------------------------
-# scale_timeout_for_rows() (ADR-012, Sprint 12 scale profiling) — real
+# scale_timeout_for_rows() (ADR-012, Sprint 12 scale profiling): real
 # profiling against a 200k-row benchmark confirmed the fixed per-call timeout
 # doesn't scale with input size; see docs/adr/ADR-012-scale-strategy.md and
 # docs/archive/work/2026-08-19-sprint12-scale-profiling.md for the measurements.
@@ -467,7 +467,7 @@ def test_install_seccomp_filter_fails_open_on_non_linux(mocker) -> None:
 
 def test_scale_timeout_unchanged_below_threshold() -> None:
     """Every existing case-study scenario (max 10k rows) must see identical
-    behavior to before this sprint — no-op below the threshold."""
+    behavior to before this sprint: no-op below the threshold."""
     assert scale_timeout_for_rows(30, 10_000) == 30
     assert scale_timeout_for_rows(15, LARGE_DATASET_ROW_THRESHOLD) == 15
 

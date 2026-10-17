@@ -3,12 +3,12 @@ import { OnboardingChecklist } from "@/components/onboarding-checklist";
 import { OnboardingWizard } from "@/components/onboarding-wizard";
 
 /**
- * "Get Started" page (Sprint 26, ADR-027) — guided first-run flow, additive to
+ * "Get Started" page (Sprint 26, ADR-027): guided first-run flow, additive to
  * (not a replacement for) `/` (`RunForm`), `/pipelines`, and
  * `/summary`. See the ADR for why this route exists separately rather than
  * gating those existing routes on activation status.
  *
- * Sprint 25 (ADR-036) — copy comes from `messages/{locale}.json`'s
+ * Sprint 25 (ADR-036): copy comes from `messages/{locale}.json`'s
  * `getStartedPage` namespace.
  */
 export default async function GetStartedPage() {

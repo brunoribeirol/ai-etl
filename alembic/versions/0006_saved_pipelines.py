@@ -1,6 +1,6 @@
 """saved_pipelines table (ADR-016, Sprint 13)
 
-Adds the new `saved_pipelines` table only — no change to any existing table.
+Adds the new `saved_pipelines` table only: no change to any existing table.
 A saved pipeline is a persisted spec + cron schedule + tenant, reexecuted
 unattended by Celery beat (services/scheduler.py); `runs`/`analysis_runs`
 are untouched, since a scheduled execution still produces a normal `runs`

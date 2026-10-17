@@ -13,7 +13,7 @@ dependencies = [
     # major. See docs/archive/work/2026-09-08-full-persona-audit.md (Tech Lead M14).
     "langchain>=1.3.0,<2.0.0",
     "langchain-openai>=1.3.0,<2.0.0",
-    # Multi-provider LLM support (Sprint 23, ADR-012) — base dependencies, not
+    # Multi-provider LLM support (Sprint 23, ADR-012): base dependencies, not
     # extras, since core/llm.py's get_llm() is called unconditionally by every
     # agent regardless of which AI_ETL_LLM_PROVIDER is configured at runtime.
     "langchain-anthropic>=1.6.0,<2.0.0",
@@ -30,7 +30,7 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "numpy>=2.0.0",
     "pyjwt[crypto]>=2.13.0",
-    # Sprint 19 (ADR-021) — Fernet symmetric encryption for tenant_secrets
+    # Sprint 19 (ADR-021): Fernet symmetric encryption for tenant_secrets
     # (services/secrets_service.py). Not a new install: pyjwt[crypto] above
     # already pulls in `cryptography` transitively; declared explicitly here
     # now that application code imports it directly.
@@ -40,47 +40,47 @@ dependencies = [
     "boto3>=1.34.0",
     "pypdf>=4.0.0",
     "python-docx>=1.1.0",
-    # Sprint 11 (ADR-012) — additional source connectors. pymysql is a
-    # pure-Python MySQL/MariaDB driver (SQLAlchemy dialect mysql+pymysql) —
+    # Sprint 11 (ADR-012): additional source connectors. pymysql is a
+    # pure-Python MySQL/MariaDB driver (SQLAlchemy dialect mysql+pymysql):
     # no compiled/system dependency, same "drop-in, no extra setup" bar
     # psycopg2-binary already meets for Postgres. pymongo is the official
-    # MongoDB driver — no SQLAlchemy dialect exists for a document store,
+    # MongoDB driver: no SQLAlchemy dialect exists for a document store,
     # so mongodb_source.py talks to it directly.
     "pymysql>=1.1.0",
     "pymongo>=4.8.0",
-    # Sprint 22 (dirty-data robustness) — was already resolved transitively
+    # Sprint 22 (dirty-data robustness): was already resolved transitively
     # via `requests` (a `langchain`/`openai` sub-dependency), but importing
     # it directly from `sources/csv_source.py` needs it pinned as a real,
     # declared dependency rather than relying on another package's internals.
     "charset-normalizer>=3.3.0",
-    # Sprint 13 (ADR-016) — recurring/scheduled pipelines. Pure-Python cron
+    # Sprint 13 (ADR-016): recurring/scheduled pipelines. Pure-Python cron
     # parsing/next-fire-time computation (month-end, leap years, DST), same
     # "no compiled/system dependency" bar as pymysql/pymongo above.
     "croniter>=2.0.0",
-    # Sprint 29 (ADR-019) — was already resolved transitively (pydantic/fastapi
+    # Sprint 29 (ADR-019): was already resolved transitively (pydantic/fastapi
     # depend on it), but `services/execution_queue.py::BudgetStatus` needs it
     # imported directly: `typing.TypedDict` fails Pydantic's schema generation
     # on Python < 3.12 (used as a FastAPI route return type in
-    # `api/routers/budget.py`) — CI's Python 3.11 job caught this for real.
+    # `api/routers/budget.py`): CI's Python 3.11 job caught this for real.
     "typing_extensions>=4.12.0",
     # Real pipeline runtime dependencies, not Streamlit-only despite living
     # under the `app` extra until Sprint 6 (2026-08-17): `agents/analyst.py`/
     # `agents/science.py` import these inside the sandbox via `extra_modules`
     # (`px`/`go` -> plotly, sklearn estimators, statsmodels) to generate
-    # charts and fit models — code paths the API (`src/ai_etl/api/`) exercises
+    # charts and fit models: code paths the API (`src/ai_etl/api/`) exercises
     # too, same as Streamlit. Moved to base `dependencies` so a future
     # Streamlit-only trim (Sprint 6 PR 6's Railway cutover) can't silently
     # drop something the pipeline itself needs at runtime.
     "plotly>=6.8.0",
     "scikit-learn>=1.4.0",
     "statsmodels>=0.14.0",
-    # Sprint 20 (ADR-021) — S3-Parquet warehouse destination. Used only as
+    # Sprint 20 (ADR-021): S3-Parquet warehouse destination. Used only as
     # pandas' `to_parquet`/`read_parquet` serialization engine (in-memory
-    # buffer) — never `pyarrow.fs.S3FileSystem`, which ADR-009 already found
+    # buffer): never `pyarrow.fs.S3FileSystem`, which ADR-009 already found
     # hangs indefinitely in this kind of sandboxed environment; S3 I/O itself
     # stays on the already-proven `boto3` path.
     "pyarrow>=15.0.0",
-    # Sprint 34 (ADR-033) — error tracking/APM, initialized conditionally by
+    # Sprint 34 (ADR-033): error tracking/APM, initialized conditionally by
     # `core/observability.py::init_sentry()` (no `SENTRY_DSN` = no-op, same
     # "optional, never breaks if absent" convention as Resend/Slack in
     # `services/notifications.py`). Base dependency, not an extra: both the
@@ -90,23 +90,23 @@ dependencies = [
     # pulls in both framework integrations this project actually uses.
     "sentry-sdk[celery,fastapi]>=2.0.0",
     # Wave 0 item 1, 2026-09-05 mega-audit remediation
-    # (docs/archive/work/2026-09-05-mega-audit-remediation-plan.md) —
+    # (docs/archive/work/2026-09-05-mega-audit-remediation-plan.md):
     # `core/sandbox.py::_install_seccomp_filter()` denies execve/execveat in
     # the sandboxed child process, closing the Red Team audit's demonstrated
     # arbitrary-command-execution vector. Base dependency, not an extra: the
     # "process" backend (default in production) calls this unconditionally.
     # Pure-ctypes wrapper around libseccomp (already present by default in
     # the project's own python:3.12-slim base image, verified in Dockerfile)
-    # — no compiler/build step needed to install it. Import-guarded in
-    # sandbox.py (fails open) since it only works on Linux — macOS has no
+    #: no compiler/build step needed to install it. Import-guarded in
+    # sandbox.py (fails open) since it only works on Linux: macOS has no
     # libseccomp.so at all, so this doesn't block local dev on the owner's
     # machine.
     "pyseccomp>=0.1.2; sys_platform == 'linux'",
 ]
 
 [project.optional-dependencies]
-# Sprint 6 (ADR-011) — HTTP API layer for the Next.js frontend. The old
-# `app` extra (streamlit) was retired in the PR 6 cutover — app.py is gone,
+# Sprint 6 (ADR-011): HTTP API layer for the Next.js frontend. The old
+# `app` extra (streamlit) was retired in the PR 6 cutover: app.py is gone,
 # Streamlit no longer runs anywhere in this project.
 api = [
     "fastapi>=0.115.0",
@@ -114,7 +114,7 @@ api = [
     "python-multipart>=0.0.12",
 ]
 
-# ADR-039 — production sandbox isolation backend (core/sandbox_vercel.py).
+# ADR-039: production sandbox isolation backend (core/sandbox_vercel.py).
 # Optional: base dependencies and every other backend work without it; only
 # needed when AI_ETL_SANDBOX_BACKEND=vercel (or backend="vercel") is used.
 vercel-sandbox = [
@@ -159,7 +159,7 @@ quote-style = "double"
 indent-style = "space"
 
 [tool.bandit]
-# B101 (assert_used) stays skipped — asserts are used deliberately in non-security
+# B101 (assert_used) stays skipped: asserts are used deliberately in non-security
 # contexts. B102 (exec_used) is NOT skipped: the two legitimate exec() sites in
 # core/sandbox.py carry an explicit per-line `# nosec B102`, so a stray exec() added
 # anywhere else fails `make security` (restores the "exec() only in the sandbox" gate).

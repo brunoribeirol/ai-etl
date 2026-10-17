@@ -36,7 +36,7 @@ def test_build_graph_returns_compiled_graph() -> None:
 
 
 # ---------------------------------------------------------------------------
-# _timed() — ADR-007 per-stage latency instrumentation wrapper
+# _timed(): ADR-007 per-stage latency instrumentation wrapper
 # ---------------------------------------------------------------------------
 
 
@@ -52,7 +52,7 @@ def test_timed_wrapper_populates_stage_durations_with_plausible_value() -> None:
     assert result["ran"] is True
     assert "extractor" in result["stage_durations"]
     # Non-zero for anything doing real work (the node slept 10ms), non-negative,
-    # and well below a sane upper bound — a regression that made this always 0
+    # and well below a sane upper bound: a regression that made this always 0
     # (or negative, e.g. a start/end swap) should fail here.
     assert result["stage_durations"]["extractor"] > 0
     assert result["stage_durations"]["extractor"] < 5
@@ -73,7 +73,7 @@ def test_timed_wrapper_merges_into_existing_stage_durations() -> None:
 
 def test_timed_wrapper_accumulates_on_repeated_calls_for_same_stage_name() -> None:
     """Per `_timed()`'s docstring, `durations[name] = durations.get(name, 0.0) +
-    elapsed` — a second call for the same stage name adds to, rather than
+    elapsed`: a second call for the same stage name adds to, rather than
     overwrites, the existing recorded duration."""
 
     def _node(state: dict) -> dict:
@@ -88,7 +88,7 @@ def test_timed_wrapper_accumulates_on_repeated_calls_for_same_stage_name() -> No
 
 def test_timed_wrapper_works_when_node_returns_partial_update() -> None:
     """A LangGraph node may return only the keys it changed, not a full state
-    copy — `_timed()` must merge `stage_durations` on top of that partial dict
+    copy: `_timed()` must merge `stage_durations` on top of that partial dict
     without requiring the rest of the state to be present in its return value."""
 
     def _partial_node(state: dict) -> dict:

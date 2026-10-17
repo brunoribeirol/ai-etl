@@ -21,7 +21,7 @@ def test_progress_message_formats_placeholders() -> None:
 
 
 def test_progress_message_unknown_locale_falls_back_to_default() -> None:
-    """Same soft-fail convention as `core.locale.resolve_locale` — an unrecognized
+    """Same soft-fail convention as `core.locale.resolve_locale`: an unrecognized
     locale code (e.g. a stale/malformed DB value) never raises, falls back to
     `DEFAULT_LOCALE` (pt-BR)."""
     assert progress_message("fr-FR", "silver_start") == progress_message("pt-BR", "silver_start")
@@ -29,7 +29,7 @@ def test_progress_message_unknown_locale_falls_back_to_default() -> None:
 
 def test_progress_message_unknown_key_raises() -> None:
     """Unlike an unknown locale, an unknown message key is a programming error
-    (a typo'd key at a call site) — it must not silently swallow into an empty
+    (a typo'd key at a call site): it must not silently swallow into an empty
     or wrong string."""
     with pytest.raises(KeyError):
         progress_message("en-US", "no_such_key")
@@ -40,7 +40,7 @@ def test_agent_step_known_node(locale: str) -> None:
     emoji, label, desc = agent_step(locale, "transformer")
     assert emoji == "⚙️"
     assert label == "Transformer"
-    assert desc  # non-empty, locale-specific — exact wording checked below
+    assert desc  # non-empty, locale-specific: exact wording checked below
     assert desc != agent_step("en-US" if locale == "pt-BR" else "pt-BR", "transformer")[2]
 
 
@@ -53,7 +53,7 @@ def test_agent_step_unknown_node_falls_back_generically() -> None:
 
 def test_agent_step_label_is_locale_independent() -> None:
     """Proper nouns ('Orchestrator', 'Extractor', ...) stay identical across
-    locales — only the description is translated."""
+    locales: only the description is translated."""
     _, label_pt, _ = agent_step("pt-BR", "orchestrator")
     _, label_en, _ = agent_step("en-US", "orchestrator")
     assert label_pt == label_en == "Orchestrator"

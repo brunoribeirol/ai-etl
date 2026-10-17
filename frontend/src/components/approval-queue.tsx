@@ -23,20 +23,20 @@ type ConfirmState = { runId: string; action: "approve" | "reject" } | null;
 
 /**
  * "Approvals" queue (Wave 6, 2026-08-25 admin panel/approval-gate UI plan)
- * — first frontend consumer of the Sprint 27 (ADR-028) approval-gate routes,
+ *: first frontend consumer of the Sprint 27 (ADR-028) approval-gate routes,
  * which shipped with an explicit "Frontend is out of scope for this sprint"
  * note. Visible to every authenticated user (this app makes no viewer/editor
- * UI distinction anywhere today — see `pipelines-manager.tsx`); `approve`/
+ * UI distinction anywhere today: see `pipelines-manager.tsx`); `approve`/
  * `reject` themselves are `editor`-gated server-side, a `viewer` caller gets
  * a 403 surfaced via the same toast-on-error path every mutation here uses.
  *
  * Only a saved/scheduled pipeline can ever be gated (an avulso run always has
- * a human watching synchronously) — see `run_silver_pipeline`'s docstring.
+ * a human watching synchronously): see `run_silver_pipeline`'s docstring.
  *
  * Expanding a row lazily fetches `GET /runs/{run_id}` for the full context
  * ADR-028 says an operator needs before approving: `load_preview` (what
  * would actually be written), `quality_report`, and any non-"ok"
- * `sanity_check` already computed on the Gold/Science sub-tasks — not just
+ * `sanity_check` already computed on the Gold/Science sub-tasks: not just
  * the write diff.
  */
 export function ApprovalQueue() {

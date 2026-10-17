@@ -1,13 +1,13 @@
-"""E2E Scenario 4 — CSV + Postgres + REST + Document (PDF/DOCX) sources.
+"""E2E Scenario 4: CSV + Postgres + REST + Document (PDF/DOCX) sources.
 
-The 4th case-study scenario (Vault: `artefact/sprint-roadmap.md`, Sprint 5) —
+The 4th case-study scenario (Vault: `artefact/sprint-roadmap.md`, Sprint 5):
 adds `sources/document_source.py` (ADR-010) on top of Scenario 3's source mix,
 proving the new connector wires through Orchestrator -> Extractor -> Transformer
 -> Quality -> Loader the same way csv/postgres/rest already do.
 
 Uses a real `.docx` file (via `python-docx`, so `document_source._extract_docx_text`
 runs for real) and mocks only the LLM structuring call inside `document_source.py`
-— same reasoning as `mock_pipeline_llm` for the other agent-level LLM calls.
+, same reasoning as `mock_pipeline_llm` for the other agent-level LLM calls.
 """
 
 import json
@@ -44,7 +44,7 @@ def transform(dfs: dict) -> pd.DataFrame:
 def test_scenario4_document_source_runs_end_to_end(
     tmp_path, mock_pipeline_llm, test_tenant, postgres_customers_table, mocker
 ) -> None:
-    # 6 orders, 5 with a matching return reason (order 2 has none) — keeps the
+    # 6 orders, 5 with a matching return reason (order 2 has none): keeps the
     # left-joined "reason" column's null ratio at ~17%, under quality.py's 20%
     # NULL_ERROR_THRESHOLD, so this stays a "warning" (Loader still runs).
     orders_path = tmp_path / "orders.csv"
@@ -56,7 +56,7 @@ def test_scenario4_document_source_runs_end_to_end(
         }
     ).to_csv(orders_path, index=False)
 
-    # A real DOCX file, real python-docx extraction — the only mocked part is
+    # A real DOCX file, real python-docx extraction: the only mocked part is
     # the LLM call that structures the extracted text into rows.
     returns_doc_path = tmp_path / "returns.docx"
     document = docx.Document()

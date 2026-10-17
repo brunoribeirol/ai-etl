@@ -1,23 +1,23 @@
-"""Digest delivery — email (Resend), Slack, Microsoft Teams, and Google Chat
+"""Digest delivery: email (Resend), Slack, Microsoft Teams, and Google Chat
 (all incoming webhooks), Sprint 14 / ADR-018 + addendum.
 
 All four functions are opt-in via env vars and never raise: a saved pipeline
 with drift detection enabled but no delivery channel configured still runs
-the comparison, it just has nowhere to send the result — that is a
+the comparison, it just has nowhere to send the result: that is a
 configuration gap for the operator to fix, not a reason to fail the
 underlying pipeline run (`services/alerting.py` calls these from inside a
 best-effort block for exactly this reason). Built on `httpx`, already a base
-dependency (see `sources/rest_source.py`) — no new dependency for any
+dependency (see `sources/rest_source.py`): no new dependency for any
 channel.
 
-**Not verified against a real provider in this environment** — no real
+**Not verified against a real provider in this environment**: no real
 credentials for any of the four available here (see ADR-018's Decision 5 and
 its addendum). The request shape for each matches that provider's own
 published API contract; a real send needs zero code changes once real
 credentials exist.
 
 Teams specifically: Microsoft retired the legacy Office 365 Connector
-webhook format — the payload below targets the current mechanism (a
+webhook format: the payload below targets the current mechanism (a
 Power Automate "Workflows" webhook posting an Adaptive Card), which is
 what Teams' own "Incoming Webhook"/"Workflows" connector setup produces
 today.
@@ -37,7 +37,7 @@ from ai_etl.services.secrets_service import SecretsEncryptionKeyMissingError, de
 RESEND_API_URL = "https://api.resend.com/emails"
 _HTTP_TIMEOUT_SECONDS = 15
 
-# Sprint 37 (ADR-034) — the notification channels a saved pipeline can override its
+# Sprint 37 (ADR-034): the notification channels a saved pipeline can override its
 # destination for; mirrors `core.llm.ALLOWED_MODELS_BY_PROVIDER`'s role as the
 # allowlist `api/routers/pipelines.py` validates a config write against before it
 # ever reaches `audit.db.set_saved_pipeline_notification_config`.
@@ -53,14 +53,14 @@ def resolve_pipeline_notification_override(
 
     Returns `(channel, decrypted_target)` when the pipeline has an active,
     configured override; `(None, None)` when it doesn't (no override, an
-    inactive one, or a decrypt failure — wrong/rotated
+    inactive one, or a decrypt failure: wrong/rotated
     `AI_ETL_SECRETS_ENCRYPTION_KEY`, corrupted ciphertext). Imported here
     (not `audit.db`) to keep the local import lazy and avoid a hard
     dependency from `audit/` on the application database at module import
     time in every environment that only needs the delivery functions below
     (e.g. this module's own unit tests).
 
-    Never raises — this feeds directly into `services/alerting.py` and
+    Never raises: this feeds directly into `services/alerting.py` and
     `services/health_alerts.py`'s best-effort delivery paths, which must
     never fail the underlying pipeline run over a notification-config
     problem (same posture `send_email_digest`/etc. already have for a
@@ -94,16 +94,16 @@ def send_email_digest(
     """POST one email to Resend's `/emails` endpoint.
 
     Requires `RESEND_API_KEY` and `AI_ETL_ALERT_EMAIL_FROM` (the sending
-    infrastructure stays deployment-global — Sprint 37/ADR-034 only makes
+    infrastructure stays deployment-global: Sprint 37/ADR-034 only makes
     the *destination* per-tenant, not the Resend credentials). Recipients
     come from `override_recipients` (a comma-separated string, same format
-    as the env var below — pass a saved pipeline's decrypted notification
+    as the env var below: pass a saved pipeline's decrypted notification
     target, `services.notifications.resolve_pipeline_notification_override`)
     when given, else `AI_ETL_ALERT_EMAIL_TO`. Returns `False` without making
     a request if the API key or from-address is unset, or the resolved
     recipient list is empty after trimming. Returns `True` only on a 2xx
     response; any `httpx` error (network failure, non-2xx status) is caught
-    and returns `False` — a failed alert delivery must never raise into the
+    and returns `False`: a failed alert delivery must never raise into the
     caller's execution flow.
     """
     api_key = os.getenv("RESEND_API_KEY")
@@ -144,7 +144,7 @@ def send_slack_digest(
     """POST one message to a Slack incoming webhook URL.
 
     Uses `override_webhook_url` (a saved pipeline's decrypted notification
-    target, Sprint 37/ADR-034) when given, else `SLACK_WEBHOOK_URL` —
+    target, Sprint 37/ADR-034) when given, else `SLACK_WEBHOOK_URL`:
     returns `False` without making a request if neither resolves to a
     value. `fallback_text` is Slack's own required plain-text fallback for
     notifications/accessibility when `blocks` can't be rendered. Returns
@@ -168,17 +168,17 @@ def send_teams_digest(
     subject: str, text_body: str, *, override_webhook_url: str | None = None
 ) -> bool:
     """POST one Adaptive Card to a Microsoft Teams "Workflows" incoming
-    webhook URL (Power Automate — the mechanism Teams' own channel
+    webhook URL (Power Automate: the mechanism Teams' own channel
     "Workflows" connector setup produces; the older Office 365 Connector
     webhook format is retired and not supported here).
 
     Uses `override_webhook_url` (Sprint 37/ADR-034 per-pipeline override)
-    when given, else `TEAMS_WEBHOOK_URL` — returns `False` without making a
+    when given, else `TEAMS_WEBHOOK_URL`: returns `False` without making a
     request if neither resolves to a value. `text_body` is rendered as a
     single Adaptive Card TextBlock with `wrap: true`; Teams renders a
     limited Markdown subset inside it (bold/italic/line breaks), which is
-    why `services/digest.py`'s plain `text` field — not the Slack-specific
-    `slack_blocks` — is the right input here, same content, different
+    why `services/digest.py`'s plain `text` field: not the Slack-specific
+    `slack_blocks`: is the right input here, same content, different
     envelope. Returns `True` only on a 2xx response; any `httpx` error is
     caught and returns `False`, same contract as
     `send_email_digest`/`send_slack_digest`.
@@ -223,9 +223,9 @@ def send_google_chat_digest(text_body: str, *, override_webhook_url: str | None 
 
     Uses `override_webhook_url` (Sprint 37/ADR-034 per-pipeline override,
     the full URL Google Chat generates per space including its
-    `key`/`token` query parameters — treat the whole URL as the secret,
+    `key`/`token` query parameters: treat the whole URL as the secret,
     same as `SLACK_WEBHOOK_URL`/`TEAMS_WEBHOOK_URL`) when given, else
-    `GOOGLE_CHAT_WEBHOOK_URL` — returns `False` without making a request if
+    `GOOGLE_CHAT_WEBHOOK_URL`: returns `False` without making a request if
     neither resolves to a value. Google Chat's `text` field supports a
     small Markdown-like subset natively (`*bold*`, `_italic_`), so
     `services/digest.py`'s plain `text` field is sent as-is, same as the

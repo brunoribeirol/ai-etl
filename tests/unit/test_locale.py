@@ -60,10 +60,10 @@ def test_narrative_language_instruction_mentions_the_language_and_code() -> None
 
 def test_date_parse_hint_prefers_dayfirst_for_pt_br() -> None:
     """2026-09-04 fix (2nd round): preference only applies to values that fail a
-    strict ISO (YYYY-MM-DD) parse — regression guard for the ISO-date corruption
+    strict ISO (YYYY-MM-DD) parse: regression guard for the ISO-date corruption
     bug, found live TWICE the same day: the 1st-round fix (comparing whether the
     two readings *disagree*) was itself still wrong, since dayfirst=True disagrees
-    with the default reading precisely for ISO dates with day/month both <= 12 —
+    with the default reading precisely for ISO dates with day/month both <= 12:
     exactly the case that must NOT be re-read."""
     hint = date_parse_hint("pt-BR")
     assert "use the dayfirst=True reading" in hint

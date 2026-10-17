@@ -7,12 +7,12 @@ import { cn } from "@/lib/utils";
 import { PHASES, stageToPhase } from "@/lib/agents";
 
 /**
- * Sprint 7 — live per-phase progress for a running task, fed by
+ * Sprint 7: live per-phase progress for a running task, fed by
  * `GET /runs/{task_id}/status`'s `meta` field (`{stage, message}`), itself
  * fed by `pipeline_service.py`'s existing `progress_callback` hook now wired
  * to Celery's `update_state` (`services/execution_queue.py`). `stage` is
  * coarse ("silver" | "planner" | "gold:0" | "science:1_repair" | "advisor"),
- * `message` is the rich human-readable string the backend already formats —
+ * `message` is the rich human-readable string the backend already formats:
  * this component just highlights which of the 4 macro-phases is current and
  * shows that message underneath, rather than trying to parse per-node detail
  * out of free text.
@@ -82,7 +82,7 @@ export function AgentProgress({
       {/* Not shown visually (the caller renders its own final status badge/
           message), but this text node's mount is what lets the `role="status"
           aria-live="polite"` region above announce completion to screen
-          readers — without it, a screen-reader user gets no signal at all
+          readers: without it, a screen-reader user gets no signal at all
           once the last stage message disappears. */}
       {done && <span className="sr-only">{failed ? t("srFailed") : t("srDone")}</span>}
     </div>

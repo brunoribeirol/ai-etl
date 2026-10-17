@@ -1,6 +1,6 @@
 """Saved-pipeline health snapshot, run history, and drift-comparison lookups.
 
-Split out of the former monolithic `audit/db.py` (Sprint 33) — see
+Split out of the former monolithic `audit/db.py` (Sprint 33): see
 `audit/db/__init__.py` for the full split rationale.
 """
 
@@ -14,10 +14,10 @@ from ai_etl.audit.models import analysis_runs, runs, saved_pipelines, stage_late
 
 
 def record_pipeline_health(pipeline_id: str, status: str, error: Optional[str] = None) -> None:
-    """Sprint 15 (ADR-020) — update the health-snapshot cache on
+    """Sprint 15 (ADR-020): update the health-snapshot cache on
     `saved_pipelines` after a scheduled fire's *final* attempt (any Level-B
     retries `execution_queue.py::run_full_analysis_task` performs are
-    already exhausted by the time this is called — this records one fire's
+    already exhausted by the time this is called: this records one fire's
     terminal outcome, not each individual attempt).
 
     `status` is `"completed"` or `"failed"` (mirrors `runs.status`).
@@ -27,7 +27,7 @@ def record_pipeline_health(pipeline_id: str, status: str, error: Optional[str] =
     (`NULL`) on success, set to `error` otherwise.
 
     Best-effort by convention of every other post-completion side effect in
-    this codebase (see `services/alerting.py`) — callers are expected to
+    this codebase (see `services/alerting.py`): callers are expected to
     wrap this in a try/except so a health-tracking hiccup never fails the
     run itself; this function does not swallow errors on its own, since
     unlike a delivery provider, a DB write failing here is worth surfacing
@@ -59,20 +59,20 @@ DEFAULT_PIPELINE_HEALTH_WINDOW = 20
 def get_pipeline_health(
     pipeline_id: str, tenant_id: str, window: int = DEFAULT_PIPELINE_HEALTH_WINDOW
 ) -> dict[str, Any]:
-    """Sprint 15 (ADR-020) — success rate and average latency for a saved
+    """Sprint 15 (ADR-020): success rate and average latency for a saved
     pipeline's most recent `window` fires, computed from `runs`/
     `stage_latencies` (both already persisted per execution, ADR-007/
-    ADR-017) — pure aggregation, no new instrumentation.
+    ADR-017): pure aggregation, no new instrumentation.
 
     `consecutive_failures`/`last_status`/`last_error` are *not* recomputed
-    here — they live on the `saved_pipelines` row itself (the cache
+    here: they live on the `saved_pipelines` row itself (the cache
     `record_pipeline_health` maintains); read them from `get_saved_pipeline`
     instead, same way `api/routers/pipelines.py` already does for every
     other field.
 
     Returns `{"success_rate": float | None, "avg_latency_seconds":
     float | None, "sample_size": int}`. Both rate/latency are `None` when
-    `sample_size` is 0 (the pipeline has never fired) — never a fabricated
+    `sample_size` is 0 (the pipeline has never fired): never a fabricated
     0.0, which would misleadingly read as "0% success" instead of "no data
     yet".
     """
@@ -93,7 +93,7 @@ def get_pipeline_health(
     success_rate = completed / sample_size
 
     run_ids = [row.run_id for row in recent_rows]
-    # `stage_latencies` has no `saved_pipeline_id` column of its own — `run_ids`
+    # `stage_latencies` has no `saved_pipeline_id` column of its own: `run_ids`
     # above are already tenant-verified (came from the `runs` query, itself
     # filtered/RLS-scoped by this same `tenant_id`), so this join-by-id stays
     # correct under the restricted engine: RLS additionally requires
@@ -121,7 +121,7 @@ def get_pipeline_health(
 
 # Sprint 17 code review (PR #64): a tight-cron saved pipeline (ADR-016 allows
 # any valid cron, including every few minutes) accumulates thousands of runs
-# over weeks/months with no cap — same class of unbounded-query risk
+# over weeks/months with no cap: same class of unbounded-query risk
 # `load_history`'s own `limit=20` default already guards against for the
 # avulso run list. 200 (vs. `load_history`'s 20) is a deliberate, larger
 # default: a KPI *trend* chart needs more points to actually show a trend,
@@ -132,11 +132,11 @@ DEFAULT_PIPELINE_HISTORY_LIMIT = 200
 def list_pipeline_run_history(
     pipeline_id: str, tenant_id: str, limit: int = DEFAULT_PIPELINE_HISTORY_LIMIT
 ) -> list[dict[str, Any]]:
-    """Sprint 17 (ADR-017) — the `limit` most recent executions of one saved
+    """Sprint 17 (ADR-017): the `limit` most recent executions of one saved
     pipeline, oldest first, with the Gold/Science KPIs the time-series view
     charts.
 
-    Scoped by `tenant_id` in addition to `saved_pipeline_id` — same
+    Scoped by `tenant_id` in addition to `saved_pipeline_id`: same
     defense-in-depth pattern as `get_saved_pipeline`/`_run_belongs_to_tenant`:
     a pipeline id alone should never be enough to read another tenant's run
     history, even though in practice a saved pipeline's own `tenant_id` and
@@ -145,15 +145,15 @@ def list_pipeline_run_history(
 
     `cost_usd`/`model_name`/`total_tokens`/`gold_subtasks`/`science_subtasks`
     come from a `LEFT OUTER JOIN` against `analysis_runs`, same as
-    `load_history` — a scheduled fire with no `business_question` (Silver-only)
+    `load_history`: a scheduled fire with no `business_question` (Silver-only)
     has no matching row and reads back as `None`/`NaN`, not zero.
 
     `limit` bounds the query itself (not a post-hoc slice of every row ever
-    fetched) — the *most recent* `limit` executions, since "the last 200"
+    fetched): the *most recent* `limit` executions, since "the last 200"
     is what a trend view needs, not an arbitrary 200 from the beginning of
     the pipeline's history. Implemented as an inner query ordered `DESC`
     with the `LIMIT`, then re-ordered `ASC` in the outer query so the
-    caller (and the chart) still gets oldest-first — the shape every
+    caller (and the chart) still gets oldest-first: the shape every
     existing caller/test expects.
     """
     base = (
@@ -199,17 +199,17 @@ def get_previous_completed_run(
     saved_pipeline_id: str, exclude_run_id: str, tenant_id: str
 ) -> Optional[dict[str, Any]]:
     """Most recent `status = "completed"` run for `saved_pipeline_id`,
-    excluding `exclude_run_id` (the run currently being evaluated) — the
+    excluding `exclude_run_id` (the run currently being evaluated): the
     "second most recent fire" ADR-018 Decision 1 compares against. `None`
     when there is no prior completed run (the pipeline's first fire, or every
-    prior fire failed) — the caller (`services/alerting.py`) treats that as
+    prior fire failed): the caller (`services/alerting.py`) treats that as
     "nothing to compare," not an error.
 
     A deliberately smaller, more targeted sibling of `list_pipeline_run_history`
     above (Sprint 17, ADR-017): that function returns up to
     `DEFAULT_PIPELINE_HISTORY_LIMIT` oldest-first rows for a time-series chart;
-    this one returns at most one row — the single most recent *completed* run
-    other than the one just evaluated — which is all Sprint 14's drift check
+    this one returns at most one row: the single most recent *completed* run
+    other than the one just evaluated: which is all Sprint 14's drift check
     needs. Kept separate rather than built on top of
     `list_pipeline_run_history` (e.g. `limit=2`, filter, take the older one)
     since that function doesn't filter by `status`, and a failed intervening
@@ -217,13 +217,13 @@ def get_previous_completed_run(
     of being skipped.
 
     Left-outer-joins `analysis_runs` for `cost_usd`/`total_tokens`, same
-    pattern as `load_history` — a Silver-only scheduled run (no
+    pattern as `load_history`: a Silver-only scheduled run (no
     `business_question`, so `save_analysis` never ran) reads those back as
     `None`, not `0`, matching `load_history`'s "no analysis, no cost" signal.
 
-    ADR-040: `tenant_id` — the saved pipeline's own owner, already known to
+    ADR-040: `tenant_id`: the saved pipeline's own owner, already known to
     every caller (`services/alerting.py` resolves it from the pipeline row
-    before calling this) — is a required parameter so this read goes through
+    before calling this): is a required parameter so this read goes through
     the restricted, RLS-backed engine like every other per-tenant lookup in
     this module, rather than staying on the bypass engine only because no
     tenant filter happened to be in the original query.

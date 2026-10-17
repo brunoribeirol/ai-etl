@@ -2,7 +2,7 @@
 
 Exercises `core/sandbox_vercel.py::execute_in_vercel_sandbox()` (and
 `execute_in_sandbox(..., backend="vercel")`) against a **real** Vercel
-Sandbox — not mocks, since the whole point of ADR-039 is the isolation a
+Sandbox: not mocks, since the whole point of ADR-039 is the isolation a
 real Firecracker microVM boundary provides.
 
 Skipped automatically unless all of the following hold, matching this
@@ -17,7 +17,7 @@ test_sandbox_docker.py):
 
 As of this ADR being written, none of the three held in this development
 environment (no `VERCEL_TOKEN`/`VERCEL_TEAM_ID`/`VERCEL_PROJECT_ID` in the
-shell, and the `vercel` package is not installed) — these tests are
+shell, and the `vercel` package is not installed): these tests are
 expected to skip here and in CI (which never builds/pushes the VCR image
 either) until someone runs them with real Vercel credentials and a pushed
 image.
@@ -62,7 +62,7 @@ def _import_execute_in_sandbox():
 
 
 # ---------------------------------------------------------------------------
-# Contract parity with the "process"/"docker" backends — same inputs, same
+# Contract parity with the "process"/"docker" backends: same inputs, same
 # outputs.
 # ---------------------------------------------------------------------------
 
@@ -113,7 +113,7 @@ def test_syntax_error_returns_error_message_via_vercel_backend() -> None:
 
 
 def test_dangerous_builtins_still_blocked_via_vercel_backend() -> None:
-    """Same restricted-globals guarantee as every other backend — the
+    """Same restricted-globals guarantee as every other backend: the
     Vercel backend calls the identical `_execute_code()` helper."""
     execute_in_sandbox = _import_execute_in_sandbox()
     code = "result = open('/etc/passwd')"
@@ -139,7 +139,7 @@ def test_timeout_kills_hung_sandbox_process() -> None:
     assert result["values"] == {}
     assert result["error"] is not None
     assert "Execution exceeded" in result["error"]
-    # 5s timeout + sandbox creation/kill_after overhead — generous but still
+    # 5s timeout + sandbox creation/kill_after overhead: generous but still
     # a real regression guard against a broken kill path hanging.
     assert wall_clock < 60, f"timeout enforcement took {wall_clock}s, expected well under 60s"
 
@@ -166,7 +166,7 @@ for cls in ().__class__.__mro__[1].__subclasses__():
 def test_introspection_bypass_cannot_reach_network() -> None:
     """The documented `__mro__`/`__subclasses__()` escape can still reach a
     real `socket` module reference inside the sandbox (Python-level
-    restriction does not stop it) — but `NetworkPolicy.deny_all()` should
+    restriction does not stop it): but `NetworkPolicy.deny_all()` should
     stop the connection itself, a kernel/hypervisor-enforced boundary the
     "process" backend never had."""
     execute_in_sandbox = _import_execute_in_sandbox()
@@ -190,7 +190,7 @@ result = "connected"
 
 
 def test_introspection_bypass_env_is_empty_not_host_secrets() -> None:
-    """No host env vars are ever passed via the sandbox's `env=` kwarg —
+    """No host env vars are ever passed via the sandbox's `env=` kwarg:
     even a successful `os` gadget reach should find no host secret like
     OPENAI_API_KEY, matching the Docker backend's equivalent guarantee."""
     execute_in_sandbox = _import_execute_in_sandbox()

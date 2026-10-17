@@ -104,14 +104,14 @@ def test_review_gold_result_forwards_llm_override(mock_get_llm) -> None:
 
 
 # ---------------------------------------------------------------------------
-# review_gold_result / review_science_result — directional hedging (2026-08-24
+# review_gold_result / review_science_result: directional hedging (2026-08-24
 # LLM/Prompt-Engineer audit, ADR-037 follow-up)
 # ---------------------------------------------------------------------------
 
 
 def test_review_gold_result_flags_hedged_directional_answer(mock_get_llm) -> None:
     """A trend question answered with a non-committal narrative gets a second,
-    distinct entry — separate from the factual-consistency check, which the
+    distinct entry: separate from the factual-consistency check, which the
     hedge doesn't necessarily fail."""
     mock_get_llm.return_value = _llm_returning(
         '{"consistent": true, "issue": null, "directional_question": true, '
@@ -134,7 +134,7 @@ def test_review_gold_result_flags_hedged_directional_answer(mock_get_llm) -> Non
 
 def test_review_gold_result_does_not_flag_committed_directional_answer(mock_get_llm) -> None:
     """A directional question answered with a clear, committed direction gets no
-    hedge entry — only the usual factual-consistency check."""
+    hedge entry: only the usual factual-consistency check."""
     mock_get_llm.return_value = _llm_returning(
         '{"consistent": true, "issue": null, "directional_question": true, '
         '"hedges_direction": false, "hedge_detail": null}'
@@ -153,7 +153,7 @@ def test_review_gold_result_does_not_flag_committed_directional_answer(mock_get_
 
 def test_review_gold_result_non_directional_question_no_hedge_entry(mock_get_llm) -> None:
     """A non-directional question never gets a hedge entry, even if the LLM
-    (incorrectly) reports hedges_direction — directional_question gates it."""
+    (incorrectly) reports hedges_direction: directional_question gates it."""
     mock_get_llm.return_value = _llm_returning(
         '{"consistent": true, "issue": null, "directional_question": false, '
         '"hedges_direction": true, "hedge_detail": "irrelevant"}'

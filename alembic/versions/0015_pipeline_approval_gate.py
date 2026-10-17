@@ -4,8 +4,8 @@
 Opt-in write-approval gate for scheduled pipelines: `require_approval` defaults
 `false` (server_default), so every existing and new pipeline behaves exactly as
 before until an operator explicitly turns this on. `approval_threshold_rows`
-(nullable — no threshold means "always require approval" once the gate is on)
-and `last_approved_at` (nullable — `NULL` means "never approved yet", the first
+(nullable: no threshold means "always require approval" once the gate is on)
+and `last_approved_at` (nullable: `NULL` means "never approved yet", the first
 write is always gated regardless of the threshold) have no server default: both
 are meaningless until `require_approval` is set, and every pre-existing row is
 correctly represented by `NULL` for both. See `agents/loader.py::_is_write_gated`

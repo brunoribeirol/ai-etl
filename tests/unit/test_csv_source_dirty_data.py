@@ -1,7 +1,7 @@
 """Unit tests for csv_source.py's Sprint 22 dirty-data hardening.
 
 Each test exercises `load_csv` against a real fixture in
-`tests/fixtures/dirty_data/` (versioned in the repo, not gitignored — small
+`tests/fixtures/dirty_data/` (versioned in the repo, not gitignored: small
 files, unlike the Sprint 12 synthetic scale benchmark). See
 `src/ai_etl/sources/csv_source.py`'s module docstring for the three failure
 classes found and fixed, and this file's own module docstring in each test
@@ -28,7 +28,7 @@ FIXTURES = Path(__file__).parent.parent / "fixtures" / "dirty_data"
 
 # --- Encoding ---
 # Before the fix: `pd.read_csv`'s default `encoding="utf-8"` raised a raw
-# `UnicodeDecodeError` for all three of these — confirmed by direct
+# `UnicodeDecodeError` for all three of these: confirmed by direct
 # reproduction against the fixtures before writing `_decode_bytes`.
 
 
@@ -62,7 +62,7 @@ def test_decode_bytes_unicode_error_with_no_confident_candidate_is_actionable() 
 
 # --- Delimiter ---
 # Before the fix: both of these parsed "successfully" under the default
-# `sep=","` into a single column containing the whole raw line — silently
+# `sep=","` into a single column containing the whole raw line: silently
 # wrong, not a crash. Confirmed by direct reproduction.
 
 
@@ -84,7 +84,7 @@ def test_detect_delimiter_falls_back_to_comma_when_ambiguous() -> None:
 
 # --- Malformed quoting / stray delimiter ---
 # Before the fix: pandas' C engine silently accepted the mismatched row
-# count and returned a DataFrame with shifted, wrong values (confirmed —
+# count and returned a DataFrame with shifted, wrong values (confirmed:
 # `nome` lost its prefix, `cidade` held a fragment of the previous field)
 # instead of raising anything at all. This is the case the sprint's
 # Definition of Done calls out as strictly worse than a crash.
@@ -117,7 +117,7 @@ def _large_well_formed_csv(n_rows: int) -> str:
 
 def test_validate_row_lengths_large_file_catches_mismatch_within_sample() -> None:
     """Sprint 22 code-review fix: above the row threshold, only a bounded
-    leading sample is validated (not a second full-file pass) — a malformed
+    leading sample is validated (not a second full-file pass): a malformed
     row inside that sample must still be caught."""
     lines = ["a,b,c"] + [f"{i},{i},{i}" for i in range(_LARGE_FILE_ROW_THRESHOLD + 1000)]
     lines[10] = "1,2,3,4"  # well within _VALIDATION_SAMPLE_ROWS
@@ -129,7 +129,7 @@ def test_validate_row_lengths_large_file_catches_mismatch_within_sample() -> Non
 def test_validate_row_lengths_large_file_skips_rows_past_sample_boundary() -> None:
     """Documented, accepted trade-off: a malformed row past the sample
     boundary in a very large file is not guaranteed to be caught by this
-    check — must not raise (and must not scan the whole file to find out)."""
+    check: must not raise (and must not scan the whole file to find out)."""
     n_rows = _LARGE_FILE_ROW_THRESHOLD + 1000
     lines = ["a,b,c"] + [f"{i},{i},{i}" for i in range(n_rows)]
     # Header is line 1, data starts at line 2, so line (2 + sample_rows) is
@@ -141,7 +141,7 @@ def test_validate_row_lengths_large_file_skips_rows_past_sample_boundary() -> No
 
 
 def test_validate_row_lengths_small_file_still_fully_validated() -> None:
-    """Below the threshold, behavior is unchanged — every row checked,
+    """Below the threshold, behavior is unchanged: every row checked,
     including one deep into a file that's still well under the threshold."""
     n_rows = 100
     lines = ["a,b,c"] + [f"{i},{i},{i}" for i in range(n_rows)]
@@ -156,7 +156,7 @@ def test_validate_row_lengths_field_size_limit_is_not_malformed_quoting(
 ) -> None:
     """Data-eng audit finding (2026-08-24): a `csv.Error` caused by a field
     exceeding the size limit is not malformed CSV and must not be labeled
-    as such — shrink the limit so an ordinary field trips it, then confirm
+    as such: shrink the limit so an ordinary field trips it, then confirm
     it surfaces as a distinct, accurate error instead of the malformed-
     quoting message."""
     original_limit = csv.field_size_limit()
@@ -181,7 +181,7 @@ def test_validate_row_lengths_restores_field_size_limit_on_success() -> None:
 def test_load_csv_large_legitimate_field_loads_successfully(tmp_path: Path) -> None:
     """Data-eng audit finding (2026-08-24): a genuinely well-formed CSV with
     one legitimate field larger than the stdlib default 128 KiB
-    `csv.field_size_limit()` must not be rejected as malformed — the
+    `csv.field_size_limit()` must not be rejected as malformed: the
     effective limit is raised (bounded) precisely so this loads cleanly."""
     large_field = "x" * 200_000  # well over the 131072 stdlib default
     path = tmp_path / "large_field.csv"
@@ -208,7 +208,7 @@ def test_load_csv_genuinely_malformed_quoting_still_raises_malformed_message(
 
 # --- BR-locale decimal comma normalization ---
 # Data-eng audit finding (2026-08-24): a `;`-delimited file with BR-locale
-# decimal commas (e.g. "80,50") in a numeric column stayed `object` dtype —
+# decimal commas (e.g. "80,50") in a numeric column stayed `object` dtype:
 # pandas has no way to know `,` is a decimal separator here rather than text.
 
 
@@ -243,7 +243,7 @@ def test_load_csv_semicolon_delimiter_does_not_corrupt_non_numeric_comma_text(
 
 def test_load_csv_comma_delimiter_does_not_trigger_br_normalization(tmp_path: Path) -> None:
     """Conservative-by-design: normalization only applies to `;`-delimited
-    files — a `,`-delimited file with a comma-adjacent-looking value in a
+    files: a `,`-delimited file with a comma-adjacent-looking value in a
     non-numeric context must not be touched."""
     path = tmp_path / "not_br.csv"
     path.write_text('nome,codigo\nAna,"80,50"\n', encoding="utf-8")
@@ -303,7 +303,7 @@ def test_load_excel_header_row_explicit_override() -> None:
 
 
 def test_load_excel_no_confident_header_row_raises(tmp_path: Path) -> None:
-    # A sheet with no row that fills every column with text-only values —
+    # A sheet with no row that fills every column with text-only values:
     # every row has at least one numeric cell, so the heuristic finds nothing.
     path = tmp_path / "no_header.xlsx"
     df = pd.DataFrame({"a": [1, 2], "b": [3, 4]})
@@ -315,7 +315,7 @@ def test_load_excel_no_confident_header_row_raises(tmp_path: Path) -> None:
 # --- JSON ---
 # Real bug found 2026-08-30, live testing against the deployed app: a
 # `.json` upload plans as source type "csv" (the Orchestrator's own type
-# enum has no "json" value — the same "closest fit" treatment `.xlsx`/`.xls`
+# enum has no "json" value: the same "closest fit" treatment `.xlsx`/`.xls`
 # already get above), but `load_csv` had no `.json` branch, so it tried to
 # parse the JSON text as delimited CSV text and failed with a "malformed
 # CSV" error instead of actually loading the data.

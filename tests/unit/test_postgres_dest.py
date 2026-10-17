@@ -2,7 +2,7 @@
 
 Pre-existing gap: `save_postgres` had zero unit coverage before this (only
 its sibling `preview_postgres` was tested, in `test_destination_previews.py`)
-— closed here alongside the tenant-connection-override behavior this module
+, closed here alongside the tenant-connection-override behavior this module
 adds, using the same real-sqlite-via-POSTGRES_URL trick already established
 by `test_destination_previews.py` rather than mocking SQLAlchemy.
 """
@@ -46,7 +46,7 @@ def test_save_postgres_writes_to_the_shared_env_database(monkeypatch, tmp_path) 
 
 def test_save_postgres_uses_tenant_override_over_shared_env(monkeypatch, tmp_path) -> None:
     # ADR-044: the shared env var points at one sqlite file, the tenant
-    # override at another — only the override's file should receive the write.
+    # override at another: only the override's file should receive the write.
     shared_db_url = f"sqlite:///{tmp_path}/shared.sqlite"
     tenant_db_url = f"sqlite:///{tmp_path}/tenant.sqlite"
     monkeypatch.setenv("POSTGRES_URL", shared_db_url)

@@ -1,7 +1,7 @@
 """Unit tests for the MySQL/MariaDB source connector (Sprint 11, ADR-012).
 
 No live MySQL here (that's `tests/integration/test_mysql_source_real.py`,
-self-skipping without `make mysql-test-up`) — this covers what's testable
+self-skipping without `make mysql-test-up`): this covers what's testable
 without a server: table-name validation (real, unmocked) and the
 MYSQL_URL-missing failure path, same split `postgres_source.py`'s own test
 coverage already uses (`tests/unit/test_sources.py` covers only its
@@ -51,7 +51,7 @@ def test_load_mysql_rejects_invalid_table_before_reading_env(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # MYSQL_URL is set, so the failure must come from table validation, not
-    # the environment-variable check — this ordering matters because the
+    # the environment-variable check: this ordering matters because the
     # invalid-table error message shouldn't be masked by a missing-URL one.
     monkeypatch.setenv("MYSQL_URL", "mysql+pymysql://user:pass@localhost/db")
     with pytest.raises(ValueError, match="Invalid table name"):

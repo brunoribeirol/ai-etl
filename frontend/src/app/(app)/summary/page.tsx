@@ -6,13 +6,13 @@ import { friendlyExecutiveError } from "@/lib/friendly-error";
 import type { SavedPipeline } from "@/lib/types";
 
 /**
- * Sprint 18 (ADR-024) — "Summary" is the executive entry point, separate
+ * Sprint 18 (ADR-024): "Summary" is the executive entry point, separate
  * from "/pipelines" (technical CRUD) and "/history" (technical run list,
  * keyed by `run_id`). Navigation here is by business question, not by
- * pipeline internals — each card leads with `business_question`, not
+ * pipeline internals: each card leads with `business_question`, not
  * `source_type`/`cron_schedule`/`spec` the way `pipelines-manager.tsx` does.
  *
- * Scoped to saved (recurring) pipelines only — see ADR-024 for why a
+ * Scoped to saved (recurring) pipelines only: see ADR-024 for why a
  * one-off run has no business-question-first identity to navigate by.
  */
 export default async function SummaryIndexPage() {
