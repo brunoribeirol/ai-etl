@@ -43,10 +43,15 @@ def _serialize_figure(fig: Figure) -> dict[str, Any]:
     return fig.to_plotly_json()  # type: ignore[no-any-return]  # plotly has no return-type stub here
 
 
-def _serialize_analysis_entry(entry: dict[str, Any], df_key: str) -> dict[str, Any]:
+def _serialize_analysis_entry(
+    entry: dict[str, Any], df_key: str, preview_rows: int | None = None
+) -> dict[str, Any]:
     serialized = dict(entry)
     df = serialized.get(df_key)
     if isinstance(df, pd.DataFrame):
+        if preview_rows is not None:
+            serialized[f"{df_key}_row_count"] = len(df)
+            df = df.head(preview_rows)
         serialized[df_key] = _serialize_dataframe(df)
     fig = serialized.get("fig")
     if isinstance(fig, Figure):
@@ -54,19 +59,33 @@ def _serialize_analysis_entry(entry: dict[str, Any], df_key: str) -> dict[str, A
     return serialized
 
 
-def serialize_full_result(result: dict[str, Any]) -> dict[str, Any]:
-    """Convert `load_full_result()`'s output into a JSON-safe dict."""
+def serialize_full_result(
+    result: dict[str, Any], preview_rows: int | None = None
+) -> dict[str, Any]:
+    """Convert `load_full_result()`'s output into a JSON-safe dict.
+
+    With `preview_rows`, every table (the Silver data and each analysis table) keeps only its
+    first rows, and its total is added beside it (`transformed_row_count`,
+    `gold_df_row_count`, `predictions_df_row_count`). The run page shows 20 rows of each; the
+    full answer for a 7,043-row file was 3.5 MB and took 12.5 s on production (2026-10-16).
+    Without it, the answer is unchanged."""
     state = dict(result.get("state") or {})
     transformed_data = state.get("transformed_data")
     if isinstance(transformed_data, pd.DataFrame):
+        if preview_rows is not None:
+            state["transformed_row_count"] = len(transformed_data)
+            transformed_data = transformed_data.head(preview_rows)
         state["transformed_data"] = _serialize_dataframe(transformed_data)
 
     return {
         "bronze": result.get("bronze"),
         "state": state,
-        "gold": [_serialize_analysis_entry(g, "gold_df") for g in result.get("gold", [])],
+        "gold": [
+            _serialize_analysis_entry(g, "gold_df", preview_rows) for g in result.get("gold", [])
+        ],
         "science": [
-            _serialize_analysis_entry(s, "predictions_df") for s in result.get("science", [])
+            _serialize_analysis_entry(s, "predictions_df", preview_rows)
+            for s in result.get("science", [])
         ],
         "advisor": result.get("advisor", {}),
         "question": result.get("question", ""),

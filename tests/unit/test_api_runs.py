@@ -78,6 +78,23 @@ def test_get_run_returns_serialized_result(client: TestClient, mocker) -> None:
     mock_load.assert_called_once_with("run-1", log_dir=mocker.ANY, tenant_id="tenant-a")
 
 
+def test_get_run_preview_rows_returns_the_first_rows_and_the_total(
+    client: TestClient, mocker
+) -> None:
+    result = {
+        "state": {"status": "completed", "transformed_data": pd.DataFrame({"a": range(5)})},
+        "gold": [],
+        "science": [],
+    }
+    mocker.patch("ai_etl.api.routers.runs.load_full_result", return_value=result)
+
+    body = client.get("/runs/run-1?preview_rows=2").json()
+
+    assert body["state"]["transformed_data"] == [{"a": 0}, {"a": 1}]
+    assert body["state"]["transformed_row_count"] == 5
+    assert client.get("/runs/run-1?preview_rows=5000").status_code == 422
+
+
 def test_get_run_404_when_unknown(client: TestClient, mocker) -> None:
     mocker.patch("ai_etl.api.routers.runs.load_full_result", return_value=None)
 

@@ -16,7 +16,8 @@
     "brand": "AI-ETL",
     "openMenu": "Abrir menu",
     "menu": "Menu",
-    "signIn": "Entrar"
+    "signIn": "Entrar",
+    "loading": "Carregando"
   },
   "appNav": {
     "getStarted": "Começar",
@@ -292,14 +293,15 @@
   },
   "runDetailPage": {
     "notFound": "Run não encontrado.",
-    "questionPrefix": "O que fazer sobre: \"{question}\"",
     "technicalDetails": "Detalhes técnicos",
     "silverHeading": "Silver",
     "priority": {
       "high": "alta",
       "medium": "média",
       "low": "baixa"
-    }
+    },
+    "eyebrow": "Execução",
+    "noQuestionTitle": "Execução sem pergunta de negócio"
   },
   "pipelinesPage": {
     "title": "Pipelines agendados",

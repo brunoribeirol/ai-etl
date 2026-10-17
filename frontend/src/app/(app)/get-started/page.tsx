@@ -14,10 +14,10 @@ import { OnboardingWizard } from "@/components/onboarding-wizard";
 export default async function GetStartedPage() {
   const t = await getTranslations("getStartedPage");
   return (
-    <main className="flex-1 flex flex-col items-center px-6 py-16 gap-10">
+    <main className="flex-1 flex flex-col items-center px-4 sm:px-6 py-12 sm:py-16 gap-10">
       <div className="flex flex-col items-center gap-2 text-center max-w-lg">
-        <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
-        <p className="text-sm text-muted-foreground">{t("subtitle")}</p>
+        <h1 className="font-serif text-4xl leading-tight tracking-tight text-balance sm:text-5xl">{t("title")}</h1>
+        <p className="mt-1 max-w-xl text-muted-foreground">{t("subtitle")}</p>
       </div>
       <div className="flex flex-col lg:flex-row gap-6 w-full max-w-4xl items-start justify-center">
         <div className="flex-1 flex flex-col items-center w-full">

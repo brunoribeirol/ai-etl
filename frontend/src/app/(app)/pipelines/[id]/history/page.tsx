@@ -36,7 +36,7 @@ export default async function PipelineHistoryPage({
 
   if (error || !pipeline) {
     return (
-      <main className="flex-1 px-6 py-12 max-w-4xl mx-auto w-full">
+      <main className="flex-1 px-4 sm:px-6 py-10 sm:py-14 max-w-5xl mx-auto w-full">
         <Alert variant="destructive">
           <AlertDescription>{error ?? t("notFound")}</AlertDescription>
         </Alert>
@@ -45,7 +45,7 @@ export default async function PipelineHistoryPage({
   }
 
   return (
-    <main className="flex-1 px-6 py-12 max-w-4xl mx-auto w-full flex flex-col gap-6">
+    <main className="flex-1 px-4 sm:px-6 py-10 sm:py-14 max-w-5xl mx-auto w-full flex flex-col gap-6">
       <div className="flex flex-col gap-1">
         <Link
           href="/pipelines"
@@ -53,7 +53,7 @@ export default async function PipelineHistoryPage({
         >
           {t("backLink")}
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">{pipeline.name}</h1>
+        <h1 className="font-serif text-4xl leading-tight tracking-tight text-balance sm:text-5xl">{pipeline.name}</h1>
         <p className="text-sm text-muted-foreground font-mono">
           {pipeline.source_type} · {pipeline.cron_schedule}
         </p>
