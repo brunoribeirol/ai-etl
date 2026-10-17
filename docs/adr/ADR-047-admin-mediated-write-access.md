@@ -2,7 +2,7 @@
 
 **Status:** Accepted, minimal scope.
 **Date:** 2026-09-06
-**Plan:** `docs/work/2026-09-06-mvp-monetization-readiness-plan.md`, WS3
+**Plan:** `docs/archive/work/2026-09-06-mvp-monetization-readiness-plan.md`, WS3
 
 ## Context
 

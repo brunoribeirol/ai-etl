@@ -37,7 +37,7 @@ Sources that can surface an incident:
 - CI security gates (`bandit`, `pip-audit`, Semgrep) flagging something
   already merged, not just something caught pre-merge.
 - Manual discovery (code review, a red-team-style self-audit like
-  `docs/work/2026-08-24-full-technical-product-audit.md`).
+  `docs/archive/work/2026-08-24-full-technical-product-audit.md`).
 - `admin_action_log`/`audit_log` review showing unexpected cross-tenant
   access patterns.
 

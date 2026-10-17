@@ -206,7 +206,7 @@ async def get_excel_sheets(
     file: UploadFile,
 ) -> dict[str, list[str]]:
     """Wave 1 item 2, 2026-09-05 mega-audit remediation
-    (docs/work/2026-09-05-mega-audit-remediation-plan.md): lets the upload form
+    (docs/archive/work/2026-09-05-mega-audit-remediation-plan.md): lets the upload form
     ask "does this workbook have more than one sheet, and what are they called"
     *before* the user submits the run, so they can pick the right one instead of
     the pipeline always defaulting to (or, before this fix, sometimes failing

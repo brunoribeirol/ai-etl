@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-08-27
-**Sprint:** Wave 3 (post-audit strategic decisions, `docs/work/2026-08-26-strategic-decisions-execution-plan.md`)
+**Sprint:** Wave 3 (post-audit strategic decisions, `docs/archive/work/2026-08-26-strategic-decisions-execution-plan.md`)
 
 ## Context
 

@@ -121,7 +121,7 @@ caso específico (formato misto, não só ISO vs BR).
 
 - **Achado 1 (Excel multi-aba sempre falha):** não. Confirma, agora ao vivo, a hipótese
   levantada por leitura de código na tentativa anterior desta mesma persona
-  (`docs/work/2026-09-04-persona-audit/data-engineer.md`, versão anterior). Não consta em
+  (`docs/archive/work/2026-09-04-persona-audit/data-engineer.md`, versão anterior). Não consta em
   `docs/CURRENT_STATE.md`.
 - **Achado 2 (bug de escape `R\$` quebrando moeda BR):** não — é mais específico e mais grave do
   que a hipótese original ("pode ficar imprevisível"). O bug real é determinístico (100% null ou

@@ -113,7 +113,7 @@ sistêmico (nenhum agente valida semântica de coluna contra o nome), não um ca
   isolado, mas a alegação de "fixed" no doc está factualmente errada para este subcaso.
 - **Achado 2 (hedging/direção em pergunta direcional)** — o mecanismo ADR-037 que existe
   hoje para isso (`reviewer.py`'s `llm_review_hedge`) já nasceu como resposta ao achado
-  do audit de 2026-08-24 (`docs/work/2026-08-24-full-technical-product-audit.md`, linha
+  do audit de 2026-08-24 (`docs/archive/work/2026-08-24-full-technical-product-audit.md`, linha
   173) — não é um achado novo; não consegui verificar ao vivo se ele dispara neste caso
   específico por instabilidade de browser.
 - **Achado "semantic slip" de coluna (item 2 acima)** — mesma classe do achado de

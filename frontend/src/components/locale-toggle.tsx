@@ -37,7 +37,7 @@ export function LocaleToggle({ syncBackend = false }: { syncBackend?: boolean })
 
   const nextLocale: Locale = locale === "pt-BR" ? "en-US" : "pt-BR";
   // Wave 3 item 10, 2026-09-05 mega-audit remediation
-  // (docs/work/2026-09-05-mega-audit-remediation-plan.md): the previous
+  // (docs/archive/work/2026-09-05-mega-audit-remediation-plan.md): the previous
   // single `switchTo` key used an ICU `select` with `en-US`/`pt-BR` as the
   // case labels (`{locale, select, en-US {English} other {Portuguese}}`) —
   // a hyphenated case label next-intl's ICU parser can't handle, so it

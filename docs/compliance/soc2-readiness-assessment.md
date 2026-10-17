@@ -190,7 +190,7 @@ sub-processors and their own compliance posture. Now recorded in
 
 ## Summary — priority-ordered gap list
 
-**Updated 2026-09-06** — see `docs/work/2026-09-06-mvp-monetization-readiness-plan.md`
+**Updated 2026-09-06** — see `docs/archive/work/2026-09-06-mvp-monetization-readiness-plan.md`
 for the plan that closed most of these.
 
 | Priority | Gap | Status (2026-09-07) |

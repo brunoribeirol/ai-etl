@@ -19,7 +19,7 @@ failure (source unavailable, LLM error) is retried automatically, and if it pers
 the operator — never fails silently.
 
 **Investigated first, per this project's own standard, before deciding anything** (full
-write-up in `docs/work/2026-08-21-sprint15-production-reliability.md`):
+write-up in `docs/archive/work/2026-08-21-sprint15-production-reliability.md`):
 
 1. `run_full_analysis_task` (`services/execution_queue.py`) has no Celery retry policy today —
    no `autoretry_for`, no `max_retries`, no `self.retry(...)` anywhere in the module.
@@ -182,5 +182,5 @@ roadmap) — this sprint's frontend footprint is a minimal badge on the existing
   delivery pattern this ADR reuses for a different (health, not content) alert.
 - ADR-019 — single-nullable-column-on-an-existing-table precedent, reused for Decision 2.
 - Vault: `artefact/product-roadmap-post-tcc.md`, Sprint 15.
-- `docs/work/2026-08-21-sprint15-production-reliability.md` — full investigation and
+- `docs/archive/work/2026-08-21-sprint15-production-reliability.md` — full investigation and
   workstream plan.

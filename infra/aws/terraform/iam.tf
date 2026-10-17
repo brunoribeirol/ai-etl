@@ -43,7 +43,7 @@ resource "aws_iam_role_policy" "ecs_task_execution_secrets" {
 # concept, so it authenticates to S3 with static AWS_ACCESS_KEY_ID /
 # AWS_SECRET_ACCESS_KEY env vars (see .env.example). On ECS, boto3 picks up
 # temporary credentials from this task role automatically -- no static keys
-# to provision, rotate, or leak. Documented in docs/deploy-diff-railway-vs-aws.md.
+# to provision, rotate, or leak. Documented in docs/architecture/deploy-diff-railway-vs-aws.md.
 
 resource "aws_iam_role" "ecs_task" {
   name = "${var.project_name}-${var.environment}-task"

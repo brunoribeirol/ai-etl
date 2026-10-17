@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-08-27
-**Sprint:** Wave 3 (post-audit strategic decisions, `docs/work/2026-08-26-strategic-decisions-execution-plan.md`)
+**Sprint:** Wave 3 (post-audit strategic decisions, `docs/archive/work/2026-08-26-strategic-decisions-execution-plan.md`)
 
 ## Context
 
@@ -31,7 +31,7 @@ This is explicitly a narrow fix for that one gap, not the broader resilience
 overhaul (bulkhead isolation across agent types, OpenTelemetry-driven SLO
 alerting, contract tests) the same gap analysis also surfaced and the owner
 deliberately deferred — see `docs/CURRENT_STATE.md`'s Wave 3 entry and
-`docs/work/2026-08-26-strategic-decisions-execution-plan.md` for the full
+`docs/archive/work/2026-08-26-strategic-decisions-execution-plan.md` for the full
 triage.
 
 ## Decision

@@ -215,5 +215,5 @@ also deferred.
 - [ADR-019](ADR-019-tenant-budget-cap.md) — flagged the missing
   admin/billing role this ADR's `editor` role partially closes for
   `PATCH /budget`.
-- `docs/work/2026-08-21-sprint19-security-enterprise.md` — investigation
+- `docs/archive/work/2026-08-21-sprint19-security-enterprise.md` — investigation
   notes and scope.

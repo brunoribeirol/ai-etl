@@ -235,13 +235,18 @@ tests/
 ├── integration/    # agents with LLM mocks, real sources
 └── e2e/            # 3 full scenarios
 
-docs/
-├── architecture.md
-├── adr/            # ADR-001 to ADR-004 (and future ones)
-└── case-study.md
+docs/               # map in docs/README.md
+├── CURRENT_STATE.md  # what is true today, one page
+├── history/        # state-log.md: every dated entry since August 2026
+├── adr/            # ADR-001 to ADR-047
+├── architecture/   # storage roles, Railway vs AWS deploy diff
+├── runbooks/       # operational procedures
+├── compliance/     # SOC 2 self-assessment, LGPD/GDPR, risk register
+└── archive/        # superseded plans and audits (archive/work/)
 
-case_study/
-├── pipelines/      # scenario1_spec.txt, scenario2_spec.txt, scenario3_spec.txt
-├── data/           # datasets (gitignored)
-└── results/        # run JSONs (scenario1/, 2/, 3/)
+case_study/         # map in case_study/README.md
+├── pipelines/      # public_scenario1-3_spec.txt + scenario 4 question (the report); scenario1-3_spec.txt (synthetic, e2e tests)
+├── data/           # fetch/seed scripts; datasets gitignored, pinned by public_data_manifest.json
+├── scripts/        # run_case_study.py, connector_check.py, load_test.py, regression_harness.py
+└── results/        # runs_log.csv and earlier sprint results
 ```

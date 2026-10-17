@@ -226,7 +226,7 @@ def test_create_run_with_file_and_manual_spec_combines_both(client: TestClient, 
 
 # ---------------------------------------------------------------------------
 # Wave 1 item 2, 2026-09-05 mega-audit remediation
-# (docs/work/2026-09-05-mega-audit-remediation-plan.md): a multi-sheet Excel
+# (docs/archive/work/2026-09-05-mega-audit-remediation-plan.md): a multi-sheet Excel
 # upload used to always silently read sheet 0 for the preview, then have the
 # real pipeline execution raise (no sheet_name in the generated plan, and
 # `_load_excel` refuses to guess) — reported as "Excel multi-sheet always

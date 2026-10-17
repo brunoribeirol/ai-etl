@@ -9,7 +9,7 @@ historical record of what was planned and why — read `CURRENT_STATE.md` for cu
 
 ## Objective
 
-Close out every open finding from `docs/work/2026-09-04-mega-persona-audit.md` (12-persona
+Close out every open finding from `docs/archive/work/2026-09-04-mega-persona-audit.md` (12-persona
 audit, 2026-09-04) that isn't already fixed. 2 items from that doc are already resolved (the
 pt-BR date-parse bug, PR #191, live-verified; one stray `# type: ignore`, PR #192) and are not
 repeated here.

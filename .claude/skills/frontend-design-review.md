@@ -42,7 +42,7 @@ it's done.
 
 ## Before shipping any new frontend PR
 
-1. `npm run lint` and `npm run build` clean (see `docs/work/2026-08-25-*.md` for the
+1. `npm run lint` and `npm run build` clean (see `docs/archive/work/2026-08-25-*.md` for the
    iCloud-sync `node_modules` hang workaround if either command hangs).
 2. Every new route name, component name, and file name reviewed against the English-only rule
    above.

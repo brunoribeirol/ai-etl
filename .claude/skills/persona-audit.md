@@ -1,7 +1,7 @@
 # Skill: persona-audit
 
 Multi-persona technical + product audit, formalized from the ad hoc protocol used on
-2026-08-24 (`docs/work/2026-08-24-full-technical-product-audit.md`) — that session ran 12
+2026-08-24 (`docs/archive/work/2026-08-24-full-technical-product-audit.md`) — that session ran 12
 personas as one-off prompts inside a conversation with no reusable artifact. This skill makes
 it repeatable.
 
@@ -82,7 +82,7 @@ plan as a phantom item.
 
 ### Step 3 — Consolidate
 
-One document, `docs/work/YYYY-MM-DD-<slug>-audit.md`, with:
+One document, `docs/archive/work/YYYY-MM-DD-<slug>-audit.md`, with:
 - Per-persona findings (link to each persona's own investigation notes if they were separate
   agent transcripts).
 - A single prioritized list across all personas, deduplicated (the 2026-08-24 audit found the
@@ -99,10 +99,10 @@ it" as distinct, separately-approved steps.
 
 ## Related
 
-- `docs/work/2026-08-24-full-technical-product-audit.md` — the original, unformalized run of
+- `docs/archive/work/2026-08-24-full-technical-product-audit.md` — the original, unformalized run of
   this protocol.
-- `docs/work/2026-09-04-mega-persona-audit.md` (+ `docs/work/2026-09-04-persona-audit/*.md`) —
+- `docs/archive/work/2026-09-04-mega-persona-audit.md` (+ `docs/archive/work/2026-09-04-persona-audit/*.md`) —
   first full-scope run using this formalized skill; source of the browser-contention and
   live-verification lessons folded into Step 2 above.
-- `docs/work/2026-09-05-mega-audit-remediation-plan.md` — the Step-4 follow-up plan for that run.
+- `docs/archive/work/2026-09-05-mega-audit-remediation-plan.md` — the Step-4 follow-up plan for that run.
 - `work-plan` skill — use for the follow-up fix-execution plan once findings are prioritized.

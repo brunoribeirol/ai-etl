@@ -369,10 +369,10 @@ def test_injected_parent_env_var_not_visible_in_sandboxed_child(
 
 # ---------------------------------------------------------------------------
 # Wave 0 item 1, 2026-09-05 mega-audit remediation
-# (docs/work/2026-09-05-mega-audit-remediation-plan.md): a seccomp filter
+# (docs/archive/work/2026-09-05-mega-audit-remediation-plan.md): a seccomp filter
 # denying execve/execveat on the sandboxed child, closing the
 # arbitrary-command-execution vector the Red Team audit demonstrated
-# (docs/work/2026-09-04-persona-audit/red-team.md — reaching subprocess.run
+# (docs/archive/work/2026-09-04-persona-audit/red-team.md — reaching subprocess.run
 # via ().__class__.__base__.__subclasses__() and calling it to run
 # `whoami`, with no `import` anywhere in the payload). This reproduces that
 # exact gadget through the real execute_in_sandbox() call (not a
@@ -461,7 +461,7 @@ def test_install_seccomp_filter_fails_open_on_non_linux(mocker) -> None:
 # scale_timeout_for_rows() (ADR-012, Sprint 12 scale profiling) — real
 # profiling against a 200k-row benchmark confirmed the fixed per-call timeout
 # doesn't scale with input size; see docs/adr/ADR-012-scale-strategy.md and
-# docs/work/2026-08-19-sprint12-scale-profiling.md for the measurements.
+# docs/archive/work/2026-08-19-sprint12-scale-profiling.md for the measurements.
 # ---------------------------------------------------------------------------
 
 

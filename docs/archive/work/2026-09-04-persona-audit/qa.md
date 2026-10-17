@@ -80,7 +80,7 @@ registrada realmente aconteceu (não apenas na documentação).
 ## Já era conhecido pelas auditorias anteriores? (sim/não + link)
 
 - **Achado 1 (test_quality.py duplicado)**: **não** — a auditoria de 2026-08-24
-  (`docs/work/2026-08-24-full-technical-product-audit.md:219`) fez uma "mock-density
+  (`docs/archive/work/2026-08-24-full-technical-product-audit.md:219`) fez uma "mock-density
   analysis" geral e concluiu que a suíte é majoritariamente não-superficial, mas não
   aponta esse arquivo específico como duplicação de unit↔integration. É um achado novo,
   porém de severidade baixa (não é um problema de segurança nem de honestidade da

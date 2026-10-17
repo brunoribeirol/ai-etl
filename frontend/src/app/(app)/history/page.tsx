@@ -106,7 +106,7 @@ export default async function History() {
             </TableHeader>
             <TableBody>
               {/* Wave 3 item 9, 2026-09-05 mega-audit remediation
-                  (docs/work/2026-09-05-mega-audit-remediation-plan.md): this
+                  (docs/archive/work/2026-09-05-mega-audit-remediation-plan.md): this
                   already renders real `<table>`/`<tr>`/`<td>` markup (shadcn
                   `<Table>`, not a `<div>` grid) — the actual reported gap was
                   5 separate, identically-targeted `<a>` elements per row, so

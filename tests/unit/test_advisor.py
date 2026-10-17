@@ -131,7 +131,7 @@ def test_run_advisor_prompt_instructs_hedging_small_samples_and_unverified_colum
     mock_get_llm, sample_df, gold_result, science_result
 ) -> None:
     """Wave 2 item 7, 2026-09-05 mega-audit remediation
-    (docs/work/2026-09-05-mega-audit-remediation-plan.md): live-verified real
+    (docs/archive/work/2026-09-05-mega-audit-remediation-plan.md): live-verified real
     gap (LLM/Prompt Engineer persona, `misleading_column.csv`) — recommendations
     grounded in a tiny segment, or in a column whose name implies a calculated
     metric it may not actually be, used to be presented with the same

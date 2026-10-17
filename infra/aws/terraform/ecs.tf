@@ -17,7 +17,7 @@ resource "aws_cloudwatch_log_group" "worker" {
 # AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY are deliberately absent here --
 # boto3 (audit/storage.py's S3StorageBackend) picks up credentials
 # automatically from the task role (iam.tf) instead. See
-# docs/deploy-diff-railway-vs-aws.md.
+# docs/architecture/deploy-diff-railway-vs-aws.md.
 
 locals {
   redis_url = "redis://${aws_elasticache_cluster.redis.cache_nodes[0].address}:${aws_elasticache_cluster.redis.cache_nodes[0].port}/0"
