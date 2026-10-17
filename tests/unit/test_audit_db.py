@@ -935,6 +935,41 @@ def test_load_full_result_reconstructs_dataframes_and_figure(
     assert result["tokens"] == {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}
 
 
+def test_load_full_result_keeps_the_order_of_many_entries(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Entries are reloaded in parallel since 2026-10-16; the page must still list them in the
+    # order the analysis produced them.
+    engine = _make_sqlite_engine()
+    monkeypatch.setattr(db, "scoped_connection", _fake_scope(engine))
+    monkeypatch.setattr(db, "tenant_scope", _fake_scope(engine))
+    state = _make_completed_state()
+    save_run(state, log_dir=str(tmp_path))
+    gold = [
+        {**_make_gold_result(), "task_question": f"gold {i}", "gold_df": pd.DataFrame({"i": [i]})}
+        for i in range(4)
+    ]
+    science = [
+        {
+            **_make_science_result(),
+            "task_question": f"science {i}",
+            "predictions_df": pd.DataFrame({"i": [i]}),
+        }
+        for i in range(3)
+    ]
+    save_analysis(
+        state["run_id"], gold, science, _make_advisor_result(), _ZERO_TOKENS, log_dir=str(tmp_path)
+    )
+
+    result = load_full_result(state["run_id"], log_dir=str(tmp_path))
+
+    assert result is not None
+    assert [e["task_question"] for e in result["gold"]] == [f"gold {i}" for i in range(4)]
+    assert [e["gold_df"]["i"].iloc[0] for e in result["gold"]] == [0, 1, 2, 3]
+    assert [e["task_question"] for e in result["science"]] == [f"science {i}" for i in range(3)]
+    assert [e["predictions_df"]["i"].iloc[0] for e in result["science"]] == [0, 1, 2]
+
+
 def test_load_full_result_returns_none_for_unknown_run(tmp_path: Path) -> None:
     assert load_full_result("no-such-run", log_dir=str(tmp_path)) is None
 
