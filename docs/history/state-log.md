@@ -125,6 +125,19 @@ _Already closed this arc (were open before): `POST /llm/test-connectivity` is no
 ("Working 1921ms"); the audit's H5/H1/M3/M11 and all other merged items are live-verified — see
 below._
 
+## 2026-10-17 (night): redesign, instant page changes, faster API reads
+
+Ninth entry.
+
+| PR | What | Verified on production |
+|---|---|---|
+| #347, #348 | `docs/` reorganised (this log split from a one-page `CURRENT_STATE.md`); comments and docstrings without em-dashes (no code change: identical ASTs) | merged, CI green |
+| #349 | Editorial design foundation (palette, Instrument Serif, light default) and a new landing page; app header with five links and "More", mobile menu below 1024px | header at 390, 1,100 and 1,460 px: no overflow, no horizontal scroll |
+| #350 | Loading boundary for the app (Next.js 16 does not prefetch a dynamic route without one); `GET /runs/{id}?preview_rows=N` with row totals; the new header on every app page; the run page titled by its business question | page switch 3,512 ms to 33 ms; run page 3,489 KB to 73 KB |
+| #351 | Loading boundary for the three detail routes | list to run page: 10,598 ms with the list on screen to 466 ms |
+| #352 | A run's analysis entries reloaded in parallel | run page 11.4 s to 7.4 s |
+| #353 | Per-pipeline lookups of `GET /pipelines` concurrent | 10.1 s to 4.4 to 5.6 s |
+
 ## 2026-10-16 (evening): screen walkthrough, four fixes, region, documents reorganised
 
 Eighth entry.
