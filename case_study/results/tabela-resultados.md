@@ -60,7 +60,7 @@
 
 ## Limitações desta rodada e protocolo de re-execução (auditoria M10, 2026-09-09)
 
-Registrado após a auditoria de 12 personas (`docs/work/2026-09-08-full-persona-audit.md`,
+Registrado após a auditoria de 12 personas (`docs/archive/work/2026-09-08-full-persona-audit.md`,
 persona Academic Evaluator) para manter a narrativa do TCC honesta sobre o que esta tabela
 cobre e o que **não** cobre:
 
