@@ -10,6 +10,7 @@ the Silver run + Gold/Science/Advisor analysis persistence pair
 
 import io
 import json
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from typing import Any, Optional, Union
 
@@ -585,11 +586,20 @@ def load_full_result(
     if storage.exists(analysis_key):
         analysis = json.loads(storage.read_bytes(analysis_key))
         question = analysis.get("question", "")
-        gold = [_reload_analysis_entry(e, storage, "gold_df") for e in analysis.get("gold", [])]
-        science = [
-            _reload_analysis_entry(e, storage, "predictions_df")
-            for e in analysis.get("science", [])
+        # Each entry costs up to four object-store calls (exists and read, for its data and its
+        # chart). Done one after another, a run with five sub-analyses spent about 11 s here
+        # on production (2026-10-16: API in Amsterdam, bucket in São Paulo). The entries are
+        # independent and the boto3 client is thread-safe, so they load in parallel; `map`
+        # keeps their order.
+        entries = [(e, "gold_df") for e in analysis.get("gold", [])] + [
+            (e, "predictions_df") for e in analysis.get("science", [])
         ]
+        with ThreadPoolExecutor(max_workers=_RELOAD_WORKERS) as pool:
+            reloaded = list(
+                pool.map(lambda pair: _reload_analysis_entry(pair[0], storage, pair[1]), entries)
+            )
+        n_gold = len(analysis.get("gold", []))
+        gold, science = reloaded[:n_gold], reloaded[n_gold:]
         advisor = analysis.get("advisor", {})
 
     return {
@@ -601,6 +611,10 @@ def load_full_result(
         "question": question,
         "tokens": _load_analysis_tokens(run_id, tenant_id),
     }
+
+
+# Concurrent object-store reads when a run's analysis entries are reloaded.
+_RELOAD_WORKERS = 8
 
 
 def _reload_analysis_entry(
