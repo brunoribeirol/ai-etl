@@ -20,7 +20,7 @@ Architecture: `CLAUDE.md` and `docs/adr/`.
 | Part | Where | Note |
 |---|---|---|
 | API, worker, scheduler, Redis | Railway, region Amsterdam (`ams`) | Moving to US East (Virginia) is decided, the owner applies it. Hard spend limit US$ 15 |
-| Interface | Vercel, https://ai-etl.vercel.app | Clerk development instance; it fails behind the owner's VPN |
+| Interface | Vercel, https://ai-etl.vercel.app | Editorial redesign (#349, #350): warm paper and graphite, one amber accent, serif headings, light by default. Clerk development instance; it fails behind the owner's VPN |
 | Database | Supabase project `ai-etl`, `sa-east-1` | Row-level security per tenant |
 | Run artefacts, database backups | S3 bucket `ai-etl-artifacts-brlla`, `sa-east-1` | Backups by `.github/workflows/db-backup.yml` |
 | Default model | `gpt-4o-mini` (`core/llm.py`, `AI_ETL_LLM_MODEL`) | To be replaced by the comparison of current models |
@@ -49,9 +49,14 @@ Health: `GET /health/ready` (database and Redis), never `/health`. Worker logs: 
    second account and a disposable database (vault runbook
    `tcc/evidence/runbook-functional-rows-with-the-owner.md`). 5.4 and 5.5 stay untested by
    decision (no notification destination).
-3. **Railway region:** move the four services to US East and measure the API before and after
-   (2026-10-16, from Amsterdam: `/health/ready` 1.2 to 4.0 s, `/pipelines` 10 s, a run page 12.5 s).
-4. **Front-end refinement.** Known: the header navigation overflows at medium widths.
+3. **Railway region:** move the four services to US East and measure the API before and after.
+   After #350 to #353 (still from Amsterdam): page switch 33 ms (skeleton), `GET /runs` 2.6 s,
+   `GET /pipelines` 4.4 to 5.6 s (was 10.1 s), a run page 7.4 s and 73 KB (was 11.4 s and
+   3.5 MB). What remains is the distance to the database and the bucket in São Paulo.
+4. **Front-end:** the landing page and every app page carry the redesign (#349, #350), the
+   header is responsive (checked at 390, 1,100 and 1,460 px). Left: the model selector cards
+   (after the comparison) and the inner components (run form, pipeline cards, executive
+   summary) beyond their headers.
 5. **Close the code:** push, message the advisor.
 
 After the report is delivered: set the five Dependabot limits back to 5 (#337), take up the
