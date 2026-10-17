@@ -7,6 +7,8 @@ here: this router only manages the `saved_pipelines` row (create/list/get/
 patch); it never itself enqueues a run.
 """
 
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from typing import Annotated, Any, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -120,33 +122,35 @@ class UpdatePipelineRequest(BaseModel):
     approval_threshold_rows: Optional[int] = Field(default=None, ge=0)
 
 
-def _with_health(pipeline: dict[str, Any]) -> dict[str, Any]:
-    """Sprint 15 (ADR-020 Decision 4): merge `success_rate`/
-    `avg_latency_seconds`/`health_sample_size` onto a saved-pipeline dict,
-    additive fields alongside the `consecutive_failures`/`last_status`/
-    `last_error` cache `_saved_pipeline_row_to_dict` already includes.
-    `consecutive_failures`/`last_status`/`last_error` are cheap (already on
-    the row); `success_rate`/`avg_latency_seconds` cost one extra aggregate
-    query per pipeline (`audit.db.get_pipeline_health`): accepted at this
-    project's current scale, same posture ADR-020 documents.
-    """
-    health = get_pipeline_health(pipeline["id"], pipeline["tenant_id"])
-    # Sprint 30 (ADR-031): merge the LLM provider/model override the same way
-    # `success_rate`/etc. above are merged: `_saved_pipeline_row_to_dict`
-    # (`audit/db.py`) intentionally wasn't touched to add these two columns (see
-    # `get_saved_pipeline_llm_config`'s docstring for why), so this router composes
-    # them on read instead.
-    llm_config = get_saved_pipeline_llm_config(pipeline["id"], pipeline["tenant_id"]) or {
-        "llm_provider": None,
-        "llm_model": None,
-    }
-    # Sprint 37 (ADR-034): same composition pattern as `llm_config` above; the
-    # notification target's value itself is never included here (only whether one
-    # is configured and active), see `get_saved_pipeline_notification_config`'s
-    # docstring for why.
-    notification_config = get_saved_pipeline_notification_config(
-        pipeline["id"], pipeline["tenant_id"]
-    ) or {
+# Concurrent database lookups when saved pipelines are listed or returned (2026-10-16).
+_LOOKUP_WORKERS = 6
+
+
+def _lookups(pipeline: dict[str, Any]) -> list[Callable[[], Any]]:
+    """The three per-pipeline reads merged onto a saved pipeline: health (Sprint 15, ADR-020),
+    LLM override (Sprint 30, ADR-031) and notification target (Sprint 37, ADR-034). Each is its
+    own tenant-scoped transaction; run one after another they cost several database round
+    trips per pipeline, and `GET /pipelines` took 10 s for two pipelines on production
+    (2026-10-16: API in Amsterdam, database in São Paulo), so they run concurrently."""
+    pipeline_id, tenant_id = pipeline["id"], pipeline["tenant_id"]
+    return [
+        lambda: get_pipeline_health(pipeline_id, tenant_id),
+        lambda: get_saved_pipeline_llm_config(pipeline_id, tenant_id),
+        lambda: get_saved_pipeline_notification_config(pipeline_id, tenant_id),
+    ]
+
+
+def _compose(
+    pipeline: dict[str, Any],
+    health: dict[str, Any],
+    llm_config: dict[str, Any] | None,
+    notification_config: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Merge the lookups onto the saved-pipeline dict. The notification target's value is
+    never included (only whether one is configured and active), see
+    `get_saved_pipeline_notification_config`'s docstring for why."""
+    llm = llm_config or {"llm_provider": None, "llm_model": None}
+    notification = notification_config or {
         "notification_channel": None,
         "notification_configured": False,
         "notification_active": True,
@@ -156,19 +160,35 @@ def _with_health(pipeline: dict[str, Any]) -> dict[str, Any]:
         "success_rate": health["success_rate"],
         "avg_latency_seconds": health["avg_latency_seconds"],
         "health_sample_size": health["sample_size"],
-        "llm_provider": llm_config["llm_provider"],
-        "llm_model": llm_config["llm_model"],
-        "notification_channel": notification_config["notification_channel"],
-        "notification_configured": notification_config["notification_configured"],
-        "notification_active": notification_config["notification_active"],
+        "llm_provider": llm["llm_provider"],
+        "llm_model": llm["llm_model"],
+        "notification_channel": notification["notification_channel"],
+        "notification_configured": notification["notification_configured"],
+        "notification_active": notification["notification_active"],
     }
+
+
+def _with_health_all(pipelines: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Enrich every pipeline, all lookups in one pool; the order of `pipelines` is kept."""
+    if not pipelines:
+        return []
+    with ThreadPoolExecutor(max_workers=_LOOKUP_WORKERS) as pool:
+        futures = [[pool.submit(lookup) for lookup in _lookups(p)] for p in pipelines]
+        return [
+            _compose(p, *(future.result() for future in group))
+            for p, group in zip(pipelines, futures, strict=True)
+        ]
+
+
+def _with_health(pipeline: dict[str, Any]) -> dict[str, Any]:
+    return _with_health_all([pipeline])[0]
 
 
 @router.get("")
 def list_pipelines(
     tenant_id: Annotated[str, Depends(get_current_tenant_id)],
 ) -> list[dict[str, Any]]:
-    return [_with_health(p) for p in list_saved_pipelines(tenant_id)]
+    return _with_health_all(list_saved_pipelines(tenant_id))
 
 
 @router.get("/{pipeline_id}")

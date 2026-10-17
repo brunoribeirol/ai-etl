@@ -86,6 +86,30 @@ def _notification_config(**overrides: object) -> dict:
     return config
 
 
+def test_list_pipelines_keeps_order_and_pairs_each_lookup_with_its_pipeline(
+    client: TestClient, mocker
+) -> None:
+    # The per-pipeline lookups run concurrently since 2026-10-16.
+    rows = [{**_saved_pipeline_row(), "id": f"pl-{i}"} for i in range(5)]
+    mocker.patch("ai_etl.api.routers.pipelines.list_saved_pipelines", return_value=rows)
+    mocker.patch(
+        "ai_etl.api.routers.pipelines.get_pipeline_health",
+        side_effect=lambda pid, tid: _health(success_rate=int(pid[-1]) / 10, sample_size=1),
+    )
+    mocker.patch(
+        "ai_etl.api.routers.pipelines.get_saved_pipeline_llm_config", return_value=_llm_config()
+    )
+    mocker.patch(
+        "ai_etl.api.routers.pipelines.get_saved_pipeline_notification_config",
+        return_value=_notification_config(),
+    )
+
+    body = client.get("/pipelines").json()
+
+    assert [p["id"] for p in body] == [f"pl-{i}" for i in range(5)]
+    assert [p["success_rate"] for p in body] == [i / 10 for i in range(5)]
+
+
 def test_list_pipelines_scoped_to_tenant(client: TestClient, mocker) -> None:
     mock_list = mocker.patch(
         "ai_etl.api.routers.pipelines.list_saved_pipelines",
