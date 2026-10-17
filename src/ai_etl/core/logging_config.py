@@ -2,14 +2,14 @@
 
 Every agent/service already calls the stdlib `logging` module directly
 (`logger = logging.getLogger(__name__)`, `logger.warning(...)`,
-`ai_etl.audit.logger.log_action(...)` for pipeline audit entries) — this
+`ai_etl.audit.logger.log_action(...)` for pipeline audit entries): this
 module does not touch any of those call sites. It only swaps the *handler/
 formatter* attached to the root logger, once, at process bootstrap
 (`api/main.py` for the web process, `core/celery_app.py` for the worker),
 so every existing log line becomes one JSON object per line instead of
 plain text, with no call-site changes anywhere in the codebase.
 
-Deliberately no `python-json-logger` (or any other) dependency — the format
+Deliberately no `python-json-logger` (or any other) dependency: the format
 this project needs (`timestamp`, `level`, `logger`, `message`, plus whatever
 extra fields a call site passes via `logging.LoggerAdapter`/`extra=`) is a
 ~30-line `logging.Formatter` subclass, not worth a new dependency for.
@@ -24,7 +24,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 # Attributes every `logging.LogRecord` carries regardless of what a call site
-# passes via `extra=` — anything NOT in this set on a given record is a
+# passes via `extra=`: anything NOT in this set on a given record is a
 # caller-supplied extra field and gets folded into the JSON output. Mirrors
 # the fields `logging.LogRecord.__init__` sets unconditionally (see the
 # stdlib `logging` source) so a legitimate `extra={"foo": ...}` is never
@@ -66,7 +66,7 @@ class JsonFormatter(logging.Formatter):
     tenant_id})`), same "structured extras" behavior `python-json-logger`
     would give, without the dependency.
 
-    Note: this formatter does not redact sensitive fields — that job stays
+    Note: this formatter does not redact sensitive fields: that job stays
     with `ai_etl.audit.logger._sanitize` for audit-log details. Application
     code must keep avoiding `logger.warning(f"... {api_key}")`-shaped calls,
     same rule as before this sprint (see CLAUDE.md's non-negotiables).
@@ -94,13 +94,13 @@ def configure_logging(level: str | None = None) -> None:
     """Attach a single JSON-formatted `StreamHandler` to the root logger.
 
     Idempotent: safe to call more than once (e.g. if a future entrypoint
-    imports both `api/main.py` and `core/celery_app.py` in-process) — it
+    imports both `api/main.py` and `core/celery_app.py` in-process): it
     clears any handlers this function previously attached before adding a
     fresh one, rather than stacking duplicate handlers that would each emit
     the same line.
 
     `level` defaults to `AI_ETL_LOG_LEVEL` (env var), falling back to
-    `INFO` — matches the "env var, sane default" convention every other
+    `INFO`: matches the "env var, sane default" convention every other
     config knob in this project follows (e.g. `AI_ETL_SANDBOX_TIMEOUT`).
     """
     resolved_level: str = level or os.getenv("AI_ETL_LOG_LEVEL") or "INFO"

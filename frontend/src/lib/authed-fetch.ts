@@ -5,7 +5,7 @@ import { useCallback } from "react";
 
 /**
  * Client-side authed fetch (Wave 6, 2026-08-25 admin panel/approval-gate UI
- * plan) — extracted from the `authedFetch` `useCallback` `pipelines-manager.tsx`
+ * plan): extracted from the `authedFetch` `useCallback` `pipelines-manager.tsx`
  * originally defined inline (Sprint 13/30, needs `useAuth().getToken()` fresh
  * per request, unlike the server-side `lib/api.ts::apiFetch`, which reads the
  * token via `auth()` at request time in a Server Component). First reuse

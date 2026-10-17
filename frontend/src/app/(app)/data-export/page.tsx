@@ -4,13 +4,13 @@ import { apiFetch } from "@/lib/api";
 import type { ApiConfig } from "@/lib/types";
 
 /**
- * "Data export & retention" page — first frontend consumer of
+ * "Data export & retention" page: first frontend consumer of
  * `GET /tenant/export`, `GET`/`PATCH /tenant/retention`, and `DELETE /tenant`
- * (Sprint 24 ADR-025, Sprint 36 ADR-035) — the 3 LGPD/GDPR data-subject
+ * (Sprint 24 ADR-025, Sprint 36 ADR-035): the 3 LGPD/GDPR data-subject
  * rights this project's backend already supported with zero UI: export
  * (Art. 9/18 II), retention (automatic purge window, opt-in), and erasure
  * (Art. 18 VI / GDPR Art. 17). All three were deliberately included together
- * per the owner's explicit decision (2026-08-27) — an earlier draft of this
+ * per the owner's explicit decision (2026-08-27): an earlier draft of this
  * page shipped export/retention-display only and flagged erasure + editing
  * the retention window as open scope questions rather than deciding them
  * unilaterally.
@@ -19,7 +19,7 @@ import type { ApiConfig } from "@/lib/types";
  * (ADR-035 Decision 1); `PATCH /tenant/retention` and `DELETE /tenant` are
  * `editor`-only (ADR-025/ADR-035). Role is read here (server-side `/config`,
  * same cosmetic pattern `(app)/layout.tsx`/`budget/page.tsx` use) purely to
- * decide whether the edit/delete controls render — both routes
+ * decide whether the edit/delete controls render: both routes
  * independently re-enforce the role server-side regardless of what this
  * page shows a `viewer` caller.
  */

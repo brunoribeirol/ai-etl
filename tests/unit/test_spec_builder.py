@@ -1,4 +1,4 @@
-"""Tests for `services/spec_builder.py` (extracted from `app.py`, Sprint 6/ADR-011 —
+"""Tests for `services/spec_builder.py` (extracted from `app.py`, Sprint 6/ADR-011:
 moved here alongside `pipeline_service.py`'s own tests since it's no longer
 Streamlit-specific)."""
 
@@ -47,7 +47,7 @@ def test_auto_generate_spec_reports_row_and_column_counts() -> None:
 def test_auto_generate_spec_includes_additional_instructions() -> None:
     """2026-09-04 gap-closing fix: the manual-spec textarea used to be silently
     discarded whenever a file was also attached (`api/routers/runs.py::create_run`
-    never passed it through) — regression guard that it now reaches the spec text
+    never passed it through): regression guard that it now reaches the spec text
     and is marked as taking priority over the generic cleaning steps."""
     df = pd.DataFrame({"dt": ["2026-01-02"], "active": [True]})
     spec = auto_generate_spec(

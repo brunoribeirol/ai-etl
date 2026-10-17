@@ -1,8 +1,8 @@
-"""stage_latencies table — per-stage latency instrumentation (ADR-007)
+"""stage_latencies table: per-stage latency instrumentation (ADR-007)
 
 Purely additive: a new table, no changes to `runs`/`analysis_runs`. See
 ADR-007 for why a narrow long-format table (with a `seq` counter) was chosen
-over new columns — the Silver pipeline always runs the same 5 LangGraph nodes
+over new columns: the Silver pipeline always runs the same 5 LangGraph nodes
 exactly once, but one `analysis_runs` row can correspond to multiple Analyst/
 Science sub-task calls plus repair reruns, which a fixed column set can't
 represent without an array column or repeated NULL-padded columns.

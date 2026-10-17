@@ -1,16 +1,16 @@
-"""Clerk session-token verification — local JWT/JWKS check, no Streamlit import.
+"""Clerk session-token verification: local JWT/JWKS check, no Streamlit import.
 
 Per ADR-006, Clerk JWTs are verified in-process against Clerk's published JWKS
 endpoint (fetch + cache the signing keys) rather than calling Clerk's backend API
 on every request. This keeps Clerk's API latency/availability off the critical
 path of every pipeline run, mirroring the pure-function-returning-results style
-already used by `pipeline_service.py` — this module never raises into the UI
+already used by `pipeline_service.py`: this module never raises into the UI
 layer for expected failure modes (expired token, bad signature, unreachable
 JWKS); it always returns an `AuthResult` and fails closed (denies access) on
 any verification error.
 
 Env vars (read via `os.environ`/`os.getenv`, same pattern as `OPENAI_API_KEY`
-in `app.py` — never hardcoded): `CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`,
+in `app.py`: never hardcoded): `CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`,
 `CLERK_JWKS_URL`, `CLERK_ISSUER`. `CLERK_JWKS_URL` and `CLERK_ISSUER` are
 both required by this module (the latter for `iss` claim validation, so a
 token signed by a key that happens to resolve via the configured JWKS URL
@@ -29,13 +29,13 @@ import jwt
 from jwt import PyJWKClient
 
 # Clerk issues RS256-signed JWTs (asymmetric, verified against the published
-# JWKS public keys) — never accept HS256/"none" here, that would let a caller
+# JWKS public keys): never accept HS256/"none" here, that would let a caller
 # forge a token using a key this service doesn't control.
 _ALGORITHMS = ["RS256"]
 
 # Module-level cache: the JWKS client fetches and caches Clerk's public keys
 # internally (PyJWKClient re-fetches only on a cache-miss/unknown `kid`), so it
-# must not be re-created per call — that would defeat the caching and add a
+# must not be re-created per call: that would defeat the caching and add a
 # network round-trip to every verification.
 _jwks_client: Optional[PyJWKClient] = None
 _jwks_client_url: Optional[str] = None
@@ -45,10 +45,10 @@ class AuthResult(TypedDict):
     ok: bool
     user_id: Optional[str]  # Clerk user id (JWT `sub` claim) -> becomes tenant_id
     error: Optional[str]
-    # Sprint 19 (ADR-022) — Clerk Organizations. Present only when the
+    # Sprint 19 (ADR-022): Clerk Organizations. Present only when the
     # session has an *active* organization; `None` for a personal session
     # (every account that predates this sprint, and any account that never
-    # joins an org). `org_role` is the raw Clerk role claim, unmapped —
+    # joins an org). `org_role` is the raw Clerk role claim, unmapped:
     # `api/deps.py` maps it to this app's editor/viewer roles.
     org_id: Optional[str]
     org_role: Optional[str]
@@ -59,7 +59,7 @@ def _extract_org_claims(payload: dict[str, object]) -> tuple[Optional[str], Opti
 
     Clerk session token v2 nests organization claims under `"o"`
     (`o.id`/`o.rol`) to keep tokens small; legacy v1 templates use flat
-    `org_id`/`org_role` claims instead. Both shapes are handled — a token
+    `org_id`/`org_role` claims instead. Both shapes are handled: a token
     with neither (a personal session, or a JWT template that omits
     organization claims entirely) yields `(None, None)`, the same as today.
     """
@@ -103,7 +103,7 @@ def verify_session_token(token: str) -> AuthResult:
     """Verify a Clerk session JWT against the cached JWKS and return the outcome.
 
     Never raises for expected failure modes (missing/empty token, expired
-    token, bad signature, malformed token, unreachable JWKS) — always returns
+    token, bad signature, malformed token, unreachable JWKS): always returns
     `AuthResult(ok=False, error=...)` so callers (`app.py`) decide how to
     present the failure, matching how `pipeline_service.py` functions return
     error strings/fields instead of raising into the UI.

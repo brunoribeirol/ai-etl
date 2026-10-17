@@ -101,7 +101,7 @@ def test_document_source_forwards_llm_override_and_audit_logs_it(mocker) -> None
 
 def test_csv_source_with_override_does_not_audit_log_override(mocker) -> None:
     """The override entry is only logged when a get_llm()-calling connector
-    (document) actually runs — a plain CSV source never touches get_llm()."""
+    (document) actually runs: a plain CSV source never touches get_llm()."""
     df = pd.DataFrame({"a": [1]})
     mocker.patch("ai_etl.agents.pipeline.extractor.load_csv", return_value=df)
 
@@ -304,7 +304,7 @@ def test_extract_schema_narrow_source_not_truncated() -> None:
 
 def test_extract_schema_wide_source_sample_capped() -> None:
     """ADR-012: a wide source's raw sample is capped to MAX_SAMPLE_COLUMNS columns,
-    not the full column count — this is the fix for the confirmed Sprint 12 finding
+    not the full column count: this is the fix for the confirmed Sprint 12 finding
     that the sample scaled linearly and unbounded with column count."""
     n_cols = MAX_SAMPLE_COLUMNS + 50
     df = pd.DataFrame({f"col_{i}": [1, 2, 3] for i in range(n_cols)})
@@ -313,7 +313,7 @@ def test_extract_schema_wide_source_sample_capped() -> None:
 
     assert schema["sample_truncated"] is True
     assert len(schema["sample"][0]) == MAX_SAMPLE_COLUMNS
-    # dtypes/columns/null_counts/null_ratio stay full-width — only the raw sample is capped.
+    # dtypes/columns/null_counts/null_ratio stay full-width: only the raw sample is capped.
     assert len(schema["dtypes"]) == n_cols
     assert len(schema["columns"]) == n_cols
     assert len(schema["null_counts"]) == n_cols

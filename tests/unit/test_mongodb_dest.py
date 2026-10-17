@@ -1,6 +1,6 @@
 """Unit tests for `destinations/mongodb_dest.py::save_mongodb`/`preview_mongodb`.
 
-Only the network transport (`pymongo.MongoClient`) is mocked — same
+Only the network transport (`pymongo.MongoClient`) is mocked: same
 convention `tests/unit/test_mongodb_source.py` already established for the
 source-side connector.
 """
@@ -71,7 +71,7 @@ def test_save_mongodb_fail_raises_when_collection_not_empty(
 
 def test_save_mongodb_append_does_not_clear(mocker, monkeypatch: pytest.MonkeyPatch) -> None:
     # Empty collection to start, same as postgres_dest.py's own append
-    # coverage — appending onto a *non-empty* collection hits the same
+    # coverage: appending onto a *non-empty* collection hits the same
     # "final count != len(df)" mismatch check postgres_dest.py's `to_sql`
     # equivalent has for pre-existing rows; not this test's concern.
     monkeypatch.setenv("MONGODB_URI", "mongodb://shared-host:27017")

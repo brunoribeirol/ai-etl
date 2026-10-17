@@ -10,10 +10,10 @@ import { cn } from "@/lib/utils";
 import type { OnboardingStatus } from "@/lib/types";
 
 /**
- * Sprint 26 (ADR-027) — activation checklist for `/get-started`. Fetches
+ * Sprint 26 (ADR-027): activation checklist for `/get-started`. Fetches
  * `GET /onboarding/status`, a read-only aggregate over `runs`/
  * `saved_pipelines` (no dedicated table, see the ADR). Deliberately scoped
- * to this one page rather than repeated in the header on every route — a
+ * to this one page rather than repeated in the header on every route: a
  * known, flagged scope cut, same posture Sprint 13's manager took.
  *
  * 2026-10-16, the advisor's remark of 2026-09-10: a returning user who opened this page for a

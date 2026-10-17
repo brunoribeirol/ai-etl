@@ -1,7 +1,7 @@
 """JSON-safe serialization of `audit.db.load_full_result()`'s output (ADR-011).
 
 `load_full_result` reconstructs a dict shaped for `app.py`'s
-`_render_results()` — meant to be read directly by Python, so it holds real
+`_render_results()`: meant to be read directly by Python, so it holds real
 `pd.DataFrame`/`plotly.graph_objects.Figure` objects (`state["transformed_data"]`,
 `gold[i]["gold_df"]`/`science[i]["predictions_df"]`, `gold[i]["fig"]`/
 `science[i]["fig"]`), not something a JSON response can carry as-is. This
@@ -18,7 +18,7 @@ from plotly.graph_objects import Figure
 
 
 def nan_to_none_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """NaN/NaT aren't valid JSON — FastAPI's default encoder would otherwise
+    """NaN/NaT aren't valid JSON: FastAPI's default encoder would otherwise
     emit the (non-standard, some clients reject it) literal `NaN` token.
     Post-`to_dict()` cleanup rather than `DataFrame.where(..., None)`: pandas-stubs'
     `where()` overloads don't accept a bare `None` for `other` under mypy strict.
@@ -39,7 +39,7 @@ def _serialize_dataframe(df: pd.DataFrame) -> list[dict[str, Any]]:
 
 def _serialize_figure(fig: Figure) -> dict[str, Any]:
     # Plotly.js's `Plotly.newPlot(el, data, layout)` reads this exact shape
-    # directly — no transformation needed on the frontend side.
+    # directly: no transformation needed on the frontend side.
     return fig.to_plotly_json()  # type: ignore[no-any-return]  # plotly has no return-type stub here
 
 

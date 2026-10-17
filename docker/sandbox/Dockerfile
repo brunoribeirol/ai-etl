@@ -8,19 +8,19 @@
 #     Firecracker microVM by Vercel Sandbox in production. Vercel Sandbox
 #     ignores a custom image's ENTRYPOINT/CMD entirely, so that backend
 #     instead runs `run_sandboxed_vercel.py` explicitly via
-#     `box.run_process(...)` — see core/sandbox_vercel.py.
+#     `box.run_process(...)`: see core/sandbox_vercel.py.
 #
 # Deliberately installs the real `ai_etl` package (same as the top-level
 # Dockerfile) so both driver scripts can import
-# `ai_etl.core.sandbox._execute_code` directly — the restricted-globals /
+# `ai_etl.core.sandbox._execute_code` directly: the restricted-globals /
 # mode ("function" vs "script") dispatch logic stays defined in exactly one
 # place (core/sandbox.py), not duplicated into this image. This image only
 # plumbs a pickle payload in (stdin for the Docker backend, a file for the
-# Vercel backend — Vercel Sandbox's Python SDK does not support piping to a
+# Vercel backend: Vercel Sandbox's Python SDK does not support piping to a
 # process's stdin) and a pickle result out; it does not re-implement any
 # security-relevant logic.
 #
-# Not used by the top-level Dockerfile/Railway deploy — see ADR-038 for why
+# Not used by the top-level Dockerfile/Railway deploy: see ADR-038 for why
 # Docker-in-Docker doesn't work from inside a Railway service. Built and run
 # locally via `make sandbox-image` / core/sandbox_docker.py for
 # AI_ETL_SANDBOX_BACKEND=docker opt-in, and pushed to VCR via `make
@@ -36,7 +36,7 @@ COPY pyproject.toml uv.lock* README.md ./
 COPY src/ ./src/
 
 # No extras: plotly/scikit-learn/statsmodels are already base dependencies
-# (pyproject.toml — Analyst/Science need them unconditionally). No `api`
+# (pyproject.toml: Analyst/Science need them unconditionally). No `api`
 # extra: fastapi/uvicorn are never imported by sandboxed code.
 RUN uv sync --no-dev --no-editable
 
@@ -49,7 +49,7 @@ ENV PATH="/app/.venv/bin:$PATH"
 # --read-only` enforces at the call site (core/sandbox_docker.py).
 ENV PYTHONDONTWRITEBYTECODE=1
 
-# Non-root at image level too — `docker run --user 65534:65534` (the
+# Non-root at image level too: `docker run --user 65534:65534` (the
 # call site's own flag) is the layer that actually matters at runtime, but a
 # non-root default here means the image is safe even if some future caller
 # forgets that flag.

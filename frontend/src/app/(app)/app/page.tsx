@@ -3,10 +3,10 @@ import { RunForm } from "@/components/run-form";
 
 /**
  * "Run" page (Sprint 6, PR 4 → Sprint 7 redesign, ADR-011). Same route
- * and behavior — the API call and auth flow live entirely in
+ * and behavior: the API call and auth flow live entirely in
  * `<RunForm />`, unchanged; this is layout/copy only.
  *
- * Sprint 25 (ADR-036) — copy comes from `messages/{locale}.json`'s
+ * Sprint 25 (ADR-036): copy comes from `messages/{locale}.json`'s
  * `runPage` namespace.
  */
 export default async function Home() {

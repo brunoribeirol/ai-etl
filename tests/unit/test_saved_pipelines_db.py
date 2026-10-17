@@ -1,6 +1,6 @@
 """Unit tests for saved-pipeline CRUD in audit/db.py (Sprint 13, ADR-016).
 
-Same style as `test_audit_db.py`'s `load_history` tests — a real in-memory
+Same style as `test_audit_db.py`'s `load_history` tests: a real in-memory
 SQLite engine, not a mocked `get_engine`, so the actual `select`/`insert`/
 `update` statements execute for real (all plain SQLAlchemy Core, no
 `ON CONFLICT`, so this is portable to SQLite without any dialect-specific
@@ -31,7 +31,7 @@ def _make_sqlite_engine() -> Engine:
 
 
 def _fake_scope(engine: Engine):
-    """Stand-in for `tenant_scope` in these unit tests (ADR-040) — ignores
+    """Stand-in for `tenant_scope` in these unit tests (ADR-040): ignores
     `tenant_id` and opens a transaction on the given SQLite engine directly,
     since the real implementation's Postgres-only `SELECT set_config(...)`
     GUC call has no SQLite equivalent. Real GUC-scoping/RLS behavior is
@@ -94,7 +94,7 @@ def test_get_saved_pipeline_returns_none_for_other_tenant(engine: Engine) -> Non
 
 def test_delete_saved_pipeline_removes_the_row(engine: Engine) -> None:
     """2026-09-04 gap-closing feature: until now, `is_active=False` (pause) was
-    the only way to stop a saved pipeline — no way to actually remove one."""
+    the only way to stop a saved pipeline: no way to actually remove one."""
     created = db.create_saved_pipeline("tenant-a", "A", "postgres", "spec a", "0 3 * * *")
 
     assert db.delete_saved_pipeline(created["id"], "tenant-a") is True
@@ -114,11 +114,11 @@ def test_delete_saved_pipeline_does_not_delete_another_tenants_pipeline(engine: 
 
 def test_delete_saved_pipeline_detaches_run_history_instead_of_deleting_it(engine: Engine) -> None:
     """Regression guard for the `ON DELETE SET NULL` FK on
-    `runs.saved_pipeline_id` (`audit/models.py`) — deleting a saved pipeline
+    `runs.saved_pipeline_id` (`audit/models.py`): deleting a saved pipeline
     must never cascade into deleting the runs it produced.
 
     SQLite ignores FK actions entirely unless `PRAGMA foreign_keys=ON` is set
-    on the connection (unlike Postgres, where it's always enforced) — this
+    on the connection (unlike Postgres, where it's always enforced): this
     fixture's engine reuses a single underlying connection (`SingletonThreadPool`,
     SQLAlchemy's default for `sqlite:///:memory:`), so setting it once here
     applies for the rest of this test, matching the real `ON DELETE SET NULL`
@@ -187,7 +187,7 @@ def test_update_saved_pipeline_resuming_recomputes_next_run_from_now(engine: Eng
     assert resumed is not None
     assert resumed["is_active"] is True
     # SQLite (unlike Postgres) doesn't round-trip tzinfo on DateTime columns
-    # — compare naive-vs-naive here; the tz-awareness itself is exercised by
+    #: compare naive-vs-naive here; the tz-awareness itself is exercised by
     # test_create_saved_pipeline_returns_full_row against the live object
     # returned before any DB round-trip.
     next_run_naive = resumed["next_run_at"].replace(tzinfo=None)
@@ -240,7 +240,7 @@ def test_claim_due_pipeline_succeeds_when_next_run_at_matches(engine: Engine) ->
 
 def test_claim_due_pipeline_is_a_compare_and_swap_second_caller_loses(engine: Engine) -> None:
     """The concurrency guard itself (Sprint 13 code review fix): two
-    "ticks" racing to claim the same due fire — only the first wins, the
+    "ticks" racing to claim the same due fire: only the first wins, the
     second (whose `expected_next_run_at` no longer matches once the winner
     committed) must get `False`, never overwrite the winner's claim."""
     created = db.create_saved_pipeline("tenant-a", "A", "postgres", "spec a", "* * * * *")
@@ -252,7 +252,7 @@ def test_claim_due_pipeline_is_a_compare_and_swap_second_caller_loses(engine: En
     won_by_b = db.claim_due_pipeline(created["id"], expected, tick_b_next)
 
     assert won_by_a is True
-    assert won_by_b is False  # lost the race — next_run_at no longer equals `expected`
+    assert won_by_b is False  # lost the race: next_run_at no longer equals `expected`
 
     reloaded = db.get_saved_pipeline(created["id"], "tenant-a")
     assert reloaded is not None
@@ -468,7 +468,7 @@ def test_get_previous_completed_run_ignores_other_pipelines(engine: Engine) -> N
 
 def test_get_previous_completed_run_ignores_null_cost_when_no_analysis(engine: Engine) -> None:
     """A Silver-only scheduled run (no business_question) never wrote an
-    `analysis_runs` row — cost/tokens must read back as `None`, not `0`."""
+    `analysis_runs` row: cost/tokens must read back as `None`, not `0`."""
     with engine.begin() as conn:
         conn.execute(
             users_table.insert().values(id="tenant-a", created_at=datetime.now(tz=timezone.utc))
@@ -500,7 +500,7 @@ def test_record_pipeline_run_updates_task_and_leaves_next_run_at_untouched(
     assert reloaded is not None
     assert reloaded["last_task_id"] == "task-123"
     assert reloaded["last_run_at"] is not None
-    # next_run_at is exactly what claim_due_pipeline set — record_pipeline_run
+    # next_run_at is exactly what claim_due_pipeline set: record_pipeline_run
     # must not touch it (the claim, not the record step, owns that field).
     assert reloaded["next_run_at"] == claimed_next
 
@@ -510,7 +510,7 @@ def test_record_pipeline_run_updates_task_and_leaves_next_run_at_untouched(
 # ---------------------------------------------------------------------------
 #
 # `save_run`/`save_analysis` use `postgresql.insert` (ON CONFLICT), which
-# doesn't translate to SQLite — so these tests insert directly into
+# doesn't translate to SQLite: so these tests insert directly into
 # `runs`/`analysis_runs` via plain, dialect-agnostic `sqlalchemy.insert`,
 # the same pattern `tests/unit/test_audit_db.py`'s `load_history` tests use.
 
@@ -587,7 +587,7 @@ def test_list_pipeline_run_history_scopes_by_pipeline_and_tenant(engine: Engine)
     _insert_run(engine, "run-2", "tenant-a", pipeline["id"], t0 + timedelta(days=1))
     # A different saved pipeline's run must never show up here.
     _insert_run(engine, "run-other", "tenant-a", other_pipeline["id"], t0)
-    # An avulso (one-off) run — saved_pipeline_id is NULL — must never show up either.
+    # An avulso (one-off) run, saved_pipeline_id is NULL, must never show up either.
     _insert_run(engine, "run-avulso", "tenant-a", None, t0)
 
     history = db.list_pipeline_run_history(pipeline["id"], "tenant-a")
@@ -600,7 +600,7 @@ def test_list_pipeline_run_history_returns_empty_for_other_tenant(engine: Engine
     pipeline = db.create_saved_pipeline("tenant-a", "A", "postgres", "spec a", "0 3 * * *")
     _insert_run(engine, "run-1", "tenant-a", pipeline["id"], datetime.now(timezone.utc))
 
-    # Same pipeline id, wrong tenant — must not leak another tenant's data.
+    # Same pipeline id, wrong tenant: must not leak another tenant's data.
     assert db.list_pipeline_run_history(pipeline["id"], "tenant-b") == []
 
 
@@ -627,10 +627,10 @@ def test_list_pipeline_run_history_joins_analysis_kpis(engine: Engine) -> None:
 def test_list_pipeline_run_history_limit_keeps_most_recent_runs_oldest_first(
     engine: Engine,
 ) -> None:
-    """Sprint 17 code review (PR #64) — a tight-cron pipeline can accumulate
+    """Sprint 17 code review (PR #64): a tight-cron pipeline can accumulate
     thousands of runs; `limit` must bound the query to the *most recent* N
     executions (not an arbitrary N from the start of history), while still
-    returning them oldest-first — the shape every other caller/the chart
+    returning them oldest-first: the shape every other caller/the chart
     expects."""
     _insert_user(engine, "tenant-a")
     pipeline = db.create_saved_pipeline("tenant-a", "A", "postgres", "spec a", "0 3 * * *")
@@ -724,7 +724,7 @@ def test_get_pipeline_health_computes_success_rate(engine: Engine) -> None:
 
 def test_get_pipeline_health_windows_to_most_recent_fires(engine: Engine) -> None:
     """A pipeline with more history than `window` only counts the most
-    recent `window` fires — an old streak of failures must not permanently
+    recent `window` fires: an old streak of failures must not permanently
     drag down a success rate that has since recovered."""
     _insert_user(engine, "tenant-a")
     pipeline = db.create_saved_pipeline("tenant-a", "A", "postgres", "spec a", "0 3 * * *")
@@ -838,7 +838,7 @@ def test_get_pipeline_health_latency_is_none_without_stage_latencies(engine: Eng
 
 
 # ---------------------------------------------------------------------------
-# Sprint 27 (ADR-028) — write-approval gate
+# Sprint 27 (ADR-028): write-approval gate
 # ---------------------------------------------------------------------------
 
 
@@ -957,7 +957,7 @@ def test_list_pending_approvals_scoped_by_tenant_and_status(engine: Engine) -> N
     assert pending[0]["pipeline_name"] == "A"
 
 
-# Sprint 30 (ADR-031) — `saved_pipelines.llm_provider`/`llm_model` (migration 0016).
+# Sprint 30 (ADR-031): `saved_pipelines.llm_provider`/`llm_model` (migration 0016).
 
 
 def test_get_saved_pipeline_llm_config_defaults_to_none_none(engine: Engine) -> None:
@@ -1023,7 +1023,7 @@ def test_set_saved_pipeline_llm_config_returns_none_for_unknown_pipeline(engine:
     assert result is None
 
 
-# Sprint 37 (ADR-034) — per-pipeline notification destination override
+# Sprint 37 (ADR-034): per-pipeline notification destination override
 # (`notification_channel`/`notification_target_ciphertext`/`notification_active`,
 # migration 0019).
 

@@ -1,4 +1,4 @@
-"""Tenant data export — LGPD Art. 9/18 II, GDPR Art. 15/20 (Sprint 36, ADR-035).
+"""Tenant data export: LGPD Art. 9/18 II, GDPR Art. 15/20 (Sprint 36, ADR-035).
 
 `GET /tenant/export` reuses `tenant_deletion_service`'s scope-strict pattern
 (ADR-025): always the caller's own resolved `tenant_id` from the verified
@@ -10,10 +10,10 @@ already documented in `docs/compliance/lgpd-gdpr-data-processing.md` §6).
 Exports every row a tenant owns across `runs`, `analysis_runs`,
 `stage_latencies`, `saved_pipelines` (the same table set
 `tenant_deletion_service` erases) plus `tenant_secrets` **metadata only**
-(id/name/timestamps — never the Fernet ciphertext, let alone a decrypted
+(id/name/timestamps: never the Fernet ciphertext, let alone a decrypted
 value) and the list of storage artifact keys the tenant's runs produced
 (reusing `tenant_deletion_service.tenant_run_storage_candidates`, filtered to
-keys that actually `exists()` in the configured `StorageBackend` — see
+keys that actually `exists()` in the configured `StorageBackend`: see
 ADR-035 for why this ships keys/metadata, not artifact bytes, inline).
 """
 
@@ -67,7 +67,7 @@ def export_tenant_data(tenant_id: str, log_dir: str = "./runs") -> TenantExport:
     Args:
         tenant_id: Always the caller's own resolved tenant id at the API
             layer (`GET /tenant/export` never accepts a path/query
-            `tenant_id` — see the router docstring).
+            `tenant_id`: see the router docstring).
         log_dir: Passed through to `get_storage_backend` for the `local`
             backend, same as `delete_tenant_data`.
 
@@ -87,21 +87,21 @@ def export_tenant_data(tenant_id: str, log_dir: str = "./runs") -> TenantExport:
         raise TenantNotFoundError(tenant_id)
 
     secrets_rows = _rows(engine, tenant_secrets, tenant_id)
-    # Metadata only — `ciphertext` (the encrypted credential) is never part
+    # Metadata only: `ciphertext` (the encrypted credential) is never part
     # of an export, decrypted or not (ADR-035 Decision, mirrors
     # `services/secrets_service.py`'s logging discipline).
     secrets_metadata = [{k: v for k, v in row.items() if k != "ciphertext"} for row in secrets_rows]
 
     storage = get_storage_backend(log_dir, tenant_id)
-    # Not migrated to tenant_scope() in this pass (out of scope — see ADR-040
-    # follow-up) — tenant_run_storage_candidates() now takes a Connection
+    # Not migrated to tenant_scope() in this pass (out of scope: see ADR-040
+    # follow-up): tenant_run_storage_candidates() now takes a Connection
     # (ADR-040 follow-up on tenant_deletion_service.py) rather than an
     # Engine, so this still-bypass-role call site just opens its own
     # connection instead of passing the engine straight through.
     with engine.connect() as conn:
         candidates_by_run = tenant_run_storage_candidates(conn, tenant_id)
     # Perf fix (2026-09-03): one `list_existing_keys()` call instead of one
-    # `storage.exists()` per candidate — see `StorageBackend`'s protocol
+    # `storage.exists()` per candidate: see `StorageBackend`'s protocol
     # docstring. This was the root cause of GET /tenant/export taking 40-75s
     # in production; confirmed via a real timed call before/after this fix.
     existing_keys = storage.list_existing_keys()

@@ -30,16 +30,16 @@ Reviewer, is opt-in via `AI_ETL_LLM_REVIEW_ENABLED` and not counted in the 9 —
 | Audit/logging | `src/ai_etl/audit/logger.py` + `src/ai_etl/audit/db.py` |
 | Execution sandbox | `src/ai_etl/core/sandbox.py` + `docs/adr/ADR-003-exec-sandbox.md` |
 | Architecture decision | `docs/adr/` → vault: `artefact/decisions.md` |
-| General TCC context | vault: `CONTEXT.md` |
+| General TCC context | vault: `README.md` (start here), then `advising/` |
 
 **Canonical source — Obsidian vault (`~/Documents/Obsidian Vault/tcc/`):**
 - `artefact/architecture.md` — authoritative technical spec of the 5 agents
 - `artefact/decisions.md` — why the choices were made
 - `artefact/requirements.md` — functional/non-functional requirements per agent
-- `artefact/case-study.md` — protocol for the 3 scenarios
+- `evidence/case-study.md` — case-study protocol; raw numbers in `evidence/case-study-evidence-2026-10-12.md`
 - `artefact/security.md` — risks and mitigations
 - `artefact/testing.md` — testing strategy
-- `CONTEXT.md` — overall TCC state and next steps
+- `README.md` — start here: what each folder holds; `advising/` for decisions and the delivery plan
 
 > Files under `docs/adr/` are the exception: ADRs live in the repo because they are implementation decisions, not research documentation.
 
@@ -115,7 +115,7 @@ make check  # lint + format-check + type-check + test + security — must pass 1
 > uv run pytest tests/unit tests/integration \
 >   --ignore=tests/unit/test_analyst.py --ignore=tests/unit/test_science.py
 > ```
-> Full diagnosis: Vault `tcc/bugs-solved/plotly-import-hangs-in-sandbox-macos.md`.
+> Full diagnosis: Vault `tcc/evidence/defects-found/plotly-import-hangs-in-sandbox-macos.md`.
 
 Project-specific checklist:
 - Every LangGraph node: signature `(state: PipelineState) -> PipelineState`, returns `{**state, ...}`

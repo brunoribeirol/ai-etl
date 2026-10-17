@@ -1,9 +1,9 @@
-"""`/pipelines` endpoints — CRUD for saved (recurring) pipelines (Sprint 13,
+"""`/pipelines` endpoints: CRUD for saved (recurring) pipelines (Sprint 13,
 ADR-016). Distinct from `/runs` (avulso, one-off execution), which is
 unchanged. Same auth pattern as `routers/runs.py`: `get_current_tenant_id`.
 
 Actual firing happens in `services/scheduler.py`'s Celery beat task, not
-here — this router only manages the `saved_pipelines` row (create/list/get/
+here: this router only manages the `saved_pipelines` row (create/list/get/
 patch); it never itself enqueues a run.
 """
 
@@ -41,14 +41,14 @@ from ai_etl.services.notifications import ALLOWED_NOTIFICATION_CHANNELS
 
 router = APIRouter(prefix="/pipelines", tags=["pipelines"])
 
-# Sprint 16 (ADR-023) — mirrors `agents/pipeline/quality.py::_CUSTOM_RULE_OPERATORS`'s keys
+# Sprint 16 (ADR-023): mirrors `agents/pipeline/quality.py::_CUSTOM_RULE_OPERATORS`'s keys
 # exactly; kept as a literal here (not imported) so the API's request-validation
 # error message names them without importing an `agents/` module into `api/`.
 QualityRuleOperator = Literal["not_null", "gte", "lte", "gt", "lt", "eq", "ne"]
 
 
 class QualityRule(BaseModel):
-    """One operator-defined data quality rule (Sprint 16, ADR-023) — a whitelisted
+    """One operator-defined data quality rule (Sprint 16, ADR-023): a whitelisted
     declarative check, never an arbitrary expression or code (see the ADR's Decision 1
     for why: a rule is persisted and re-run unattended on every future scheduled fire).
     """
@@ -84,26 +84,26 @@ class CreatePipelineRequest(BaseModel):
     spec: str = Field(min_length=1)
     cron_schedule: str
     business_question: str = ""
-    # Sprint 14 (ADR-018) — "% change on a tracked KPI worth alerting on"
+    # Sprint 14 (ADR-018): "% change on a tracked KPI worth alerting on"
     # for this pipeline's own recurring drift check. Default matches
     # audit/models.py's server_default, so a client that omits it gets the
     # same behavior as a row written before this field existed.
     drift_threshold_pct: float = Field(default=20.0, gt=0)
-    # Sprint 16 (ADR-023) — operator-defined quality rules, run on every subsequent
+    # Sprint 16 (ADR-023): operator-defined quality rules, run on every subsequent
     # execution of this saved pipeline alongside the fixed checks. Defaults to no
     # custom rules, same behavior as every pipeline created before this sprint.
     quality_rules: list[QualityRule] = Field(default_factory=list)
-    # Sprint 27 (ADR-028) — opt-in write-approval gate. `False` by default: zero
+    # Sprint 27 (ADR-028): opt-in write-approval gate. `False` by default: zero
     # behavior change unless explicitly turned on. See `agents/pipeline/loader.py`.
     require_approval: bool = False
     approval_threshold_rows: Optional[int] = Field(default=None, ge=0)
 
 
 class UpdatePipelineRequest(BaseModel):
-    """All fields optional — PATCH semantics, only provided fields change.
+    """All fields optional: PATCH semantics, only provided fields change.
 
     `quality_rules`, if provided, REPLACES the pipeline's whole rule set (not a
-    per-rule merge) — the same "provide the field, it wins whole" PATCH semantics
+    per-rule merge): the same "provide the field, it wins whole" PATCH semantics
     every other field here already has; `None` (the default, field omitted) leaves
     the existing rules untouched.
     """
@@ -121,17 +121,17 @@ class UpdatePipelineRequest(BaseModel):
 
 
 def _with_health(pipeline: dict[str, Any]) -> dict[str, Any]:
-    """Sprint 15 (ADR-020 Decision 4) — merge `success_rate`/
+    """Sprint 15 (ADR-020 Decision 4): merge `success_rate`/
     `avg_latency_seconds`/`health_sample_size` onto a saved-pipeline dict,
     additive fields alongside the `consecutive_failures`/`last_status`/
     `last_error` cache `_saved_pipeline_row_to_dict` already includes.
     `consecutive_failures`/`last_status`/`last_error` are cheap (already on
     the row); `success_rate`/`avg_latency_seconds` cost one extra aggregate
-    query per pipeline (`audit.db.get_pipeline_health`) — accepted at this
+    query per pipeline (`audit.db.get_pipeline_health`): accepted at this
     project's current scale, same posture ADR-020 documents.
     """
     health = get_pipeline_health(pipeline["id"], pipeline["tenant_id"])
-    # Sprint 30 (ADR-031) — merge the LLM provider/model override the same way
+    # Sprint 30 (ADR-031): merge the LLM provider/model override the same way
     # `success_rate`/etc. above are merged: `_saved_pipeline_row_to_dict`
     # (`audit/db.py`) intentionally wasn't touched to add these two columns (see
     # `get_saved_pipeline_llm_config`'s docstring for why), so this router composes
@@ -140,7 +140,7 @@ def _with_health(pipeline: dict[str, Any]) -> dict[str, Any]:
         "llm_provider": None,
         "llm_model": None,
     }
-    # Sprint 37 (ADR-034) — same composition pattern as `llm_config` above; the
+    # Sprint 37 (ADR-034): same composition pattern as `llm_config` above; the
     # notification target's value itself is never included here (only whether one
     # is configured and active), see `get_saved_pipeline_notification_config`'s
     # docstring for why.
@@ -213,16 +213,16 @@ def get_pipeline_history(
     tenant_id: Annotated[str, Depends(get_current_tenant_id)],
     limit: int = Query(default=DEFAULT_PIPELINE_HISTORY_LIMIT, ge=1, le=1000),
 ) -> list[dict[str, Any]]:
-    """Sprint 17 (ADR-017) — time series of the `limit` most recent
+    """Sprint 17 (ADR-017): time series of the `limit` most recent
     executions of one saved pipeline (oldest first), for the "Histórico
     comparável" view: KPI trend charts and the two-run diff. 404s (rather
     than returning an empty list) when the pipeline itself doesn't exist or
-    isn't owned by this tenant — same "unknown vs. empty" distinction
+    isn't owned by this tenant: same "unknown vs. empty" distinction
     `get_pipeline` already makes, so the frontend can tell "no pipeline"
     from "pipeline with no runs yet" apart.
 
     `limit` (Sprint 17 code review, PR #64): a tight-cron pipeline can
-    accumulate thousands of runs — same unbounded-query risk `GET /runs`'s
+    accumulate thousands of runs: same unbounded-query risk `GET /runs`'s
     own `limit` already guards against. Defaults to
     `audit.db.DEFAULT_PIPELINE_HISTORY_LIMIT` (200); capped at 1000 so a
     caller can widen the window without being able to request an unbounded
@@ -274,33 +274,33 @@ def delete_pipeline(
     tenant_id: Annotated[str, Depends(require_role("editor"))],
 ) -> None:
     """2026-09-04 gap-closing feature: until now, `is_active=False` (pause) was
-    the only way to stop a saved pipeline — there was no way to actually remove
-    a mistaken or test entry, so it stayed listed on `/pipelines` and `/summary`
-    forever. Permanently deletes the `saved_pipelines` row; safe by schema design
-    — `runs.saved_pipeline_id`/`analysis_runs.saved_pipeline_id` are both
-    `ON DELETE SET NULL` (`audit/models.py`), so existing run history is
-    detached, never deleted, by this call. `require_role("editor")`, same as
-    `create_pipeline`/`patch_pipeline` — this is a regular tenant-scoped
-    mutation, not a platform-admin action (no `log_admin_action`, matching the
-    existing create/update endpoints in this router, neither of which logs
-    either).
+     the only way to stop a saved pipeline: there was no way to actually remove
+     a mistaken or test entry, so it stayed listed on `/pipelines` and `/summary`
+     forever. Permanently deletes the `saved_pipelines` row; safe by schema design
+    : `runs.saved_pipeline_id`/`analysis_runs.saved_pipeline_id` are both
+     `ON DELETE SET NULL` (`audit/models.py`), so existing run history is
+     detached, never deleted, by this call. `require_role("editor")`, same as
+     `create_pipeline`/`patch_pipeline`: this is a regular tenant-scoped
+     mutation, not a platform-admin action (no `log_admin_action`, matching the
+     existing create/update endpoints in this router, neither of which logs
+     either).
     """
     if not delete_saved_pipeline(pipeline_id, tenant_id):
         raise HTTPException(status_code=404, detail="Saved pipeline not found.")
 
 
-# Sprint 30 (ADR-031) — per-pipeline LLM provider/model selection, split into its
+# Sprint 30 (ADR-031): per-pipeline LLM provider/model selection, split into its
 # own request model/endpoints (rather than folded into `UpdatePipelineRequest`/
 # `patch_pipeline`) since "clear the override" needs `llm_provider=None,
 # llm_model=None` to mean something different from "field omitted, leave
-# unchanged" — the PATCH-with-`None`-means-omitted convention every other field on
+# unchanged": the PATCH-with-`None`-means-omitted convention every other field on
 # `UpdatePipelineRequest` already uses would make clearing an override
 # inexpressible.
 class SetPipelineLlmConfigRequest(BaseModel):
     """`llm_provider`/`llm_model` both `None` clears the override (falls back to
     this deployment's global `AI_ETL_LLM_PROVIDER`/`AI_ETL_LLM_MODEL`,
-    `core/llm.py`). Providing only one of the two is rejected — see
-    `_model_validator` below — since a provider without a model (or vice versa) is
+    `core/llm.py`). Providing only one of the two is rejected: see
+    `_model_validator` below: since a provider without a model (or vice versa) is
     not a state `core.llm.ALLOWED_MODELS_BY_PROVIDER` can validate.
     """
 
@@ -322,7 +322,7 @@ def get_pipeline_llm_config(
     pipeline_id: str,
     tenant_id: Annotated[str, Depends(get_current_tenant_id)],
 ) -> dict[str, Any]:
-    """Sprint 30 (ADR-031) — current LLM provider/model override for one saved
+    """Sprint 30 (ADR-031): current LLM provider/model override for one saved
     pipeline. Both fields `None` means "no override, using this deployment's
     global default" (`GET /config`'s `model_name`)."""
     config = get_saved_pipeline_llm_config(pipeline_id, tenant_id)
@@ -337,10 +337,10 @@ def set_pipeline_llm_config(
     body: SetPipelineLlmConfigRequest,
     tenant_id: Annotated[str, Depends(require_role("editor"))],
 ) -> dict[str, Any]:
-    """Sprint 30 (ADR-031) — set or clear a saved pipeline's LLM provider/model
+    """Sprint 30 (ADR-031): set or clear a saved pipeline's LLM provider/model
     override. A non-null pair must be in `core.llm.ALLOWED_MODELS_BY_PROVIDER`
     (same allowlist-validation posture as `_validate_source_type` above for
-    `source_type`, ADR-016 Decision 3) — an out-of-allowlist choice is rejected
+    `source_type`, ADR-016 Decision 3): an out-of-allowlist choice is rejected
     with 400 before it's ever persisted.
     """
     if body.llm_provider is not None and body.llm_model is not None:
@@ -361,14 +361,14 @@ def set_pipeline_llm_config(
 def get_allowed_llm_models(
     tenant_id: Annotated[str, Depends(get_current_tenant_id)],
 ) -> dict[str, list[str]]:
-    """Sprint 30 (ADR-031) — the allowlist `PUT /pipelines/{id}/llm-config`
+    """Sprint 30 (ADR-031): the allowlist `PUT /pipelines/{id}/llm-config`
     validates against, sorted for stable UI rendering. Lives under `/pipelines`
     (not a new top-level router) since its only consumer is the per-pipeline LLM
     config picker this endpoint exists to back."""
     return {provider: sorted(models) for provider, models in ALLOWED_MODELS_BY_PROVIDER.items()}
 
 
-# Sprint 37 (ADR-034) — per-pipeline notification destination (email recipients /
+# Sprint 37 (ADR-034): per-pipeline notification destination (email recipients /
 # webhook URL), same "own request model/endpoints, not folded into
 # `UpdatePipelineRequest`" rationale as the LLM-config block above: clearing the
 # override needs `notification_channel=None, notification_target=None` to mean
@@ -378,11 +378,11 @@ class SetPipelineNotificationConfigRequest(BaseModel):
     override (falls back to this deployment's global
     `RESEND_API_KEY`/`SLACK_WEBHOOK_URL`/`TEAMS_WEBHOOK_URL`/
     `GOOGLE_CHAT_WEBHOOK_URL` env vars, `services/notifications.py`).
-    Providing only one of the two is rejected — see `_both_or_neither`
-    below — same reasoning as `SetPipelineLlmConfigRequest`.
+    Providing only one of the two is rejected: see `_both_or_neither`
+    below: same reasoning as `SetPipelineLlmConfigRequest`.
 
     `notification_target` is plaintext on the wire (this endpoint requires
-    `editor`, same as every other pipeline-mutating endpoint here) — it is
+    `editor`, same as every other pipeline-mutating endpoint here): it is
     encrypted before being persisted (`services.secrets_service.encrypt_value`,
     called from `audit.db.set_saved_pipeline_notification_config`) and is
     never echoed back in this or any other response.
@@ -407,11 +407,11 @@ def get_pipeline_notification_config(
     pipeline_id: str,
     tenant_id: Annotated[str, Depends(get_current_tenant_id)],
 ) -> dict[str, Any]:
-    """Sprint 37 (ADR-034) — current notification destination override for one
+    """Sprint 37 (ADR-034): current notification destination override for one
     saved pipeline. `notification_channel=None`/`notification_configured=False`
     means "no override, using this deployment's global channel(s)". The
     destination value itself (email recipients / webhook URL) is never
-    returned by any endpoint, encrypted or not — see
+    returned by any endpoint, encrypted or not: see
     `audit.db.get_saved_pipeline_notification_config`'s docstring for why.
     """
     config = get_saved_pipeline_notification_config(pipeline_id, tenant_id)
@@ -426,11 +426,11 @@ def set_pipeline_notification_config(
     body: SetPipelineNotificationConfigRequest,
     tenant_id: Annotated[str, Depends(require_role("editor"))],
 ) -> dict[str, Any]:
-    """Sprint 37 (ADR-034) — set or clear a saved pipeline's notification
+    """Sprint 37 (ADR-034): set or clear a saved pipeline's notification
     destination override. A non-null `notification_channel` must be one of
     `services.notifications.ALLOWED_NOTIFICATION_CHANNELS` (same
     allowlist-validation posture as `_validate_source_type` above for
-    `source_type`, ADR-016 Decision 3) — an out-of-allowlist channel is
+    `source_type`, ADR-016 Decision 3): an out-of-allowlist channel is
     rejected with 400 before it's ever persisted. `notification_target` is
     encrypted before it reaches the database and is never returned.
     """
@@ -462,7 +462,7 @@ def set_pipeline_notification_config(
 def get_allowed_notification_channels(
     tenant_id: Annotated[str, Depends(get_current_tenant_id)],
 ) -> list[str]:
-    """Sprint 37 (ADR-034) — the allowlist `PUT /pipelines/{id}/notification-config`
+    """Sprint 37 (ADR-034): the allowlist `PUT /pipelines/{id}/notification-config`
     validates against. Lives under `/pipelines` (not a new top-level router), same
     rationale as `GET /pipelines/llm/allowed-models`."""
     return list(ALLOWED_NOTIFICATION_CHANNELS)

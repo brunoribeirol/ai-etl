@@ -1,6 +1,6 @@
 """Unit tests for `destinations/mysql_dest.py::save_mysql`/`preview_mysql`.
 
-Same real-sqlite-via-env-var trick `test_postgres_dest.py` uses — SQLAlchemy
+Same real-sqlite-via-env-var trick `test_postgres_dest.py` uses: SQLAlchemy
 doesn't care that the URL scheme says `sqlite` while the module's own name
 says MySQL; the connector just passes whatever URL it resolves to
 `create_engine`, so this exercises the real read/write path without a real
@@ -46,7 +46,7 @@ def test_save_mysql_writes_to_the_shared_env_database(monkeypatch, tmp_path) -> 
 
 def test_save_mysql_uses_tenant_override_over_shared_env(monkeypatch, tmp_path) -> None:
     # ADR-044: the shared env var points at one sqlite file, the tenant
-    # override at another — only the override's file should receive the write.
+    # override at another: only the override's file should receive the write.
     shared_db_url = f"sqlite:///{tmp_path}/shared.sqlite"
     tenant_db_url = f"sqlite:///{tmp_path}/tenant.sqlite"
     monkeypatch.setenv("MYSQL_URL", shared_db_url)

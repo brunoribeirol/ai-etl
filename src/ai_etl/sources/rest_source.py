@@ -2,18 +2,18 @@
 
 Sprint 11 (ADR-012) adds an optional `auth` argument on top of the original
 no-auth, public-endpoint-only connector (e.g. the Open-Meteo call in
-scenario 3). `auth` never carries a literal secret — each field references
+scenario 3). `auth` never carries a literal secret: each field references
 either an *environment variable name* the secret is read from at call time
-(same convention as `postgres_source.py`'s `POSTGRES_URL` lookup), or —
-since ADR-045 — a tenant's own stored secret *name*, resolved lazily via
+(same convention as `postgres_source.py`'s `POSTGRES_URL` lookup), or:
+since ADR-045: a tenant's own stored secret *name*, resolved lazily via
 `core/tenant_context.py::get_rest_secret` at call time and tried first. So a
-`pipeline_plan` — whether LLM-produced by `agents/pipeline/orchestrator.py` or
-supplied directly — never embeds credentials either way.
+`pipeline_plan`: whether LLM-produced by `agents/pipeline/orchestrator.py` or
+supplied directly: never embeds credentials either way.
 
 `oauth2_client_credentials` (added in this same sprint, on top of the
 original `api_key`/`bearer`/`basic`) fetches a real access token from a
 token endpoint using the client-credentials grant and caches it in-process
-until shortly before it expires, re-fetching only then — the caching lives
+until shortly before it expires, re-fetching only then: the caching lives
 at module scope (`_TOKEN_CACHE`) so repeated `load_rest` calls within one
 process (e.g. paginated pulls, or multiple sources sharing one OAuth2 app)
 don't hit the token endpoint on every call.
@@ -33,7 +33,7 @@ _SUPPORTED_AUTH_TYPES = {"api_key", "bearer", "basic", "oauth2_client_credential
 # Cache of fetched OAuth2 access tokens, keyed by (token_url, client_id) so
 # distinct REST sources using different client credentials against the same
 # token endpoint don't collide. Value is (access_token, expires_at) where
-# expires_at is a `time.monotonic()` timestamp — monotonic rather than
+# expires_at is a `time.monotonic()` timestamp: monotonic rather than
 # wall-clock so a system clock adjustment can't make a cached token look
 # valid (or expired) incorrectly.
 _TOKEN_CACHE: dict[tuple[str, str], tuple[str, float]] = {}
@@ -106,7 +106,7 @@ def _read_secret(auth: dict[str, Any], env_key: str, ref_key: str) -> str:
     tenant context, or no secret saved under that name) falls back to
     `env_key` if the plan also set one, same "the tenant just hasn't
     configured this yet" posture `core/tenant_context.py`'s DB overrides
-    already have — but raises a clear error rather than a `KeyError` if
+    already have: but raises a clear error rather than a `KeyError` if
     there's no `env_key` to fall back to at all, so a plan that deliberately
     only sets `ref_key` fails with an actionable message, not a stack trace.
     A plan with no `ref_key` at all preserves the exact original behavior:
@@ -130,8 +130,8 @@ def _fetch_oauth2_token(
 ) -> str:
     """Fetch (or return a cached) OAuth2 client-credentials access token.
 
-    POSTs `grant_type=client_credentials` to `token_url` — the standard
-    OAuth2 client-credentials grant (RFC 6749 §4.4) — and caches the
+    POSTs `grant_type=client_credentials` to `token_url`: the standard
+    OAuth2 client-credentials grant (RFC 6749 §4.4): and caches the
     resulting `access_token` until `expires_in` (default 3600s if the
     token endpoint omits it) minus `_TOKEN_EXPIRY_LEEWAY_SECONDS`.
     """
@@ -165,7 +165,7 @@ def _build_auth(
     """Turn an `auth` config dict into httpx headers/auth kwargs.
 
     Supported shapes (each `*_env_var` field has an ADR-045 `*_secret_ref`
-    counterpart — a tenant's own stored secret, resolved by name at call
+    counterpart: a tenant's own stored secret, resolved by name at call
     time, tried first and falling back to the env var):
     - `{"type": "api_key", "header": "X-API-Key", "env_var": "NAME"}`
       (`header` defaults to `"X-API-Key"` if omitted; secret ref: `secret_ref`)
@@ -209,7 +209,7 @@ def load_rest(
 ) -> pd.DataFrame:
     """Fetch JSON from a REST endpoint and normalize into a DataFrame.
 
-    `auth` is optional and backward compatible — omitting it (or passing
+    `auth` is optional and backward compatible: omitting it (or passing
     `None`) preserves the original public-endpoint behavior.
     """
     headers, httpx_auth = _build_auth(auth)

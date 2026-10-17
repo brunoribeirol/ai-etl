@@ -19,15 +19,15 @@ type PyramidText = { label: string; description: string };
 type RosterText = { description: string };
 
 /**
- * Sprint 7 — replaces the always-visible Streamlit sidebar (pyramid +
+ * Sprint 7: replaces the always-visible Streamlit sidebar (pyramid +
  * "how it works" + agent list + model caption) with an on-demand Sheet, so
  * the 3 pages stay uncluttered by default but the same explanation is one
  * click away. `modelName` comes from `GET /config` (server-fetched in
- * `layout.tsx`, passed down — this component stays a Client Component only
+ * `layout.tsx`, passed down: this component stays a Client Component only
  * for the Sheet's open/close interaction, not for data fetching).
  *
  * Sprint 25 (ADR-036): `PYRAMID`/`AGENTS` (`lib/agents.ts`) now hold only
- * structural data (id/emoji/name) — translated label/description text comes
+ * structural data (id/emoji/name): translated label/description text comes
  * from `messages/{locale}.json`'s `agents` namespace (`pyramid`/`roster`
  * arrays, read via `t.raw`, zipped back to `PYRAMID`/`AGENTS` by index), the
  * same pattern the landing page uses for the same data.

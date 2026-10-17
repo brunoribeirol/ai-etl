@@ -1,7 +1,7 @@
-"""PipelineState — shared state TypedDict passed between all LangGraph nodes.
+"""PipelineState: shared state TypedDict passed between all LangGraph nodes.
 
 Every agent reads from and writes to this state. No agent communicates
-directly with another — all information flows through the state.
+directly with another: all information flows through the state.
 """
 
 from typing import Any, Optional, TypedDict
@@ -31,7 +31,7 @@ class PipelineState(TypedDict):
     # --- Extractor output ---
     extracted_data: dict[str, Any]  # {"source_name": pd.DataFrame}
     source_schemas: dict[str, Any]  # {"source_name": {columns, dtypes, shape, sample,
-    # sample_truncated, null_counts, null_ratio}} — sample is capped to
+    # sample_truncated, null_counts, null_ratio}}: sample is capped to
     # extractor.MAX_SAMPLE_COLUMNS columns for wide sources (ADR-013).
 
     # --- Transformer output ---
@@ -44,7 +44,7 @@ class PipelineState(TypedDict):
     custom_quality_rules: list[dict[str, Any]]  # operator-defined rules for the saved
     # pipeline this run belongs to (empty for every avulso run). Fetched by
     # `services/pipeline_service.py::run_silver_pipeline` from
-    # `saved_pipelines.quality_rules` — never read from the DB by `quality_node`
+    # `saved_pipelines.quality_rules`: never read from the DB by `quality_node`
     # itself, keeping the node a pure function of `PipelineState`. Each entry:
     # {"column": str, "operator": "not_null"|"gte"|"lte"|"gt"|"lt"|"eq"|"ne",
     #  "value": Any (omitted for "not_null"), "severity": "ok"|"warning"|"error"
@@ -61,48 +61,48 @@ class PipelineState(TypedDict):
     #     {"check": "outlier", "column": "amount", "outlier_count": 3, "severity": "warning"},
     #     {"check": "custom_rule", "rule_name": "amount não pode ser negativo",
     #      "column": "amount", "operator": "gte", "value": 0, "violation_count": 2,
-    #      "severity": "error"}   # Sprint 16 (ADR-023) — one entry per custom rule
+    #      "severity": "error"}   # Sprint 16 (ADR-023): one entry per custom rule
     #   ],
     #   "severity": "ok" | "warning" | "error",   # max severity across all checks
     #   "summary": "3 checks: 2 warnings, 0 errors"
     # }
 
     # --- LLM provider/model override (Sprint 30/gap-closing, ADR-031 §5) ---
-    llm_provider_override: Optional[str]  # e.g. "anthropic" — resolved once by
+    llm_provider_override: Optional[str]  # e.g. "anthropic": resolved once by
     # `services/pipeline_service.py::run_silver_pipeline` from the saved pipeline's
     # own `llm_provider` column (via `audit/db.py::get_saved_pipeline_llm_config`),
     # mirroring `custom_quality_rules`'/`approval_policy`'s resolve-in-service-then-
     # carry-in-state pattern. `None` for every avulso run and every saved pipeline
-    # that never called `PUT /pipelines/{id}/llm-config` — falls back to this
+    # that never called `PUT /pipelines/{id}/llm-config`: falls back to this
     # deployment's global `AI_ETL_LLM_PROVIDER`. Read by every `agents/pipeline/*.py`
     # node that calls `core/llm.py::get_llm()`; never queried from the DB inside a
     # node itself.
-    llm_model_override: Optional[str]  # paired with llm_provider_override above —
+    llm_model_override: Optional[str]  # paired with llm_provider_override above:
     # always resolved (and `None`) together, since `saved_pipelines.llm_provider`/
     # `llm_model` are always written or cleared together (ADR-031 §3).
 
     # --- Locale (Sprint 25, ADR-036) ---
-    locale: str  # e.g. "pt-BR" (default) or "en-US" — resolved once by
+    locale: str  # e.g. "pt-BR" (default) or "en-US": resolved once by
     # `services/pipeline_service.py::run_silver_pipeline` from the tenant's own
     # `users.locale` column (via `audit/db.py::get_locale`), same resolve-in-service-
     # then-carry-in-state pattern as `llm_provider_override` above, but keyed only on
     # `tenant_id` (not `saved_pipeline_id` too) since locale is a per-tenant, not
-    # per-pipeline, setting (ADR-036 §1) — applies to every run, avulso or scheduled.
+    # per-pipeline, setting (ADR-036 §1): applies to every run, avulso or scheduled.
     # Never `Optional`: always has a value, unlike the LLM override. Read by
     # `agents/pipeline/transformer.py` (date-parsing convention hint) and by the
     # analytical layer (`agents/analysis/*.py`, forwarded as a plain parameter the
-    # same way `llm_provider_override`/`llm_model_override` are — see
+    # same way `llm_provider_override`/`llm_model_override` are: see
     # `services/pipeline_service.py::run_full_analysis`).
 
     # --- Loader input (Sprint 27, ADR-028) ---
     approval_policy: Optional[dict[str, Any]]  # {"require_approval": bool,
-    # "threshold_rows": int | None, "last_approved_at": str | None (isoformat)} —
+    # "threshold_rows": int | None, "last_approved_at": str | None (isoformat)}:
     # resolved by `services/pipeline_service.py::run_silver_pipeline` from the
     # saved pipeline this run belongs to (mirrors `custom_quality_rules`'
-    # resolution above). `None` for every avulso run — an avulso execution is
+    # resolution above). `None` for every avulso run: an avulso execution is
     # never gated, see ADR-028 Decision 2. Read by `agents/pipeline/loader.py::loader_node`
     # only; never queried from the DB inside the node itself.
-    approval_granted: bool  # Sprint 27 (ADR-028) — set `True` only by
+    approval_granted: bool  # Sprint 27 (ADR-028): set `True` only by
     # `pipeline_service.resume_pending_load` on the second, direct `loader_node`
     # call that performs the real write after an operator approves a gated run.
     # `False` for every normal graph run (the default `initial_state` sets).
@@ -111,7 +111,7 @@ class PipelineState(TypedDict):
     load_result: Optional[
         dict[str, Any]
     ]  # {"rows_loaded": int, "destination": str, "timestamp": str}
-    load_preview: Optional[dict[str, Any]]  # Sprint 27 (ADR-028) — set instead of
+    load_preview: Optional[dict[str, Any]]  # Sprint 27 (ADR-028): set instead of
     # `load_result` when a write is gated: what *would* be written, computed by
     # `destinations/*.py::preview_*` without ever writing. `None` otherwise.
 
@@ -126,13 +126,13 @@ class PipelineState(TypedDict):
     llm_usage: dict[str, int]
 
     # --- Latency instrumentation (ADR-007) ---
-    stage_durations: dict[str, float]  # {"orchestrator": 1.2, "extractor": 0.4, ...} — wall-
+    stage_durations: dict[str, float]  # {"orchestrator": 1.2, "extractor": 0.4, ...}: wall-
     # clock seconds per LangGraph node, populated by core/graph.py's `_timed()` wrapper.
 
     # --- Control flow ---
     error: Optional[str]  # fatal error message; routes to END if set
     status: str  # "running" | "completed" | "failed" | "awaiting_approval" (Sprint 27, ADR-028
-    # — a gated write that computed a preview but did not write; not a failure, see the ADR)
+    #: a gated write that computed a preview but did not write; not a failure, see the ADR)
 
 
 def initial_state(
@@ -147,25 +147,25 @@ def initial_state(
     """Create a fresh PipelineState for a new pipeline run.
 
     Args:
-        custom_quality_rules: Sprint 16 (ADR-023) — operator-defined quality rules for
+        custom_quality_rules: Sprint 16 (ADR-023): operator-defined quality rules for
             the saved pipeline this run belongs to, already resolved by the caller
             (`services/pipeline_service.py::run_silver_pipeline`). Defaults to `[]` for
             every avulso run and every existing caller that doesn't pass it.
-        approval_policy: Sprint 27 (ADR-028) — this run's write-approval policy,
+        approval_policy: Sprint 27 (ADR-028): this run's write-approval policy,
             already resolved by the caller from the saved pipeline it belongs to.
-            `None` (the default) for every avulso run — never gated.
-        llm_provider_override: Sprint 30/gap-closing (ADR-031 §5) — this run's
+            `None` (the default) for every avulso run: never gated.
+        llm_provider_override: Sprint 30/gap-closing (ADR-031 §5): this run's
             saved-pipeline LLM provider override, already resolved by the caller
             (`services/pipeline_service.py::run_silver_pipeline` via
             `audit/db.py::get_saved_pipeline_llm_config`). `None` (the default) for
-            every avulso run and every saved pipeline without an override — falls
+            every avulso run and every saved pipeline without an override: falls
             back to the deployment-global `AI_ETL_LLM_PROVIDER` at each `get_llm()`
             call site.
         llm_model_override: paired with `llm_provider_override` above.
-        locale: Sprint 25 (ADR-036) — this run's tenant-configured locale, already
+        locale: Sprint 25 (ADR-036): this run's tenant-configured locale, already
             resolved by the caller (`services/pipeline_service.py::run_silver_pipeline`
             via `audit/db.py::get_locale`). Defaults to `"pt-BR"` for every avulso run
-            with no `tenant_id` and every caller predating this sprint — unchanged
+            with no `tenant_id` and every caller predating this sprint: unchanged
             behavior.
     """
     return PipelineState(

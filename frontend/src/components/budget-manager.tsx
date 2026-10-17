@@ -13,7 +13,7 @@ import { useAuthedFetch } from "@/lib/authed-fetch";
 import type { BudgetStatus } from "@/lib/types";
 
 /**
- * "Budget" page's data + interaction layer — first frontend consumer of
+ * "Budget" page's data + interaction layer: first frontend consumer of
  * `api/routers/budget.py` (Sprint 29, ADR-019) as a *self-service* surface:
  * `admin-manager.tsx` already renders a read-only `BudgetStatus` for the
  * admin-viewing-another-tenant case (`GET /admin/tenants/{id}/budget`); this
@@ -22,17 +22,17 @@ import type { BudgetStatus } from "@/lib/types";
  * since it's the same response shape either way.
  *
  * `role` is passed down from the page (server-side `/config` read, same
- * cosmetic-only pattern `(app)/layout.tsx` uses for the admin nav link) —
+ * cosmetic-only pattern `(app)/layout.tsx` uses for the admin nav link):
  * only gates whether the edit form renders; `PATCH /budget` independently
  * enforces `require_role("editor")` server-side regardless of what this
  * component shows a `viewer` caller.
  *
  * Clearing the cap gets the same lightweight 2-click inline confirm
- * `approval-queue.tsx` established for its approve/reject actions — setting
+ * `approval-queue.tsx` established for its approve/reject actions: setting
  * a cap is a single click (reversible by just setting it again), but
  * clearing one removes a spending control a tenant may have relied on, so
  * it earns the one extra tap; still a plain button rather than a full
- * modal since — unlike approve/reject — nothing is written or lost, only a
+ * modal since, unlike approve/reject, nothing is written or lost, only a
  * limit is turned off.
  */
 export function BudgetManager({ canEdit }: { canEdit: boolean }) {

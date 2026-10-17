@@ -1,7 +1,7 @@
 """Format a drift finding + the Advisor's existing output as a ready-to-send
 executive briefing (Sprint 14, ADR-018).
 
-No new agent, no new LLM call — this is pure formatting over what
+No new agent, no new LLM call: this is pure formatting over what
 `agents/analysis/advisor.py` (via `services/pipeline_service.run_advisor_analysis`)
 already produced for the run. `services/alerting.py` calls `build_digest`
 once drift has been detected, then hands the result to
@@ -49,10 +49,10 @@ def build_digest(
 
     `findings` should already be filtered to the triggered subset (callers
     build a digest only once `detect_kpi_drift` found something worth
-    reporting — `services/alerting.py` owns that decision, not this
+    reporting: `services/alerting.py` owns that decision, not this
     function). Returns a plain dict (not a TypedDict) since its four keys
     are each consumed by an independent, optional delivery channel
-    (`services/notifications.py`) — a caller only using one channel still
+    (`services/notifications.py`): a caller only using one channel still
     gets a fully-formed dict, nothing here requires both to be sent.
     """
     subject = f"[AI-ETL] Alerta de variação — {pipeline_name}"

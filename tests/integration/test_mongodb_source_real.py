@@ -1,9 +1,9 @@
 """Integration test for the MongoDB source connector (Sprint 11, ADR-012).
 
-Exercises `sources/mongodb_source.py::load_mongodb` against a live MongoDB —
+Exercises `sources/mongodb_source.py::load_mongodb` against a live MongoDB:
 `mongodb-test` in docker-compose.yml (`make mongodb-test-up`). Skipped
 automatically when that database isn't reachable, matching
-`test_audit_persistence.py`'s skip convention — so `make test`/CI keep
+`test_audit_persistence.py`'s skip convention: so `make test`/CI keep
 passing on machines without Docker.
 """
 
@@ -47,7 +47,7 @@ def mongo_orders_collection(monkeypatch: pytest.MonkeyPatch) -> Iterator[tuple[s
     client[database][collection].insert_many(
         [
             {"product": "A", "revenue": 100.0, "tags": ["sale"]},
-            {"product": "B", "revenue": 200.0},  # heterogeneous shape — no "tags" key
+            {"product": "B", "revenue": 200.0},  # heterogeneous shape: no "tags" key
         ]
     )
     yield database, collection

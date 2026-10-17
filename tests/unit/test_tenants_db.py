@@ -1,6 +1,6 @@
 """Unit tests for `audit/db/tenants.py::list_all_tenants` (Wave 6, 2026-08-25).
 
-Previously untested at the DB layer (2026-09-04 coverage gap-closing pass) —
+Previously untested at the DB layer (2026-09-04 coverage gap-closing pass):
 `test_api_admin.py`/`test_admin_log.py` only ever mock this function out at the
 router boundary, so the actual `select`/ordering never ran for real. Same
 in-memory-SQLite style as `test_saved_pipelines_db.py`.

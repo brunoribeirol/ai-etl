@@ -1,7 +1,7 @@
 """S3-Parquet destination connector (Sprint 20, ADR-021).
 
 The first data-warehouse-oriented destination: writes the transformed DataFrame
-as a Parquet object in S3 — a de facto lake-house interchange format most
+as a Parquet object in S3: a de facto lake-house interchange format most
 warehouses (Snowflake/BigQuery external tables, Athena, Redshift Spectrum,
 Databricks) can query directly, so this doesn't compete with a customer's
 existing warehouse, it lands data at its doorstep.
@@ -11,14 +11,14 @@ Same shape as `csv_dest.py`/`postgres_dest.py`: a single module-level
 `destination` in the result, row count validated after the write.
 
 Credentials: boto3's default chain (`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`/
-`AWS_DEFAULT_REGION`) — the same one `audit/storage.py::S3StorageBackend`
+`AWS_DEFAULT_REGION`): the same one `audit/storage.py::S3StorageBackend`
 already uses live in production (ADR-009), nothing new to provision.
 `bucket`/`key` are per-destination values from `pipeline_plan.destination`
-(LLM-parsed from the spec), not a shared env var — a customer's target
+(LLM-parsed from the spec), not a shared env var: a customer's target
 bucket/prefix is destination data, not deployment config.
 
 Serialization uses `pandas.DataFrame.to_parquet(engine="pyarrow")` into an
-in-memory buffer, then a plain `boto3` `put_object` — never
+in-memory buffer, then a plain `boto3` `put_object`: never
 `pyarrow.fs.S3FileSystem`, which ADR-009 found hangs indefinitely in this
 kind of sandboxed environment even with correct IAM. `pyarrow` here is only a
 serialization engine, no network I/O of its own.
@@ -60,11 +60,11 @@ def save_s3_parquet(df: pd.DataFrame, bucket: str, key: str) -> dict[str, Any]:
 
 
 def preview_s3_parquet(df: pd.DataFrame, bucket: str, key: str) -> dict[str, Any]:
-    """Sprint 27 (ADR-028) — what `save_s3_parquet` would do, without writing
-    anything. Never calls `put_object` — a `head_object` (metadata only, no
+    """Sprint 27 (ADR-028): what `save_s3_parquet` would do, without writing
+    anything. Never calls `put_object`: a `head_object` (metadata only, no
     object body transferred) reports the existing object's size if the key
     is already occupied, `None` if it isn't (a fresh key, or any other
-    lookup failure — a preview should never fail the run over a diagnostic
+    lookup failure: a preview should never fail the run over a diagnostic
     read).
     """
     import boto3

@@ -5,15 +5,15 @@ import { apiFetch } from "@/lib/api";
 import type { ApiConfig } from "@/lib/types";
 
 /**
- * "Admin" page (Wave 6, 2026-08-25 admin panel/approval-gate UI plan) — first
+ * "Admin" page (Wave 6, 2026-08-25 admin panel/approval-gate UI plan): first
  * frontend consumer of `api/routers/admin.py` (Sprint 31, ADR-032), which was
  * previously never wired to any UI at all.
  *
  * Defense in depth: `(app)/layout.tsx` only *shows* the nav link to a caller
- * whose `/config` role is `"admin"` — that's cosmetic, so this page
+ * whose `/config` role is `"admin"`: that's cosmetic, so this page
  * independently re-checks the same `/config` role server-side before
  * rendering anything real. Every actual data call `<AdminManager>` makes
- * still hits a `require_admin`-gated route on its own regardless — this
+ * still hits a `require_admin`-gated route on its own regardless: this
  * check is a friendlier failure mode (a clear message instead of a stream of
  * per-request 403 toasts), not the security boundary itself.
  */

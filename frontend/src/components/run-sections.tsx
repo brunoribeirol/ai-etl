@@ -6,10 +6,10 @@ import { useTranslations } from "next-intl";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 /**
- * Sprint 7 redesign — groups the run-detail page's Silver/Gold/Science/Advisor
+ * Sprint 7 redesign: groups the run-detail page's Silver/Gold/Science/Advisor
  * sections into tabs instead of one long vertical stack, and gives the active
  * panel's children a staggered fade/slide-in (Motion) so results don't just
- * pop in — matches the "animate what communicates state" call from the
+ * pop in: matches the "animate what communicates state" call from the
  * research phase (see PR description). Purely presentational: all content is
  * still server-rendered and passed down as `ReactNode` props, no client-side
  * data fetching.
@@ -29,9 +29,9 @@ export function RunSections({
   advisor: ReactNode;
   code: ReactNode;
 }) {
-  // Sprint 25 (ADR-036) — "Silver"/"Pipeline"/"Gold"/"Science"/"Advisor" are
+  // Sprint 25 (ADR-036): "Silver"/"Pipeline"/"Gold"/"Science"/"Advisor" are
   // this product's own technical vocabulary (see `lib/agents.ts`), identical
-  // in both locales — only "Código" is translated (`runSections.code`).
+  // in both locales: only "Código" is translated (`runSections.code`).
   // Audit finding M12 (2026-09-09): a non-technical user has no idea "Silver"
   // means "cleaned data" or "Gold" means "analysis". Rather than drop the brand
   // vocabulary (a deliberate product decision), each tab now carries a localized

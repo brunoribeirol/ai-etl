@@ -1,9 +1,9 @@
 """Integration test for the MySQL/MariaDB source connector (Sprint 11, ADR-012).
 
-Exercises `sources/mysql_source.py::load_mysql` against a live MySQL —
+Exercises `sources/mysql_source.py::load_mysql` against a live MySQL:
 `mysql-test` in docker-compose.yml (`make mysql-test-up`). Skipped
 automatically when that database isn't reachable, matching
-`test_audit_persistence.py`'s skip convention — so `make test`/CI keep
+`test_audit_persistence.py`'s skip convention: so `make test`/CI keep
 passing on machines without Docker.
 """
 

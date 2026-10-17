@@ -1,7 +1,7 @@
 """Unit tests for Sprint 8's model comparison harness (`case_study/scripts/
-model_comparison.py`). Only the pure, deterministic helpers are covered here —
+model_comparison.py`). Only the pure, deterministic helpers are covered here:
 `score_quality` (the objective quality metric) and `compute_stability` (the
-variance/stability computation) — per the sr-standard's guidance that this
+variance/stability computation): per the sr-standard's guidance that this
 script is "majoritariamente um experimento" rather than new business logic.
 `run_scenario1`/`main` are I/O-heavy orchestration (subprocess-shaped, real
 sandbox execution) exercised manually and documented in

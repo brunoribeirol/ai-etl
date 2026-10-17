@@ -12,16 +12,16 @@ import { useAuthedFetch } from "@/lib/authed-fetch";
 import type { SecretMutationResult } from "@/lib/types";
 
 /**
- * `/secrets` page's data + interaction layer — first frontend consumer of
+ * `/secrets` page's data + interaction layer: first frontend consumer of
  * `api/routers/secrets.py` (Sprint 19, ADR-022), previously 100% backend
  * with zero UI. `GET /secrets` returns names only (`list_secret_names`); no
- * endpoint here — nor anywhere in this router — ever returns a decrypted
+ * endpoint here, nor anywhere in this router, ever returns a decrypted
  * value, so there is nothing to accidentally echo back after the user types
  * it into `value` below. The value field is cleared (state reset) the
  * moment `POST /secrets` succeeds, and is never logged or rendered again.
  *
  * `name` doubles as the identifier `POST` creates *and* rotates (same
- * endpoint either way — the router has no separate "update" verb), so
+ * endpoint either way: the router has no separate "update" verb), so
  * submitting an existing name silently rotates it; the success toast wording
  * stays agnostic ("stored") rather than claiming "created" for what may be a
  * rotation.

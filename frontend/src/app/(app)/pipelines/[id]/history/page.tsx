@@ -6,11 +6,11 @@ import { apiFetch } from "@/lib/api";
 import type { SavedPipeline } from "@/lib/types";
 
 /**
- * Sprint 17 (ADR-017) — "Comparable history" for one saved pipeline: a
+ * Sprint 17 (ADR-017): "Comparable history" for one saved pipeline: a
  * time-series view of its KPIs across every execution, plus a diff between
  * two runs the user picks. Distinct from "/history" (every one-off + every
  * scheduled run, flat, no grouping) and from "/pipelines" (CRUD, no run
- * history at all) — this page is the missing link between the two.
+ * history at all): this page is the missing link between the two.
  *
  * Server-fetches the pipeline itself (name/spec for the header, and to 404
  * early if it isn't this tenant's) the same way `history/[runId]/page.tsx`

@@ -1,6 +1,6 @@
 """Celery application factory (ADR-008).
 
-Single call site for the Celery app instance — `services/execution_queue.py`
+Single call site for the Celery app instance: `services/execution_queue.py`
 (and any future task module) import `celery_app` from here rather than
 constructing their own, so task registration and broker/backend config stay
 in one place. Mirrors `audit/connection.py`'s "one function, one env var,
@@ -8,13 +8,13 @@ fail loud if unset" shape for the same reason: a silently-defaulted broker
 URL would make a worker connect to the wrong Redis without any error.
 
 Broker and result backend both point at the same Redis instance (`REDIS_URL`)
-— there's no need for a separate result store at this project's scale, and
+, there's no need for a separate result store at this project's scale, and
 splitting them would be one more moving part with no offsetting benefit here.
 
 Unlike `connection.py`'s `get_engine()` (raises if `APP_DATABASE_URL` is
 unset), a missing `REDIS_URL` falls back to the local `docker-compose` default
-instead of raising. `Celery(...)` doesn't connect eagerly — the constructor
-just stores config — so failing loudly here would only punish importing this
+instead of raising. `Celery(...)` doesn't connect eagerly: the constructor
+just stores config: so failing loudly here would only punish importing this
 module (e.g. from `services/execution_queue.py`, itself imported by `app.py`)
 in any environment without Redis configured, including plain unit-test
 collection. A real connection failure still surfaces loudly, just later, at
@@ -29,12 +29,12 @@ from celery.schedules import schedule
 from ai_etl.core.logging_config import configure_logging
 from ai_etl.core.observability import init_sentry
 
-# Sprint 34 (ADR-033) — module-scope, same "runs once at import time" shape
+# Sprint 34 (ADR-033): module-scope, same "runs once at import time" shape
 # as `api/main.py`'s bootstrap: `celery_app.py` is the single import site
 # every worker/beat process (`celery -A ai_etl.core.celery_app worker`)
 # loads before executing any task, so this covers both without a separate
 # entrypoint. `CeleryIntegration` (inside `init_sentry`) instruments task
-# execution automatically from here on — no per-task code change needed.
+# execution automatically from here on: no per-task code change needed.
 configure_logging()
 init_sentry(component="worker")
 
@@ -43,7 +43,7 @@ def _redis_url() -> str:
     return os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
 
-# Sprint 13 (ADR-016) — how often the beat process checks for due saved
+# Sprint 13 (ADR-016): how often the beat process checks for due saved
 # pipelines. A plain interval (`schedule(seconds=...)`), not a crontab entry
 # itself: each *saved pipeline* has its own cron schedule, evaluated inside
 # `check_scheduled_pipelines_task`; this is just the polling cadence of that
@@ -52,10 +52,10 @@ def _redis_url() -> str:
 # production redeploy needing a code change.
 SCHEDULER_INTERVAL_SECONDS = int(os.getenv("AI_ETL_SCHEDULER_INTERVAL_SECONDS", "60"))
 
-# Sprint 36 (ADR-035) — how often the beat process sweeps every tenant with a
+# Sprint 36 (ADR-035): how often the beat process sweeps every tenant with a
 # configured retention window for expired storage artifacts. A compliance
 # sweep, not a latency-sensitive job like `SCHEDULER_INTERVAL_SECONDS` above
-# — daily by default. Configurable for the same reason: tests/local
+#: daily by default. Configurable for the same reason: tests/local
 # verification need a short interval without a production redeploy needing a
 # code change.
 RETENTION_INTERVAL_SECONDS = int(os.getenv("AI_ETL_RETENTION_INTERVAL_SECONDS", str(24 * 60 * 60)))
@@ -63,14 +63,14 @@ RETENTION_INTERVAL_SECONDS = int(os.getenv("AI_ETL_RETENTION_INTERVAL_SECONDS", 
 celery_app = Celery("ai_etl", broker=_redis_url(), backend=_redis_url())
 celery_app.conf.update(
     # `run_full_analysis_task` lives in `services/execution_queue.py`, not
-    # here — a plain `celery -A ai_etl.core.celery_app worker` never imports
+    # here: a plain `celery -A ai_etl.core.celery_app worker` never imports
     # that module on its own, so the task would register only on the web
     # process (which imports `execution_queue` transitively via `app.py`)
     # and the worker would reject every enqueued run as "unregistered task".
     # `include` makes the worker import it at startup too, independent of
     # whatever CLI flags the actual `celery worker` invocation happens to use.
     # `services.scheduler` (Sprint 13) is included the same way, for the
-    # same reason — the beat process only *schedules* the task by name; a
+    # same reason: the beat process only *schedules* the task by name; a
     # worker still needs to have imported it to execute it.
     # `services.retention_service` (Sprint 36) is included the same way, for
     # the same reason: a plain worker only executes a task it has imported;
@@ -83,7 +83,7 @@ celery_app.conf.update(
     task_serializer="json",
     result_serializer="json",
     accept_content=["json"],
-    # Task return values must stay JSON-safe (see execution_queue.py's task —
+    # Task return values must stay JSON-safe (see execution_queue.py's task:
     # it returns a small summary dict, never DataFrames/Figures). Enforcing
     # the json serializer (over pickle) means a task that ever tries to
     # return something unpicklable-unsafe fails loudly at serialization time
@@ -100,7 +100,7 @@ celery_app.conf.update(
     # Point it at `/tmp`, which is world-writable in the container. Only `beat` reads
     # this; the API and worker ignore it.
     beat_schedule_filename="/tmp/celerybeat-schedule",  # nosec B108 -- celery beat's own schedule state file (not attacker-controlled, not a secret); /tmp is the writable location for the non-root container. See H1 note above.
-    # Sprint 13 (ADR-016) — requires a separate `celery -A
+    # Sprint 13 (ADR-016): requires a separate `celery -A
     # ai_etl.core.celery_app beat` process running in production (same image
     # as the existing worker, different Custom Start Command) to actually
     # tick; the web/API process and the plain worker process don't run beat
@@ -110,7 +110,7 @@ celery_app.conf.update(
             "task": "ai_etl.check_scheduled_pipelines",
             "schedule": schedule(run_every=SCHEDULER_INTERVAL_SECONDS),
         },
-        # Sprint 36 (ADR-035) — same "requires a separate `celery beat`
+        # Sprint 36 (ADR-035): same "requires a separate `celery beat`
         # process" caveat as `check-scheduled-pipelines` above.
         "cleanup-expired-retention": {
             "task": "ai_etl.cleanup_expired_retention",

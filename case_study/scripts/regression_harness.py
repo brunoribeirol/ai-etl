@@ -1,33 +1,33 @@
-"""Sprint 28 — prompt/agent regression harness (ADR-029).
+"""Sprint 28: prompt/agent regression harness (ADR-029).
 
 Runs a larger, more adversarial corpus of scenarios (`case_study/scenarios/*.json`) through
-`ai_etl.services.pipeline_service.run_full_analysis` — the same entry point Sprint 8's
+`ai_etl.services.pipeline_service.run_full_analysis`: the same entry point Sprint 8's
 `model_comparison.py` uses, and the same one `services/execution_queue.py::enqueue_analysis`
-wraps for a real production run — and compares the resulting quality metrics against a
+wraps for a real production run: and compares the resulting quality metrics against a
 committed baseline (`case_study/results/sprint28/baseline_metrics.json`) before a
 prompt/agent/model change is promoted.
 
 --- Trigger: manual only (see ADR-029 Decision 1) ---
 This script is invoked by hand (or via `.github/workflows/prompt-regression.yml`'s
-`workflow_dispatch`), never automatically on every push/PR — real LLM calls cost real money,
+`workflow_dispatch`), never automatically on every push/PR: real LLM calls cost real money,
 and this project's own sandboxed dev sessions frequently have no `OPENAI_API_KEY` at all
 (same documented gap as Sprints 8/12/22).
 
 --- Quality signal: reused, not reinvented (ADR-029 Decision 2) ---
 Per-scenario quality is Sprint 8's own `score_quality(state)` (0-100, Silver-layer) plus a
-sanity-warning count read directly off `run_full_analysis`'s own `gold`/`science` results —
+sanity-warning count read directly off `run_full_analysis`'s own `gold`/`science` results:
 Sprint 21 (ADR-026)'s `check_gold_output`/`check_science_output` are already computed and
 attached there by `pipeline_service.run_gold_analysis`/`run_science_analysis`; this harness
 does not call them separately.
 
 --- data_source honesty (same convention as Sprint 8) ---
-Every scenario result is tagged `data_source`: "real" (a real OPENAI_API_KEY was available —
+Every scenario result is tagged `data_source`: "real" (a real OPENAI_API_KEY was available:
 the harness ran the actual Orchestrator/Transformer/Planner/Analyst/Science prompts against a
-real model) or "mock" (no key available — every LLM call site is patched with a deterministic,
-scenario-defined fixed response; this still exercises the full deterministic pipeline — real
-extraction, real sandboxed execution, real Quality Agent, real output_validation checks — but
+real model) or "mock" (no key available: every LLM call site is patched with a deterministic,
+scenario-defined fixed response; this still exercises the full deterministic pipeline: real
+extraction, real sandboxed execution, real Quality Agent, real output_validation checks: but
 CANNOT catch a prompt-wording regression, only a regression in the surrounding code). Re-run
-with `OPENAI_API_KEY` exported to get a real signal — no code change needed.
+with `OPENAI_API_KEY` exported to get a real signal: no code change needed.
 
 Usage:
     uv run python case_study/scripts/regression_harness.py
@@ -59,7 +59,7 @@ BASELINE_PATH = RESULTS_DIR / "baseline_metrics.json"
 LATEST_RUN_PATH = RESULTS_DIR / "latest_run.json"
 
 # Default tolerance a corpus-wide or per-scenario score_quality drop must exceed before it's
-# flagged as a regression — absorbs normal LLM run-to-run variance (Sprint 8's own "stability"
+# flagged as a regression: absorbs normal LLM run-to-run variance (Sprint 8's own "stability"
 # experiment found real variance across identical repeated runs); not a rubber stamp for any
 # drop, just for noise.
 DEFAULT_QUALITY_TOLERANCE = 5.0
@@ -85,7 +85,7 @@ def _mock_response(content: str) -> MagicMock:
 
 
 def _patch_no_audit_persistence(stack: ExitStack) -> None:
-    """Bypasses save_run/save_analysis/save_stage_latencies — same reason as Sprint 8's
+    """Bypasses save_run/save_analysis/save_stage_latencies: same reason as Sprint 8's
     own `_patch_no_audit_persistence`: this harness needs no reachable Postgres."""
     stack.enter_context(patch("ai_etl.services.pipeline_service.save_run", return_value=None))
     stack.enter_context(patch("ai_etl.services.pipeline_service.save_analysis", return_value=None))
@@ -155,7 +155,7 @@ def scenario_metrics_from_result(
     science_results: list[dict[str, Any]],
 ) -> dict[str, Any]:
     """Pure aggregation of one scenario's outcome into the flat metrics shape
-    `compare_against_baseline` consumes. No I/O — takes already-computed results."""
+    `compare_against_baseline` consumes. No I/O: takes already-computed results."""
     status = state.get("status", "unknown")
     status_matches_expectation = (status == "failed") if expect_failure else (status == "completed")
 
@@ -181,9 +181,9 @@ def scenario_metrics_from_result(
 
 
 def run_scenario(scenario: dict[str, Any], data_source: str, tmp_dir: Path) -> dict[str, Any]:
-    """Run one scenario end-to-end through `run_full_analysis`. I/O-heavy orchestration —
+    """Run one scenario end-to-end through `run_full_analysis`. I/O-heavy orchestration:
     exercised manually/via CI, not unit-tested directly (same boundary Sprint 8's own
-    `run_scenario1` draws — see its module docstring)."""
+    `run_scenario1` draws: see its module docstring)."""
     csv_path = _resolve_data_path(scenario)
     run_dir = tmp_dir / scenario["id"]
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -246,7 +246,7 @@ def compare_against_baseline(
     baseline: dict[str, Any],
     quality_tolerance: float = DEFAULT_QUALITY_TOLERANCE,
 ) -> dict[str, Any]:
-    """Pure regression-detection function — no I/O, no LLM. This is the literal target of
+    """Pure regression-detection function: no I/O, no LLM. This is the literal target of
     ADR-029/Sprint 28's definition of done: a deliberately worse mocked run's metrics fed
     through this function must be flagged. See tests/unit/test_regression_harness.py."""
     regressions: list[str] = []

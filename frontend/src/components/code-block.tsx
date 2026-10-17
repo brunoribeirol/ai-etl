@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 
-/** Sprint 7 — plain `<pre>` + copy button, not a syntax-highlighting library:
+/** Sprint 7: plain `<pre>` + copy button, not a syntax-highlighting library:
  * the generated code (Transformer/Analyst/Science) is short pandas/sklearn
  * snippets, not something worth a new dependency for. */
 export function CodeBlock({ code, filename }: { code: string; filename?: string }) {

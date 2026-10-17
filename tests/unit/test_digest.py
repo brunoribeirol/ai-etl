@@ -1,4 +1,4 @@
-"""Unit tests for services/digest.py — briefing formatting (Sprint 14, ADR-018)."""
+"""Unit tests for services/digest.py: briefing formatting (Sprint 14, ADR-018)."""
 
 from ai_etl.core.drift import DriftMetric
 from ai_etl.services.digest import build_digest

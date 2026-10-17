@@ -1,4 +1,4 @@
-"""Orchestrator Agent — parses NL spec into a structured pipeline plan."""
+"""Orchestrator Agent: parses NL spec into a structured pipeline plan."""
 
 import json
 import uuid
@@ -69,7 +69,7 @@ def orchestrator_node(state: PipelineState) -> PipelineState:
     run_id = state.get("run_id") or str(uuid.uuid4())
 
     if provider_override or model_override:
-        # Sprint 30/gap-closing (ADR-031 §5) — visibility into which provider/model
+        # Sprint 30/gap-closing (ADR-031 §5): visibility into which provider/model
         # actually ran this execution, not just the saved pipeline's configured
         # intent. Logged once per node that calls get_llm() with an override.
         state = {
@@ -92,7 +92,7 @@ def orchestrator_node(state: PipelineState) -> PipelineState:
         # Real bug found 2026-08-23 running a live model comparison: unlike every
         # other agent that parses an LLM response (Transformer/Analyst/Science/
         # Advisor, via this same strip_code_fences), the Orchestrator used to call
-        # json.loads() directly with no fence-stripping — already flagged as a real
+        # json.loads() directly with no fence-stripping: already flagged as a real
         # gap in the 2026-08-22 audit ("costs 1 retry whenever the model ignores 'no
         # markdown fences'"), confirmed here as more than cosmetic: claude-haiku-4-5
         # consistently wraps its JSON in ```json fences on every attempt, so the old
@@ -101,13 +101,13 @@ def orchestrator_node(state: PipelineState) -> PipelineState:
 
         try:
             pipeline_plan = json.loads(content)
-            # Wave 0 (2026-08-24 audit, Red Team CRITICAL finding) — structural gate
+            # Wave 0 (2026-08-24 audit, Red Team CRITICAL finding): structural gate
             # before any downstream node reads pipeline_plan. An unexpected `type`
             # value or a missing `name`/`type` fails here and retries with feedback,
-            # same as malformed JSON. Doesn't validate `query` content — that defense
+            # same as malformed JSON. Doesn't validate `query` content: that defense
             # lives at the connector level (sources/sqlite_source.py,
             # sources/mysql_source.py), so it runs regardless of caller. Validated
-            # against `PipelinePlan`, not stored — extractor_node keeps reading the
+            # against `PipelinePlan`, not stored: extractor_node keeps reading the
             # original dict, plan shape downstream is unchanged.
             PipelinePlan.model_validate(pipeline_plan)
             new_log = log_action(

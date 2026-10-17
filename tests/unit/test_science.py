@@ -51,7 +51,7 @@ model_info = {'model_type': 'LinearRegression', 'task': 'regression',
               'metrics': {'r2': 0.92}, 'features': ['units'], 'target': 'revenue'}
 """
 
-# HAPPY_CODE uses `from sklearn` — not allowed in sandbox.
+# HAPPY_CODE uses `from sklearn`: not allowed in sandbox.
 # Use the injected sklearn classes directly:
 HAPPY_CODE = """\
 X = df[['units']].fillna(0)
@@ -98,7 +98,7 @@ def test_build_column_stats_numeric(sample_df: pd.DataFrame) -> None:
 
 
 # ---------------------------------------------------------------------------
-# run_science — happy path
+# run_science: happy path
 # ---------------------------------------------------------------------------
 
 
@@ -120,7 +120,7 @@ def test_run_science_scales_timeout_for_large_df(
 ) -> None:
     """ADR-012: real profiling showed representative Science-style code (a real
     RandomForestRegressor fit) TIMES OUT at the unscaled 20s budget on a
-    ~200k-row benchmark — this is the confirmed fix."""
+    ~200k-row benchmark: this is the confirmed fix."""
     from ai_etl.core import sandbox as sandbox_module
 
     mock_get_llm.return_value = _mock_llm([HAPPY_CODE])
@@ -224,7 +224,7 @@ def test_run_science_strips_fences(mock_get_llm, sample_df: pd.DataFrame) -> Non
 
 
 # ---------------------------------------------------------------------------
-# run_science — retry / failure
+# run_science: retry / failure
 # ---------------------------------------------------------------------------
 
 
@@ -301,13 +301,13 @@ def test_validate_narrative_consistency_accepts_matching_claim() -> None:
 
 def test_validate_narrative_consistency_checks_the_column_the_narrative_names() -> None:
     """Wave 2 item 6, 2026-09-05 mega-audit remediation: live-verified real
-    miss (LLM/Prompt Engineer persona, `misleading_column.csv`) — the guard
+    miss (LLM/Prompt Engineer persona, `misleading_column.csv`): the guard
     used to always check `numeric_cols[-1]` (last by position), so a
     narrative's trend claim about a column that ISN'T last sailed through
     unchecked as long as the actually-last column happened to agree.
     `profit_margin` decreases here but is not the last column; `unrelated`
     (last by position) increases. The narrative names `profit_margin`
-    explicitly and claims an increase — must be checked against the column
+    explicitly and claims an increase: must be checked against the column
     it actually names, not whichever one happens to be last."""
     predictions_df = pd.DataFrame(
         {"profit_margin": [100.0, 90.0, 80.0], "unrelated": [1.0, 2.0, 3.0]}
@@ -322,7 +322,7 @@ def test_validate_narrative_consistency_checks_the_column_the_narrative_names() 
 
 def test_validate_narrative_consistency_falls_back_to_last_column_when_none_named() -> None:
     """Regression guard: a narrative that doesn't name any specific column
-    keeps the original (pre-fix) fallback behavior — must not become
+    keeps the original (pre-fix) fallback behavior: must not become
     stricter than before for the common case."""
     predictions_df = pd.DataFrame({"first": [1.0, 2.0, 3.0], "second": [10.0, 5.0, 1.0]})
     with pytest.raises(ValueError, match="'second' decreased"):

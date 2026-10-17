@@ -1,8 +1,8 @@
-"""E2E Scenario 1 — CSV only, through the full stack (auth/tenancy/sandbox/async).
+"""E2E Scenario 1: CSV only, through the full stack (auth/tenancy/sandbox/async).
 
 Mirrors `case_study/pipelines/scenario1_spec.txt` (rename dt->date, amt->amount,
-filter status=="active", drop duplicates), run through `enqueue_analysis` — the
-same entry point `app.py`'s "Executar" tab uses — with a real Clerk-shaped
+filter status=="active", drop duplicates), run through `enqueue_analysis`: the
+same entry point `app.py`'s "Executar" tab uses: with a real Clerk-shaped
 session token, real Celery task round-trip (eager), real sandboxed transform
 execution, and a real read-back via `load_history`/`load_full_result`, exactly
 what the History tab does after a run completes.
@@ -77,7 +77,7 @@ def test_scenario1_csv_runs_end_to_end(tmp_path, mock_pipeline_llm, test_tenant)
     assert len(result_df) == 2  # one duplicate + one cancelled row dropped
     assert set(result_df["status"]) == {"active"}
 
-    # Real read-back through the same path the History tab uses — proves the
+    # Real read-back through the same path the History tab uses: proves the
     # tenant-scoped audit trail (Postgres) round-trips correctly, not just the
     # Loader's file write.
     history = load_history(tenant_id=tenant_id)

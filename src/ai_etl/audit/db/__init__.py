@@ -1,30 +1,30 @@
-"""Audit persistence — saves pipeline run state to JSON and the application Postgres.
+"""Audit persistence: saves pipeline run state to JSON and the application Postgres.
 
 Split (Sprint 33) out of a single ~1370-line `audit/db.py` god file into 5
 modules by responsibility, re-exported here so every existing
 `from ai_etl.audit.db import X` call site outside `audit/` keeps working
 unchanged:
 
-- `runs.py` — `ensure_user`, Silver run persistence (`save_run`) and
+- `runs.py`: `ensure_user`, Silver run persistence (`save_run`) and
   Gold/Science/Advisor analysis persistence (`save_analysis`), their JSON/
   reload helpers, and `save_stage_latencies` (ADR-007).
-- `pipelines.py` — saved-pipeline CRUD, scheduling claims
+- `pipelines.py`: saved-pipeline CRUD, scheduling claims
   (`claim_due_pipeline`/`release_pipeline_claim`), write-approval
   (`mark_pipeline_approved`, `list_pending_approvals`), per-pipeline
   LLM provider/model overrides (Sprint 30, ADR-031), and per-pipeline
   notification destination overrides (Sprint 37, ADR-034).
-- `health.py` — health-snapshot cache (`record_pipeline_health`,
+- `health.py`: health-snapshot cache (`record_pipeline_health`,
   `get_pipeline_health`), run-history time series, and the drift-detection
   lookup (`get_previous_completed_run`).
-- `budget.py` — tenant monthly budget cap (Sprint 29, ADR-019); pre-run cost
+- `budget.py`: tenant monthly budget cap (Sprint 29, ADR-019); pre-run cost
   estimation's historical-average helpers (Sprint 35).
-- `onboarding.py` — self-serve activation checklist (Sprint 26, ADR-027).
-- `retention.py` — per-tenant automatic run-retention policy config
+- `onboarding.py`: self-serve activation checklist (Sprint 26, ADR-027).
+- `retention.py`: per-tenant automatic run-retention policy config
   (Sprint 36, ADR-035), same shape as `budget.py`'s spend cap.
-- `locale.py` — per-tenant locale config (Sprint 25, ADR-036), same shape as
+- `locale.py`: per-tenant locale config (Sprint 25, ADR-036), same shape as
   `retention.py`'s single scalar column.
 
-Pure reorganization — no behavior change. Internal call sites within
+Pure reorganization: no behavior change. Internal call sites within
 `audit/` should import directly from the specific submodule; everything
 else should keep importing from `ai_etl.audit.db` as before.
 """

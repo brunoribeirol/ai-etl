@@ -1,7 +1,7 @@
 """Unit tests for services/alerting.py (Sprint 14, ADR-018).
 
 Mocks at the import site inside `services/alerting.py`, same convention
-`test_scheduler.py` uses — no real DB/HTTP touched here.
+`test_scheduler.py` uses: no real DB/HTTP touched here.
 """
 
 from __future__ import annotations
@@ -116,7 +116,7 @@ def test_drift_over_threshold_triggers_digest_delivery(mocker) -> None:
     result = alerting.check_drift_and_notify(
         pipeline=_pipeline(drift_threshold_pct=20.0),
         run_id="run-2",
-        rows_loaded=2000,  # 100% change over 1000 — well over threshold
+        rows_loaded=2000,  # 100% change over 1000: well over threshold
         tokens={"input_tokens": 250, "output_tokens": 260, "total_tokens": 510},
         science_results=[],
         advisor_result=_advisor_result(),
@@ -159,7 +159,7 @@ def test_uses_default_threshold_when_pipeline_value_missing(mocker) -> None:
     result = alerting.check_drift_and_notify(
         pipeline=pipeline,
         run_id="run-2",
-        rows_loaded=1005,  # 0.5% change — under the 20.0 default
+        rows_loaded=1005,  # 0.5% change: under the 20.0 default
         tokens={"input_tokens": 0, "output_tokens": 0, "total_tokens": 0},
         science_results=[],
         advisor_result=_advisor_result(),
@@ -227,7 +227,7 @@ def test_science_metrics_are_compared_when_present(mocker) -> None:
 
 
 def test_drift_notify_forwards_override_only_to_matching_channel(mocker) -> None:
-    """Sprint 37 (ADR-034) — a configured `slack` override reaches
+    """Sprint 37 (ADR-034): a configured `slack` override reaches
     `send_slack_digest` as `override_webhook_url`; the other three channels get
     `None` and fall back to their own global env var, unaffected."""
     mocker.patch(

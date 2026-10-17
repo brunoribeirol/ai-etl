@@ -1,4 +1,4 @@
-"""Unit tests for audit persistence (db.py) — JSON-file behavior only.
+"""Unit tests for audit persistence (db.py): JSON-file behavior only.
 
 Row-level Postgres behavior (upsert semantics, token aggregation, history
 ordering) is covered by tests/integration/test_audit_persistence.py against a
@@ -10,7 +10,7 @@ and don't require a database.
 The `load_history(tenant_id=...)` tests below are the one exception: the
 `tenant_id` filter is a `WHERE` clause on the *read* path, not an
 upsert/aggregation detail, and its correctness (does it actually scope rows
-per-session) is the whole point of the Sprint A fix — worth covering here
+per-session) is the whole point of the Sprint A fix: worth covering here
 without waiting on a live Postgres. They run `db.load_history` against a
 real (if lightweight) in-memory SQLite engine rather than mocking `get_engine`,
 so the actual SQLAlchemy Core `select(...).where(...)` executes for real.
@@ -104,7 +104,7 @@ def test_save_run_scrubs_dsn_password_from_error_in_json_snapshot(tmp_path: Path
     raw driver exception into `state["error"]`, persisted verbatim in the run's JSON
     snapshot. If that message carries a DSN with an inline password, the password
     would land on disk/S3. `_write_json` must scrub it. (The happy-path guard in
-    test_pipeline_service.py only proved the DSN never enters state on success — this
+    test_pipeline_service.py only proved the DSN never enters state on success: this
     covers the error path it didn't.)"""
     state = initial_state(spec="read tenant db", run_id="run-dsn-err")
     state = {
@@ -371,8 +371,8 @@ def test_save_analysis_aggregates_tokens_before_writing_row(
 def test_save_analysis_forwards_explicit_model_name_to_write_row(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """ADR-031 gap fix: `save_analysis(..., model_name=...)` — the actual
-    resolved per-pipeline model (e.g. from `llm_model_override`) — must reach
+    """ADR-031 gap fix: `save_analysis(..., model_name=...)`: the actual
+    resolved per-pipeline model (e.g. from `llm_model_override`): must reach
     `_write_analysis_row` unchanged, not be silently dropped or recomputed from
     the global `AI_ETL_LLM_MODEL` env var."""
     captured: dict = {}
@@ -437,7 +437,7 @@ def _make_sqlite_engine() -> Engine:
     """A fresh in-memory SQLite engine with the `runs`/`analysis_runs` schema.
 
     `load_history` only ever runs a plain `select(...).where(...)` against
-    `runs` (no `pg_insert`/`ON CONFLICT`), so it's portable to SQLite — this
+    `runs` (no `pg_insert`/`ON CONFLICT`), so it's portable to SQLite: this
     lets the tenant-filter `WHERE` clause execute for real instead of being
     mocked, without requiring a live Postgres.
     """
@@ -554,7 +554,7 @@ def test_write_analysis_row_uses_explicit_model_name_over_global_env(
     persisted for the model that *actually ran* (the caller-supplied
     `model_name` argument), not the deployment-global `AI_ETL_LLM_MODEL` env
     var `get_model_name()` reads. Before the fix, `_write_analysis_row` always
-    called `get_model_name()` internally and ignored any override — this test
+    called `get_model_name()` internally and ignored any override: this test
     would have failed against that old behavior, since the persisted
     `model_name`/`cost_usd` would have matched the global env var
     (gpt-4o-mini pricing) instead of the passed-in override (claude-opus-5
@@ -569,7 +569,7 @@ def test_write_analysis_row_uses_explicit_model_name_over_global_env(
     tokens = {"input_tokens": 1000, "output_tokens": 1000, "total_tokens": 2000}
     # Bypass this file's autouse `_no_db` fixture (which monkeypatches
     # `db._write_analysis_row` to a no-op for every other test here) by calling
-    # the real function directly — this test exists specifically to exercise it.
+    # the real function directly: this test exists specifically to exercise it.
     _real_write_analysis_row(
         "run-override",
         1,
@@ -599,7 +599,7 @@ def test_runs_table_rejects_null_tenant_id() -> None:
     now (it maps to a real Clerk account via a FK to `users`, not the ADR-005
     session-UUID stopgap, which allowed NULL). This replaces the old
     `test_load_history_handles_legacy_rows_with_null_tenant_id` test, whose
-    premise (a legacy NULL-tenant row) the migration makes impossible — this
+    premise (a legacy NULL-tenant row) the migration makes impossible: this
     proves the constraint is actually enforced by the schema, not just
     documented in the migration."""
     engine = _make_sqlite_engine()
@@ -609,7 +609,7 @@ def test_runs_table_rejects_null_tenant_id() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Tenant isolation (ADR-006) — real users rows, real FK, real in-memory engine
+# Tenant isolation (ADR-006): real users rows, real FK, real in-memory engine
 # ---------------------------------------------------------------------------
 
 
@@ -634,7 +634,7 @@ def _make_sqlite_engine_with_fk_enforcement() -> Engine:
     keeps the connection opened by `create_all()` alive and reuses it for
     every later `.begin()`/`.connect()` call on this thread. Registering the
     listener on an already-built `_make_sqlite_engine()` engine attaches it
-    too late — that first connection was already made without the pragma,
+    too late: that first connection was already made without the pragma,
     and no new connection is ever opened to trigger it, so FK enforcement
     was silently never applied (the bug this comment now prevents).
     """
@@ -683,7 +683,7 @@ def test_save_run_rejects_tenant_id_with_no_matching_user_row(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The key regression guard for ADR-006's migration: `tenant_id` is a real
-    FK to `users.id`, not a decorative string column — saving a run under a
+    FK to `users.id`, not a decorative string column: saving a run under a
     tenant_id with no corresponding `users` row must fail, not silently
     persist an orphaned row."""
     monkeypatch.setattr(db, "_write_run_row", _real_write_run_row)
@@ -698,7 +698,7 @@ def test_save_run_rejects_tenant_id_with_no_matching_user_row(
 
 
 # ---------------------------------------------------------------------------
-# ensure_user (fixed in 7507300) — a brand-new Clerk user has no `users` row
+# ensure_user (fixed in 7507300): a brand-new Clerk user has no `users` row
 # yet, so their first save_run()/save_analysis() used to fail its FK.
 # ---------------------------------------------------------------------------
 
@@ -740,7 +740,7 @@ def test_ensure_user_is_idempotent(monkeypatch: pytest.MonkeyPatch) -> None:
             sqlalchemy.select(users_table.c.created_at).where(users_table.c.id == "repeat_user")
         ).scalar()
 
-    db.ensure_user("repeat_user")  # second call — must not raise
+    db.ensure_user("repeat_user")  # second call: must not raise
 
     with engine.connect() as conn:
         second_created_at = conn.execute(
@@ -755,7 +755,7 @@ def test_ensure_user_is_idempotent(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 # ---------------------------------------------------------------------------
-# save_stage_latencies (ADR-007) — same in-memory-SQLite-with-FK-enforcement
+# save_stage_latencies (ADR-007): same in-memory-SQLite-with-FK-enforcement
 # pattern as the tenant-isolation tests above, since `stage_latencies.tenant_id`
 # is a real FK to `users.id` just like `runs`/`analysis_runs`.
 # ---------------------------------------------------------------------------
@@ -772,7 +772,7 @@ def _select_stage_latencies(engine: Engine, run_id: str | None = None) -> list[d
 def test_save_stage_latencies_silver_dict_form_inserts_one_row_per_stage(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Silver's `state["stage_durations"]` is a flat {stage: seconds} dict — one
+    """Silver's `state["stage_durations"]` is a flat {stage: seconds} dict: one
     LangGraph node run exactly once each, so every row's `seq` is 1."""
     engine = _make_sqlite_engine_with_fk_enforcement()
     monkeypatch.setattr(db, "scoped_connection", _fake_scope(engine))
@@ -837,7 +837,7 @@ def test_save_stage_latencies_empty_durations_is_a_noop(
 def test_save_stage_latencies_rejects_tenant_id_with_no_matching_user_row(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Same FK-integrity guarantee as `runs`/`analysis_runs` — `tenant_id` must
+    """Same FK-integrity guarantee as `runs`/`analysis_runs`: `tenant_id` must
     reference a real `users` row, not just be a decorative string column."""
     engine = _make_sqlite_engine_with_fk_enforcement()
     monkeypatch.setattr(db, "scoped_connection", _fake_scope(engine))
@@ -851,7 +851,7 @@ def test_save_stage_latencies_scoped_by_run_id_and_run_type(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Two batches for the same tenant and same `run_id` but different
-    `run_type` (silver vs. analysis — legitimate per ADR-007's schema, since
+    `run_type` (silver vs. analysis: legitimate per ADR-007's schema, since
     `run_id` alone doesn't disambiguate the parent table) don't bleed into
     each other's rows."""
     engine = _make_sqlite_engine_with_fk_enforcement()
@@ -873,7 +873,7 @@ def test_save_stage_latencies_scoped_by_run_id_and_run_type(
 
 
 # ---------------------------------------------------------------------------
-# load_full_result (Sprint 3, ADR-008) — reconstructing _render_results' input
+# load_full_result (Sprint 3, ADR-008): reconstructing _render_results' input
 # from what save_run/save_analysis persist to disk, for the History tab and a
 # completed async run alike.
 # ---------------------------------------------------------------------------
@@ -943,7 +943,7 @@ def test_load_full_result_rejects_wrong_tenant(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Security regression test: `load_full_result` must not return another
-    tenant's artifacts even when the caller supplies a valid `run_id` — the
+    tenant's artifacts even when the caller supplies a valid `run_id`: the
     only thing that made this reachable before was `app.py` always sourcing
     `run_id` from that tenant's own `load_history(...)`, a UI-layer
     restriction, not a data-layer one. See this project's Sprint A leak for
@@ -961,7 +961,7 @@ def test_load_full_result_rejects_wrong_tenant(
     )
     assert load_full_result(state["run_id"], log_dir=str(tmp_path), tenant_id="tenant-b") is None
     # Callers that don't pass tenant_id at all keep the old, unscoped behavior
-    # (e.g. any future internal/admin tooling) — only an explicit mismatch
+    # (e.g. any future internal/admin tooling): only an explicit mismatch
     # is rejected, not the absence of a tenant_id.
     assert load_full_result(state["run_id"], log_dir=str(tmp_path)) is not None
 
@@ -970,7 +970,7 @@ def test_load_full_result_degrades_gracefully_when_csv_missing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A gold entry whose CSV artifact was deleted/corrupted still yields its
-    narrative/task_question — just without gold_df — rather than failing the
+    narrative/task_question, just without gold_df, rather than failing the
     whole reload."""
     engine = _make_sqlite_engine()
     monkeypatch.setattr(db, "scoped_connection", _fake_scope(engine))
@@ -996,7 +996,7 @@ def test_load_full_result_degrades_gracefully_when_csv_missing(
 
 
 # ---------------------------------------------------------------------------
-# Sprint 29 (ADR-019): tenant budget cap — get/set_monthly_budget,
+# Sprint 29 (ADR-019): tenant budget cap: get/set_monthly_budget,
 # get_monthly_spend_usd. All against the real in-memory SQLite schema, same
 # pattern as the load_history tests above.
 # ---------------------------------------------------------------------------
@@ -1141,7 +1141,7 @@ def test_get_monthly_spend_usd_is_zero_with_no_runs(monkeypatch: pytest.MonkeyPa
     assert get_monthly_spend_usd("tenant-a") == 0.0
 
 
-# Sprint 35 (FinOps: pre-run cost estimation) — get_avg_run_cost_usd,
+# Sprint 35 (FinOps: pre-run cost estimation): get_avg_run_cost_usd,
 # get_global_avg_run_cost_usd. Previously untested (2026-09-04 coverage
 # gap-closing pass): unlike get_monthly_spend_usd above, these two were never
 # exercised by any unit test, only indirectly (if at all) through
@@ -1187,7 +1187,7 @@ def test_get_avg_run_cost_usd_averages_this_tenants_priced_runs(
 
 
 def test_get_avg_run_cost_usd_ignores_unpriced_runs(monkeypatch: pytest.MonkeyPatch) -> None:
-    """`cost_usd IS NOT NULL` filter — a run made with an unpriced model
+    """`cost_usd IS NOT NULL` filter: a run made with an unpriced model
     (`core.pricing.compute_cost_usd`'s docstring) must not drag the average
     toward zero or blow up the SQL average with a NULL."""
     engine = _make_sqlite_engine()
@@ -1227,7 +1227,7 @@ def test_get_avg_run_cost_usd_is_scoped_per_tenant(monkeypatch: pytest.MonkeyPat
 
 
 def test_get_avg_run_cost_usd_respects_the_limit(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Only the most recent `limit` priced runs count — an old, cheap run
+    """Only the most recent `limit` priced runs count: an old, cheap run
     outside the window must not pull the average down."""
     engine = _make_sqlite_engine()
     monkeypatch.setattr(budget_db, "get_engine", lambda: engine)
@@ -1244,7 +1244,7 @@ def test_get_global_avg_run_cost_usd_averages_across_tenants(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Unlike get_avg_run_cost_usd, this one reads through get_engine()
-    directly (no tenant_scope) — it is deliberately not tenant-scoped, the
+    directly (no tenant_scope): it is deliberately not tenant-scoped, the
     fallback signal for a brand-new tenant with no run history of its own."""
     engine = _make_sqlite_engine()
     monkeypatch.setattr(budget_db, "get_engine", lambda: engine)
@@ -1267,7 +1267,7 @@ def test_get_global_avg_run_cost_usd_returns_none_with_zero_priced_runs(
 
 
 # ---------------------------------------------------------------------------
-# Sprint 36 (ADR-035): per-tenant retention policy — get/set_retention_days,
+# Sprint 36 (ADR-035): per-tenant retention policy: get/set_retention_days,
 # list_tenants_with_retention. Same pattern as the budget-cap tests above.
 # ---------------------------------------------------------------------------
 

@@ -4,11 +4,11 @@ Takes `pipeline_service.run_full_analysis` off Streamlit's blocking click
 handler by running it inside a Celery task, and enforces a per-tenant rate
 limit backed by the same Redis instance Celery already uses as its broker.
 
-**Design decision — rate limiting diverges from ADR-008's initial framing.**
+**Design decision: rate limiting diverges from ADR-008's initial framing.**
 ADR-008 suggested reusing "Celery's native rate limiting." Celery's own
 `rate_limit` (set via `@task(rate_limit=...)` or `CELERY_TASK_ANNOTATIONS`)
-throttles a *task type* globally across all workers — e.g. "no more than N
-`run_full_analysis_task` executions per minute, total" — it has no concept of
+throttles a *task type* globally across all workers: e.g. "no more than N
+`run_full_analysis_task` executions per minute, total": it has no concept of
 a per-call argument like `tenant_id`. What Sprint 3 actually needs is "no more
 than N runs per *tenant* per window," which Celery's rate_limit cannot express
 on its own. Rather than force-fit it (e.g. one dynamically-registered task per
@@ -16,17 +16,17 @@ tenant, which Celery does not support cleanly), this module adds a small,
 explicit fixed-window counter directly on Redis (`INCR` + `EXPIRE`) ahead of
 enqueueing. This still satisfies ADR-008's spirit (reuse the same Redis
 instance, no second piece of infra) while actually being per-tenant. Flagged
-for Tech Lead review — this is the one place implementation diverged from the
+for Tech Lead review: this is the one place implementation diverged from the
 ADR's sketch.
 
-**Design decision — Celery task returns a summary, not the full result.**
+**Design decision: Celery task returns a summary, not the full result.**
 `run_full_analysis`'s return value carries `pd.DataFrame`s and Plotly
 `Figure` objects, which are not JSON-serializable (and this project
-deliberately keeps Celery's serializer as `json`, not `pickle` — see
+deliberately keeps Celery's serializer as `json`, not `pickle`: see
 `core/celery_app.py`'s docstring on why). Rather than relax that, the task
 returns a small JSON-safe summary (`run_id`, `status`, `error`, `tokens`).
 The full result is already durably persisted as a side effect of
-`run_full_analysis` itself (`save_run`/`save_analysis`, unchanged) — exactly
+`run_full_analysis` itself (`save_run`/`save_analysis`, unchanged): exactly
 the same JSON-on-disk-plus-DB-row path `app.py`'s History tab already reads
 from for past runs. `app.py` polls this module's `get_task_status`, and once
 `SUCCESS`, re-loads the full result the same way the History tab does, rather
@@ -62,31 +62,31 @@ from ai_etl.services.pipeline_service import run_full_analysis
 logger = logging.getLogger(__name__)
 
 # Defaults are deliberately generous for a TCC-scale deployment (few tenants,
-# manual testing) rather than tuned for real production load — revisit once
+# manual testing) rather than tuned for real production load: revisit once
 # Sprint 6's load/stability testing has real numbers to tune against.
 RATE_LIMIT_MAX_RUNS = int(os.getenv("AI_ETL_RATE_LIMIT_MAX_RUNS", "10"))
 RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("AI_ETL_RATE_LIMIT_WINDOW_SECONDS", "3600"))
 
-# Sprint 29 (ADR-019) — fraction of a tenant's monthly_budget_usd at which
+# Sprint 29 (ADR-019): fraction of a tenant's monthly_budget_usd at which
 # check_budget_cap starts warning, before the cap is actually reached.
 BUDGET_WARNING_THRESHOLD_RATIO = float(os.getenv("AI_ETL_BUDGET_WARNING_THRESHOLD_RATIO", "0.8"))
 
-# Sprint 29 (ADR-019 addendum) — safety-net TTL on the per-tenant in-flight
+# Sprint 29 (ADR-019 addendum): safety-net TTL on the per-tenant in-flight
 # budget lock (see check_budget_cap's docstring). Only matters if a worker
 # crashes/is killed after acquiring the lock and before releasing it in
-# run_full_analysis_task's `finally` — bounds how long a capped tenant could
+# run_full_analysis_task's `finally`: bounds how long a capped tenant could
 # otherwise be stuck unable to enqueue anything. Generous relative to a real
 # run's worst-case duration (sandbox timeouts scale up to a few minutes at
 # large row counts, ADR-013) without being effectively unbounded.
 BUDGET_INFLIGHT_LOCK_TTL_SECONDS = int(os.getenv("AI_ETL_BUDGET_INFLIGHT_LOCK_TTL_SECONDS", "900"))
 
-# Sprint 15 (ADR-020) — shared retry budget for BOTH failure classes a
+# Sprint 15 (ADR-020): shared retry budget for BOTH failure classes a
 # scheduled fire can hit: an unhandled exception (Celery's own
 # `autoretry_for`, set on the task decorator below) and a *logical* failure
-# (`state["status"] == "failed"` returned with no exception — the common
+# (`state["status"] == "failed"` returned with no exception: the common
 # case in practice, since `agents/pipeline/extractor.py` catches a source-connection
 # error internally rather than raising). Both share Celery's own
-# `self.request.retries` counter, per ADR-020 Decision 1 — one retry budget,
+# `self.request.retries` counter, per ADR-020 Decision 1: one retry budget,
 # not two independently-tracked ones. Deliberately small: each retry of an
 # LLM-calling pipeline costs real tokens (Sprint 3/8's own measured
 # ~$0.0006/run at this project's current scale), so retrying a persistently
@@ -95,7 +95,7 @@ BUDGET_INFLIGHT_LOCK_TTL_SECONDS = int(os.getenv("AI_ETL_BUDGET_INFLIGHT_LOCK_TT
 SCHEDULED_PIPELINE_MAX_RETRIES = int(os.getenv("AI_ETL_SCHEDULED_PIPELINE_MAX_RETRIES", "2"))
 
 # Base backoff (seconds) between attempts, doubled per retry
-# (`_level_b_retry_countdown`) — gives a transient blip (a source flaking
+# (`_level_b_retry_countdown`): gives a transient blip (a source flaking
 # for a few seconds) a real chance to clear before the next attempt, rather
 # than hammering it immediately. Also used as Celery's own `retry_backoff`
 # base for the unhandled-exception (Level A) path, so both failure classes
@@ -104,18 +104,18 @@ SCHEDULED_PIPELINE_RETRY_BACKOFF_SECONDS = int(
     os.getenv("AI_ETL_SCHEDULED_PIPELINE_RETRY_BACKOFF_SECONDS", "60")
 )
 
-# Sprint 15 (ADR-020 Decision 3) — alert the operator once `saved_pipelines
+# Sprint 15 (ADR-020 Decision 3): alert the operator once `saved_pipelines
 # .consecutive_failures` reaches this value (after Level-B retries for that
 # fire are already exhausted, not on every retry). Compared with `==`, not
-# `>=`, at the call site — see `_record_scheduled_pipeline_health_best_effort`
-# — so a pipeline that stays broken alerts exactly once per crossing, not on
+# `>=`, at the call site: see `_record_scheduled_pipeline_health_best_effort`
+#: so a pipeline that stays broken alerts exactly once per crossing, not on
 # every subsequent failed fire.
 HEALTH_ALERT_FAILURE_THRESHOLD = int(os.getenv("AI_ETL_HEALTH_ALERT_FAILURE_THRESHOLD", "3"))
 
 
 def _level_b_retry_countdown(retries_so_far: int) -> int:
     """Seconds to wait before the next attempt of a scheduled fire that
-    just failed logically (Level B, ADR-020 Decision 1) — doubles per
+    just failed logically (Level B, ADR-020 Decision 1): doubles per
     retry (60s, 120s, ... at the defaults), capped implicitly by
     `SCHEDULED_PIPELINE_MAX_RETRIES` itself (there's no attempt past the
     max to need a longer countdown for)."""
@@ -128,7 +128,7 @@ def _level_b_retry_countdown(retries_so_far: int) -> int:
 
 class RateLimitExceededError(Exception):
     """Raised by `enqueue_analysis` when a tenant is over the cap for the
-    current window. Carries no extra fields — the message alone is enough for
+    current window. Carries no extra fields: the message alone is enough for
     `app.py` to render an `st.error`."""
 
 
@@ -139,7 +139,7 @@ class BudgetExceededError(Exception):
 
 
 class BudgetStatus(TypedDict):
-    """Return shape of `check_budget_cap` — also what `GET /budget` exposes."""
+    """Return shape of `check_budget_cap`: also what `GET /budget` exposes."""
 
     cap_usd: float | None
     spent_usd: float
@@ -157,7 +157,7 @@ def _budget_inflight_key(tenant_id: str) -> str:
 
 
 def _try_acquire_budget_inflight_lock(tenant_id: str) -> bool:
-    """`SET ... NX EX` — Redis's own atomic "set only if absent" primitive,
+    """`SET ... NX EX`: Redis's own atomic "set only if absent" primitive,
     the same building block `check_and_increment_rate_limit` already relies
     on for its own atomicity (there, `INCR`; here, `SET NX`). Returns `True`
     if this call won the lock, `False` if another unreconciled execution for
@@ -172,7 +172,7 @@ def _try_acquire_budget_inflight_lock(tenant_id: str) -> bool:
 
 
 def _release_budget_inflight_lock(tenant_id: str) -> None:
-    """Best-effort release — a plain `DELETE` is a no-op if the lock was
+    """Best-effort release: a plain `DELETE` is a no-op if the lock was
     never acquired (uncapped tenant) or already expired, so this is always
     safe to call unconditionally."""
     client = _redis_client()
@@ -183,11 +183,11 @@ def check_and_increment_rate_limit(tenant_id: str) -> None:
     """Fixed-window per-tenant counter on Redis.
 
     Key is `ratelimit:{tenant_id}:{window_index}`, where `window_index` is
-    `int(time.time()) // RATE_LIMIT_WINDOW_SECONDS` — every tenant's counter
+    `int(time.time()) // RATE_LIMIT_WINDOW_SECONDS`: every tenant's counter
     resets at the same wall-clock boundaries (not a sliding window keyed off
     each tenant's first call). Simpler than a sliding-window log, and
     "resets on a shared clock boundary rather than per-tenant" is an accepted
-    trade-off at this project's scale — a tenant could in principle burst up
+    trade-off at this project's scale: a tenant could in principle burst up
     to `2x` the cap across a window boundary. Good enough to stop runaway
     /adversarial usage; not meant to be billing-grade precise.
 
@@ -202,7 +202,7 @@ def check_and_increment_rate_limit(tenant_id: str) -> None:
 
     count = client.incr(key)
     if count == 1:
-        # Only the call that creates the key sets its TTL — re-setting it on
+        # Only the call that creates the key sets its TTL: re-setting it on
         # every INCR would keep pushing the window out indefinitely under
         # sustained traffic, defeating the fixed-window design.
         client.expire(key, RATE_LIMIT_WINDOW_SECONDS)
@@ -239,7 +239,7 @@ def _default_monthly_budget_usd() -> float | None:
 
 def get_budget_status(tenant_id: str) -> BudgetStatus:
     """Read-only: current cap, spend-so-far this calendar month, and whether
-    the tenant is near or over it. Never raises — `check_budget_cap` below is
+    the tenant is near or over it. Never raises: `check_budget_cap` below is
     the enforcement wrapper around this for call sites that must block;
     `GET /budget` uses this directly so status can always be read, even for
     a tenant already over their cap."""
@@ -263,7 +263,7 @@ def get_budget_status(tenant_id: str) -> BudgetStatus:
 
 
 def check_budget_cap(tenant_id: str) -> BudgetStatus:
-    """Pre-enqueue budget gate (ADR-019, Sprint 29) — mirrors
+    """Pre-enqueue budget gate (ADR-019, Sprint 29): mirrors
     `check_and_increment_rate_limit`'s shape (a cheap, synchronous check
     ahead of `.delay()`, its own exception the API layer maps to an HTTP
     error) but the "count" being checked is real accumulated USD spend for
@@ -275,13 +275,13 @@ def check_budget_cap(tenant_id: str) -> BudgetStatus:
     tenant this month via `audit.db.get_monthly_spend_usd`) against the cap,
     and rejects the *next* execution once the tenant is at or over it. It
     does not estimate this run's own cost ahead of time, so a single run can
-    still itself push spend past the cap — flagged as an accepted
+    still itself push spend past the cap: flagged as an accepted
     limitation, not fixed here.
 
     Deliberately queries Postgres directly rather than mirroring spend into
     a second Redis-resident running total (unlike the rate limiter's own
     Redis `INCR`): `analysis_runs.cost_usd` is already the canonical,
-    per-run persisted cost this project computes once (Sprint 3) — a
+    per-run persisted cost this project computes once (Sprint 3): a
     parallel Redis counter would only add a second value that can drift from
     it (e.g. a task that dies after being enqueued but before `save_analysis`
     runs), for no correctness benefit at this project's scale.
@@ -292,33 +292,33 @@ def check_budget_cap(tenant_id: str) -> BudgetStatus:
     Decision 3 originally promised. Two `enqueue_analysis` calls arriving
     close together both read the same pre-execution `spent` (neither run has
     completed yet, so neither's cost has landed in `analysis_runs`), both see
-    `spent < cap`, and both would pass — N concurrent runs, not one. Fixed by
+    `spent < cap`, and both would pass: N concurrent runs, not one. Fixed by
     reusing the rate limiter's own atomicity primitive (Redis `SET NX`,
     exactly `INCR`'s "one winner" guarantee, applied to a lock instead of a
     counter) rather than inventing a third concurrency pattern in this
     module: once a cap is configured, at most one of this tenant's
     executions may be "in flight and unreconciled" (enqueued but not yet
-    priced) at a time — `_try_acquire_budget_inflight_lock` below. A second
+    priced) at a time: `_try_acquire_budget_inflight_lock` below. A second
     concurrent call for the same capped tenant is rejected here with
     `BudgetExceededError`, not silently queued, until the first execution's
     real cost is persisted and the lock is released (`run_full_analysis_task`'s
     `finally`) or the safety-net TTL expires. This trades some concurrency
     for capped tenants (at most one execution in flight while unreconciled)
     for the overshoot guarantee ADR-019 actually promises; uncapped tenants
-    (the default) are entirely unaffected — the lock is only acquired when
+    (the default) are entirely unaffected: the lock is only acquired when
     `monthly_budget_usd` is set.
 
     A Postgres compare-and-swap (`audit.db.claim_due_pipeline`'s pattern,
     Sprint 13) was considered and rejected here: that pattern fits "claim one
     specific row before acting on it," which doesn't map onto "gate access to
-    an aggregate `SUM(...)` across many rows" the way a lock does — reusing
+    an aggregate `SUM(...)` across many rows" the way a lock does: reusing
     the rate limiter's existing Redis-lock family is the smaller, more
     consistent change for this specific problem.
 
     Raises `BudgetExceededError` if a cap is configured and either the
     tenant is already at/over it, or another of the tenant's executions is
     still in flight and unreconciled. Otherwise returns the `BudgetStatus`,
-    logging a warning (not an audit-log `log_action()` entry — no
+    logging a warning (not an audit-log `log_action()` entry: no
     `PipelineState`/`run_id` exists yet at enqueue-time, before a run has
     even started) if spend is near the cap but not yet over it. Caller
     (`enqueue_analysis`) is responsible for releasing the lock this acquires
@@ -354,15 +354,15 @@ def check_budget_cap(tenant_id: str) -> BudgetStatus:
 @celery_app.task(  # type: ignore[untyped-decorator]  # celery has no type stubs for @task
     name="ai_etl.run_full_analysis",
     bind=True,
-    # Sprint 15 (ADR-020 Decision 1) — Level A: an unhandled exception
-    # escaping this task (infra transience — a DB/Redis blip, an uncaught
+    # Sprint 15 (ADR-020 Decision 1): Level A: an unhandled exception
+    # escaping this task (infra transience: a DB/Redis blip, an uncaught
     # bug) is retried automatically, backing off exponentially from
     # `SCHEDULED_PIPELINE_RETRY_BACKOFF_SECONDS`. Applies to every run
-    # regardless of origin (scheduled or avulso) — an unhandled infra
+    # regardless of origin (scheduled or avulso): an unhandled infra
     # exception is never a deliberate user action to second-guess, unlike
     # Level B below, which only applies to scheduled fires. Shares
     # `max_retries`/the `self.request.retries` counter with Level B's manual
-    # `self.retry()` call further down — one retry budget, not two.
+    # `self.retry()` call further down: one retry budget, not two.
     autoretry_for=(Exception,),
     retry_backoff=SCHEDULED_PIPELINE_RETRY_BACKOFF_SECONDS,
     retry_backoff_max=600,
@@ -384,9 +384,9 @@ def run_full_analysis_task(
     """Celery task wrapping `pipeline_service.run_full_analysis`.
 
     Sprint 7: live per-node progress, previously out of scope ("no
-    `progress_callback` crosses the task boundary" — true, it still doesn't,
+    `progress_callback` crosses the task boundary": true, it still doesn't,
     as a Python callable), now uses Celery's own `update_state(meta=...)`
-    instead — no new infra (still just the existing Redis result backend).
+    instead: no new infra (still just the existing Redis result backend).
     `_report_progress` below is a plain closure over `self`, called from
     *inside* the worker process, so it never needs to be serialized itself;
     only the plain `(stage, message)` strings it sends via `update_state` do.
@@ -394,10 +394,10 @@ def run_full_analysis_task(
     Returns a JSON-safe summary; see this module's docstring for why the full
     result isn't returned here.
 
-    **`file_path`/`file_bytes_b64` — interim fix, not the final design.**
+    **`file_path`/`file_bytes_b64`: interim fix, not the final design.**
     `spec` embeds an uploaded file's path as plain text (see `app.py`'s
     `_auto_generate_spec`), but the web process and this worker are separate
-    Railway services with separate filesystems — a path that exists on the
+    Railway services with separate filesystems: a path that exists on the
     web container's disk does not exist here. Rather than assume shared
     storage, the web process base64-encodes the uploaded file's bytes and
     passes them through the task itself; this worker re-materializes the
@@ -405,21 +405,21 @@ def run_full_analysis_task(
     (`runs/uploads/...`) both containers already agree on (same relative
     `WORKDIR`), before ever calling `run_full_analysis`. Both are `None` when
     `spec` came from the manual-spec textarea (no upload to move). This is a
-    deliberate, scoped Sprint 3 fix — Sprint 4 (ADR-009, tenant-scoped S3
+    deliberate, scoped Sprint 3 fix: Sprint 4 (ADR-009, tenant-scoped S3
     storage) replaces it with a real shared store; base64-in-task-payload
     does not scale past small demo-sized files and isn't meant to.
 
     `saved_pipeline_id` (Sprint 17, ADR-017): forwarded straight through to
     `run_full_analysis`/`save_run`/`save_analysis` so this execution can be
     grouped with the rest of its saved pipeline's run history. `None` for
-    every avulso (one-off) `POST /runs` call — only `services/scheduler.py`
+    every avulso (one-off) `POST /runs` call: only `services/scheduler.py`
     passes a real value. Sprint 14 (ADR-018) also uses it here, after the
     run completes, to run drift detection against the pipeline's previous
-    fire and, if triggered, deliver a digest — an avulso run (`None`) never
+    fire and, if triggered, deliver a digest: an avulso run (`None`) never
     runs drift detection at all.
 
     `llm_provider_override`/`llm_model_override`: gap-closing fix (2026-08-25
-    audit, Wave 4) — forwarded straight through to `run_full_analysis`, which
+    audit, Wave 4): forwarded straight through to `run_full_analysis`, which
     forwards to `run_silver_pipeline`; only actually used there when
     `saved_pipeline_id` doesn't already resolve a real override from the DB.
     """
@@ -451,11 +451,11 @@ def run_full_analysis_task(
     finally:
         # Sprint 29 (ADR-019 addendum): release the per-tenant "in-flight"
         # budget lock `check_budget_cap` may have acquired, regardless of
-        # success/failure — the tenant's real cost for this run (if any) is
+        # success/failure: the tenant's real cost for this run (if any) is
         # already durably persisted by `run_full_analysis` (`save_analysis`)
         # by the time this runs, so the next `check_budget_cap` call will see
         # it via `get_monthly_spend_usd`. A no-op if no cap was configured
-        # (lock never acquired) — see `_release_budget_inflight_lock`. This
+        # (lock never acquired): see `_release_budget_inflight_lock`. This
         # release must happen before the Sprint 14 drift check below, not
         # just before the return, so a drift-check hiccup can never leave
         # the tenant's budget lock held past this run's own completion.
@@ -463,7 +463,7 @@ def run_full_analysis_task(
 
     state = result["state"]
     # `state["status"]` is a required `PipelineState` field and should always
-    # be set by the time the graph finishes — the `or "failed"` fallback is
+    # be set by the time the graph finishes: the `or "failed"` fallback is
     # defensive, not expected in practice: an unexpectedly missing status is
     # treated as a failure (triggers retry/health-tracking) rather than
     # silently passing through as `None`, which none of the code below can
@@ -471,20 +471,20 @@ def run_full_analysis_task(
     final_status: str = state.get("status") or "failed"
 
     if saved_pipeline_id is not None:
-        # Sprint 15 (ADR-020 Decision 1) — Level B: this fire's own graph run
+        # Sprint 15 (ADR-020 Decision 1): Level B: this fire's own graph run
         # completed without raising (Level A above only fires on an
-        # exception), but the *logical* result is still a failure — e.g.
+        # exception), but the *logical* result is still a failure: e.g.
         # `agents/pipeline/extractor.py` caught a source-connection error internally
         # and wrote it to `state["error"]`/`status`, exactly the roadmap's
         # own "fonte indisponível" example. Only scheduled fires get this
-        # auto-retry (`saved_pipeline_id is not None`) — an avulso `POST
+        # auto-retry (`saved_pipeline_id is not None`): an avulso `POST
         # /runs` caller is already watching the result and can resubmit;
         # auto-retrying behind them would silently repeat real LLM cost for
         # a request they may not want repeated (see ADR-020 Decision 1).
         #
         # Sprint 27 (ADR-028 Decision 3): `"awaiting_approval"` is a third,
         # non-failure terminal status (a gated write correctly waiting on a
-        # human, not a broken pipeline) — excluded from both the retry
+        # human, not a broken pipeline): excluded from both the retry
         # condition (retrying would just recompute the same preview) and the
         # health-tracking call below (would otherwise increment
         # `consecutive_failures` and eventually fire a misleading "this
@@ -521,7 +521,7 @@ def _run_drift_check_best_effort(
     result: AnalysisRunResult,
 ) -> None:
     """Fetch the saved pipeline, run drift detection, deliver a digest if
-    triggered — all best-effort (Sprint 14, ADR-018 Decision 6). Any
+    triggered: all best-effort (Sprint 14, ADR-018 Decision 6). Any
     failure here (a DB hiccup, an unreachable delivery provider) is caught
     and swallowed: the run itself already completed and was persisted above,
     an alerting side-effect must never retroactively fail it.
@@ -541,7 +541,7 @@ def _run_drift_check_best_effort(
             business_question=business_question,
             log_dir=run_dir,
         )
-    except Exception:  # nosec B110 — best-effort alerting, never fails the run
+    except Exception:  # nosec B110: best-effort alerting, never fails the run
         pass
 
 
@@ -550,13 +550,13 @@ def _record_scheduled_pipeline_health_best_effort(
 ) -> None:
     """Update the health-snapshot cache after a scheduled fire's *final*
     attempt (Level-B retries, if any, already exhausted by the time this is
-    called — see `run_full_analysis_task`), and alert the operator exactly
+    called: see `run_full_analysis_task`), and alert the operator exactly
     once when `consecutive_failures` crosses `HEALTH_ALERT_FAILURE_THRESHOLD`
     (Sprint 15, ADR-020 Decisions 2/3).
 
     Best-effort, same discipline as `_run_drift_check_best_effort` right
     above: any failure here (a DB hiccup, an unreachable delivery provider)
-    is caught and swallowed — a health-tracking/alerting side effect must
+    is caught and swallowed: a health-tracking/alerting side effect must
     never retroactively fail a run that has already completed (successfully
     or not) and was already persisted.
     """
@@ -566,14 +566,14 @@ def _record_scheduled_pipeline_health_best_effort(
             return
         pipeline = get_saved_pipeline(saved_pipeline_id, tenant_id)
         # `== `, not `>=`: alert exactly on the crossing, not on every
-        # failure past it — a pipeline stuck broken for weeks must not spam
+        # failure past it: a pipeline stuck broken for weeks must not spam
         # the operator once per fire (ADR-020 Decision 3).
         if (
             pipeline is not None
             and pipeline["consecutive_failures"] == HEALTH_ALERT_FAILURE_THRESHOLD
         ):
             check_and_alert_pipeline_health(pipeline)
-    except Exception:  # nosec B110 — best-effort health tracking, never fails the run
+    except Exception:  # nosec B110: best-effort health tracking, never fails the run
         pass
 
 
@@ -597,7 +597,7 @@ def enqueue_analysis(
     if another of the tenant's executions is still in flight and
     unreconciled (see `check_budget_cap`'s docstring for the concurrency
     guard). **Checked first, before the rate limit** (post-PR-#63 code
-    review fix) — a request rejected for being over budget must not still
+    review fix): a request rejected for being over budget must not still
     consume a rate-limit slot; the tenant would otherwise be locked out of
     legitimate calls for the rest of the rate-limit window even after fixing
     their budget, for a run that never actually executed. Raises
@@ -605,8 +605,8 @@ def enqueue_analysis(
     cap. Either way, a rejected run never occupies a queue slot.
 
     `file_path`/`file_bytes`: pass both when `spec` references an uploaded
-    file (`app.py`'s upload flow) so the worker — a separate process/
-    container with its own filesystem — can re-materialize it before running;
+    file (`app.py`'s upload flow) so the worker: a separate process/
+    container with its own filesystem: can re-materialize it before running;
     see `run_full_analysis_task`'s docstring. `file_bytes` is base64-encoded
     here, not by the caller, so callers just pass the raw bytes they already
     have (e.g. `UploadedFile.getvalue()`).
@@ -615,14 +615,14 @@ def enqueue_analysis(
     when this call is a scheduled fire (`services/scheduler.py`), so the
     resulting `runs`/`analysis_runs` rows are linked back to it. `None` (the
     default) for every avulso call, e.g. `POST /runs`. Sprint 14 (ADR-018)
-    also relies on this to gate its drift check — see
+    also relies on this to gate its drift check: see
     `run_full_analysis_task`'s docstring.
 
     `llm_provider_override`/`llm_model_override`: gap-closing fix (2026-08-25
-    audit, Wave 4) — a caller-supplied override for an avulso run (e.g.
+    audit, Wave 4): a caller-supplied override for an avulso run (e.g.
     `POST /runs`' `ModelPicker` selection), forwarded to `run_full_analysis_task`
     and, from there, `pipeline_service.run_full_analysis`. Ignored whenever
-    `saved_pipeline_id` already resolves a real override from the DB — see
+    `saved_pipeline_id` already resolves a real override from the DB: see
     `pipeline_service.run_silver_pipeline`'s docstring.
 
     Returns the Celery task id `app.py` stores in `st.session_state` and
@@ -647,7 +647,7 @@ def enqueue_analysis(
         )
     except Exception:
         # The run never actually started (rate-limited, or the broker call
-        # itself failed) — release the in-flight budget lock `check_budget_cap`
+        # itself failed): release the in-flight budget lock `check_budget_cap`
         # just acquired so it isn't held for BUDGET_INFLIGHT_LOCK_TTL_SECONDS
         # over a run that will never happen. Once `.delay()` succeeds, the
         # lock's release is `run_full_analysis_task`'s responsibility instead
@@ -663,7 +663,7 @@ def get_task_status(task_id: str) -> dict[str, Any]:
 
     `state` is one of Celery's own values (`PENDING`, `STARTED`, `SUCCESS`,
     `FAILURE`, ...) plus the custom `"PROGRESS"` state `run_full_analysis_task`
-    reports via `update_state` (Sprint 7) — `app.py` used to map these to UI
+    reports via `update_state` (Sprint 7): `app.py` used to map these to UI
     copy rather than this module inventing a parallel vocabulary; the
     frontend now does the same. `result` is the task's JSON-safe summary dict
     on success; `error` is the stringified exception on failure; `meta` is

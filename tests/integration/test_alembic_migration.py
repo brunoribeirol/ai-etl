@@ -55,8 +55,8 @@ def _clean_slate(monkeypatch: pytest.MonkeyPatch):
     admin_action_log, retention_cleanup_log) and silently stopped covering the full
     table set those migrations create. That let one test's `upgrade(head)` leave
     e.g. `users` behind after its own (incomplete) teardown, so the next test's
-    `upgrade(head)` — starting from a dropped `alembic_version` but a still-present
-    `users` table — failed with `DuplicateTable: relation "users" already exists`.
+    `upgrade(head)`: starting from a dropped `alembic_version` but a still-present
+    `users` table: failed with `DuplicateTable: relation "users" already exists`.
     `DROP SCHEMA ... CASCADE` + recreate is the actual fix: it stays correct
     regardless of which/how many tables a future migration adds, with no list to
     keep in sync here.
@@ -94,7 +94,7 @@ def test_upgrade_head_creates_expected_columns() -> None:
     engine.dispose()
 
     # Ground truth as of migration 0020 (introspected against a real Postgres
-    # after running the full chain, not just copied from models.py — see
+    # after running the full chain, not just copied from models.py: see
     # ai_etl.audit.models.runs/analysis_runs for what added each column):
     # 0002 tenant_id, 0003 required tenant_id FK, 0007 saved_pipeline_id.
     assert run_columns == {

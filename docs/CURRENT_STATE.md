@@ -35,7 +35,7 @@ Health: `GET /health/ready` (database and Redis), never `/health`. Worker logs: 
 | Case study, 4 scenarios x 5 runs, default model, final code | 20 of 20 completed and equal to the reference | workflow run 38332893793 |
 | Scenario 3 across batches | 22 of 30 equal to the reference; the generated code varies there | `history/state-log.md`, 2026-10-13 |
 | Connectors without a database behind production (MySQL, MongoDB, SQLite, Parquet) | each completed and equal to the reference | `gh workflow run case-study.yml -f job=connectors` |
-| Functional checklist, 57 rows | works 47, in part 2 (2.5 S3 behind an emulator, 3.9 unrelated input), does not work 1 (1.2 PostgreSQL source on production: no database behind the default), not tested 6 (5.4, 5.5, 6.5, 6.7, 8.1, 8.2), note 1 | vault, `tcc/artefact/case-study-evidence-2026-10-12.md`, sections O and P |
+| Functional checklist, 57 rows | works 47, in part 2 (2.5 S3 behind an emulator, 3.9 unrelated input), does not work 1 (1.2 PostgreSQL source on production: no database behind the default), not tested 6 (5.4, 5.5, 6.5, 6.7, 8.1, 8.2), note 1 | vault, `tcc/evidence/case-study-evidence-2026-10-12.md`, sections O and P |
 | Tests | CI green on `main` (lint, format, types, unit, integration, security, e2e) | `.github/workflows/ci.yml` |
 
 ## Open, in the order the advisor fixed on 2026-10-16
@@ -47,7 +47,7 @@ Health: `GET /health/ready` (database and Redis), never `/health`. Worker logs: 
    out of the model selector, measured figures on its cards.
 2. **Validation rows with the owner:** 8.1, 8.2, 6.5, 6.7 (and 1.2, 2.2 on production) with a
    second account and a disposable database (vault runbook
-   `tcc/artefact/runbook-functional-rows-with-the-owner.md`). 5.4 and 5.5 stay untested by
+   `tcc/evidence/runbook-functional-rows-with-the-owner.md`). 5.4 and 5.5 stay untested by
    decision (no notification destination).
 3. **Railway region:** move the four services to US East and measure the API before and after
    (2026-10-16, from Amsterdam: `/health/ready` 1.2 to 4.0 s, `/pipelines` 10 s, a run page 12.5 s).

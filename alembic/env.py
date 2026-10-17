@@ -1,4 +1,4 @@
-"""Alembic environment — migrates the application database (APP_DATABASE_URL).
+"""Alembic environment: migrates the application database (APP_DATABASE_URL).
 
 Not `POSTGRES_URL`: that variable points at the pipeline's source/destination
 Postgres, a database this project's migrations never touch.
@@ -38,7 +38,7 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    # connect_timeout bounds only the initial TCP handshake, per libpq — a
+    # connect_timeout bounds only the initial TCP handshake, per libpq: a
     # stalled TLS/SSL negotiation past that point (e.g. an MTU black hole on
     # a VPN or flaky network) is not covered and can otherwise hang forever
     # with no error. Fail fast and loud instead.

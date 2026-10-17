@@ -4,7 +4,7 @@ Mirrors the `runs`/`analysis_runs` tables Phase 1 kept in SQLite
 (`{log_dir}/runs.db`), now backed by the application Postgres so run
 history survives across processes and Streamlit redeploys instead of
 living in one file per deployment. `tenant_id` maps to a real Clerk user
-account (see `users` below and ADR-006) — it is a required foreign key,
+account (see `users` below and ADR-006): it is a required foreign key,
 not the per-browser-session UUID stopgap ADR-005 originally introduced.
 
 Core (not the ORM) matches the style already used in
@@ -32,31 +32,31 @@ metadata = MetaData()
 users = Table(
     "users",
     metadata,
-    Column("id", String, primary_key=True),  # Clerk user_id — not a UUID
+    Column("id", String, primary_key=True),  # Clerk user_id: not a UUID
     Column("created_at", DateTime(timezone=True), nullable=False),
-    # Sprint 29 (ADR-019) — optional per-tenant spend cap, USD, calendar-month
+    # Sprint 29 (ADR-019): optional per-tenant spend cap, USD, calendar-month
     # window. NULL (the default for every existing and new tenant) means "no
-    # cap configured" — opt-in, zero behavior change for a tenant that never
+    # cap configured": opt-in, zero behavior change for a tenant that never
     # sets one. See services/execution_queue.py::check_budget_cap for
     # enforcement and ADR-019 for why this is a single nullable column rather
-    # than a new table (no history/versioning of the cap value is needed —
+    # than a new table (no history/versioning of the cap value is needed:
     # actual spend history already lives in analysis_runs.cost_usd).
     Column("monthly_budget_usd", Float, nullable=True),
-    # Sprint 36 (ADR-035) — optional per-tenant automatic run-artifact
+    # Sprint 36 (ADR-035): optional per-tenant automatic run-artifact
     # retention window, in days. NULL (the default for every existing and
-    # new tenant) means "keep forever" — opt-in, zero behavior change unless
+    # new tenant) means "keep forever": opt-in, zero behavior change unless
     # a tenant sets one. See `services/retention_service.py` for the Celery
     # beat job that actually purges storage artifacts past this window, and
     # `audit/db/retention.py` for the get/set accessors (same shape as
     # `monthly_budget_usd` above).
     Column("retention_days", Integer, nullable=True),
-    # Sprint 25 (ADR-036, migration 0020) — per-tenant locale, driving the
+    # Sprint 25 (ADR-036, migration 0020): per-tenant locale, driving the
     # Transformer's date-parsing convention and the language the Analyst/Science/
     # Advisor narrative is generated in (see `core/locale.py`). `NOT NULL DEFAULT
-    # 'pt-BR'` — unlike `llm_provider`/`llm_model` above, locale always has a value;
+    # 'pt-BR'`: unlike `llm_provider`/`llm_model` above, locale always has a value;
     # every existing tenant reads back `'pt-BR'` after the migration, which is the
     # behavior every one of them already has today. Only `'pt-BR'`/`'en-US'` are
-    # valid — enforced by `core/locale.py::resolve_locale()` and the
+    # valid: enforced by `core/locale.py::resolve_locale()` and the
     # `PATCH /tenant/locale` API boundary, never re-validated at read time.
     Column("locale", String(10), nullable=False, server_default="pt-BR"),
 )
@@ -71,10 +71,10 @@ runs = Table(
     Column("rows_loaded", Integer, nullable=True),
     Column("timestamp", DateTime(timezone=True), nullable=False),
     Column("tenant_id", String, ForeignKey("users.id"), nullable=False),
-    # Sprint 17 (ADR-017, migration 0007) — which saved pipeline (if any)
+    # Sprint 17 (ADR-017, migration 0007): which saved pipeline (if any)
     # produced this execution. Nullable: every avulso (one-off) run, and
     # every run that predates this column, has none. No FK
-    # ON DELETE CASCADE — deleting a saved pipeline must not delete its run
+    # ON DELETE CASCADE: deleting a saved pipeline must not delete its run
     # history (ADR-017); the column reads back NULL after such a delete
     # instead (ON DELETE SET NULL, set explicitly in the migration).
     Column(
@@ -84,7 +84,7 @@ runs = Table(
         nullable=True,
     ),
     Index("ix_runs_saved_pipeline_id", "saved_pipeline_id"),
-    # Sprint 14 (ADR-018, migration 0008) — additional composite index on top
+    # Sprint 14 (ADR-018, migration 0008): additional composite index on top
     # of Sprint 17's single-column one above:
     # `get_previous_completed_run`'s `WHERE saved_pipeline_id = :id ...
     # ORDER BY timestamp DESC LIMIT 1` query (drift detection's "most recent
@@ -98,7 +98,7 @@ stage_latencies = Table(
     "stage_latencies",
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
-    # runs.run_id or analysis_runs.run_id, disambiguated by run_type — see ADR-007
+    # runs.run_id or analysis_runs.run_id, disambiguated by run_type: see ADR-007
     # for why this is one narrow long-format table instead of two nullable FKs.
     Column("run_id", String, nullable=False),
     Column("run_type", String(10), nullable=False),  # "silver" | "analysis"
@@ -124,15 +124,15 @@ analysis_runs = Table(
     Column("total_tokens", Integer, nullable=False),
     Column("timestamp", DateTime(timezone=True), nullable=False),
     Column("tenant_id", String, ForeignKey("users.id"), nullable=False),
-    # Sprint 3 (ADR-008, migration 0005) — evaluation metric 3, cost per
+    # Sprint 3 (ADR-008, migration 0005): evaluation metric 3, cost per
     # execution. model_name is persisted per-run (not just read live from
     # AI_ETL_LLM_MODEL) so a later change to the env var doesn't silently
     # reprice historical runs. cost_usd is nullable: core/pricing.py returns
-    # None for an unpriced model, which must round-trip as NULL, not 0.0 —
+    # None for an unpriced model, which must round-trip as NULL, not 0.0:
     # see compute_cost_usd's docstring.
     Column("model_name", String(50), nullable=True),
     Column("cost_usd", Float, nullable=True),
-    # Sprint 17 (ADR-017, migration 0007) — same linkage as runs.saved_pipeline_id
+    # Sprint 17 (ADR-017, migration 0007): same linkage as runs.saved_pipeline_id
     # above, kept on this table too since a saved pipeline's analysis-side KPIs
     # (cost, tokens, gold/science subtask counts) are what Sprint 17's time-series
     # view actually charts; joining back to `runs` for every query would work but
@@ -147,10 +147,10 @@ analysis_runs = Table(
     Index("ix_analysis_runs_saved_pipeline_id", "saved_pipeline_id"),
 )
 
-# Sprint 13 (ADR-016, migration 0006) — a "saved pipeline" is a persisted
+# Sprint 13 (ADR-016, migration 0006): a "saved pipeline" is a persisted
 # spec + cron schedule + tenant, reexecuted unattended by Celery beat
 # (services/scheduler.py). Distinct from `runs`/`analysis_runs`, which stay
-# one row per *execution* (avulso or scheduled alike) — a saved pipeline
+# one row per *execution* (avulso or scheduled alike): a saved pipeline
 # produces many `runs` rows over time, linked loosely via `last_task_id` only
 # (no FK: a saved pipeline can be deleted independently of its run history,
 # and `runs.run_id` values already exist before this table does).
@@ -162,12 +162,12 @@ saved_pipelines = Table(
     Column("name", String(200), nullable=False),
     # ADR-016 Decision 3: declared explicitly by the caller (not LLM-inferred
     # from spec) and validated against `core.scheduling.SCHEDULABLE_SOURCE_TYPES`
-    # at the API layer before a row is ever written — only "live" sources
+    # at the API layer before a row is ever written: only "live" sources
     # (postgres/sqlite/mysql/mongodb/rest) may be scheduled, since only those
     # are re-resolvable from connection info alone on every scheduled fire,
     # with no dependency on a browser-uploaded file surviving between runs.
     Column("source_type", String(20), nullable=False),
-    # Same free-text shape as runs.spec — the Orchestrator LLM re-derives the
+    # Same free-text shape as runs.spec: the Orchestrator LLM re-derives the
     # actual structured plan from this at execution time, same as an avulso
     # run. `source_type` above is only a save-time validation gate, not
     # threaded any further into execution.
@@ -182,13 +182,13 @@ saved_pipelines = Table(
     Column("next_run_at", DateTime(timezone=True), nullable=False),
     Column("last_task_id", String, nullable=True),
     Column("last_run_at", DateTime(timezone=True), nullable=True),
-    # Sprint 14 (ADR-018, migration 0008) — "% change on a tracked KPI worth
+    # Sprint 14 (ADR-018, migration 0008): "% change on a tracked KPI worth
     # alerting on" for this pipeline's own recurring drift check (see
     # core/drift.py). Server-side default backfills every pre-existing row;
     # a customer with a naturally noisier pipeline can loosen it per pipeline
     # without a code change.
     Column("drift_threshold_pct", Float, nullable=False, server_default="20.0"),
-    # Sprint 15 (ADR-020, migration 0010) — a fast-read health-snapshot cache
+    # Sprint 15 (ADR-020, migration 0010): a fast-read health-snapshot cache
     # for this pipeline's most recent fires, not a second source of truth:
     # the real per-fire history is still `runs`/`runs.error`, joined via
     # `saved_pipeline_id` (ADR-017). These three columns exist so a health
@@ -201,19 +201,19 @@ saved_pipelines = Table(
     # `services/health_alerts.py` alerts the operator once this crosses
     # `AI_ETL_HEALTH_ALERT_FAILURE_THRESHOLD` (default 3).
     Column("consecutive_failures", Integer, nullable=False, server_default="0"),
-    # "completed" | "failed" — the outcome of the most recent fire's final
+    # "completed" | "failed": the outcome of the most recent fire's final
     # attempt. `NULL` for a pipeline that has never fired yet.
     Column("last_status", String(20), nullable=True),
     # The most recent failure's error message; cleared (NULL) on success.
     Column("last_error", Text, nullable=True),
-    # Sprint 16 (ADR-023) — operator-defined data quality rules for this pipeline,
+    # Sprint 16 (ADR-023): operator-defined data quality rules for this pipeline,
     # a plain JSON array of rule dicts (`{"column", "operator", "value", "severity",
-    # "name"}` — see `agents/pipeline/quality.py::_CUSTOM_RULE_OPERATORS`). Folded into every
+    # "name"}`: see `agents/pipeline/quality.py::_CUSTOM_RULE_OPERATORS`). Folded into every
     # subsequent scheduled run's `quality_report` alongside the fixed checks; not a
-    # derived cache of another table (unlike `consecutive_failures` above) — this is
+    # derived cache of another table (unlike `consecutive_failures` above): this is
     # the rule definitions' only source of truth.
     Column("quality_rules", JSON, nullable=False, server_default="[]"),
-    # Sprint 27 (ADR-028, migration 0015) — opt-in write-approval gate. `False`
+    # Sprint 27 (ADR-028, migration 0015): opt-in write-approval gate. `False`
     # (the default) for every existing and new pipeline: zero behavior change
     # unless an operator explicitly turns this on. See
     # `agents/pipeline/loader.py::_is_write_gated` for the full gate decision.
@@ -221,49 +221,49 @@ saved_pipelines = Table(
     # `NULL` = "every write requires approval" (once `require_approval` is on).
     # A set value = "only a write whose row count is at or above this needs
     # approval" *after* the pipeline's first approved write (`last_approved_at`
-    # below) — reuses `rows_loaded`'s existing definition (`len(transformed_data)`).
+    # below): reuses `rows_loaded`'s existing definition (`len(transformed_data)`).
     Column("approval_threshold_rows", Integer, nullable=True),
-    # `NULL` = this pipeline has never had an operator-approved write — the
+    # `NULL` = this pipeline has never had an operator-approved write: the
     # roadmap's "before the first real write" clause is unconditional while
     # this is `NULL`, regardless of `approval_threshold_rows`. Set once, on
     # the first successful approval, by
     # `services/pipeline_service.py::resume_pending_load`.
     Column("last_approved_at", DateTime(timezone=True), nullable=True),
-    # Sprint 30 (ADR-031, migration 0016) — per-pipeline LLM provider/model
+    # Sprint 30 (ADR-031, migration 0016): per-pipeline LLM provider/model
     # override. Both `NULL` (the default for every existing and new pipeline) means
     # "no override, use this deployment's global `AI_ETL_LLM_PROVIDER`/
-    # `AI_ETL_LLM_MODEL`" — zero behavior change unless a tenant explicitly sets
+    # `AI_ETL_LLM_MODEL`": zero behavior change unless a tenant explicitly sets
     # both via `PUT /pipelines/{id}/llm-config`. Always set or cleared together
-    # (never one `NULL` and the other not) — see
+    # (never one `NULL` and the other not): see
     # `audit/db/pipelines.py::set_saved_pipeline_llm_config`. Validated against
     # `core/llm.ALLOWED_MODELS_BY_PROVIDER` before being persisted, never at read
     # time. Actual pipeline execution does not yet read these columns (see
-    # ADR-031 §5, "Explicitly out of scope") — this is API-contract/persistence
+    # ADR-031 §5, "Explicitly out of scope"): this is API-contract/persistence
     # only for this sprint.
     Column("llm_provider", String(20), nullable=True),
     Column("llm_model", String(100), nullable=True),
-    # Sprint 37 (ADR-034, migration 0019) — per-pipeline notification destination,
+    # Sprint 37 (ADR-034, migration 0019): per-pipeline notification destination,
     # replacing the deployment-global `RESEND_API_KEY`/`SLACK_WEBHOOK_URL`/
     # `TEAMS_WEBHOOK_URL`/`GOOGLE_CHAT_WEBHOOK_URL` env vars `services/notifications.py`
     # otherwise falls back to. `notification_channel` is `NULL` (the default for
     # every existing and new pipeline) until an operator explicitly sets it via
-    # `PUT /pipelines/{id}/notifications` — zero behavior change until then, same
+    # `PUT /pipelines/{id}/notifications`: zero behavior change until then, same
     # "NULL = no override" convention as `llm_provider`/`llm_model` above.
     #
     # `notification_target_ciphertext` is a Fernet token (ADR-034: reuses
     # `services/secrets_service`'s encryption mechanism/key,
-    # `AI_ETL_SECRETS_ENCRYPTION_KEY` — not the `tenant_secrets` table itself,
+    # `AI_ETL_SECRETS_ENCRYPTION_KEY`: not the `tenant_secrets` table itself,
     # since that table is keyed `(tenant_id, name)` for tenant-wide named
     # credentials, not one destination scoped to a single pipeline row). Holds an
     # email recipient list (comma-separated, "email" channel) or a webhook URL
-    # ("slack"/"teams"/"google_chat") — never the plaintext value, never logged,
+    # ("slack"/"teams"/"google_chat"): never the plaintext value, never logged,
     # never returned by any API endpoint (see `audit/db/pipelines.py::
     # get_saved_pipeline_notification_config`, which returns only whether a target
     # is configured, not its value).
     Column("notification_channel", String(20), nullable=True),
     Column("notification_target_ciphertext", Text, nullable=True),
     # Lets an operator temporarily silence a configured destination without
-    # clearing it (e.g. a webhook rotation in progress) — `True` by default so a
+    # clearing it (e.g. a webhook rotation in progress): `True` by default so a
     # freshly configured destination is active immediately.
     Column("notification_active", Boolean, nullable=False, server_default="true"),
     Column("created_at", DateTime(timezone=True), nullable=False),
@@ -272,10 +272,10 @@ saved_pipelines = Table(
     Index("ix_saved_pipelines_tenant", "tenant_id"),
 )
 
-# Sprint 19 (ADR-022, migration 0011) — per-tenant encrypted credentials for
+# Sprint 19 (ADR-022, migration 0011): per-tenant encrypted credentials for
 # external source connectors (e.g. a REST API key), replacing the
 # process-wide shared env var every connector reads today. `ciphertext` is
-# a Fernet token (see services/secrets_service.py) — the decrypted value
+# a Fernet token (see services/secrets_service.py): the decrypted value
 # never lives in this table, is never logged, and is only ever returned by
 # `secrets_service.get_secret`, which no read-only API endpoint calls.
 tenant_secrets = Table(
@@ -291,12 +291,12 @@ tenant_secrets = Table(
     Index("ix_tenant_secrets_tenant", "tenant_id"),
 )
 
-# Sprint 24 (ADR-025, migration 0014) — evidence that a tenant data-erasure
+# Sprint 24 (ADR-025, migration 0014): evidence that a tenant data-erasure
 # request (LGPD/GDPR, DELETE /tenant) was fulfilled. Deliberately has no FK
 # to `users.id`: the row it describes is deleted by the same operation that
 # writes this log entry (services/tenant_deletion_service.py). Stores only
 # the opaque tenant id (same classification as `users.id` today, not
-# sensitive on its own) and row/key counts — never the personal data itself.
+# sensitive on its own) and row/key counts: never the personal data itself.
 tenant_deletion_log = Table(
     "tenant_deletion_log",
     metadata,
@@ -311,7 +311,7 @@ tenant_deletion_log = Table(
     Column("saved_pipelines_deleted", Integer, nullable=False, server_default="0"),
     Column("secrets_deleted", Integer, nullable=False, server_default="0"),
     Column("storage_keys_deleted", Integer, nullable=False, server_default="0"),
-    # "completed" | "failed" — see ADR-025 Decision 3: a partial storage
+    # "completed" | "failed": see ADR-025 Decision 3: a partial storage
     # cleanup failure still leaves status "completed" with `error` set, since
     # the DB-side erasure (the higher-confidence signal) succeeded.
     Column("status", String(20), nullable=False),
@@ -319,12 +319,12 @@ tenant_deletion_log = Table(
     Index("ix_tenant_deletion_log_tenant", "tenant_id"),
 )
 
-# Sprint 31 (ADR-032, migration 0017) — every platform-admin action that
+# Sprint 31 (ADR-032, migration 0017): every platform-admin action that
 # reads or writes another tenant's data. Deliberately its own table, not
 # `PipelineState.audit_log` (per-run, transient) and not `tenant_deletion_log`
 # above (a different, narrower event). Written by `audit/admin_log.py`, never
 # by `audit/db.py` (Sprint 31 isolation: avoid touching that file while other
-# sprints run in parallel against it). No FK to `users.id` on either side —
+# sprints run in parallel against it). No FK to `users.id` on either side:
 # `actor_user_id` is a platform admin (may not even be a tenant themselves)
 # and `target_tenant_id` may reference a tenant that no longer exists by the
 # time this row is read back, same reasoning as `tenant_deletion_log`.
@@ -336,9 +336,9 @@ admin_action_log = Table(
     Column("action", String(100), nullable=False),
     Column("target_tenant_id", String, nullable=True),
     Column("detail", Text, nullable=True),
-    # ADR-047, migration 0022 — the caller's stated justification for this
+    # ADR-047, migration 0022: the caller's stated justification for this
     # action. Nullable because every row written before this migration has
-    # none (never backfilled — an honest "unknown" beats a fabricated one);
+    # none (never backfilled: an honest "unknown" beats a fabricated one);
     # every route added after ADR-047 requires it at the API layer, so new
     # rows always have a value even though the column itself stays nullable.
     Column("reason", Text, nullable=True),
@@ -348,12 +348,12 @@ admin_action_log = Table(
     Index("ix_admin_action_log_created", "created_at"),
 )
 
-# Sprint 36 (ADR-035) — evidence that an automatic retention cleanup pass ran
+# Sprint 36 (ADR-035): evidence that an automatic retention cleanup pass ran
 # for a tenant, same "survives the thing it describes" shape as
 # `tenant_deletion_log` above, but per cleanup pass rather than per
 # irreversible account event: unlike `DELETE /tenant`, retention cleanup only
 # purges storage artifacts past the tenant's configured window, never the
-# `users` row itself, so a FK to `users.id` would be safe here — kept as a
+# `users` row itself, so a FK to `users.id` would be safe here: kept as a
 # plain string anyway for the same reason `tenant_deletion_log` does: a
 # tenant that deletes its account (ADR-025) after a cleanup ran must not
 # cascade-delete this compliance evidence too.
@@ -367,7 +367,7 @@ retention_cleanup_log = Table(
     Column("completed_at", DateTime(timezone=True), nullable=True),
     Column("runs_scanned", Integer, nullable=False, server_default="0"),
     Column("storage_keys_deleted", Integer, nullable=False, server_default="0"),
-    # "completed" | "failed" — same contract as `tenant_deletion_log.status`:
+    # "completed" | "failed": same contract as `tenant_deletion_log.status`:
     # a partial storage error still leaves status "completed" with `error`
     # set (best-effort, never blocks the next tenant in the same pass).
     Column("status", String(20), nullable=False),

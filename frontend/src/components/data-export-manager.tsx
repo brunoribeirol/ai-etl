@@ -13,17 +13,17 @@ import { useAuthedFetch } from "@/lib/authed-fetch";
 import type { RetentionPolicy, TenantDeletionSummary, TenantExport } from "@/lib/types";
 
 /**
- * "Data export & retention" page's data + interaction layer — first
+ * "Data export & retention" page's data + interaction layer: first
  * frontend consumer of `GET /tenant/export`, `GET`/`PATCH /tenant/retention`,
  * and `DELETE /tenant` (Sprint 24 ADR-025, Sprint 36 ADR-035): the 3 LGPD/GDPR
- * data-subject rights this backend already supported with zero UI — export,
+ * data-subject rights this backend already supported with zero UI: export,
  * retention, and erasure. All three included per the owner's explicit
  * 2026-08-27 decision (an earlier draft flagged erasure and retention-editing
  * as open scope questions instead of deciding them unilaterally).
  *
  * `GET /tenant/export`/`GET /tenant/retention` are `viewer`-and-above
- * (ADR-035 Decision 1) — always rendered. `PATCH /tenant/retention` and
- * `DELETE /tenant` are `editor`-only — `canEdit` (server-side `/config` role,
+ * (ADR-035 Decision 1): always rendered. `PATCH /tenant/retention` and
+ * `DELETE /tenant` are `editor`-only: `canEdit` (server-side `/config` role,
  * same cosmetic pattern `budget-manager.tsx` uses) gates both sections;
  * either route independently re-enforces the role server-side regardless of
  * what this component shows a `viewer` caller.
@@ -31,15 +31,15 @@ import type { RetentionPolicy, TenantDeletionSummary, TenantExport } from "@/lib
  * Export and retention-clearing use the same inline 2-click confirm
  * `approval-queue.tsx`/`budget-manager.tsx` established. `DELETE /tenant` is
  * a materially bigger action (irreversible full-account erasure, not just a
- * cleared setting) — the backend's own contract already specifies a
+ * cleared setting): the backend's own contract already specifies a
  * stronger confirmation than 2 clicks (`ADR-025 Decision 4`: the request
- * body requires `confirm: "DELETE"`, a literal string match) — this UI
+ * body requires `confirm: "DELETE"`, a literal string match): this UI
  * mirrors that exactly with a text input that must read `DELETE` before the
  * button enables, rather than inventing a weaker client-side gate.
  *
  * There is no existing convention in this codebase for triggering a browser
  * file download from a fetched JSON response (checked for `Blob`/`download`
- * usage repo-wide) — this introduces one: fetch, wrap in a `Blob`, and click
+ * usage repo-wide): this introduces one: fetch, wrap in a `Blob`, and click
  * a transient `<a download>` built from an object URL, revoked right after.
  */
 export function DataExportManager({ canEdit }: { canEdit: boolean }) {
@@ -317,7 +317,7 @@ export function DataExportManager({ canEdit }: { canEdit: boolean }) {
 }
 
 /** Triggers a browser download of `data` as a pretty-printed JSON file named
- * `filename`, via a transient object-URL anchor — no existing helper for
+ * `filename`, via a transient object-URL anchor: no existing helper for
  * this in the codebase (checked repo-wide for `Blob`/`download` usage), so
  * this is the first one. */
 function downloadJson(data: unknown, filename: string): void {

@@ -1,6 +1,6 @@
 /**
  * Response shapes from `src/ai_etl/api/` (ADR-011). Mirrors
- * `api/serialization.py`/`api/routers/runs.py` — kept in sync by hand since
+ * `api/serialization.py`/`api/routers/runs.py`: kept in sync by hand since
  * there's no shared schema generation between the Python and TS sides yet.
  */
 
@@ -14,7 +14,7 @@ export type RunSummary = {
   model_name: string | null;
 };
 
-/** `GET /runs/pending-approval` (Sprint 27, ADR-028) — the operator's
+/** `GET /runs/pending-approval` (Sprint 27, ADR-028): the operator's
  * work-queue of gated writes, most recently created first. Mirrors
  * `audit/db/pipelines.py::list_pending_approvals`. */
 export type PendingApproval = {
@@ -25,7 +25,7 @@ export type PendingApproval = {
   pipeline_name: string | null;
 };
 
-/** `PipelineState["load_preview"]` (Sprint 27, ADR-028) — what a gated
+/** `PipelineState["load_preview"]` (Sprint 27, ADR-028): what a gated
  * write would do, computed without ever writing. `destination_type`-specific
  * `existing` shape (mirrors `destinations/*.py::preview_*`). */
 export type LoadPreview = {
@@ -61,11 +61,11 @@ export type AnalysisEntry = {
   gold_df?: Record<string, unknown>[];
   predictions_df?: Record<string, unknown>[];
   fig?: PlotlyFigure;
-  /** Sprint 7 — generated pandas/sklearn source (`agents/analyst.py`/
+  /** Sprint 7: generated pandas/sklearn source (`agents/analyst.py`/
    * `science.py`), now persisted by `_serialize_analysis_result`. Optional:
    * absent on any run saved before this field existed. */
   code?: string | null;
-  /** Sprint 21 (ADR-026) — deterministic sanity-check of this sub-task's own
+  /** Sprint 21 (ADR-026): deterministic sanity-check of this sub-task's own
    * result (`gold_df`/`predictions_df`) against the Silver data it was derived
    * from. Absent on any run saved before this field existed, or on a failed
    * sub-task (nothing to sanity-check). `"error"` is kept for shape-parity with
@@ -81,7 +81,7 @@ export type AnalysisEntry = {
   };
 };
 
-/** Sprint 7 — per-check entry inside `state.quality_report.checks`
+/** Sprint 7: per-check entry inside `state.quality_report.checks`
  * (`core/state.py`'s `PipelineState.quality_report` docstring). */
 export type QualityCheck = {
   check: string;
@@ -90,7 +90,7 @@ export type QualityCheck = {
   null_ratio?: number;
   count?: number;
   outlier_count?: number;
-  // Sprint 16 (ADR-023) — present only on `check === "custom_rule"` entries
+  // Sprint 16 (ADR-023): present only on `check === "custom_rule"` entries
   // (operator-defined quality rules, `agents/quality.py::_check_custom_rules`).
   rule_name?: string;
   operator?: string;
@@ -100,7 +100,7 @@ export type QualityCheck = {
   [key: string]: unknown;
 };
 
-/** Sprint 16 (ADR-023) — one operator-defined quality rule, mirrors
+/** Sprint 16 (ADR-023): one operator-defined quality rule, mirrors
  * `api/routers/pipelines.py::QualityRule`. */
 export type QualityRuleOperator = "not_null" | "gte" | "lte" | "gt" | "lt" | "eq" | "ne";
 
@@ -140,10 +140,10 @@ export type FullResult = {
     transformation_error?: string | null;
     pipeline_plan?: Record<string, unknown>;
     quality_report?: { checks?: QualityCheck[]; severity?: string; summary?: string };
-    /** Sprint 27 (ADR-028) — set instead of `load_result` when a write is
+    /** Sprint 27 (ADR-028): set instead of `load_result` when a write is
      * gated; `null`/absent for an ungated or already-resolved run. */
     load_preview?: LoadPreview | null;
-    /** Wall-clock seconds per Silver LangGraph node — the field the old
+    /** Wall-clock seconds per Silver LangGraph node: the field the old
      * Streamlit sidebar meant to read as `_agent_timings` (a key that was
      * never actually set on `state`, a pre-existing dead-code bug; the real
      * field has always been `stage_durations`). */
@@ -157,7 +157,7 @@ export type FullResult = {
   tokens: TokenUsage;
 };
 
-/** Sprint 7 — `GET /runs/{task_id}/status` response shape, extended with the
+/** Sprint 7: `GET /runs/{task_id}/status` response shape, extended with the
  * live-progress `meta` field (`services/execution_queue.py::get_task_status`). */
 export type TaskStatus = {
   state: string;
@@ -167,8 +167,8 @@ export type TaskStatus = {
   meta: { stage: string; message: string } | null;
 };
 
-/** `GET /config` — read-only, which model every agent in a run currently uses.
- * `role` (Wave 6, 2026-08-25 admin panel/approval-gate UI plan) — the
+/** `GET /config`: read-only, which model every agent in a run currently uses.
+ * `role` (Wave 6, 2026-08-25 admin panel/approval-gate UI plan): the
  * caller's resolved viewer/editor/admin role (`api/deps.py::AuthContext`),
  * used only for cosmetic UI decisions (e.g. showing the "Admin" nav link);
  * every actual admin/approval endpoint still independently enforces its own
@@ -178,7 +178,7 @@ export type ApiConfig = {
   role: "viewer" | "editor" | "admin";
 };
 
-/** `GET /admin/tenants` (ADR-032 + Wave 6 gap-closing addition) — the whole
+/** `GET /admin/tenants` (ADR-032 + Wave 6 gap-closing addition): the whole
  * tenant directory; `tenant_id` doubles as the raw Clerk user/org id, no
  * separate display name exists. */
 export type AdminTenantSummary = {
@@ -186,7 +186,7 @@ export type AdminTenantSummary = {
   created_at: string;
 };
 
-/** `GET /admin/audit-log` — mirrors `audit/admin_log.py::AdminActionRecord`. */
+/** `GET /admin/audit-log`: mirrors `audit/admin_log.py::AdminActionRecord`. */
 export type AdminActionRecord = {
   id: string;
   actor_user_id: string;
@@ -196,7 +196,7 @@ export type AdminActionRecord = {
   created_at: string;
 };
 
-/** `GET /budget`, `GET /admin/tenants/{id}/budget` — mirrors
+/** `GET /budget`, `GET /admin/tenants/{id}/budget`: mirrors
  * `services/execution_queue.py::BudgetStatus`. */
 export type BudgetStatus = {
   cap_usd: number | null;
@@ -206,10 +206,10 @@ export type BudgetStatus = {
   exceeded: boolean;
 };
 
-/** `POST /secrets`, `DELETE /secrets/{name}` (Sprint 19, ADR-022) — mirrors
+/** `POST /secrets`, `DELETE /secrets/{name}` (Sprint 19, ADR-022): mirrors
  * `api/routers/secrets.py`'s `{"name": ..., "status": "stored" | "deleted"}`.
  * `GET /secrets` returns `string[]` (names only) directly, no wrapper type
- * needed. Never carries a secret's decrypted value — the router itself never
+ * needed. Never carries a secret's decrypted value: the router itself never
  * returns one. */
 export type SecretMutationResult = {
   name: string;
@@ -217,9 +217,9 @@ export type SecretMutationResult = {
 };
 
 /**
- * Sprint 13 (ADR-016) — `/pipelines` CRUD. Mirrors
+ * Sprint 13 (ADR-016): `/pipelines` CRUD. Mirrors
  * `audit/db.py::_saved_pipeline_row_to_dict`. `source_type` is restricted to
- * "live" connectors only (no browser-uploaded csv/document) — see ADR-016
+ * "live" connectors only (no browser-uploaded csv/document): see ADR-016
  * Decision 3.
  */
 export type SchedulableSourceType = "postgres" | "sqlite" | "mysql" | "mongodb" | "rest";
@@ -244,21 +244,21 @@ export type SavedPipeline = {
   next_run_at: string;
   last_task_id: string | null;
   last_run_at: string | null;
-  // Sprint 15 (ADR-020) — health-snapshot cache (`consecutive_failures`/
+  // Sprint 15 (ADR-020): health-snapshot cache (`consecutive_failures`/
   // `last_status`/`last_error`, persisted on `saved_pipelines`) plus
   // aggregated fields the API computes on read (`success_rate`/
   // `avg_latency_seconds`/`health_sample_size`, `null` until the pipeline
-  // has fired at least once — never a fabricated 0).
+  // has fired at least once: never a fabricated 0).
   consecutive_failures: number;
   last_status: "completed" | "failed" | null;
   last_error: string | null;
   success_rate: number | null;
   avg_latency_seconds: number | null;
   health_sample_size: number;
-  // Sprint 16 (ADR-023) — operator-defined quality rules, run on every subsequent
+  // Sprint 16 (ADR-023): operator-defined quality rules, run on every subsequent
   // execution of this pipeline alongside the fixed checks.
   quality_rules: QualityRule[];
-  // Sprint 27 (ADR-028) — require-approval gate for this pipeline's writes.
+  // Sprint 27 (ADR-028): require-approval gate for this pipeline's writes.
   // `approval_threshold_rows: null` means "always gate, no row-count
   // exemption"; `last_approved_at` is set the first time an operator
   // approves a write, which is what lets a later write under the threshold
@@ -267,20 +267,20 @@ export type SavedPipeline = {
   approval_threshold_rows: number | null;
   last_approved_at: string | null;
   // Wave 2 item 8, 2026-09-05 mega-audit remediation
-  // (docs/archive/work/2026-09-05-mega-audit-remediation-plan.md) — already a valid,
+  // (docs/archive/work/2026-09-05-mega-audit-remediation-plan.md): already a valid,
   // accepted API field (`api/routers/pipelines.py`, `gt=0`, server default
   // 20.0) with no UI to set it; this is the frontend catching up, not a new
   // backend field. Never null (DB column has a `server_default`).
   drift_threshold_pct: number;
-  // Sprint 30 (ADR-031) — per-pipeline LLM provider/model override, merged onto
+  // Sprint 30 (ADR-031): per-pipeline LLM provider/model override, merged onto
   // every `saved_pipeline` dict by `api/routers/pipelines.py::_with_health`.
   // Both `null` means "no override, uses this deployment's global default".
   llm_provider: string | null;
   llm_model: string | null;
-  // Sprint 37 (ADR-034) — per-pipeline notification destination override,
+  // Sprint 37 (ADR-034): per-pipeline notification destination override,
   // merged onto every `saved_pipeline` dict the same way as `llm_provider`/
   // `llm_model` above. `notification_configured` is whether a target is set
-  // (never the target value itself — it's never returned by any endpoint).
+  // (never the target value itself: it's never returned by any endpoint).
   notification_channel: string | null;
   notification_configured: boolean;
   notification_active: boolean;
@@ -289,7 +289,7 @@ export type SavedPipeline = {
 };
 
 /**
- * Sprint 17 (ADR-017) — `GET /pipelines/{id}/history` response entry. Mirrors
+ * Sprint 17 (ADR-017): `GET /pipelines/{id}/history` response entry. Mirrors
  * `audit/db.py::list_pipeline_run_history`. One entry per execution of a
  * saved pipeline, oldest first. `cost_usd`/`model_name`/`total_tokens`/
  * `gold_subtasks`/`science_subtasks` are `null` for a Silver-only fire (no
@@ -310,7 +310,7 @@ export type PipelineRunHistoryEntry = {
 };
 
 /**
- * Sprint 26 (ADR-027) — `GET /onboarding/status` response. Mirrors
+ * Sprint 26 (ADR-027): `GET /onboarding/status` response. Mirrors
  * `audit/db.py::get_onboarding_status`, derived on read from
  * `runs`/`saved_pipelines`, no dedicated table.
  */
@@ -324,7 +324,7 @@ export type OnboardingStatus = {
   has_pipeline_run: boolean;
 };
 
-/** `GET /tenant/retention` (Sprint 36, ADR-035) — the tenant's automatic
+/** `GET /tenant/retention` (Sprint 36, ADR-035): the tenant's automatic
  * run-artifact retention window, if any. Mirrors
  * `audit/db/retention.py::RetentionPolicy`. `retention_days: null` is the
  * default for every tenant ("keep forever") until they opt in via
@@ -334,9 +334,9 @@ export type RetentionPolicy = {
   retention_days: number | null;
 };
 
-/** `GET /tenant/export` (Sprint 36, ADR-035) — a tenant's full self-service
+/** `GET /tenant/export` (Sprint 36, ADR-035): a tenant's full self-service
  * data-access export. Mirrors `services/tenant_export_service.py::TenantExport`.
- * Row shapes are intentionally untyped (`Record<string, unknown>`) — this is
+ * Row shapes are intentionally untyped (`Record<string, unknown>`): this is
  * a raw dump of DB rows for download, not data this UI renders field-by-field.
  * `tenant_secrets` is metadata only (id/name/timestamps), never `ciphertext`.
  * `storage_artifacts` is `{run_id, key}` pairs, never inline file bytes
@@ -353,9 +353,9 @@ export type TenantExport = {
   storage_artifacts: Record<string, unknown>[];
 };
 
-/** `DELETE /tenant` (Sprint 24, ADR-025) — full tenant erasure, `editor`-only.
+/** `DELETE /tenant` (Sprint 24, ADR-025): full tenant erasure, `editor`-only.
  * Mirrors `services/tenant_deletion_service.py::TenantDeletionSummary`.
- * Irreversible — the caller must send `{"confirm": "DELETE"}` (a literal
+ * Irreversible: the caller must send `{"confirm": "DELETE"}` (a literal
  * string match, ADR-025 Decision 4), never a soft-delete/undo path. */
 export type TenantDeletionSummary = {
   tenant_id: string;

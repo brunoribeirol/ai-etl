@@ -21,7 +21,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AGENTS, PYRAMID } from "@/lib/agents";
 
 // Shared fade-up entrance, triggered once as each section scrolls into view
-// — cheap, tasteful, and consistent with `agent-progress.tsx`'s existing use
+//: cheap, tasteful, and consistent with `agent-progress.tsx`'s existing use
 // of `motion/react` elsewhere in this app (Sprint 7), not a new dependency.
 const fadeUp = {
   initial: { opacity: 0, y: 16 },
@@ -32,7 +32,7 @@ const fadeUp = {
 
 // Sprint 25 (ADR-036): translated title/body/label text now lives in
 // `messages/{locale}.json` under `landing.differentiators`/`landing.techFacts`
-// (arrays, read via `t.raw`) — these two arrays keep only the icon, correlated
+// (arrays, read via `t.raw`): these two arrays keep only the icon, correlated
 // by index with the translated array.
 const DIFFERENTIATOR_ICONS = [Database, FileStack, Workflow, ShieldCheck];
 const TECH_FACT_ICONS = [GitBranch, Terminal, Lock, Radar, Boxes, Sparkles];
@@ -162,8 +162,8 @@ export default function LandingPage() {
 
           {/* Real bug, found live 2026-09-08: `howBody` above says "nine
               specialized agents", but this section used to render only the
-              5-tier pyramid (Bronze/Silver/Gold/Science/Advisor — data
-              layers, not agents) — the actual 9-agent roster existed in
+              5-tier pyramid (Bronze/Silver/Gold/Science/Advisor: data
+              layers, not agents): the actual 9-agent roster existed in
               this same message catalog (`agents.roster`) and in
               `agents-info.tsx` (shown only inside the authenticated app),
               but was never rendered on the public landing page. This grid

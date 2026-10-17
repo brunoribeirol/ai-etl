@@ -1,7 +1,7 @@
 """Tests for `/runs` endpoints (ADR-011).
 
 Mocks at the import site inside `api/routers/runs.py`, same convention
-`test_extractor.py` etc. already use — and overrides the auth dependency via
+`test_extractor.py` etc. already use: and overrides the auth dependency via
 FastAPI's `dependency_overrides` rather than minting real JWTs here (that's
 already covered by `test_api_deps.py`).
 """
@@ -115,7 +115,7 @@ def test_create_run_requires_file_or_spec(client: TestClient) -> None:
 
 
 def test_create_run_with_llm_override(client: TestClient, mocker) -> None:
-    """Gap-closing fix (2026-08-25 audit, Wave 4) — the avulso `POST /runs`
+    """Gap-closing fix (2026-08-25 audit, Wave 4): the avulso `POST /runs`
     flow's `ModelPicker` selection (`llm_provider_override`/
     `llm_model_override` form fields) must reach `enqueue_analysis`."""
     mock_enqueue = mocker.patch("ai_etl.api.routers.runs.enqueue_analysis", return_value="task-abc")
@@ -204,7 +204,7 @@ def test_create_run_with_uploaded_csv(client: TestClient, mocker) -> None:
 
 def test_create_run_with_file_and_manual_spec_combines_both(client: TestClient, mocker) -> None:
     """Real, live-verified bug found 2026-09-04: `manual_spec` used to be silently
-    discarded whenever a file was also attached — a typed instruction like "rename
+    discarded whenever a file was also attached: a typed instruction like "rename
     dt to date, filter active rows" never reached the Orchestrator. Regression guard
     that both the file-derived spec AND the typed instructions now reach
     `enqueue_analysis`."""
@@ -229,7 +229,7 @@ def test_create_run_with_file_and_manual_spec_combines_both(client: TestClient, 
 # (docs/archive/work/2026-09-05-mega-audit-remediation-plan.md): a multi-sheet Excel
 # upload used to always silently read sheet 0 for the preview, then have the
 # real pipeline execution raise (no sheet_name in the generated plan, and
-# `_load_excel` refuses to guess) — reported as "Excel multi-sheet always
+# `_load_excel` refuses to guess): reported as "Excel multi-sheet always
 # fails". Fixed with a real picker: `POST /runs/excel-sheets` lists sheets,
 # `POST /runs` requires `sheet_name` when there's more than one and threads
 # it through to both the preview DataFrame and the generated spec text.
@@ -354,7 +354,7 @@ def test_create_run_with_single_sheet_excel_and_no_sheet_name_still_works(
 # ---------------------------------------------------------------------------
 # Real bug found 2026-08-30, live testing: `.pdf`/`.docx` uploads had no
 # branch in `_dataframe_from_upload()` at all and always 400'd with "Could
-# not parse uploaded file." — despite the upload UI advertising both and
+# not parse uploaded file.": despite the upload UI advertising both and
 # `sources/document_source.py` existing specifically to handle them.
 # ---------------------------------------------------------------------------
 
@@ -456,7 +456,7 @@ def test_create_run_with_empty_extracted_pdf_text_returns_400(client: TestClient
 
 
 # ---------------------------------------------------------------------------
-# Sprint 27 (ADR-028) — write-approval gate
+# Sprint 27 (ADR-028): write-approval gate
 # ---------------------------------------------------------------------------
 
 

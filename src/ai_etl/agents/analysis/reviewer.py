@@ -5,24 +5,24 @@ Additive to `core/output_validation.py`'s deterministic checks, never a replacem
 `review_gold_result`/`review_science_result` each make one extra `get_llm().invoke()`
 call asking whether a successful sub-task's narrative/result actually answers the
 question it was supposed to, given a compact preview of the result (never the full
-DataFrame — same truncation posture every other agent prompt already uses, ADR-012).
+DataFrame: same truncation posture every other agent prompt already uses, ADR-012).
 
 That same call also checks a distinct failure mode the factual-consistency check can't
 catch (2026-08-24 LLM/Prompt-Engineer audit, reproduced): a directional/trend/comparison
 question ("is revenue trending up or down?") answered with a hedged, non-committal
 narrative ("increased in some months, decreased in others") that never states a
-direction. A narrative can be fully consistent with the data — nothing it says is
-wrong — while still failing to actually answer a question that asked for a direction.
+direction. A narrative can be fully consistent with the data: nothing it says is
+wrong: while still failing to actually answer a question that asked for a direction.
 This surfaces as a second, independent `OutputSanityCheckEntry` (`llm_review_hedge`),
-appended only when the question is directional AND the narrative hedges — mirroring
+appended only when the question is directional AND the narrative hedges: mirroring
 `core/output_validation.py`'s "non-applicable check is skipped entirely" convention
 for a non-directional question, rather than emitting a false "ok".
 
 Opt-in (`core.llm.is_llm_review_enabled()`), never called unless a caller checks that
-flag first — this module itself doesn't gate on it, matching `core/output_validation.py`'s
+flag first: this module itself doesn't gate on it, matching `core/output_validation.py`'s
 own "pure function, caller decides when to call it" shape.
 
-Never raises: any failure (LLM error, malformed JSON) is caught and returns `[]` — a
+Never raises: any failure (LLM error, malformed JSON) is caught and returns `[]`: a
 skipped review is different from one that ran and found nothing (see ADR-037
 Decision 3), so callers must treat an empty list as "no entries to append", not
 "review passed".
@@ -81,7 +81,7 @@ class _ParsedReview(NamedTuple):
 
 
 def _parse_review_response(raw: str) -> _ParsedReview:
-    """Parse the LLM's JSON response. Raises on anything malformed — callers catch it,
+    """Parse the LLM's JSON response. Raises on anything malformed: callers catch it,
     same "never raises past this module's own boundary" posture as the functions below.
     """
     parsed: Any = json.loads(strip_code_fences(raw.strip()))
@@ -142,7 +142,7 @@ def _run_review(
         )
 
     # Distinct from the check above: a hedge only matters for a directional question, and
-    # is only worth surfacing when it actually happened — a non-directional question, or a
+    # is only worth surfacing when it actually happened: a non-directional question, or a
     # directional one that got a committed answer, has nothing to flag here (see module
     # docstring's "skipped entirely rather than a false ok" convention).
     if parsed.directional_question and parsed.hedges_direction:
@@ -168,12 +168,12 @@ def review_gold_result(
 ) -> tuple[list[OutputSanityCheckEntry], TokenUsage]:
     """Review one Gold sub-task's narrative/`gold_df` against `business_question`.
 
-    Returns `([], zero_tokens)` if the review call itself fails — see module
+    Returns `([], zero_tokens)` if the review call itself fails: see module
     docstring. Otherwise returns one or two `OutputSanityCheckEntry` items to append
-    via `core.output_validation.append_check` (one per entry) — the factual-
+    via `core.output_validation.append_check` (one per entry): the factual-
     consistency check (`llm_review`), plus a second `llm_review_hedge` entry only
     when `business_question` is directional/comparative and the narrative hedges
-    instead of committing to an answer — along with the token usage the review call
+    instead of committing to an answer: along with the token usage the review call
     consumed (fold into the sub-task's own `tokens` for accurate cost tracking).
     """
     preview = (

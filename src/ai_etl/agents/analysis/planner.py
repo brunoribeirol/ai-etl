@@ -1,4 +1,4 @@
-"""Planner — decomposes a business question into independently-answerable analysis tasks.
+"""Planner: decomposes a business question into independently-answerable analysis tasks.
 
 Rationale: a single Gold/Science call answering a multi-part business question in one
 shot tends to cover only part of it, since the LLM must prioritize within one code
@@ -84,19 +84,19 @@ def plan_analysis_tasks(
     """Decompose a business question into up to MAX_TASKS independent sub-tasks.
 
     Falls back to a single descriptive task wrapping the original question if the LLM
-    output can't be parsed — a decomposition failure should degrade to the old one-shot
+    output can't be parsed: a decomposition failure should degrade to the old one-shot
     behavior, not block the pipeline.
 
     Args:
         llm_provider_override / llm_model_override: Sprint 30/gap-closing (ADR-031
-            §5) — the saved pipeline's LLM override, threaded in by
+            §5): the saved pipeline's LLM override, threaded in by
             `services/pipeline_service.py::run_analysis_tasks` (resolved once in
             `run_full_analysis` from `PipelineState`, since this agent runs outside
-            the LangGraph/PipelineState — see that module's docstring). `None` (the
-            default) for every existing caller — unchanged behavior.
-        locale: Sprint 25 (ADR-036) — the tenant's configured locale, same threading
+            the LangGraph/PipelineState: see that module's docstring). `None` (the
+            default) for every existing caller: unchanged behavior.
+        locale: Sprint 25 (ADR-036): the tenant's configured locale, same threading
             pattern as `llm_provider_override` above. Defaults to `DEFAULT_LOCALE`
-            ("pt-BR") — unchanged behavior for every existing caller.
+            ("pt-BR"): unchanged behavior for every existing caller.
     """
     prompt = _PROMPT_TEMPLATE.format(
         columns_list=str(df.columns.tolist()),
@@ -135,7 +135,7 @@ def plan_analysis_tasks(
 
     except Exception:
         # No PipelineState exists at this layer (Planner runs outside the LangGraph
-        # graph, see module docstring) — `log_action()` doesn't apply here, same
+        # graph, see module docstring): `log_action()` doesn't apply here, same
         # reasoning as `execution_queue.py`'s own `logging.warning()` at enqueue time.
         # Without this, a decomposition failure was previously silent: the caller
         # (and an external tester reporting "only got one sub-answer") had no signal

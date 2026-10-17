@@ -1,17 +1,17 @@
 """admin_action_log table (ADR-032, Sprint 31)
 
-New, standalone table — no changes to any existing table. Records every
+New, standalone table: no changes to any existing table. Records every
 platform-admin cross-tenant action (Sprint 31's `admin` RBAC role, ADR-032
-Decision 2): who (`actor_user_id`, the individual Clerk user id — platform
+Decision 2): who (`actor_user_id`, the individual Clerk user id: platform
 admins are identified via `AI_ETL_PLATFORM_ADMINS`, not a Clerk org role),
-what (`action`), against which tenant (`target_tenant_id`, nullable — some
+what (`action`), against which tenant (`target_tenant_id`, nullable: some
 admin actions, e.g. listing all tenants, have no single target), and when.
 Written by `src/ai_etl/audit/admin_log.py`, a module deliberately kept out
 of `audit/db.py` (Sprint 31 isolation note: minimize merge conflict with
 other sprints touching that file in the same parallel batch).
 
 RLS is enabled in this same migration per this project's own standing rule
-(`SECURITY.md` — "Every new migration that adds a table must enable RLS on
+(`SECURITY.md`: "Every new migration that adds a table must enable RLS on
 it in the same migration"); this app's connection role has
 `rolbypassrls = true` (see ADR-032 Decision 1 for why that posture itself
 is being kept, not changed, this sprint), so this is a safe no-op for
@@ -24,7 +24,7 @@ Revises: 0016
 Chain-reconciliation, applied at merge time (same pattern as Sprints
 14/17/29): `0016` (Sprint 30) was pre-assigned and running in parallel in a
 different worktree at authoring time, and did not exist on this branch yet
-— this migration originally chained onto `0015`. Sprint 30's PR (#96) merged
+, this migration originally chained onto `0015`. Sprint 30's PR (#96) merged
 first; this migration's `down_revision` was rebased onto `0016` immediately
 before this PR's own merge, restoring a single linear chain, exactly as
 flagged as the expected outcome when this file was authored.

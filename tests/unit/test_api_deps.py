@@ -1,7 +1,7 @@
-"""Tests for `api/deps.py` — auth (ADR-011) and RBAC (ADR-022).
+"""Tests for `api/deps.py`: auth (ADR-011) and RBAC (ADR-022).
 
 Reuses the fake-JWKS-via-local-RSA-keypair pattern already established in
-`tests/unit/test_auth_service.py` — no network call to Clerk, tokens signed
+`tests/unit/test_auth_service.py`: no network call to Clerk, tokens signed
 and verified entirely in-process.
 """
 
@@ -100,7 +100,7 @@ def test_valid_token_returns_tenant_id_and_ensures_user(
     assert auth["role"] == "editor"  # solo tenant, no org -> full access
     mock_ensure_user.assert_called_once_with("user_xyz789")
 
-    # get_current_tenant_id is a thin wrapper — still returns just the id.
+    # get_current_tenant_id is a thin wrapper: still returns just the id.
     assert deps.get_current_tenant_id(auth) == "user_xyz789"
 
 
@@ -182,7 +182,7 @@ def test_require_role_viewer_allows_both_roles(
     assert viewer_dep(auth) == "org_x"
 
 
-# --- Sprint 31 (ADR-032) — platform `admin` role ---------------------------
+# --- Sprint 31 (ADR-032): platform `admin` role ---------------------------
 
 
 def test_platform_admin_user_id_resolves_to_admin_regardless_of_org(
@@ -215,7 +215,7 @@ def test_non_platform_admin_org_admin_stays_editor_not_admin(
     mocker,
 ) -> None:
     """A Clerk org's own admin role must never grant the platform `admin`
-    role — that would let any tenant self-promote to cross-tenant access."""
+    role: that would let any tenant self-promote to cross-tenant access."""
     monkeypatch.setenv("AI_ETL_PLATFORM_ADMINS", "someone_else")
     private_key, public_key = rsa_keypair
     _mock_jwks_client(monkeypatch, public_key)

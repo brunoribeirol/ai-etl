@@ -7,14 +7,14 @@ on:
     branches: [main]
 
 # Least-privilege default (SR hardening): this workflow only reads the repo
-# and reports check results, it never pushes/writes anything — no job below
+# and reports check results, it never pushes/writes anything: no job below
 # needs more than this. A job that genuinely needs to write (none do today)
 # would declare its own `permissions:` override, not widen this default.
 permissions:
   contents: read
 
 # Cancel a stale run on the same branch/PR the moment a newer push
-# supersedes it — without this, 3-4 quick fix-up pushes to the same PR (a
+# supersedes it: without this, 3-4 quick fix-up pushes to the same PR (a
 # real pattern this session hit) queue up and burn CI minutes running
 # checks against commits nobody cares about anymore.
 concurrency:
@@ -30,18 +30,18 @@ jobs:
       matrix:
         python-version: ["3.11", "3.12"]
     # mysql-test/mongodb-test (Sprint 11, ADR-012) are deliberately added
-    # here, not to the `e2e` job's services below — unlike a live Postgres
+    # here, not to the `e2e` job's services below: unlike a live Postgres
     # (see the `e2e` job's comment on why THAT stays isolated from `check`),
     # these two only gate tests/integration/test_mysql_source_real.py and
     # test_mongodb_source_real.py's own reachability checks, so adding them
     # doesn't unblock any pre-existing self-skipping integration test.
     #
-    # AUDIT FINDING H4 (2026-09-09), NOT yet closed here — needs live-CI
+    # AUDIT FINDING H4 (2026-09-09), NOT yet closed here: needs live-CI
     # iteration the owner must drive, so it is documented rather than changed
     # blindly (a broken required check is worse than the gap). Today the RLS
     # tenant-isolation tests (tests/integration/test_tenant_isolation_rls.py,
     # ADR-040) and the sandbox-containment tests (test_sandbox_docker.py,
-    # ADR-038) SELF-SKIP in this required `check` job — the two headline
+    # ADR-038) SELF-SKIP in this required `check` job: the two headline
     # security controls SECURITY.md cites as "verified" are not actually
     # gating CI. Closing it requires, and must be verified over 1-2 real CI
     # runs before merge:
@@ -50,11 +50,11 @@ jobs:
     #     (NOBYPASSRLS) role + RLS policies exist, PLUS
     #     TEST_APP_DATABASE_URL / TEST_APP_DATABASE_URL_TENANT env pointing at
     #     both roles (the RLS test needs BOTH the bypass and the restricted
-    #     role — see the file's module header);
+    #     role: see the file's module header);
     #   - the ai-etl-sandbox image built (`make sandbox-image`) for the
     #     docker-sandbox tests, or accept they stay skipped and make e2e a
     #     REQUIRED status check instead (branch-protection setting, owner
-    #     action — see docs/archive/work/2026-09-09-persona-audit-remediation-plan.md).
+    #     action: see docs/archive/work/2026-09-09-persona-audit-remediation-plan.md).
     services:
       mysql-test:
         image: mysql:8.4
@@ -132,7 +132,7 @@ jobs:
     # `check` job's services a live Postgres would also make
     # tests/integration/ stop self-skipping (see
     # tests/integration/test_audit_persistence.py's `_database_reachable()`
-    # guard) and start running for real — which surfaced pre-existing,
+    # guard) and start running for real: which surfaced pre-existing,
     # unrelated integration-test bugs predating this PR (a tenant_id NOT NULL
     # constraint mismatch, an Alembic migration-test table-already-exists
     # conflict) that are out of Sprint 5's scope to fix here. Isolating e2e in

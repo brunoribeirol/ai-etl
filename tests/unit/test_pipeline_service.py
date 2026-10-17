@@ -1,4 +1,4 @@
-"""Tests for `ai_etl.services.pipeline_service` — the orchestration layer extracted
+"""Tests for `ai_etl.services.pipeline_service`: the orchestration layer extracted
 from `app.py`'s "Analisar dados" button handler.
 
 These are characterization tests: they pin down the *existing* sequencing, retry,
@@ -25,7 +25,7 @@ _ZERO_TOKENS = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
 @pytest.fixture(autouse=True)
 def _default_locale(monkeypatch: pytest.MonkeyPatch) -> None:
     """Sprint 25 (ADR-036): `run_silver_pipeline` calls `get_locale(tenant_id)` for
-    every run with a real `tenant_id` — default it to a no-DB stub here so every
+    every run with a real `tenant_id`: default it to a no-DB stub here so every
     existing test in this module (most of which pass `tenant_id="tenant-a"` without
     caring about locale) doesn't need a real `users` table. Tests that specifically
     exercise locale resolution override this with their own `monkeypatch.setattr`."""
@@ -34,7 +34,7 @@ def _default_locale(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture(autouse=True)
 def _no_tenant_connection_overrides_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
-    """ADR-044: same rationale as `_default_locale` above — `run_silver_pipeline`/
+    """ADR-044: same rationale as `_default_locale` above: `run_silver_pipeline`/
     `resume_pending_load` now call `resolve_tenant_overrides(tenant_id)` for every
     run with a real `tenant_id`, which hits `secrets_service.get_secret` ->
     `tenant_scope` -> a real Postgres engine. Default it to `{}` (today's
@@ -169,7 +169,7 @@ def test_run_silver_pipeline_emits_progress_and_persists(monkeypatch) -> None:
 
 def test_run_silver_pipeline_emits_english_progress_for_en_us_locale(monkeypatch) -> None:
     """Real bug, found live 2026-09-08: an English-UI tenant watched Portuguese
-    progress messages scroll past during every run — `core/locale.py` (ADR-036)
+    progress messages scroll past during every run: `core/locale.py` (ADR-036)
     already resolved a per-tenant locale for the Transformer/Analyst/Science/
     Advisor prompts, but `progress_callback` messages stayed hardcoded Portuguese
     regardless. This pins down the fix (`core/progress_messages.py`): an `en-US`
@@ -198,7 +198,7 @@ def test_run_silver_pipeline_emits_english_progress_for_en_us_locale(monkeypatch
     assert events[0][1] == "⚡ Running Silver pipeline..."
     assert events[-1][1].startswith("✅ Silver completed in")
     # The per-node step message (label kept as a proper noun, description
-    # localized) — confirms `agent_step()` is wired, not just the start/done
+    # localized): confirms `agent_step()` is wired, not just the start/done
     # messages.
     orchestrator_events = [msg for stage, msg in events if "Orchestrator" in msg]
     assert orchestrator_events and "Planning the pipeline..." in orchestrator_events[0]
@@ -207,7 +207,7 @@ def test_run_silver_pipeline_emits_english_progress_for_en_us_locale(monkeypatch
 def test_locale_override_wins_over_tenant_db_locale(monkeypatch) -> None:
     """Audit finding H5 / D4 (2026-09-09): the UI's active locale (passed as
     `locale_override` from POST /runs) must win over the tenant's stored
-    `users.locale`. Here the DB locale is pt-BR but the UI is en-US — the run's
+    `users.locale`. Here the DB locale is pt-BR but the UI is en-US: the run's
     progress messages must come back in ENGLISH. This is the gap PR #221 left:
     it localized to `users.locale`, not the UI the user actually sees, so an
     English-UI tenant whose `users.locale` was still pt-BR kept seeing Portuguese."""
@@ -266,7 +266,7 @@ def test_run_silver_pipeline_makes_tenant_overrides_visible_during_the_graph_run
 ) -> None:
     """ADR-044: `resolve_tenant_overrides(tenant_id)` result must be visible
     to connectors (via `get_connection_override`) for exactly the duration of
-    the graph run — checked from *inside* a fake node, not just asserted
+    the graph run: checked from *inside* a fake node, not just asserted
     against a mocked call."""
     monkeypatch.setattr(
         pipeline_service,
@@ -287,7 +287,7 @@ def test_run_silver_pipeline_makes_tenant_overrides_visible_during_the_graph_run
     pipeline_service.run_silver_pipeline("read file.csv", run_dir="runs", tenant_id="tenant-a")
 
     assert seen["during_run"] == "postgresql://tenant/db"
-    # Restored after the run — no leakage into whatever runs next in this worker.
+    # Restored after the run: no leakage into whatever runs next in this worker.
     assert get_connection_override("postgres") is None
 
 
@@ -315,7 +315,7 @@ def test_run_silver_pipeline_never_persists_tenant_connection_string_in_saved_st
     """Security regression guard (ADR-044): the whole point of resolving
     overrides through a `ContextVar` instead of `PipelineState` is that
     `save_run` serializes the *entire* state to the run's JSON snapshot with
-    no per-key redaction (`audit/db/runs.py::_make_serializable`) — a tenant's
+    no per-key redaction (`audit/db/runs.py::_make_serializable`): a tenant's
     decrypted connection string must never show up there."""
     secret_url = "postgresql://tenant:supersecret@tenant-host/db"
     monkeypatch.setattr(
@@ -392,7 +392,7 @@ def test_run_silver_pipeline_threads_quality_rules_for_scheduled_fire(monkeypatc
 
 
 def test_run_silver_pipeline_avulso_run_gets_empty_quality_rules(monkeypatch) -> None:
-    """An avulso run (no `saved_pipeline_id`) must never look up quality rules —
+    """An avulso run (no `saved_pipeline_id`) must never look up quality rules:
     `get_saved_pipeline` is not even called."""
     chunks = [{"loader": {"status": "completed"}}]
     captured_states: list[Any] = []
@@ -413,7 +413,7 @@ def test_run_silver_pipeline_avulso_run_gets_empty_quality_rules(monkeypatch) ->
 
 
 def test_run_silver_pipeline_resolves_llm_override_for_scheduled_fire(monkeypatch) -> None:
-    """Sprint 30/gap-closing (ADR-031 §5) — a scheduled fire resolves its saved
+    """Sprint 30/gap-closing (ADR-031 §5): a scheduled fire resolves its saved
     pipeline's llm_provider/llm_model override and carries it into the initial
     `PipelineState`, the same way quality_rules/approval_policy already do."""
     chunks = [{"loader": {"status": "completed"}}]
@@ -446,8 +446,8 @@ def test_run_silver_pipeline_resolves_llm_override_for_scheduled_fire(monkeypatc
 
 
 def test_run_silver_pipeline_resolves_locale_for_any_run_with_a_tenant_id(monkeypatch) -> None:
-    """Sprint 25 (ADR-036) — unlike quality_rules/the LLM override above, locale is
-    resolved for ANY run with a real `tenant_id`, avulso or scheduled — it does not
+    """Sprint 25 (ADR-036): unlike quality_rules/the LLM override above, locale is
+    resolved for ANY run with a real `tenant_id`, avulso or scheduled: it does not
     require a `saved_pipeline_id` too."""
     chunks = [{"loader": {"status": "completed"}}]
     captured_states: list[Any] = []
@@ -465,7 +465,7 @@ def test_run_silver_pipeline_resolves_locale_for_any_run_with_a_tenant_id(monkey
 
 def test_run_silver_pipeline_no_tenant_id_defaults_locale_without_a_db_call(monkeypatch) -> None:
     """An avulso run with no `tenant_id` at all (e.g. a script/test caller) must not
-    call `get_locale` — there's no tenant to look one up for."""
+    call `get_locale`: there's no tenant to look one up for."""
     chunks = [{"loader": {"status": "completed"}}]
     captured_states: list[Any] = []
     monkeypatch.setattr(
@@ -485,7 +485,7 @@ def test_run_silver_pipeline_no_tenant_id_defaults_locale_without_a_db_call(monk
 
 
 def test_run_silver_pipeline_avulso_run_gets_no_llm_override(monkeypatch) -> None:
-    """An avulso run (no `saved_pipeline_id`) never looks up an LLM override —
+    """An avulso run (no `saved_pipeline_id`) never looks up an LLM override:
     `get_saved_pipeline_llm_config` is not even called."""
     chunks = [{"loader": {"status": "completed"}}]
     captured_states: list[Any] = []
@@ -507,7 +507,7 @@ def test_run_silver_pipeline_avulso_run_gets_no_llm_override(monkeypatch) -> Non
 
 
 def test_run_silver_pipeline_avulso_run_uses_caller_supplied_llm_override(monkeypatch) -> None:
-    """Gap-closing fix (2026-08-25 audit, Wave 4) — an avulso run has no
+    """Gap-closing fix (2026-08-25 audit, Wave 4): an avulso run has no
     `saved_pipeline_id` to resolve a DB override from, but a caller (e.g.
     `POST /runs`' `ModelPicker` selection) can still supply one directly."""
     chunks = [{"loader": {"status": "completed"}}]
@@ -534,7 +534,7 @@ def test_run_silver_pipeline_saved_pipeline_override_wins_over_caller_override(
     monkeypatch,
 ) -> None:
     """A saved pipeline's own DB-configured override always wins over whatever
-    a caller happened to pass — matching `run_silver_pipeline`'s docstring."""
+    a caller happened to pass: matching `run_silver_pipeline`'s docstring."""
     chunks = [{"loader": {"status": "completed"}}]
     captured_states: list[Any] = []
     monkeypatch.setattr(
@@ -587,7 +587,7 @@ def test_run_silver_pipeline_reports_failure(monkeypatch) -> None:
 
 
 # ---------------------------------------------------------------------------
-# run_gold_analysis / run_science_analysis — single attempt, no retry
+# run_gold_analysis / run_science_analysis: single attempt, no retry
 # ---------------------------------------------------------------------------
 
 
@@ -692,7 +692,7 @@ def test_run_science_analysis_omits_sanity_check_on_failure(monkeypatch) -> None
 
 
 # ---------------------------------------------------------------------------
-# run_gold_analysis / run_science_analysis — ADR-037 opt-in LLM review
+# run_gold_analysis / run_science_analysis: ADR-037 opt-in LLM review
 # ---------------------------------------------------------------------------
 
 
@@ -737,7 +737,7 @@ def test_run_gold_analysis_appends_llm_review_entry_when_enabled(monkeypatch) ->
 
 def test_run_gold_analysis_llm_review_returning_empty_still_counts_tokens(monkeypatch) -> None:
     """A review call that fails (see reviewer.py) still folds in its (zero) tokens
-    and adds no entry — never crashes the sub-task."""
+    and adds no entry: never crashes the sub-task."""
     monkeypatch.setattr(pipeline_service, "is_llm_review_enabled", lambda: True)
     monkeypatch.setattr(
         pipeline_service, "run_analyst", lambda df, q, *a, **k: _gold_result(error=None)
@@ -806,7 +806,7 @@ def test_run_gold_analysis_appends_both_llm_review_entries_when_hedging_flagged(
 
 
 # ---------------------------------------------------------------------------
-# run_gold_with_repair / run_science_with_repair — auto-repair fallback
+# run_gold_with_repair / run_science_with_repair: auto-repair fallback
 # ---------------------------------------------------------------------------
 
 
@@ -896,7 +896,7 @@ def test_run_science_with_repair_surfaces_original_error_when_both_attempts_fail
 
 
 def test_run_gold_and_science_with_repair_both_delegate_to_shared_helper(monkeypatch) -> None:
-    """Wave 5 dedup — `run_gold_with_repair`/`run_science_with_repair` must both be
+    """Wave 5 dedup: `run_gold_with_repair`/`run_science_with_repair` must both be
     thin wrappers around the shared `_run_with_repair` helper, not independent
     copies of the retry control flow."""
     calls: list[tuple[Any, str]] = []
@@ -924,7 +924,7 @@ def test_run_gold_and_science_with_repair_both_delegate_to_shared_helper(monkeyp
 
 
 # ---------------------------------------------------------------------------
-# run_analysis_tasks — Planner + per-subtask routing
+# run_analysis_tasks: Planner + per-subtask routing
 # ---------------------------------------------------------------------------
 
 
@@ -1005,7 +1005,7 @@ def test_sum_run_tokens_handles_missing_tokens_key() -> None:
 
 
 # ---------------------------------------------------------------------------
-# run_full_analysis — end-to-end sequencing, short-circuit, persistence timing
+# run_full_analysis: end-to-end sequencing, short-circuit, persistence timing
 # ---------------------------------------------------------------------------
 
 
@@ -1097,7 +1097,7 @@ def test_run_full_analysis_forwards_resolved_per_pipeline_model_to_save_analysis
 ) -> None:
     """ADR-031 gap fix regression guard: a run with a per-pipeline
     `llm_model_override` set on `PipelineState` (Sprint 30) must have that
-    *actual* resolved model — not the global `AI_ETL_LLM_MODEL` default —
+    *actual* resolved model: not the global `AI_ETL_LLM_MODEL` default:
     forwarded to `save_analysis(..., model_name=...)`, so cost tracking prices
     the model that really ran. Before the fix, `save_analysis` had no
     `model_name` parameter at all and `_write_analysis_row` always re-derived
@@ -1163,7 +1163,7 @@ def test_run_full_analysis_forwards_resolved_per_pipeline_model_to_save_analysis
 
 
 def test_run_full_analysis_forwards_caller_llm_override_to_silver(monkeypatch) -> None:
-    """Gap-closing fix (2026-08-25 audit, Wave 4) — an avulso run's caller-
+    """Gap-closing fix (2026-08-25 audit, Wave 4): an avulso run's caller-
     supplied `llm_provider_override`/`llm_model_override` (e.g. `POST /runs`'
     `ModelPicker` selection) must reach `run_silver_pipeline`, which only had
     a DB-resolved override for saved-pipeline runs before this fix."""
@@ -1250,7 +1250,7 @@ def test_run_full_analysis_short_circuits_when_silver_produces_no_data(monkeypat
     assert downstream_called == {"planner": False, "advisor": False, "save_analysis": False}
     assert result["gold"] == []
     assert result["science"] == []
-    assert result["advisor"] == {}  # legacy "not run" sentinel — see AnalysisRunResult docstring
+    assert result["advisor"] == {}  # legacy "not run" sentinel: see AnalysisRunResult docstring
     assert result["state"]["status"] == "failed"
     assert result["tokens"] == _ZERO_TOKENS
 
@@ -1419,7 +1419,7 @@ def test_resume_pending_load_writes_and_marks_approved(monkeypatch) -> None:
 
 def test_resume_pending_load_makes_tenant_overrides_visible_to_loader_node(monkeypatch) -> None:
     """ADR-044: the deferred write after an approval also needs the tenant's
-    own connection string available — checked from inside `loader_node`
+    own connection string available: checked from inside `loader_node`
     itself, the same way the graph-run equivalent test does."""
     _patch_reload(monkeypatch)
     monkeypatch.setattr(
@@ -1493,7 +1493,7 @@ def test_resume_pending_load_wrong_status_raises(monkeypatch) -> None:
 def test_resume_pending_load_logs_warning_when_health_bookkeeping_raises(
     monkeypatch, caplog
 ) -> None:
-    """Finding 2 (Tech Lead 2026-08-24 audit) — the `# nosec B110` best-effort
+    """Finding 2 (Tech Lead 2026-08-24 audit): the `# nosec B110` best-effort
     bookkeeping except-block must not fail the run, but it must not be silent
     either: a `logger.warning` should fire so a failed write is visible."""
     _patch_reload(monkeypatch)
@@ -1513,7 +1513,7 @@ def test_resume_pending_load_logs_warning_when_health_bookkeeping_raises(
     with caplog.at_level("WARNING", logger="ai_etl.services.pipeline_service"):
         result = pipeline_service.resume_pending_load("run-1", "tenant-a", run_dir="runs")
 
-    # the best-effort failure must not surface — the run still completes normally
+    # the best-effort failure must not surface: the run still completes normally
     assert result["status"] == "completed"
     assert any(
         "resume_pending_load" in record.message and record.exc_info is not None
@@ -1524,7 +1524,7 @@ def test_resume_pending_load_logs_warning_when_health_bookkeeping_raises(
 def test_reject_pending_load_logs_warning_when_health_bookkeeping_raises(
     monkeypatch, caplog
 ) -> None:
-    """Finding 2 — same coverage as the resume_pending_load test above, for
+    """Finding 2: same coverage as the resume_pending_load test above, for
     reject_pending_load's identical best-effort except-block."""
     _patch_reload(monkeypatch)
     monkeypatch.setattr(pipeline_service, "save_run", lambda *a, **k: None)
@@ -1539,7 +1539,7 @@ def test_reject_pending_load_logs_warning_when_health_bookkeeping_raises(
             "run-1", "tenant-a", run_dir="runs", reason="looks wrong"
         )
 
-    # the best-effort failure must not surface — rejection still completes normally
+    # the best-effort failure must not surface: rejection still completes normally
     assert result["status"] == "failed"
     assert "looks wrong" in result["error"]
     assert any(
@@ -1574,7 +1574,7 @@ def test_reject_pending_load_never_calls_loader_node(monkeypatch) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Architectural guard — services/ must stay presentation-agnostic
+# Architectural guard: services/ must stay presentation-agnostic
 # ---------------------------------------------------------------------------
 
 

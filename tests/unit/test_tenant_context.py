@@ -2,7 +2,7 @@
 
 Covers the three properties the module exists to guarantee:
 1. With no active `tenant_connections` block, every connector falls back to
-   `None` (its shared env var) — zero behavior change for every existing
+   `None` (its shared env var): zero behavior change for every existing
    deployment/tenant that never configured a DB secret.
 2. Inside a `tenant_connections` block, `get_connection_override` returns
    exactly what was set, and only for the source types actually provided.
@@ -43,7 +43,7 @@ def test_get_rest_secret_resolves_for_the_active_tenant(mocker) -> None:
     with tenant_connections({}, tenant_id="tenant-a"):
         assert get_rest_secret("shop_api_key") == "tenant-secret-value"
 
-    # Restored after the block — no leakage into an unscoped call.
+    # Restored after the block: no leakage into an unscoped call.
     assert get_rest_secret("shop_api_key") is None
 
 

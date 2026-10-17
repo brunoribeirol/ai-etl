@@ -1,4 +1,4 @@
-"""E2E Scenario 2 — CSV + Postgres source, Postgres destination.
+"""E2E Scenario 2: CSV + Postgres source, Postgres destination.
 
 Mirrors `case_study/pipelines/scenario2_spec.txt`: join `orders.csv` with the
 Postgres `public.customers` table, filter active orders, rename `order_dt` to
@@ -69,7 +69,7 @@ def test_scenario2_csv_postgres_runs_end_to_end(
     assert status["result"]["status"] == "completed"
 
     # Customer 999 doesn't exist in postgres_customers_table (inner join drops
-    # it), customer 300's order is cancelled (filtered out) — 2 rows survive.
+    # it), customer 300's order is cancelled (filtered out): 2 rows survive.
     engine = sqlalchemy.create_engine(TEST_POSTGRES_URL)
     written = pd.read_sql("SELECT * FROM public.orders_cleaned", engine)
     assert len(written) == 2

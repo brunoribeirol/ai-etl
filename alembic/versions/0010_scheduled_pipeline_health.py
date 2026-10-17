@@ -2,7 +2,7 @@
 
 Purely additive: three new columns on `saved_pipelines`, no changes to any
 other table. `consecutive_failures` backfills every existing row to 0 (its
-`server_default`) — zero behavior change for a pipeline that has never had
+`server_default`): zero behavior change for a pipeline that has never had
 a health snapshot computed for it before this migration.
 
 Revision ID: 0010

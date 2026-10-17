@@ -67,7 +67,7 @@ def test_plan_analysis_tasks_prompt_instructs_dropping_prescriptive_clause(
 
     This is a prompt-level fix: whether the LLM actually follows the instruction can't
     be asserted deterministically without a real model call, so this test only pins
-    that the instruction (and its example) is present in what gets sent to the LLM —
+    that the instruction (and its example) is present in what gets sent to the LLM:
     it does not simulate or assert LLM decomposition behavior.
     """
     response = json.dumps(
@@ -83,7 +83,7 @@ def test_plan_analysis_tasks_prompt_instructs_dropping_prescriptive_clause(
     sent_prompt = llm.invoke.call_args[0][0]
     assert "prescriptive/recommendation-seeking clause" in sent_prompt
     assert "Do not turn it into a sub-task of any type" in sent_prompt
-    # the prompt's own worked example — not derived from the question above
+    # the prompt's own worked example: not derived from the question above
     assert "recomende uma ação" in sent_prompt
 
 

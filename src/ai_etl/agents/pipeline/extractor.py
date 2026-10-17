@@ -1,4 +1,4 @@
-"""Extractor Agent — connects to sources and extracts DataFrames."""
+"""Extractor Agent: connects to sources and extracts DataFrames."""
 
 from typing import Any
 
@@ -15,7 +15,7 @@ from ai_etl.sources.rest_source import load_rest
 from ai_etl.sources.sqlite_source import load_sqlite
 
 # Sprint 12 (ADR-013): the raw per-row sample used to scale with column count with no
-# cap — `df.head(3).to_dict(orient="records")` over ALL columns is 3 x n_cols values per
+# cap: `df.head(3).to_dict(orient="records")` over ALL columns is 3 x n_cols values per
 # source. Real profiling against a 200k x 300 benchmark confirmed this as the dominant
 # contributor to source_schemas' serialized size, growing linearly and unbounded with
 # source width. Capping the sample to the first MAX_SAMPLE_COLUMNS columns keeps the
@@ -103,7 +103,7 @@ def extractor_node(state: PipelineState) -> PipelineState:
         },
     )
     if document_source_used and (provider_override or model_override):
-        # Sprint 30/gap-closing (ADR-031 §5) — visibility into the override actually
+        # Sprint 30/gap-closing (ADR-031 §5): visibility into the override actually
         # used by document_source.py::load_document's own get_llm() call, distinct
         # from the Orchestrator/Transformer entries since this node's LLM usage is
         # conditional (only "document"-typed sources reach it).
@@ -124,10 +124,10 @@ def extractor_node(state: PipelineState) -> PipelineState:
 def _extract_schema(df: pd.DataFrame) -> dict[str, Any]:
     """Build the schema summary fed into the Orchestrator/Transformer prompts.
 
-    `dtypes`/`null_counts`/`columns` stay full-width — one small scalar per column,
+    `dtypes`/`null_counts`/`columns` stay full-width: one small scalar per column,
     not per-row sampled values, so they don't scale the way the raw sample does.
     `sample` is capped to the first MAX_SAMPLE_COLUMNS columns (ADR-013, Sprint 12
-    scale profiling) — see module-level constant docstring for why.
+    scale profiling): see module-level constant docstring for why.
     """
     null_counts = df.isnull().sum().to_dict()
     n_rows = len(df)

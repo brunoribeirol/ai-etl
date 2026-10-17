@@ -16,7 +16,7 @@ Two kinds of input live here. Only the first is the case study reported in the t
 
 Run it through `.github/workflows/case-study.yml` (inputs `models`, `runs`, `scenarios`, `job`).
 Scenario 4 runs only on Linux. Results and tables: the vault note
-`tcc/artefact/case-study-evidence-2026-10-12.md`.
+`tcc/evidence/case-study-evidence-2026-10-12.md`.
 
 ## Other inputs: tests, load and regression
 

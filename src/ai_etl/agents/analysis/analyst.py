@@ -1,4 +1,4 @@
-"""Analyst Agent — Gold layer.
+"""Analyst Agent: Gold layer.
 
 Receives the Silver DataFrame + a business question and produces:
 - gold_df  : aggregated/processed DataFrame answering the question
@@ -29,11 +29,11 @@ from ai_etl.core.locale import (
 )
 from ai_etl.core.sandbox import execute_in_sandbox, scale_timeout_for_rows
 
-# Lower than Transformer's default (30s, core/sandbox.py) — deliberately, per
+# Lower than Transformer's default (30s, core/sandbox.py): deliberately, per
 # ADR-007's flagged-but-unfixed compounding concern. Analyst retries up to 3x
 # (`for attempt in range(1, 4)` below), so worst-case sandbox time alone is
 # 3 x timeout_seconds, on top of 3 LLM round-trips, for a *single* Gold
-# sub-task — and one business question can fan out into several sub-tasks
+# sub-task: and one business question can fan out into several sub-tasks
 # (pipeline_service.run_analysis_tasks). Gold code here is aggregation/filter/
 # plot work over an already-loaded Silver DataFrame, not model training, so it
 # has no legitimate reason to run long; 15s is generous headroom over any
@@ -144,15 +144,15 @@ def run_analyst(
     """Answer a business question from a Silver DataFrame.
 
     Returns a GoldResult dict (see ai_etl.core.analysis_types) with `task_question`
-    left blank — callers running this per Planner sub-task fill it in themselves.
+    left blank: callers running this per Planner sub-task fill it in themselves.
 
     Args:
         llm_provider_override / llm_model_override: Sprint 30/gap-closing (ADR-031
-            §5) — see `agents/analysis/planner.py::plan_analysis_tasks`'s identical
-            parameters for rationale. `None` (the default) — unchanged behavior.
-        locale: Sprint 25 (ADR-036) — the tenant's configured locale, same threading
+            §5): see `agents/analysis/planner.py::plan_analysis_tasks`'s identical
+            parameters for rationale. `None` (the default): unchanged behavior.
+        locale: Sprint 25 (ADR-036): the tenant's configured locale, same threading
             pattern as `llm_provider_override` above. Defaults to `DEFAULT_LOCALE`
-            ("pt-BR") — unchanged behavior for every existing caller.
+            ("pt-BR"): unchanged behavior for every existing caller.
     """
     resolved_locale = resolve_locale(locale)
     columns_list = str(df.columns.tolist())
@@ -174,7 +174,7 @@ def run_analyst(
     last_error = ""
     last_code = ""
     attempt_usages: list[TokenUsage] = []
-    # ADR-012: scaled once per call (not per attempt) — the input size doesn't
+    # ADR-012: scaled once per call (not per attempt): the input size doesn't
     # change across retries, only the generated code does.
     timeout_seconds = scale_timeout_for_rows(ANALYST_TIMEOUT_SECONDS, len(df))
 
@@ -207,7 +207,7 @@ def run_analyst(
         )
 
         if sandbox_result["timed_out"]:
-            # Distinct failure mode from an exception (ADR-007) — feeds the same
+            # Distinct failure mode from an exception (ADR-007): feeds the same
             # last_error/retry-prompt channel, but with a message that hints the
             # LLM toward cheaper code on the next attempt instead of an opaque trace.
             last_error = f"Execution exceeded {timeout_seconds}s — simplify the computation"

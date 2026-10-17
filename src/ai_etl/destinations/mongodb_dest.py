@@ -1,7 +1,7 @@
 """MongoDB destination connector.
 
 The one `destinations/` connector backed by a document store instead of a
-SQL engine — no SQLAlchemy dialect applies, so this talks to `pymongo`
+SQL engine: no SQLAlchemy dialect applies, so this talks to `pymongo`
 directly, mirroring `sources/mongodb_source.py`'s own reasoning. Otherwise
 follows the same `save_<type>`/`preview_<type>` shape and `if_exists`
 contract as `postgres_dest.py`/`mysql_dest.py`, adapted to a collection
@@ -38,7 +38,7 @@ def save_mongodb(
     if not uri:
         raise EnvironmentError("MONGODB_URI environment variable is not set.")
 
-    # pandas types this as list[dict[Hashable, Any]] — every real DataFrame
+    # pandas types this as list[dict[Hashable, Any]]: every real DataFrame
     # column label is a str (enforced elsewhere in this codebase), so this
     # cast documents an invariant rather than papering over a real mismatch.
     records = cast("list[dict[str, Any]]", df.to_dict(orient="records"))
@@ -64,13 +64,13 @@ def save_mongodb(
 
 
 def preview_mongodb(df: pd.DataFrame, database: str, collection: str) -> dict[str, Any]:
-    """Sprint 27 (ADR-028) pattern, ported here — what `save_mongodb` would
-    do, without writing anything. Never calls `insert_many`/`delete_many` —
+    """Sprint 27 (ADR-028) pattern, ported here: what `save_mongodb` would
+    do, without writing anything. Never calls `insert_many`/`delete_many`:
     reads the collection's current document count (if it's reachable) for
     the diff.
 
     `existing_rows` is `None` if the collection/database doesn't exist yet
-    or the connection itself fails — distinguished from "0 existing rows"
+    or the connection itself fails: distinguished from "0 existing rows"
     (a real, empty collection) so the preview doesn't claim certainty it
     doesn't have.
     """
@@ -82,7 +82,7 @@ def preview_mongodb(df: pd.DataFrame, database: str, collection: str) -> dict[st
     try:
         with MongoClient(uri) as client:  # type: MongoClient[dict[str, Any]]
             existing_rows = client[database][collection].count_documents({})
-    except Exception:  # nosec B110 — unreachable/nonexistent collection, not a preview error
+    except Exception:  # nosec B110: unreachable/nonexistent collection, not a preview error
         existing_rows = None
 
     return {

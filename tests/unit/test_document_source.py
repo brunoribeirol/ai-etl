@@ -104,7 +104,7 @@ def test_structure_text_retries_on_invalid_json(mock_get_llm) -> None:
 
 def test_structure_text_retries_on_non_array_json(mock_get_llm) -> None:
     """A JSON object (not an array) is syntactically valid JSON but the wrong
-    shape — must be treated as a retry-able failure, not accepted as-is."""
+    shape: must be treated as a retry-able failure, not accepted as-is."""
     mock_get_llm.return_value = _mock_llm([json.dumps({"not": "a list"}), json.dumps(VALID_ROWS)])
     df = _structure_text("some text")
 
@@ -134,7 +134,7 @@ def test_load_document_composes_extract_and_structure(mocker) -> None:
 
 
 def test_load_document_forwards_llm_override(mocker) -> None:
-    """Sprint 30/gap-closing (ADR-031 §5) — a per-pipeline LLM override reaches
+    """Sprint 30/gap-closing (ADR-031 §5): a per-pipeline LLM override reaches
     document_source.py's own get_llm() call the same way it reaches every other
     call site."""
     mocker.patch("ai_etl.sources.document_source.extract_document_text", return_value="raw text")

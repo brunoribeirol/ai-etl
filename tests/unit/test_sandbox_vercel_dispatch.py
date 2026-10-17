@@ -3,7 +3,7 @@
 
 These do not require the real `vercel` Python package, a real Vercel
 project, or network access (`tests/integration/test_sandbox_vercel.py`
-covers the real Sandbox path when live credentials are available) — they
+covers the real Sandbox path when live credentials are available): they
 exercise: (1) that `execute_in_sandbox()`'s default stays "process" (2)
 requesting `backend="vercel"` fails loudly, not silently downgrading to the
 weaker "process" backend, when the SDK package or the required credential
@@ -21,7 +21,7 @@ from ai_etl.core.sandbox_vercel import (
 
 
 def test_default_backend_is_process_when_unspecified() -> None:
-    """No existing caller (Transformer/Analyst/Science) passes `backend` —
+    """No existing caller (Transformer/Analyst/Science) passes `backend`:
     confirms the default keeps using the multiprocessing "process" backend,
     not something that would require Vercel credentials in every deployment.
     """
@@ -39,7 +39,7 @@ def transform(dfs):
 def test_env_var_backend_selection_falls_back_to_process_by_default(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Explicitly unset AI_ETL_SANDBOX_BACKEND resolves to "process" — the
+    """Explicitly unset AI_ETL_SANDBOX_BACKEND resolves to "process": the
     production-safe default until Railway's env vars opt into "vercel"."""
     monkeypatch.delenv("AI_ETL_SANDBOX_BACKEND", raising=False)
     code = "result = 1 + 1"

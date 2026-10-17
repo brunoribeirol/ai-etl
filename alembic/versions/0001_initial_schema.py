@@ -1,4 +1,4 @@
-"""initial schema — runs and analysis_runs
+"""initial schema: runs and analysis_runs
 
 Revision ID: 0001
 Revises:

@@ -1,4 +1,4 @@
-"""Advisor Agent — prescriptive analytics layer.
+"""Advisor Agent: prescriptive analytics layer.
 
 Receives all available analysis results and produces:
 - recommendations : list of actionable business recommendations
@@ -108,13 +108,13 @@ Rules:
 
 _PRIORITY_ORDER = {"high": 0, "medium": 1, "low": 2}
 
-# Audit finding M3 (2026-09-10) — deterministic guard for revenue↔demand conflation.
+# Audit finding M3 (2026-09-10): deterministic guard for revenue↔demand conflation.
 # A prompt rule tells the Advisor not to infer "demand" from a revenue figure, but an
 # LLM does not reliably obey it (verified live: a recommendation still said "increase
 # inventory to meet demand" grounded in a revenue-only analysis). So detect it after the
 # fact: if a recommendation uses demand/volume language while the underlying analysis
 # has NO quantity dimension (only value/revenue), append a caveat and downgrade a
-# "high" priority — deterministic, and it only ever ADDS a hedge, never removes content.
+# "high" priority: deterministic, and it only ever ADDS a hedge, never removes content.
 _DEMAND_LANGUAGE = (
     "demand",
     "demanda",
@@ -157,7 +157,7 @@ _CONFLATION_CAVEAT = {
 def _analysis_has_quantity_dimension(
     gold_results: list[GoldResult], science_results: list[ScienceResult]
 ) -> bool:
-    """True if any Gold/Science result's data has a quantity/volume-like column —
+    """True if any Gold/Science result's data has a quantity/volume-like column:
     i.e. the analysis actually measured units, not just value/revenue."""
     frames = [g.get("gold_df") for g in gold_results] + [
         s.get("predictions_df") for s in science_results
@@ -218,7 +218,7 @@ def _sanity_check_warning(sanity_check: OutputSanityCheck | None) -> str | None:
 
     The Advisor must see this: `reviewer.py`'s ADR-037 second-pass review (and the
     deterministic checks in `core/output_validation.py`) can catch a genuine
-    contradiction between a sub-task's narrative and its data — without this, the
+    contradiction between a sub-task's narrative and its data: without this, the
     Advisor's prompt has zero awareness of a warning the system already raised and can
     silently act on the flagged number anyway.
     """
@@ -306,18 +306,18 @@ def run_advisor(
     """Generate prescriptive recommendations from all available analysis.
 
     `gold_results` and `science_results` hold one entry per sub-task produced by the
-    Planner (`ai_etl.agents.analysis.planner.plan_analysis_tasks`) — a multi-part business
+    Planner (`ai_etl.agents.analysis.planner.plan_analysis_tasks`): a multi-part business
     question is answered by several independent Gold/Science runs, not a single one.
 
     Returns an AdvisorResult dict (see ai_etl.core.analysis_types).
 
     Args:
         llm_provider_override / llm_model_override: Sprint 30/gap-closing (ADR-031
-            §5) — see `agents/analysis/planner.py::plan_analysis_tasks`'s identical
-            parameters for rationale. `None` (the default) — unchanged behavior.
-        locale: Sprint 25 (ADR-036) — the tenant's configured locale, same threading
+            §5): see `agents/analysis/planner.py::plan_analysis_tasks`'s identical
+            parameters for rationale. `None` (the default): unchanged behavior.
+        locale: Sprint 25 (ADR-036): the tenant's configured locale, same threading
             pattern as `llm_provider_override` above. Defaults to `DEFAULT_LOCALE`
-            ("pt-BR") — unchanged behavior for every existing caller.
+            ("pt-BR"): unchanged behavior for every existing caller.
     """
     resolved_locale = resolve_locale(locale)
     data_overview = _build_data_overview(df)
@@ -351,7 +351,7 @@ def run_advisor(
                 if rec.get("priority") not in valid_priorities:
                     rec["priority"] = "medium"
 
-            # Audit M3 (2026-09-10): deterministic revenue↔demand conflation guard —
+            # Audit M3 (2026-09-10): deterministic revenue↔demand conflation guard:
             # caveats + downgrades recs that infer demand from a revenue-only analysis.
             # Runs before the sort so a downgraded "high" re-orders correctly.
             _hedge_revenue_demand_conflation(

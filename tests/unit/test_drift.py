@@ -1,4 +1,4 @@
-"""Unit tests for core/drift.py — pure KPI comparison math (Sprint 14, ADR-018)."""
+"""Unit tests for core/drift.py: pure KPI comparison math (Sprint 14, ADR-018)."""
 
 from ai_etl.core.drift import compute_pct_change, detect_kpi_drift
 
@@ -40,7 +40,7 @@ def test_detect_kpi_drift_does_not_flag_metric_under_threshold() -> None:
 
 
 def test_detect_kpi_drift_exactly_at_threshold_is_triggered() -> None:
-    """`>=`, not `>` — a change exactly at the configured threshold counts."""
+    """`>=`, not `>`: a change exactly at the configured threshold counts."""
     findings = detect_kpi_drift(
         previous={"cost_usd": 10.0}, current={"cost_usd": 12.0}, threshold_pct=20.0
     )
@@ -49,7 +49,7 @@ def test_detect_kpi_drift_exactly_at_threshold_is_triggered() -> None:
 
 def test_detect_kpi_drift_skips_metrics_missing_from_previous() -> None:
     """A KPI only present in the current run (e.g. a new Science sub-task
-    question) has no meaningful prior value — must not be reported as
+    question) has no meaningful prior value: must not be reported as
     infinite drift."""
     findings = detect_kpi_drift(
         previous={"rows_loaded": 1000.0},

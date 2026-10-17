@@ -1,6 +1,6 @@
 """admin_action_log.reason (ADR-047, MVP monetization-readiness plan WS3)
 
-Adds a `reason` column to `admin_action_log` — the caller's stated
+Adds a `reason` column to `admin_action_log`: the caller's stated
 justification for a platform-admin action, required at the API layer
 (`api/routers/admin.py`) for every route from this migration forward, but
 nullable at the DB level: every row written before this migration has none,
@@ -13,7 +13,7 @@ Revises: 0021
 Create Date: 2026-09-06
 
 Chain note: originally authored as `0021` before finding a real fork already
-on `main` — `0021_rls_tenant_isolation.py` (ADR-040) had already claimed that
+on `main`: `0021_rls_tenant_isolation.py` (ADR-040) had already claimed that
 number, both chaining onto `0020`. Renumbered to `0022`, chained onto the
 real `0021`, same "keep the work, fix the pointer" convention already used
 for the `0018`/`0019` fork (see that migration's own history).

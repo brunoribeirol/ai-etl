@@ -19,7 +19,7 @@ def save_postgres(
 
     Uses the current run's tenant-supplied connection string (ADR-044,
     `core/tenant_context.py`) if one is set, otherwise falls back to the
-    shared POSTGRES_URL env var. Never uses f-strings in SQL queries — table
+    shared POSTGRES_URL env var. Never uses f-strings in SQL queries: table
     name is passed to pandas which uses SQLAlchemy's parameterized execution
     path.
     """
@@ -32,7 +32,7 @@ def save_postgres(
     df.to_sql(table.split(".")[-1], engine, schema=_schema(table), if_exists=if_exists, index=False)
 
     with engine.connect() as conn:
-        count = conn.execute(text(f"SELECT COUNT(*) FROM {table}")).scalar()  # nosec B608 — table name validated above
+        count = conn.execute(text(f"SELECT COUNT(*) FROM {table}")).scalar()  # nosec B608: table name validated above
 
     if count != len(df):
         raise RuntimeError(f"Load count mismatch: expected {len(df)}, got {count}")
@@ -46,14 +46,14 @@ def _schema(table: str) -> str | None:
 
 
 def preview_postgres(df: pd.DataFrame, table: str) -> dict[str, Any]:
-    """Sprint 27 (ADR-028) — what `save_postgres` would do, without writing
-    anything. Never calls `to_sql` — reads the table's current row count (if
+    """Sprint 27 (ADR-028): what `save_postgres` would do, without writing
+    anything. Never calls `to_sql`: reads the table's current row count (if
     it already exists) for the diff, same read-only `SELECT COUNT(*)` shape
     `save_postgres` itself uses to verify a write after the fact, guarded by
     the same `core.sql_safety.validate_table_name` check.
 
     `existing_rows` is `None` if the table doesn't exist yet (a fresh table,
-    or a real connection error surfacing as "can't tell") — distinguished
+    or a real connection error surfacing as "can't tell"): distinguished
     from "0 existing rows" (a real, empty table) so the preview doesn't claim
     certainty it doesn't have.
     """
@@ -67,9 +67,9 @@ def preview_postgres(df: pd.DataFrame, table: str) -> dict[str, Any]:
     try:
         with engine.connect() as conn:
             existing_rows = conn.execute(
-                text(f"SELECT COUNT(*) FROM {table}")  # nosec B608 — table name validated above
+                text(f"SELECT COUNT(*) FROM {table}")  # nosec B608: table name validated above
             ).scalar()
-    except Exception:  # nosec B110 — table doesn't exist yet, not a preview error
+    except Exception:  # nosec B110: table doesn't exist yet, not a preview error
         existing_rows = None
 
     return {

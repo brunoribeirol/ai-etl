@@ -3,7 +3,7 @@
 `core/celery_app.py`'s `beat_schedule` calls `check_scheduled_pipelines_task`
 on a fixed interval (`AI_ETL_SCHEDULER_INTERVAL_SECONDS`, default 60s). Each
 tick: query `audit.db.list_due_pipelines()`, and for every due pipeline call
-the *same* `execution_queue.enqueue_analysis()` `POST /runs` already uses —
+the *same* `execution_queue.enqueue_analysis()` `POST /runs` already uses:
 no separate execution path, so a scheduled run is audited exactly like an
 avulso one (ADR-016 Decision 1/2). Sprint 17 (ADR-017) passes this call's own
 `pipeline_id` through as `enqueue_analysis(..., saved_pipeline_id=...)` so the
@@ -12,26 +12,26 @@ for the comparable-run-history view.
 
 Sprint 14 (ADR-018) passes this pipeline's own id through as
 `enqueue_analysis`'s `saved_pipeline_id` so the eventual `runs` row records
-which saved pipeline produced it — `run_full_analysis_task` uses that link,
+which saved pipeline produced it: `run_full_analysis_task` uses that link,
 once the run completes, to run drift detection against the pipeline's
 previous fire and (if triggered) deliver a digest. Nothing here changes:
 the beat task's own job is still only to enqueue the run.
 
 Requires a `celery beat` process running in production alongside the
-existing worker (same Docker image, different Custom Start Command — see
+existing worker (same Docker image, different Custom Start Command: see
 ADR-016) for scheduled pipelines to actually fire; the web/API process and
 the plain `celery worker` process do not run beat themselves.
 
 **Concurrency (Sprint 13 code review fix, ADR-016 addendum)**: a tick has no
-guarantee it finishes before the next one starts — many due pipelines, a
+guarantee it finishes before the next one starts: many due pipelines, a
 slow Redis rate-limit check, or worker backlog can all make a tick overrun
 `AI_ETL_SCHEDULER_INTERVAL_SECONDS`. `audit.db.claim_due_pipeline` guards
 against this with a `next_run_at` compare-and-swap *before* calling
-`enqueue_analysis`, not after — exactly one overlapping tick can win the
+`enqueue_analysis`, not after: exactly one overlapping tick can win the
 claim for a given due fire; the loser sees 0 rows affected and skips it
 without firing a duplicate run. The claim's replacement `next_run_at` is
 also computed from the pipeline's *previous* `next_run_at` (the originally
-scheduled time), not `datetime.now()` — otherwise a cron running "every
+scheduled time), not `datetime.now()`: otherwise a cron running "every
 minute" under sustained load would drift later on every tick, since each
 fire would inherit the delay of the one before it.
 """
@@ -59,14 +59,14 @@ from ai_etl.services.execution_queue import (
 @celery_app.task(name="ai_etl.check_scheduled_pipelines")  # type: ignore[untyped-decorator]  # celery has no type stubs for @task
 def check_scheduled_pipelines_task() -> dict[str, Any]:
     """Fire every due, active saved pipeline. Returns a small summary dict
-    (fired/skipped counts) — useful for beat log inspection, not consumed by
+    (fired/skipped counts): useful for beat log inspection, not consumed by
     any caller.
 
     Per due pipeline: compute the next fire time from its *current*
-    `next_run_at` (not `datetime.now()` — see module docstring), then
+    `next_run_at` (not `datetime.now()`: see module docstring), then
     atomically claim it (`claim_due_pipeline`). Losing the claim (another
     tick got there first) or any `enqueue_analysis` failure (rate limit, or
-    anything else) is caught and skipped, not raised — a single misbehaving
+    anything else) is caught and skipped, not raised: a single misbehaving
     or overlapping tick must never stop the same run from firing every other
     tenant's due pipelines. A failed `enqueue_analysis` call releases its
     claim (`release_pipeline_claim`) so the pipeline is retried on the very
@@ -86,7 +86,7 @@ def check_scheduled_pipelines_task() -> dict[str, Any]:
             continue
 
         if not claim_due_pipeline(pipeline_id, expected_next_run_at, new_next_run_at):
-            # Another (overlapping) tick already claimed this fire — not an
+            # Another (overlapping) tick already claimed this fire: not an
             # error, just lost the race. See module docstring.
             skipped.append(pipeline_id)
             continue
@@ -102,16 +102,16 @@ def check_scheduled_pipelines_task() -> dict[str, Any]:
         except (RateLimitExceededError, BudgetExceededError):
             # Sprint 29 (ADR-019): a scheduled pipeline whose tenant is over
             # their monthly budget cap is skipped exactly like a rate-limited
-            # one — released to retry next tick, never silently charged.
+            # one: released to retry next tick, never silently charged.
             release_pipeline_claim(pipeline_id, new_next_run_at, expected_next_run_at)
             skipped.append(pipeline_id)
             continue
-        except Exception:  # nosec B110 — one bad pipeline must not break the tick
+        except Exception:  # nosec B110: one bad pipeline must not break the tick
             release_pipeline_claim(pipeline_id, new_next_run_at, expected_next_run_at)
             skipped.append(pipeline_id)
             continue
 
-        # `enqueue_analysis` returns a Celery task id, not a run_id — the
+        # `enqueue_analysis` returns a Celery task id, not a run_id: the
         # actual run_id is only known once `run_full_analysis_task` starts
         # (it's generated inside `run_silver_pipeline`). Recording the task
         # id here still gives the UI something to poll immediately; a future

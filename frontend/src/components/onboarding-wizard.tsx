@@ -11,11 +11,11 @@ import { Card, CardContent } from "@/components/ui/card";
 const EXAMPLE_CSV_URL = "/examples/sample-sales.csv";
 
 /**
- * Sprint 26 (ADR-027) — guided first-run flow. Step 1 picks a source
+ * Sprint 26 (ADR-027): guided first-run flow. Step 1 picks a source
  * (example dataset, fetched client-side and handed to `RunForm` as a
  * real `File`; or "upload your own", which just renders the plain form).
  * Once a source is chosen, `RunForm` is mounted for the first time
- * with the right `initialFile`/`initialBusinessQuestion` — it owns every
+ * with the right `initialFile`/`initialBusinessQuestion`: it owns every
  * following step (spec, submit, poll, result) unchanged from `/`, so this
  * wizard never reimplements upload/poll/result logic.
  */

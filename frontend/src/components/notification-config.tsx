@@ -8,14 +8,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 /**
- * Sprint 37 (ADR-034) frontend — per-pipeline notification destination
+ * Sprint 37 (ADR-034) frontend: per-pipeline notification destination
  * override. Consumes `PUT /pipelines/{id}/notification-config` directly (own
  * component-local form state, independent of `pipelines-manager.tsx`'s main
  * edit form), same "separate endpoint, separate control" reasoning
  * `ModelPicker`'s own docstring documents for the LLM override.
  *
  * `notification_target` (the email address / webhook URL) is never returned
- * by any backend endpoint once saved — see
+ * by any backend endpoint once saved: see
  * `SetPipelineNotificationConfigRequest`'s docstring in
  * `api/routers/pipelines.py`. This form therefore never prefills the target
  * field, same "value never echoed back" convention `secrets-manager.tsx`
@@ -24,7 +24,7 @@ import { Label } from "@/components/ui/label";
  *
  * `notification_channel`/`notification_target` are always written together
  * by the backend (clearing the override needs both `None`, same as
- * `SetPipelineLlmConfigRequest`) — there is no partial-update verb for
+ * `SetPipelineLlmConfigRequest`): there is no partial-update verb for
  * `notification_active` alone. So toggling "active" on an already-configured
  * destination still requires re-entering the target here; `hint` below spells
  * that out rather than leaving it a silent surprise.

@@ -1,4 +1,4 @@
-"""Science Agent — predictive analytics layer.
+"""Science Agent: predictive analytics layer.
 
 Receives the Silver DataFrame + a business question and produces:
 - predictions_df : DataFrame with model results / predictions
@@ -32,7 +32,7 @@ from ai_etl.core.locale import (
 from ai_etl.core.sandbox import execute_in_sandbox, scale_timeout_for_rows
 
 # Higher than Analyst's (15s) but still lower than Transformer's default (30s,
-# core/sandbox.py) — Science's sandboxed code can legitimately do model fitting
+# core/sandbox.py): Science's sandboxed code can legitimately do model fitting
 # (RandomForest, KMeans, ExponentialSmoothing/ARIMA) on top of the aggregation
 # work Analyst does, so it needs more headroom per attempt. Still bounded well
 # below Transformer's 30s given the same 3x retry compounding ADR-007 flagged
@@ -161,7 +161,7 @@ Use ONLY the exact column names: {columns_list}
 
 
 # Sprint 25 (ADR-036): checked unconditionally regardless of the tenant's locale rather
-# than switched per locale — simpler than threading locale into this one validator too,
+# than switched per locale: simpler than threading locale into this one validator too,
 # and an extra vocabulary match is harmless here: it can only ever add to a detected
 # direction, and the validator only rejects on a genuine contradiction against the
 # numbers, never on vocabulary alone.
@@ -225,20 +225,20 @@ def _column_named_in_narrative(lowercased_narrative: str, numeric_cols: pd.Index
     (docs/archive/work/2026-09-05-mega-audit-remediation-plan.md): the guard-rail
     below used to always check `numeric_cols[-1]` (last by DataFrame
     position) regardless of which column the narrative's trend claim was
-    actually about — live-verified real miss (LLM/Prompt Engineer persona,
+    actually about: live-verified real miss (LLM/Prompt Engineer persona,
     `misleading_column.csv`): a narrative about a misread `profit_margin`
     column sailed through unchecked because a different, unrelated numeric
     column happened to be last.
 
     Column names are typically snake_case (`profit_margin`) while narrative
-    prose uses natural language (`"profit margin"`) — normalize underscores
+    prose uses natural language (`"profit margin"`): normalize underscores
     to spaces before substring-matching. Checks columns in DataFrame order
     (not narrative word order) and returns the first match; a predictions_df
     with two numeric columns both named in the narrative is rare enough that
     "first by position" is a reasonable tiebreak, not a real ambiguity this
     function needs to resolve perfectly. Returns `None` (caller falls back
     to the old `numeric_cols[-1]` behavior) when the narrative names none of
-    them — unchanged behavior for narratives that don't call out a specific
+    them: unchanged behavior for narratives that don't call out a specific
     column by name.
     """
     for col in numeric_cols:
@@ -297,15 +297,15 @@ def run_science(
     """Run predictive analytics on the Silver DataFrame.
 
     Returns a ScienceResult dict (see ai_etl.core.analysis_types) with `task_question`
-    left blank — callers running this per Planner sub-task fill it in themselves.
+    left blank: callers running this per Planner sub-task fill it in themselves.
 
     Args:
         llm_provider_override / llm_model_override: Sprint 30/gap-closing (ADR-031
-            §5) — see `agents/analysis/planner.py::plan_analysis_tasks`'s identical
-            parameters for rationale. `None` (the default) — unchanged behavior.
-        locale: Sprint 25 (ADR-036) — the tenant's configured locale, same threading
+            §5): see `agents/analysis/planner.py::plan_analysis_tasks`'s identical
+            parameters for rationale. `None` (the default): unchanged behavior.
+        locale: Sprint 25 (ADR-036): the tenant's configured locale, same threading
             pattern as `llm_provider_override` above. Defaults to `DEFAULT_LOCALE`
-            ("pt-BR") — unchanged behavior for every existing caller.
+            ("pt-BR"): unchanged behavior for every existing caller.
     """
     resolved_locale = resolve_locale(locale)
     from sklearn.cluster import KMeans
@@ -338,7 +338,7 @@ def run_science(
     )
 
     # Modules (px/go/math) go through extra_modules, imported by dotted path
-    # inside the sandboxed child — whole module objects cannot be pickled
+    # inside the sandboxed child: whole module objects cannot be pickled
     # across multiprocessing's process boundary (TypeError: cannot pickle
     # 'module' object), unlike the classes/functions below, which pickle by
     # reference just fine. See core/sandbox.py's execute_in_sandbox() docstring.
@@ -379,7 +379,7 @@ def run_science(
     last_error = ""
     last_code = ""
     attempt_usages: list[TokenUsage] = []
-    # ADR-012: scaled once per call (not per attempt) — the input size doesn't
+    # ADR-012: scaled once per call (not per attempt): the input size doesn't
     # change across retries, only the generated code does.
     timeout_seconds = scale_timeout_for_rows(SCIENCE_TIMEOUT_SECONDS, len(df))
 
@@ -413,7 +413,7 @@ def run_science(
         )
 
         if sandbox_result["timed_out"]:
-            # Distinct failure mode from an exception (ADR-007) — feeds the same
+            # Distinct failure mode from an exception (ADR-007): feeds the same
             # last_error/retry-prompt channel, but with a message that hints the
             # LLM toward cheaper code on the next attempt instead of an opaque trace.
             last_error = f"Execution exceeded {timeout_seconds}s — simplify the computation"

@@ -2,15 +2,15 @@
 
 Exercises the full stack together, for real: Postgres (`app-postgres-test` for
 the audit trail, `postgres-test` as a pipeline source/destination), Redis-backed
-Celery (`task_always_eager` — still goes through `enqueue_analysis`'s real code
-path: rate limiting, `.delay()`, task registration, JSON-safe result summary —
+Celery (`task_always_eager`: still goes through `enqueue_analysis`'s real code
+path: rate limiting, `.delay()`, task registration, JSON-safe result summary:
 just synchronous, so no separate worker process is needed in CI), the real
 sandboxed code executor (ADR-007), and real Clerk-JWT-shaped auth verification
-(fake JWKS resolving to a locally generated RSA keypair — same pattern as
+(fake JWKS resolving to a locally generated RSA keypair: same pattern as
 `tests/unit/test_auth_service.py`, no network call to Clerk).
 
 **Only the LLM calls are mocked** (Orchestrator/Transformer/Planner, via
-`mock_pipeline_llm`) — every existing unit test in this project already avoids
+`mock_pipeline_llm`): every existing unit test in this project already avoids
 real OpenAI calls (`test_orchestrator.py`, `test_transformer.py`, ...) for the
 same reason: cost and network-flakiness have no place in a suite that runs on
 every push. "Full stack" here means every layer *this project built*
@@ -49,7 +49,7 @@ _TEST_APP_DATABASE_URL = os.getenv(
     "TEST_APP_DATABASE_URL",
     "postgresql://ai_etl_app_test:ai_etl_app_test@localhost:5435/ai_etl_app_test_db",
 )
-# ADR-040 — see `tests/integration/test_audit_persistence.py`'s identical rationale:
+# ADR-040: see `tests/integration/test_audit_persistence.py`'s identical rationale:
 # `ensure_user`/`save_run`/`save_analysis` now go through `tenant_scope()`, which
 # needs the restricted role migration 0021 creates.
 _TEST_APP_DATABASE_URL_TENANT = os.getenv(
@@ -115,7 +115,7 @@ def _app_database(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     connection.get_tenant_engine.cache_clear()
     engine = connection.get_engine()
     # ADR-040: run the real migration chain (not a bare `create_all()`) so the
-    # restricted role + RLS policies migration 0021 creates actually exist —
+    # restricted role + RLS policies migration 0021 creates actually exist:
     # `ensure_user`/`save_run`/`save_analysis` go through them via `tenant_scope()`.
     with engine.begin() as conn:
         conn.execute(text("DROP SCHEMA public CASCADE"))
@@ -132,7 +132,7 @@ def _app_database(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
 @pytest.fixture(autouse=True)
 def _celery_eager() -> Iterator[None]:
     """Runs Celery tasks synchronously in-process, still through the real
-    `.delay()`/task-registration/JSON-serialization round-trip — exercises the
+    `.delay()`/task-registration/JSON-serialization round-trip: exercises the
     async plumbing without a separate worker process in CI."""
     original_eager = celery_app.conf.task_always_eager
     original_propagates = celery_app.conf.task_eager_propagates
@@ -141,7 +141,7 @@ def _celery_eager() -> Iterator[None]:
     celery_app.conf.task_eager_propagates = True
     # Without this, a fresh AsyncResult(task_id, ...) built by get_task_status
     # (a separate call from enqueue_analysis's own `.delay()`) can't find the
-    # eagerly-computed result in the backend — it would read back PENDING
+    # eagerly-computed result in the backend: it would read back PENDING
     # forever, even though the task already ran synchronously above.
     celery_app.conf.task_store_eager_result = True
     yield
@@ -165,7 +165,7 @@ def rsa_keypair() -> tuple[RSAPrivateKey, RSAPublicKey]:
 
 
 class _FakeSigningKey:
-    """Stand-in for `jwt.PyJWK` — `auth_service` only ever reads `.key`."""
+    """Stand-in for `jwt.PyJWK`: `auth_service` only ever reads `.key`."""
 
     def __init__(self, key: Any) -> None:
         self.key = key
@@ -175,7 +175,7 @@ class _FakeSigningKey:
 def test_tenant(
     monkeypatch: pytest.MonkeyPatch, rsa_keypair: tuple[RSAPrivateKey, RSAPublicKey]
 ) -> dict[str, str]:
-    """A real, verifiable Clerk-shaped session token plus a matching `users` row —
+    """A real, verifiable Clerk-shaped session token plus a matching `users` row:
     mirrors what `app.py`'s sign-in gate hands the Executar/Histórico tabs after a
     real login, minted with no network call to Clerk (fake JWKS, same pattern as
     `tests/unit/test_auth_service.py`)."""
@@ -209,12 +209,12 @@ def mock_pipeline_llm(mocker) -> Callable[[dict, str], None]:
     real OpenAI call.
 
     These scenarios pass `business_question=""` (Silver-ETL only, no real
-    question) — but `agents/analysis/planner.py::plan_analysis_tasks` treats an empty
+    question): but `agents/analysis/planner.py::plan_analysis_tasks` treats an empty
     (or unparseable) LLM response as a *decomposition failure*, not "zero
     tasks", and falls back to exactly one descriptive task wrapping the
     (empty) question. That one task always reaches Gold (`agents/analysis/analyst.py`),
     never Science (the fallback is hardcoded `"type": "descriptive"`), so
-    Analyst's LLM call must be mocked too — and `run_full_analysis` also calls
+    Analyst's LLM call must be mocked too: and `run_full_analysis` also calls
     Advisor unconditionally afterward regardless of how many sub-tasks ran.
     Skipping any of the three (Planner/Analyst/Advisor) makes a real,
     credential-less `ChatOpenAI` get constructed in CI and fail with
@@ -228,7 +228,7 @@ def mock_pipeline_llm(mocker) -> Callable[[dict, str], None]:
 
     def _mock_response(content: str) -> MagicMock:
         # `extract_token_usage` (core/llm.py) reads `.usage_metadata` off the
-        # response — a bare MagicMock auto-vivifies that attribute into
+        # response: a bare MagicMock auto-vivifies that attribute into
         # another (truthy, non-dict) MagicMock instead of leaving it unset,
         # which breaks `int(usage.get(...))` downstream. Must be set
         # explicitly, same pattern tests/unit/test_planner.py already uses.
@@ -250,7 +250,7 @@ def mock_pipeline_llm(mocker) -> Callable[[dict, str], None]:
         mocker.patch("ai_etl.agents.analysis.planner.get_llm", return_value=planner_llm)
 
         # Reached via Planner's fallback-to-one-task path (see docstring
-        # above) — a trivial, always-valid Gold script wrapping the real
+        # above): a trivial, always-valid Gold script wrapping the real
         # `df` global the sandbox exposes (script mode's contract, ADR-007).
         analyst_llm = MagicMock()
         analyst_llm.invoke.return_value = _mock_response(
@@ -272,7 +272,7 @@ def mock_pipeline_llm(mocker) -> Callable[[dict, str], None]:
 @pytest.fixture
 def postgres_customers_table(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     """Seeds `public.customers` in the pipeline source/destination test Postgres
-    (`postgres-test`, port 5433) — a small, fixed fixture standing in for
+    (`postgres-test`, port 5433): a small, fixed fixture standing in for
     `case_study/data/seed_postgres.py`'s 400-row seed, scoped down for a fast
     e2e run. Cleaned up after the test."""
     monkeypatch.setenv("POSTGRES_URL", TEST_POSTGRES_URL)

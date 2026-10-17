@@ -1,19 +1,19 @@
 """Output sanity-check for Gold/Science results (Sprint 21, ADR-026).
 
 `core/sandbox.py` (ADR-007) only guarantees the LLM-generated Analyst/Science code
-*ran* without raising — not that its *logic* is correct. This module runs a fixed set
+*ran* without raising: not that its *logic* is correct. This module runs a fixed set
 of deterministic, statistical checks over a successful `gold_df`/`predictions_df`
 against the `silver_df` it was derived from, to catch a result that is internally
 consistent (right dtypes, right shape) but numerically implausible.
 
-Pure functions, no I/O — mirrors `core/drift.py`'s own shape. Every check emits one
+Pure functions, no I/O: mirrors `core/drift.py`'s own shape. Every check emits one
 entry per rule it evaluates whenever the rule is applicable (`severity: "ok"` on pass),
-mirroring `agents/pipeline/quality.py::_check_custom_rules` (ADR-023) — so a run's manifest
+mirroring `agents/pipeline/quality.py::_check_custom_rules` (ADR-023): so a run's manifest
 shows every check that ran, not just the ones that fired. A non-applicable check (e.g.
 no shared numeric column between `gold_df` and `silver_df`) is skipped entirely rather
 than emitted as a false "ok".
 
-Severity here is always "ok" or "warning", never "error" — see ADR-026 Decision 1 for
+Severity here is always "ok" or "warning", never "error": see ADR-026 Decision 1 for
 why a sanity-check finding flags a result with a caveat instead of withholding it.
 """
 
@@ -26,18 +26,18 @@ import pandas as pd
 from ai_etl.core.analysis_types import OutputSanityCheck, OutputSanityCheckEntry
 
 # Sum of an aggregated/filtered column may equal but never legitimately exceed the
-# source total — this tolerance only absorbs float rounding noise, not real drift.
+# source total: this tolerance only absorbs float rounding noise, not real drift.
 _SUM_TOLERANCE_RATIO = 0.005
 
 # How far past the historical [min, max] range (as a multiple of that range's span) a
-# forecast/regression prediction may go before being flagged. Deliberately generous —
+# forecast/regression prediction may go before being flagged. Deliberately generous:
 # a real trend or seasonal forecast can legitimately exceed historical bounds; this
 # only catches an order-of-magnitude error, not a normal extrapolation.
 _PREDICTION_RANGE_MULTIPLIER = 3.0
 
 # Textbook-valid ranges for well-known metric keys. A metric outside its
 # mathematically valid range means the sandboxed code computed it against
-# mismatched arrays/columns — a bad-but-valid fit (e.g. r2=-0.3) is not flagged.
+# mismatched arrays/columns: a bad-but-valid fit (e.g. r2=-0.3) is not flagged.
 _METRIC_RANGES: dict[str, tuple[float, float]] = {
     "r2": (float("-inf"), 1.0 + _SUM_TOLERANCE_RATIO),
     "accuracy": (-1.0, 1.0),
@@ -71,7 +71,7 @@ def _summarize(checks: list[OutputSanityCheckEntry]) -> OutputSanityCheck:
 def append_check(
     sanity_check: OutputSanityCheck, entry: OutputSanityCheckEntry
 ) -> OutputSanityCheck:
-    """ADR-037 (Sprint 21 follow-up) — append one more entry (e.g. from
+    """ADR-037 (Sprint 21 follow-up): append one more entry (e.g. from
     `agents/analysis/reviewer.py`'s optional LLM review) onto an existing
     `OutputSanityCheck` and recompute `severity`/`summary` via the same
     `_summarize` logic every deterministic check already goes through, so there is

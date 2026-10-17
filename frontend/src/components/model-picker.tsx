@@ -13,22 +13,22 @@ import { MODEL_REFERENCE_DATA } from "@/lib/model-reference-data";
 type TestResult = { ok: boolean; latencyMs: number; error: string | null };
 
 /**
- * Sprint 30 (ADR-031) frontend — per-pipeline LLM model picker. Consumes
+ * Sprint 30 (ADR-031) frontend: per-pipeline LLM model picker. Consumes
  * `PUT /pipelines/{id}/llm-config` directly (own component-local loading
- * state, independent of `pipelines-manager.tsx`'s main edit form — this
+ * state, independent of `pipelines-manager.tsx`'s main edit form: this
  * writes immediately on click, same "separate endpoint, separate control"
  * reasoning `SetPipelineLlmConfigRequest`'s own docstring documents for why
  * it isn't folded into `UpdatePipelineRequest`).
  *
- * Only the 4 cloud models in `MODEL_REFERENCE_DATA` are shown — no local
+ * Only the 4 cloud models in `MODEL_REFERENCE_DATA` are shown: no local
  * (Ollama) reference cards. Product decision (2026-08-23): local models will
  * never be client-selectable and have no place in this UI even as a
  * non-clickable reference (see that module's own docstring for the full
  * rationale).
  *
  * Gap-closing fix (2026-09-08): `POST /llm/test-connectivity` (ADR-031,
- * `api/routers/llm.py`) has existed since Sprint 30 — a real, working
- * endpoint that makes one live LLM call and reports success/failure — but
+ * `api/routers/llm.py`) has existed since Sprint 30: a real, working
+ * endpoint that makes one live LLM call and reports success/failure: but
  * no frontend ever called it. A tenant picking a model had no way to find
  * out it didn't work (bad/missing credential, wrong model id) except
  * running a real pipeline and watching it fail mid-run. The per-card "Test

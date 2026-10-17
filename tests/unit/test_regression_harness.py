@@ -1,8 +1,8 @@
 """Unit tests for Sprint 28's prompt/agent regression harness
 (`case_study/scripts/regression_harness.py`, ADR-029).
 
-Only the pure, deterministic functions are covered here — `scenario_metrics_from_result`,
-`aggregate_report`, and `compare_against_baseline` — same "majoritariamente um experimento"
+Only the pure, deterministic functions are covered here: `scenario_metrics_from_result`,
+`aggregate_report`, and `compare_against_baseline`: same "majoritariamente um experimento"
 boundary Sprint 8's own `tests/unit/test_model_comparison.py` draws: `run_scenario`/`main` are
 I/O-heavy orchestration (real sandbox execution, real LLM-shaped call sites) exercised manually
 via `uv run python case_study/scripts/regression_harness.py`, not unit-tested here.
@@ -11,7 +11,7 @@ via `uv run python case_study/scripts/regression_harness.py`, not unit-tested he
 deliberately worse result (a fabricated `gold_df` that double-counts, run through the REAL
 `core/output_validation.check_gold_output` and `core/pricing`-free `score_quality`, exactly the
 functions the harness itself calls) must be flagged as a regression by
-`compare_against_baseline` before it would reach a promoted baseline — see
+`compare_against_baseline` before it would reach a promoted baseline: see
 `test_compare_against_baseline_catches_injected_worse_result` below.
 """
 
@@ -94,7 +94,7 @@ def test_scenario_metrics_from_result_counts_sanity_warnings() -> None:
 
 def test_scenario_metrics_from_result_ignores_errored_subtask_sanity() -> None:
     """A failed sub-task (`error` set) never had a sanity_check computed for it
-    (ADR-026) — must not be miscounted as a warning."""
+    (ADR-026): must not be miscounted as a warning."""
     metrics = scenario_metrics_from_result(
         scenario_id="s3",
         category="nominal_descriptive",
@@ -191,7 +191,7 @@ def test_aggregate_report_handles_no_scored_scenarios() -> None:
 
 
 # ---------------------------------------------------------------------------
-# compare_against_baseline — the definition-of-done target
+# compare_against_baseline: the definition-of-done target
 # ---------------------------------------------------------------------------
 
 
@@ -218,7 +218,7 @@ def test_compare_against_baseline_passes_on_identical_run() -> None:
 def test_compare_against_baseline_catches_injected_worse_result() -> None:
     """Sprint 28/ADR-029's own definition of done: a deliberately-wrong Gold result
     (a fabricated gold_df that double-counts the source, run through the REAL
-    `check_gold_output` — the same function the harness's `run_full_analysis` call path
+    `check_gold_output`: the same function the harness's `run_full_analysis` call path
     exercises) must be caught before it would be promoted as a new baseline."""
     silver_df = pd.DataFrame({"region": ["norte", "sul"], "amount": [100.0, 200.0]})  # total=300
     bad_gold_df = pd.DataFrame({"region": ["norte", "sul"], "amount": [400.0, 400.0]})  # sum=800

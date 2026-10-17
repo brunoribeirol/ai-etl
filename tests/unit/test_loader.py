@@ -123,7 +123,7 @@ def test_upstream_error_short_circuits(mocker) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Sprint 27 (ADR-028) — write-approval gate
+# Sprint 27 (ADR-028): write-approval gate
 # ---------------------------------------------------------------------------
 
 

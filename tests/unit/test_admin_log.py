@@ -47,7 +47,7 @@ def test_log_admin_action_persists_row(engine: Engine) -> None:
 
 def test_log_admin_action_target_tenant_id_and_reason_optional(engine: Engine) -> None:
     """Some admin actions (e.g. listing all tenants) have no single target;
-    `reason` is `None` only for pre-ADR-047 call sites — every route added
+    `reason` is `None` only for pre-ADR-047 call sites: every route added
     since requires it, but the persistence layer doesn't enforce that."""
     admin_log.log_admin_action("user_admin1", "list_all_tenants")
 

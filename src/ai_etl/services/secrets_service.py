@@ -5,21 +5,21 @@ today (`POSTGRES_URL`, REST `auth.env_var`) with per-tenant, encrypted-at-rest
 storage: each tenant stores its own named secret (e.g. an API key), never a
 literal value another tenant's code path can read.
 
-Encryption: Fernet (symmetric AEAD, from the `cryptography` package — already
+Encryption: Fernet (symmetric AEAD, from the `cryptography` package: already
 a locked transitive dependency of `pyjwt[crypto]`, see `pyproject.toml`), key
 from `AI_ETL_SECRETS_ENCRYPTION_KEY`. This module never logs a decrypted
-value — only `name` and outcome are ever passed to `logger` calls, matching
+value: only `name` and outcome are ever passed to `logger` calls, matching
 the "API keys em logs" non-negotiable rule the same way the logger's
 automatic redaction already covers everything else.
 
-ADR-022 Decision 4 originally scoped this sprint to storage/API only — no
+ADR-022 Decision 4 originally scoped this sprint to storage/API only: no
 source connector consumed a stored secret (see the ADR for why: `tenant_id`
 is not available inside a LangGraph node without breaking the node-signature
 contract or widening `PipelineState`, both deliberately avoided). As of
 ADR-044 (2026-08-31), `postgres_source.py`/`mysql_source.py`/
 `mongodb_source.py`/`postgres_dest.py` now read a tenant's own connection
 string (stored here under a fixed name, e.g. `postgres_connection_string`)
-via `core/tenant_context.py` — a `contextvars`-based resolution done in
+via `core/tenant_context.py`: a `contextvars`-based resolution done in
 `services/pipeline_service.py`, never inside a node itself and never added
 to `PipelineState`, so the node-signature contract this docstring describes
 is still exactly as intact as it was before. REST's `_build_auth`
@@ -67,7 +67,7 @@ def _get_fernet() -> Fernet:
 def set_secret(tenant_id: str, name: str, value: str) -> None:
     """Encrypt and upsert one named secret for a tenant.
 
-    Upsert on `(tenant_id, name)` — calling this again with the same name
+    Upsert on `(tenant_id, name)`: calling this again with the same name
     rotates the stored value (e.g. an API key rotation) without needing a
     separate update endpoint.
     """
@@ -98,7 +98,7 @@ def set_secret(tenant_id: str, name: str, value: str) -> None:
 def get_secret(tenant_id: str, name: str) -> str:
     """Decrypt and return one named secret for a tenant.
 
-    Raises `SecretNotFoundError` if no such secret exists for this tenant —
+    Raises `SecretNotFoundError` if no such secret exists for this tenant:
     intentionally never returns another tenant's secret even if `name`
     collides, since the lookup is always scoped by `tenant_id`.
     """
@@ -112,13 +112,13 @@ def get_secret(tenant_id: str, name: str) -> str:
     try:
         return _get_fernet().decrypt(row.ciphertext.encode("utf-8")).decode("utf-8")
     except InvalidToken as exc:
-        # Wrong/rotated encryption key, or corrupted ciphertext — never
+        # Wrong/rotated encryption key, or corrupted ciphertext: never
         # surface the raw ciphertext or key material in the error.
         raise SecretNotFoundError(name) from exc
 
 
 def list_secret_names(tenant_id: str) -> list[str]:
-    """Return only the names of a tenant's stored secrets — never values."""
+    """Return only the names of a tenant's stored secrets: never values."""
     stmt = (
         select(tenant_secrets.c.name)
         .where(tenant_secrets.c.tenant_id == tenant_id)
@@ -144,19 +144,19 @@ def delete_secret(tenant_id: str, name: str) -> bool:
 
 
 def generate_encryption_key() -> str:
-    """Generate a new Fernet key — operational helper for provisioning
+    """Generate a new Fernet key: operational helper for provisioning
     `AI_ETL_SECRETS_ENCRYPTION_KEY` once, not called by application code."""
     return Fernet.generate_key().decode("utf-8")
 
 
 def encrypt_value(value: str) -> str:
     """Encrypt an arbitrary string with the same Fernet key/mechanism
-    `set_secret` uses (Sprint 37, ADR-034) — for callers that need
+    `set_secret` uses (Sprint 37, ADR-034): for callers that need
     encryption-at-rest for one value tied to a single row (e.g. a saved
     pipeline's notification webhook URL) rather than a named, listable
     per-tenant secret (`tenant_secrets`, this module's own table). Raises
     `SecretsEncryptionKeyMissingError` the same way `set_secret` does when
-    `AI_ETL_SECRETS_ENCRYPTION_KEY` is unset — fails closed, never stores
+    `AI_ETL_SECRETS_ENCRYPTION_KEY` is unset: fails closed, never stores
     plaintext.
     """
     return _get_fernet().encrypt(value.encode("utf-8")).decode("utf-8")
@@ -165,7 +165,7 @@ def encrypt_value(value: str) -> str:
 def decrypt_value(ciphertext: str) -> str:
     """Decrypt a value produced by `encrypt_value`. Raises `InvalidToken`
     (from `cryptography.fernet`) on a wrong/rotated key or corrupted
-    ciphertext — callers that must never raise into a best-effort delivery
+    ciphertext: callers that must never raise into a best-effort delivery
     path (`services/notifications.py`) are responsible for catching it,
     same as `get_secret` already documents for its own `InvalidToken` case.
     """

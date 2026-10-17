@@ -1,7 +1,7 @@
 """Unit tests for the MongoDB source connector (Sprint 11, ADR-012).
 
-Only the network transport (`pymongo.MongoClient`) is mocked — same
-convention already used for `rest_source.py`'s `httpx.get` — so the real
+Only the network transport (`pymongo.MongoClient`) is mocked: same
+convention already used for `rest_source.py`'s `httpx.get`: so the real
 schema-inference logic (`pd.json_normalize` unioning heterogeneous document
 shapes, `_id` stringification) and the query-validation guard run for real.
 Live-MongoDB coverage lives in `tests/integration/test_mongodb_source_real.py`
@@ -18,7 +18,7 @@ from ai_etl.sources.mongodb_source import DEFAULT_SAMPLE_LIMIT, _validate_query,
 
 
 def _mock_client_from(mongo_client_mock: MagicMock, documents: list[dict]) -> MagicMock:
-    """Configure an already-patched `MongoClient` mock's return value — split
+    """Configure an already-patched `MongoClient` mock's return value: split
     out of `_mock_client` (ADR-044) so a test can hold onto the constructor
     mock itself (e.g. to assert which connection string it was called with),
     not just the collection it ultimately returns.

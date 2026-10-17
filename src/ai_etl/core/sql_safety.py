@@ -3,16 +3,16 @@
 Extracted from `sources/postgres_source.py`, `sources/mysql_source.py`,
 `sources/sqlite_source.py`, and `destinations/postgres_dest.py`, which each
 duplicated an identical (or near-identical) `_validate_table_name()` helper.
-This is the single source of truth going forward — pure refactor, no change
+This is the single source of truth going forward: pure refactor, no change
 in validation behavior for any of the four call sites.
 
 Table names are validated against a safe-identifier allowlist before being
 interpolated into a `SELECT * FROM {table}`-style string (SQLAlchemy has no
 bind-parameter syntax for identifiers, only values, so this allowlist check
-is the injection defense — never an f-string with unvalidated input).
+is the injection defense: never an f-string with unvalidated input).
 
 **Divergence found during extraction (Sprint 33):** `sqlite_source.py` used a
-stricter regex than the other three modules — no `.` allowed, since SQLite
+stricter regex than the other three modules: no `.` allowed, since SQLite
 has no `schema.table` notion the way Postgres/MySQL do (documented in its
 original docstring). This isn't an accidental drift between copies; it's a
 deliberate per-engine difference. Rather than pick one regex and silently
@@ -33,10 +33,10 @@ def validate_table_name(table: str, *, allow_dots: bool = False) -> None:
 
     `allow_dots=True` permits `schema.table` form (Postgres, MySQL/MariaDB).
     `allow_dots=False` (default) restricts to a bare identifier (SQLite,
-    which has no schema-qualification notion) — the more restrictive option,
+    which has no schema-qualification notion): the more restrictive option,
     so omitting the flag fails safe.
 
-    Uses `re.fullmatch` (not `re.match` with a trailing `$`) — `$` alone
+    Uses `re.fullmatch` (not `re.match` with a trailing `$`): `$` alone
     matches immediately before a trailing `\\n`, which would let
     `"users\\n"` slip through a `re.match(..., "^...$")` check. Cosmetic-only
     under the current call sites (no caller passes a literal newline today),
@@ -58,11 +58,11 @@ def validate_table_name(table: str, *, allow_dots: bool = False) -> None:
 # and `mysql_source.py::load_mysql` accept an optional raw `query` string from
 # `pipeline_plan` (LLM-generated) instead of the default `SELECT * FROM {validated_table}`.
 # Unlike `table`, there is no SQLAlchemy bind-parameter syntax for an entire arbitrary
-# query, so this is the injection defense for that path — confirmed exploited for real:
+# query, so this is the injection defense for that path: confirmed exploited for real:
 # `{"type": "sqlite", "query": "DROP TABLE users; --"}` was passed straight to
 # `pd.read_sql(text(sql), conn)` with zero validation and actually dropped the table.
 # Mirrors `sources/mongodb_source.py::_validate_query`'s connector-level denylist
-# pattern — runs inside the connector itself, regardless of caller.
+# pattern: runs inside the connector itself, regardless of caller.
 _SELECT_PREFIX_RE = re.compile(r"^\s*select\b", re.IGNORECASE)
 _WORD_RE = re.compile(r"[a-zA-Z_][a-zA-Z0-9_]*")
 

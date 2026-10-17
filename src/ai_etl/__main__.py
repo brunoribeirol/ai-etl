@@ -1,4 +1,4 @@
-"""CLI entry point — python -m ai_etl run --spec "..." --output ./runs/"""
+"""CLI entry point: python -m ai_etl run --spec "..." --output ./runs/"""
 
 import argparse
 import uuid

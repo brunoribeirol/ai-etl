@@ -1,4 +1,4 @@
-"""analysis_runs cost tracking — model_name + cost_usd (ADR-008, Sprint 3)
+"""analysis_runs cost tracking: model_name + cost_usd (ADR-008, Sprint 3)
 
 Purely additive: two new nullable columns on `analysis_runs`, no changes to
 `runs`/`stage_latencies`/`users`. Nullable because historical rows predate

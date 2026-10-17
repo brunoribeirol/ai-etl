@@ -1,8 +1,8 @@
-"""`/onboarding` endpoints — self-serve activation checklist (Sprint 26,
+"""`/onboarding` endpoints: self-serve activation checklist (Sprint 26,
 ADR-027).
 
 Read-only, same trust model as `/budget`: a tenant can only ever read its
-own activation status. No new schema — every field is an aggregate over
+own activation status. No new schema: every field is an aggregate over
 `runs`/`saved_pipelines`, computed on demand by
 `audit.db.get_onboarding_status`.
 """

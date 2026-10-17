@@ -24,7 +24,7 @@ rng = np.random.default_rng(SEED)
 CUSTOMER_IDS = list(range(100, 500))  # 400 customers
 N = len(CUSTOMER_IDS)
 
-# Pernambuco cities — Recife-heavy so Scenario 3 enrichment has meaningful matches
+# Pernambuco cities: Recife-heavy so Scenario 3 enrichment has meaningful matches
 CITIES = ["Recife", "Recife", "Recife", "Recife", "Recife",
           "Olinda", "Olinda", "Caruaru", "Petrolina", "Garanhuns"]
 CITY_WEIGHTS = [0.5, 0.5, 0.5, 0.5, 0.5, 0.1, 0.1, 0.1, 0.05, 0.05]

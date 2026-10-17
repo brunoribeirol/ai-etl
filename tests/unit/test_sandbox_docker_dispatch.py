@@ -2,7 +2,7 @@
 `execute_in_sandbox()` and the Docker backend's fail-closed behavior.
 
 These do not require a real Docker daemon (`test_sandbox_docker.py`, an
-integration test, covers the real container path) — they exercise:
+integration test, covers the real container path): they exercise:
 (1) that `execute_in_sandbox()`'s signature/behavior is unchanged for every
 existing caller (default backend stays "process"), and (2) that requesting
 `backend="docker"` without Docker available fails loudly rather than
@@ -17,7 +17,7 @@ from ai_etl.core.sandbox_docker import DockerSandboxUnavailableError
 
 
 def test_default_backend_is_process_when_unspecified() -> None:
-    """No existing caller (Transformer/Analyst/Science) passes `backend` —
+    """No existing caller (Transformer/Analyst/Science) passes `backend`:
     confirms the default keeps using the multiprocessing "process" backend,
     not something that would require Docker in every deployment."""
     code = """
@@ -34,7 +34,7 @@ def transform(dfs):
 def test_env_var_backend_selection_falls_back_to_process_by_default(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Explicitly unset AI_ETL_SANDBOX_BACKEND resolves to "process" — the
+    """Explicitly unset AI_ETL_SANDBOX_BACKEND resolves to "process": the
     production-safe default this project's Railway deployment relies on."""
     monkeypatch.delenv("AI_ETL_SANDBOX_BACKEND", raising=False)
     code = "result = 1 + 1"

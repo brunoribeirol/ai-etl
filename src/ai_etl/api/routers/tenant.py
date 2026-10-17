@@ -1,11 +1,11 @@
-"""`/tenant` endpoints — self-service tenant data erasure, export,
+"""`/tenant` endpoints: self-service tenant data erasure, export,
 retention, and locale (Sprint 24 ADR-025, Sprint 36 ADR-035, Sprint 25 ADR-036).
 
 `editor`-only for anything that mutates/deletes (`DELETE /tenant`,
 `PATCH /tenant/retention`, `PATCH /tenant/locale`), same trust boundary as
 `PATCH /budget` and `POST/DELETE /secrets`: a tenant can only ever act on its
 own data, resolved from the verified JWT (`require_role`/
-`get_current_tenant_id`), never an arbitrary `tenant_id` — there is no admin
+`get_current_tenant_id`), never an arbitrary `tenant_id`: there is no admin
 role able to target another tenant (ADR-022's still-open limitation,
 deliberately not resolved here, see ADR-025 Decision 1). `GET /tenant/export`,
 `GET /tenant/retention`, and `GET /tenant/locale` are read-only and available
@@ -38,7 +38,7 @@ class TenantDeletionRequest(BaseModel):
 
 
 class SetRetentionRequest(BaseModel):
-    # None explicitly clears the policy (back to "keep forever") — Optional
+    # None explicitly clears the policy (back to "keep forever"): Optional
     # with no default so a caller must pass the key, not omit it, mirroring
     # `SetBudgetRequest` (api/routers/budget.py).
     retention_days: int | None = Field(ge=1)
@@ -50,7 +50,7 @@ class LocaleConfig(BaseModel):
 
 
 class SetLocaleRequest(BaseModel):
-    # Validated against `core.locale.SUPPORTED_LOCALES` below — 422 on anything
+    # Validated against `core.locale.SUPPORTED_LOCALES` below: 422 on anything
     # else, same "allowlist validated once at the boundary" pattern as
     # `core.llm.validate_provider_and_model` (ADR-031 §2). No `None` case (unlike
     # `SetRetentionRequest.retention_days`): locale always has a value (ADR-036 §1).
@@ -72,7 +72,7 @@ def delete_tenant(
 def export_tenant(
     tenant_id: Annotated[str, Depends(get_current_tenant_id)],
 ) -> TenantExport:
-    """LGPD Art. 9/18 II, GDPR Art. 15/20 — a tenant's full self-service data
+    """LGPD Art. 9/18 II, GDPR Art. 15/20: a tenant's full self-service data
     export (ADR-035). Never cross-tenant: always the caller's own resolved
     `tenant_id`, same as `DELETE /tenant`."""
     try:
@@ -87,7 +87,7 @@ def get_retention(
 ) -> RetentionPolicy:
     """Current automatic run-artifact retention window, if any (ADR-035).
     `retention_days=None` (the default for every tenant) means "keep
-    forever" — zero behavior change unless a tenant opts in."""
+    forever": zero behavior change unless a tenant opts in."""
     return RetentionPolicy(tenant_id=tenant_id, retention_days=get_retention_days(tenant_id))
 
 
@@ -104,7 +104,7 @@ def patch_retention(
 def get_tenant_locale(
     tenant_id: Annotated[str, Depends(get_current_tenant_id)],
 ) -> LocaleConfig:
-    """Current locale (ADR-036) — `"pt-BR"` for every tenant that never called
+    """Current locale (ADR-036): `"pt-BR"` for every tenant that never called
     `PATCH /tenant/locale`, same "default until explicitly changed" contract as
     `GET /tenant/retention`."""
     return LocaleConfig(tenant_id=tenant_id, locale=get_locale(tenant_id))
@@ -115,7 +115,7 @@ def patch_tenant_locale(
     body: SetLocaleRequest,
     tenant_id: Annotated[str, Depends(require_role("editor"))],
 ) -> LocaleConfig:
-    """Set this tenant's locale (ADR-036) — drives the Transformer's date-parsing
+    """Set this tenant's locale (ADR-036): drives the Transformer's date-parsing
     convention and the language Analyst/Science/Advisor generate narrative text in
     on every subsequent run. Takes effect on the *next* run; never retroactively
     rewrites an already-persisted run's narrative."""

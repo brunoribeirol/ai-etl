@@ -1,4 +1,4 @@
-"""Unit tests for core/pricing.py (Sprint 3, ADR-008 — cost per execution)."""
+"""Unit tests for core/pricing.py (Sprint 3, ADR-008: cost per execution)."""
 
 from ai_etl.core.pricing import MODEL_PRICING_USD_PER_MILLION_TOKENS, compute_cost_usd
 
@@ -29,7 +29,7 @@ def test_compute_cost_usd_missing_keys_default_to_zero() -> None:
     assert compute_cost_usd("gpt-4o", {}) == 0.0
 
 
-# Sprint 30 (ADR-031) — multi-provider pricing. Before this sprint, every model
+# Sprint 30 (ADR-031): multi-provider pricing. Before this sprint, every model
 # below returned `None` ("cost unknown"), silently defeating the Sprint 29 budget
 # cap for any tenant running Anthropic/Google.
 
@@ -53,14 +53,14 @@ def test_compute_cost_usd_claude_haiku_5_5_uses_base_tier() -> None:
 
 
 def test_compute_cost_usd_ollama_model_is_explicit_zero_not_none() -> None:
-    """`0.0` (not `None`) — Ollama is genuinely free, distinct from "unpriced"."""
+    """`0.0` (not `None`): Ollama is genuinely free, distinct from "unpriced"."""
     tokens = {"input_tokens": 1_000_000, "output_tokens": 1_000_000, "total_tokens": 2_000_000}
     assert compute_cost_usd("llama3.1", tokens) == 0.0
 
 
 def test_every_llm_allowed_model_has_a_pricing_entry() -> None:
     """`core.llm.ALLOWED_MODELS_BY_PROVIDER` and this module's pricing table must
-    stay in sync — an allowlisted model with no pricing entry would silently price
+    stay in sync: an allowlisted model with no pricing entry would silently price
     as `None` ("unknown") for any tenant who selects it (ADR-031)."""
     from ai_etl.core.llm import ALLOWED_MODELS_BY_PROVIDER
 

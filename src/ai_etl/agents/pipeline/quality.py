@@ -1,4 +1,4 @@
-"""Quality Agent — deterministic data quality checks on the transformed DataFrame."""
+"""Quality Agent: deterministic data quality checks on the transformed DataFrame."""
 
 from typing import Any, Callable
 
@@ -12,9 +12,9 @@ NULL_WARNING_THRESHOLD = 0.05  # 5% nulls → warning
 NULL_ERROR_THRESHOLD = 0.20  # 20% nulls → error
 IDENTIFIER_UNIQUENESS_THRESHOLD = 0.8  # column looks like a name/identifier, not a category
 
-# Sprint 16 (ADR-023) — whitelisted comparison operators for operator-defined quality
+# Sprint 16 (ADR-023): whitelisted comparison operators for operator-defined quality
 # rules. Deliberately NOT an eval()/exec() of an arbitrary expression: a rule is
-# operator-authored, persisted, and re-run unattended on every future scheduled fire —
+# operator-authored, persisted, and re-run unattended on every future scheduled fire:
 # CLAUDE.md bars exec() outside core/sandbox.py, and even that sandbox exists for
 # LLM-generated code reviewed once per pipeline, not for input silently re-executed
 # forever with no re-review step. Each operator maps to one vectorized pandas
@@ -50,10 +50,10 @@ def quality_node(state: PipelineState) -> PipelineState:
     # project was originally tuned against): generated transform code renamed two
     # source columns to the same target name, producing a DataFrame with duplicate
     # column labels. `df[col]` on a duplicate-named column returns a DataFrame, not a
-    # Series — every column-by-column check below (`_check_nulls` first) then crashed
+    # Series: every column-by-column check below (`_check_nulls` first) then crashed
     # with an uncaught `TypeError` instead of the graph's normal "route to END with a
     # clear error" contract. Guard for it explicitly, before any check that assumes
-    # `df[col]` is always a Series — this is a real risk from ANY model's generated
+    # `df[col]` is always a Series: this is a real risk from ANY model's generated
     # code, not specific to weaker/local ones, just more likely to surface there.
     duplicate_columns = df.columns[df.columns.duplicated()].unique().tolist()
     if duplicate_columns:
@@ -120,7 +120,7 @@ def quality_node(state: PipelineState) -> PipelineState:
     )
     # When severity is "error", the graph routes directly to END (bypassing Loader).
     # Set status AND error here so the final state is never left "running" with no
-    # explanation — callers (e.g. app.py) render `error` directly and must not see None.
+    # explanation: callers (e.g. app.py) render `error` directly and must not see None.
     blocked = overall_severity == "error"
     final_status = "failed" if blocked else state["status"]
     final_error: str | None = (
@@ -173,8 +173,8 @@ def _check_logical_duplicates(df: pd.DataFrame) -> list[dict[str, Any]]:
 
     `_check_duplicates` only catches fully identical rows. A column with high
     uniqueness (e.g. a product or customer name) that still has repeated values
-    signals *logical* duplicates — the same entity recorded more than once with
-    different attributes — which exact row-matching would miss entirely.
+    signals *logical* duplicates: the same entity recorded more than once with
+    different attributes: which exact row-matching would miss entirely.
     Low-cardinality columns (categories, flags) are excluded on purpose: repeats
     there are expected, not a data-quality signal.
     """
@@ -210,17 +210,17 @@ def _check_coerced_numeric_loss(
     non-numeric value in a column the Transformer coerced to numeric (e.g. the
     text "cem" in a quantity column) becomes NaN under `pd.to_numeric(...,
     errors="coerce")` and, if the LLM-generated code then does `.fillna(0)`,
-    silently turns into 0 — corrupting every downstream sum/mean/ranking with no
+    silently turns into 0: corrupting every downstream sum/mean/ranking with no
     trace. A prompt rule tells the Transformer not to do that, but an LLM does not
     reliably obey it (verified live: gpt-4o-mini still `fillna(0)`'d "cem"→0). So
     this makes the loss *visible* deterministically instead of trusting the prompt.
 
     Compares each numeric Silver column against a same-named object/string Bronze
     source column: any source value that is non-empty but not parseable as a number
-    was coerced away. Column-level counts only — no row alignment needed, so
+    was coerced away. Column-level counts only: no row alignment needed, so
     dedup/reorder don't matter. Columns the Transformer renamed can't be matched by
     name and are skipped (honest: we flag what we can attribute, never guess).
-    Always "warning" — a heads-up, never a pipeline-blocking error.
+    Always "warning": a heads-up, never a pipeline-blocking error.
     """
     # Collect Bronze object/string columns by name (only these can hold stray text;
     # a column pandas already read as numeric had no non-numeric values to lose).
@@ -232,7 +232,7 @@ def _check_coerced_numeric_loss(
             if col in bronze_object_cols:
                 continue
             series = src_df[col]
-            if isinstance(series, pd.DataFrame):  # duplicate column label — skip
+            if isinstance(series, pd.DataFrame):  # duplicate column label: skip
                 continue
             if str(series.dtype) in ("object", "string"):
                 bronze_object_cols[col] = series
@@ -243,7 +243,7 @@ def _check_coerced_numeric_loss(
         if source is None:
             continue
         non_null = source.dropna()
-        # Ignore blank/whitespace-only cells — those are legitimately missing, not
+        # Ignore blank/whitespace-only cells: those are legitimately missing, not
         # coerced *data*; only genuine non-numeric text counts as silent loss.
         non_blank = non_null[non_null.astype(str).str.strip() != ""]
         if non_blank.empty:
@@ -254,7 +254,7 @@ def _check_coerced_numeric_loss(
         if lost_count == 0:
             continue
         # A source value that pandas can't parse directly (e.g. "R$ 1.234,56") is not
-        # necessarily *lost* — the Transformer may have cleaned it into a real number via
+        # necessarily *lost*: the Transformer may have cleaned it into a real number via
         # string ops (currency stripping). Only flag when the Silver column actually
         # contains 0/NaN values, the footprint of a genuine coercion-to-zero. Without at
         # least one 0/NaN, the non-numeric source values were successfully transformed
@@ -286,7 +286,7 @@ def _check_types(df: pd.DataFrame, source_schemas: dict[str, Any]) -> list[dict[
     """Flag columns whose transformed dtype diverges from every source schema.
 
     Comparison is by column name against the dtypes extracted per source, since
-    the Transformer may rename, drop or add columns freely — a mismatch here is
+    the Transformer may rename, drop or add columns freely: a mismatch here is
     a signal for review, not a pipeline-blocking condition.
     """
     expected_dtypes: dict[str, set[str]] = {}
@@ -339,15 +339,15 @@ def _check_custom_rules(df: pd.DataFrame, rules: list[dict[str, Any]]) -> list[d
     """Evaluate operator-defined quality rules (Sprint 16, ADR-023) against `df`.
 
     `rules` is trusted, whitelist-validated data (`api/routers/pipelines.py` rejects an
-    unknown `operator` or a missing `value` at rule-definition time via Pydantic) — this
+    unknown `operator` or a missing `value` at rule-definition time via Pydantic): this
     function does not re-validate, matching every other `_check_*` here's own
     "caller already shaped the input" posture. A rule referencing a column the current
     run's transformed data doesn't have (e.g. the Transformer renamed/dropped it) is
     surfaced as its own explicit `"error"`-severity check entry rather than silently
     skipped, so a broken rule is visible instead of quietly doing nothing.
 
-    Emits one entry per rule, always (even when it passes, `severity: "ok"`) — unlike
-    the null/outlier checks above, which only emit on a nonzero finding — so the
+    Emits one entry per rule, always (even when it passes, `severity: "ok"`): unlike
+    the null/outlier checks above, which only emit on a nonzero finding: so the
     operator can see every rule they defined actually ran, matching this sprint's own
     definition of done ("a regra aparece no relatório... e falha visivelmente quando
     violada").
@@ -378,7 +378,7 @@ def _check_custom_rules(df: pd.DataFrame, rules: list[dict[str, Any]]) -> list[d
             violation_mask = _CUSTOM_RULE_OPERATORS[operator](df[column], value)
             violation_count = int(violation_mask.sum())
         except (TypeError, ValueError) as exc:
-            # e.g. a "gte"/numeric rule against a string column — surfaced as its own
+            # e.g. a "gte"/numeric rule against a string column: surfaced as its own
             # error entry (same "visible, not silently skipped" posture as the
             # unknown-column branch above) rather than crashing the whole quality gate.
             results.append(

@@ -18,7 +18,7 @@ from ai_etl.core.output_validation import append_check, check_gold_output, check
 
 def test_check_gold_output_flags_sum_exceeding_silver_total() -> None:
     """The roadmap's own worked example: 'a soma bate com o total esperado do
-    Silver?' — a deliberately fabricated gold_df whose sum is larger than the
+    Silver?': a deliberately fabricated gold_df whose sum is larger than the
     Silver total it claims to summarize."""
     silver_df = pd.DataFrame({"category": ["a", "b", "c"], "amount": [10, 20, 30]})  # total = 60
     gold_df = pd.DataFrame({"category": ["a", "b"], "amount": [500, 500]})  # fabricated, sum=1000
@@ -98,7 +98,7 @@ def test_check_science_output_accepts_a_legitimately_bad_but_valid_fit() -> None
 
 def test_check_science_output_flags_prediction_far_outside_historical_range() -> None:
     """A deliberately wrong prediction: historical target ranges 10-100, but the
-    model 'predicts' 1,000,000 — an order-of-magnitude sanity failure."""
+    model 'predicts' 1,000,000: an order-of-magnitude sanity failure."""
     silver_df = pd.DataFrame({"y": [10, 20, 50, 100]})
     predictions_df = pd.DataFrame({"date": ["2026-01", "2026-02"], "forecast": [110, 1_000_000]})
     model_info = {"task": "forecast", "target": "y", "metrics": {}}
@@ -142,7 +142,7 @@ def test_check_science_output_ignores_non_dict_metrics_key_gracefully() -> None:
 
 
 # ---------------------------------------------------------------------------
-# append_check (ADR-037 — Sprint 21 follow-up, LLM review extension point)
+# append_check (ADR-037: Sprint 21 follow-up, LLM review extension point)
 # ---------------------------------------------------------------------------
 
 

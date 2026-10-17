@@ -1,35 +1,35 @@
 name: Postgres backup (manual stopgap)
 
 # ADR-042 amendment (2026-09-06): Supabase's dashboard confirmed the Free
-# Plan includes zero backups (no scheduled backups, no PITR) — the ADR's
+# Plan includes zero backups (no scheduled backups, no PITR): the ADR's
 # original assumption ("almost certainly available on paid tiers") was
 # wrong for this project's actual tier. Owner chose a manual pg_dump-to-S3
 # stopgap over a Supabase Pro upgrade for now. See
 # docs/adr/ADR-042-rto-rpo-disaster-recovery.md's "Manual backup stopgap"
 # section for the full decision and the restore procedure.
 #
-# This is deliberately NOT continuous (PITR) — one dump per day means an
+# This is deliberately NOT continuous (PITR): one dump per day means an
 # RPO of up to 24h, matching ADR-042's original target by coincidence, not
 # by a stronger mechanism. Read the ADR before assuming this is equivalent
 # to real PITR.
 #
 # Audit finding M1 (2026-09-09), two operational gaps this workflow must not
 # leave silent:
-#  1. Failure alerting — a failed nightly dump would otherwise be invisible
+#  1. Failure alerting: a failed nightly dump would otherwise be invisible
 #     until a restore is needed. The `notify-on-failure` step below posts to
 #     Slack (SLACK_WEBHOOK_URL secret) whenever any step fails. GitHub also
-#     disables `schedule` triggers after 60 days of repo inactivity — if this
+#     disables `schedule` triggers after 60 days of repo inactivity: if this
 #     project goes dormant, RPO silently returns to infinite; the weekly
 #     "still alive" nudge is a manual owner check, tracked in ADR-042.
-#  2. Retention — these dumps must NOT accumulate forever (both cost and a
+#  2. Retention: these dumps must NOT accumulate forever (both cost and a
 #     right-to-erasure gap: an erased tenant persists in old dumps). The S3
 #     bucket needs a lifecycle rule expiring `_system/db-backups/` objects
 #     (e.g. 35 days). That rule is AWS-side config, not expressible in this
-#     workflow — see infra/ and ADR-042/ADR-025 for the required lifecycle.
+#     workflow: see infra/ and ADR-042/ADR-025 for the required lifecycle.
 
 on:
   schedule:
-    # 03:00 UTC daily — outside this project's own business hours, same
+    # 03:00 UTC daily: outside this project's own business hours, same
     # reasoning as `services/retention_service.py`'s off-peak cadence.
     - cron: "0 3 * * *"
   workflow_dispatch: {} # manual trigger, e.g. for the first backup or an ad-hoc one before a risky migration
@@ -44,7 +44,7 @@ jobs:
     steps:
       - name: Install postgresql-client (v17, matching Supabase's server version)
         # Ubuntu's own apt repo only ships postgresql-client 16, but this
-        # project's Supabase Postgres is 17.6 — pg_dump refuses to run
+        # project's Supabase Postgres is 17.6: pg_dump refuses to run
         # against a newer server than itself ("aborting because of server
         # version mismatch", found running this workflow for the first
         # time, 2026-09-06). Pull the matching client from PGDG's own apt
@@ -74,18 +74,18 @@ jobs:
         # running this workflow for the first time (2026-09-06) that even
         # with postgresql-client-17 installed alongside the runner's
         # pre-existing v16, the postgresql-common wrapper script still
-        # resolved plain `pg_dump` to v16 — silently, no error, just the
+        # resolved plain `pg_dump` to v16: silently, no error, just the
         # wrong binary. Bypassing the wrapper entirely is more reliable
         # than debugging its version-selection logic in CI.
         #
         # `--schema=public`: Supabase's shared Postgres instance also has
-        # `auth`/`storage`/`realtime` schemas it manages internally — a
+        # `auth`/`storage`/`realtime` schemas it manages internally: a
         # first real run found `backup_reader` (deliberately granted only
         # `public` access, ADR-042) can't lock those tables, and this
         # application doesn't own them anyway (Supabase's own platform is
         # responsible for backing up its own internal schemas). This
-        # project's actual data — `runs`, `users`, `saved_pipelines`, etc.
-        # — all lives in `public`.
+        # project's actual data: `runs`, `users`, `saved_pipelines`, etc.
+        #: all lives in `public`.
         run: |
           set -euo pipefail
           /usr/lib/postgresql/17/bin/pg_dump "${{ secrets.BACKUP_DATABASE_URL }}" \
@@ -115,7 +115,7 @@ jobs:
 
       - name: Notify on failure (Slack)
         # Audit finding M1: a silently-failing nightly backup is the worst
-        # failure mode — the gap is only discovered when a restore is needed.
+        # failure mode: the gap is only discovered when a restore is needed.
         # Fires only if an earlier step failed. No-op (skipped, not failed) if
         # SLACK_WEBHOOK_URL isn't configured, so this never turns a real backup
         # failure into a second confusing failure.

@@ -21,7 +21,7 @@ def test_initial_state_pipeline_plan_is_empty() -> None:
 
 
 def test_initial_state_approval_gate_defaults() -> None:
-    """Sprint 27 (ADR-028) — an avulso run's default state is never gated."""
+    """Sprint 27 (ADR-028): an avulso run's default state is never gated."""
     state = initial_state(spec="any spec", run_id="x")
     assert state["approval_policy"] is None
     assert state["approval_granted"] is False

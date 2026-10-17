@@ -1,7 +1,7 @@
 """Unit tests for `audit/db.py::get_onboarding_status` (Sprint 26, ADR-027).
 
 Same in-memory SQLite pattern as `test_saved_pipelines_db.py`/
-`test_audit_db.py`'s `load_history` tests — plain `select(func.count())`
+`test_audit_db.py`'s `load_history` tests: plain `select(func.count())`
 statements, no dialect-specific SQL, so the real query executes against a
 throwaway SQLite engine instead of being mocked.
 """
@@ -28,7 +28,7 @@ def _make_sqlite_engine() -> Engine:
 
 
 def _fake_scope(engine: Engine):
-    """Stand-in for `tenant_scope` in these unit tests (ADR-040) — see
+    """Stand-in for `tenant_scope` in these unit tests (ADR-040): see
     `test_saved_pipelines_db.py`'s identical helper for the full rationale."""
 
     @contextmanager

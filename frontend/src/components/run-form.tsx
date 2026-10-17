@@ -21,12 +21,12 @@ import { formatUsd } from "@/lib/format-number";
 import type { CostEstimate, TaskStatus } from "@/lib/types";
 
 /**
- * PR 4 (Sprint 6, ADR-011), restyled in Sprint 7 — the API contract, polling
+ * PR 4 (Sprint 6, ADR-011), restyled in Sprint 7: the API contract, polling
  * cadence, and fresh-per-request `getToken()` behavior are all unchanged
  * (see the original rationale below); only the presentation layer changed.
  *
  * `getToken()` is called fresh on every request (submit *and* every poll
- * tick), not cached from submit-time — this is the whole point of Sprint 6
+ * tick), not cached from submit-time: this is the whole point of Sprint 6
  * vs. Streamlit's static pasted-token flow: Clerk's client SDK silently
  * refreshes the session token, so a long-running analysis never hits an
  * expired-token dead end the way the old UI could.
@@ -49,11 +49,11 @@ async function csvShape(file: File): Promise<{ rows: number; cols: number } | nu
 
 type RunFormProps = {
   /**
-   * Sprint 26 (ADR-027) — the `/get-started` guided onboarding flow reuses this
+   * Sprint 26 (ADR-027): the `/get-started` guided onboarding flow reuses this
    * form instead of reimplementing upload/poll/result logic. Both props are
    * optional and default to the original empty state, so `/` (`page.tsx`)
    * renders `<RunForm />` unchanged. Only meant to be set once, at
-   * mount — the onboarding page only renders this component after its
+   * mount: the onboarding page only renders this component after its
    * example file (if any) has finished loading.
    */
   initialFile?: File | null;
@@ -85,7 +85,7 @@ export function RunForm({
   const [businessQuestion, setBusinessQuestion] = useState(initialBusinessQuestion);
   // One-off runs have no saved-pipeline id to write an LLM override to
   // immediately (unlike `pipelines-manager.tsx`'s `ModelPicker`, which PUTs
-  // to `/pipelines/{id}/llm-config` on click) — the choice is only kept in
+  // to `/pipelines/{id}/llm-config` on click): the choice is only kept in
   // local state here and threaded into the `/runs` submit below.
   const [llmProvider, setLlmProvider] = useState<string | null>(null);
   const [llmModel, setLlmModel] = useState<string | null>(null);
@@ -172,7 +172,7 @@ export function RunForm({
     } catch {
       // Non-fatal: the picker just won't show. `create_run` still enforces
       // the same rule server-side (400 naming the sheets) if this file
-      // really does have more than one sheet, so nothing silently breaks —
+      // really does have more than one sheet, so nothing silently breaks:
       // the user just loses the up-front picker and has to retry.
       toast.error(t("sheetCheckFailed"));
     } finally {
@@ -244,12 +244,12 @@ export function RunForm({
       // Audit finding H5 / D4: send the UI's active locale so the run's progress
       // messages + Advisor narrative follow what the user is actually seeing,
       // instead of the tenant's stored `users.locale` (which can differ from the
-      // UI cookie — an English UI was showing Portuguese progress before this).
+      // UI cookie: an English UI was showing Portuguese progress before this).
       formData.append("locale", locale);
       // Sent under the same field names as `PipelineState["llm_provider_override"]`/
       // `["llm_model_override"]` (`src/ai_etl/core/state.py`). NOTE: as of this
       // change, `POST /runs` (`src/ai_etl/api/routers/runs.py::create_run`) does
-      // not yet read these fields for one-off runs — only the saved-pipeline
+      // not yet read these fields for one-off runs: only the saved-pipeline
       // path (`services/pipeline_service.py`) applies an LLM override today. The
       // picker and this wiring are ready; a small backend follow-up is needed
       // to make the selection actually take effect for `/runs`.
@@ -292,7 +292,7 @@ export function RunForm({
               {/* Wave 2 item 5, 2026-09-05 mega-audit remediation
                   (docs/archive/work/2026-09-05-mega-audit-remediation-plan.md):
                   `className="hidden"` (display:none) used to remove this
-                  input from the tab order entirely — a keyboard-only user
+                  input from the tab order entirely: a keyboard-only user
                   tabbing through the form skipped straight over file upload
                   with no way to activate it. `sr-only` (clip-path, not
                   display:none) keeps it visually hidden but focusable; `peer`
